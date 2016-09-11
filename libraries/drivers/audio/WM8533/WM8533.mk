@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Platform_wm8533_dac_driver
+NAME := Lib_wm8533_dac_driver
 
 $(NAME)_SOURCES += wm8533_dac.c
 GLOBAL_INCLUDES += .

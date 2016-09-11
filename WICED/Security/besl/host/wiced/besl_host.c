@@ -22,10 +22,14 @@
 #include "internal/wwd_bcmendian.h"
 #include <string.h>
 #include "network/wwd_buffer_interface.h"
+#include "wwd_assert.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
+
+#define is_digit(c) ((c >= '0') && (c <= '9'))
+#define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) {  wiced_assert("Allocation failed\n", 0 == 1); return BESL_BUFFER_ALLOC_FAIL; }
 
 /******************************************************
  *                    Constants
@@ -57,7 +61,19 @@
 
 void* besl_host_malloc( char* name, uint32_t size )
 {
+    BESL_DEBUG(("besl_host_malloc: %s %u\r\n", name, (unsigned int)size));
     return malloc_named( name, size );
+}
+
+void* besl_host_calloc( char* name, uint32_t num, uint32_t size )
+{
+    void *ptr;
+    ptr = besl_host_malloc( name, num * size );
+    if ( ptr != NULL )
+    {
+        memset(ptr, 0, num * size);
+    }
+    return ptr;
 }
 
 void besl_host_free( void* p )
@@ -65,7 +81,7 @@ void besl_host_free( void* p )
     free( p );
 }
 
-void besl_host_get_mac_address(besl_mac_t* address, uint32_t interface )
+besl_result_t besl_host_get_mac_address(besl_mac_t* address, uint32_t interface )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
@@ -73,88 +89,43 @@ void besl_host_get_mac_address(besl_mac_t* address, uint32_t interface )
     uint32_t*      data;
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), IOVAR_STR_BSSCFG_CUR_ETHERADDR );
-    if ( data == NULL )
-    {
-        return;
-    }
+    CHECK_IOCTL_BUFFER( data );
     *data = interface;
 
     result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
-    if ( result == WWD_SUCCESS )
+    if ( result != WWD_SUCCESS )
     {
-        memcpy( address, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
-        host_buffer_release( response, WWD_NETWORK_RX );
+        memset( address->octet, 0, sizeof(wiced_mac_t) );
+        return (besl_result_t) result;
     }
+    memcpy( address, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+
+    return WICED_SUCCESS;
 }
 
-void besl_host_set_mac_address(besl_mac_t* address, uint32_t interface )
+besl_result_t besl_host_set_mac_address(besl_mac_t* address, uint32_t interface )
 {
     wiced_buffer_t buffer;
     uint32_t*      data;
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
-    if ( data == NULL )
-    {
-        return;
-    }
+    CHECK_IOCTL_BUFFER( data );
     data[0] = interface;
     memcpy(&data[1], address, sizeof(wiced_mac_t));
 
-    wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
+    return (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
 }
 
-
-wiced_result_t wiced_besl_wifi_get_random( uint16_t* val )
+void besl_host_random_bytes( uint8_t* buffer, uint16_t buffer_length )
 {
-    wiced_buffer_t buffer;
-    wiced_buffer_t response;
-    wiced_result_t ret;
-    static uint16_t pseudo_random = 0;
-
-    (void) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 2 ); /* Do not need to put anything in buffer hence void cast */
-    ret = wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RANDOM_BYTES, buffer, &response, WWD_STA_INTERFACE );
-
-    if ( ret == WICED_SUCCESS )
-    {
-        uint8_t* data = (uint8_t*) host_buffer_get_current_piece_data_pointer( response );
-        memcpy( val, data, (size_t) 2 );
-        host_buffer_release( response, WWD_NETWORK_RX );
-    }
-    else
-    {
-        /* Use a pseudo random number */
-        if ( pseudo_random == 0 )
-        {
-            pseudo_random = (uint16_t) host_rtos_get_time( );
-        }
-        pseudo_random = (uint16_t) ( ( pseudo_random * 32719 + 3 ) % 32749 );
-
-        *val = pseudo_random;
-    }
-
-    return WICED_SUCCESS;
+    wwd_wifi_get_random( buffer, buffer_length );
 }
 
-
-void besl_host_random_bytes(uint8_t* buffer, uint16_t buffer_length)
+void besl_host_get_time(besl_time_t* time)
 {
-    for ( ; buffer_length != 0; buffer_length -= 2 )
-    {
-        uint16_t temp_random;
-        if ( wiced_besl_wifi_get_random( &temp_random ) != WICED_SUCCESS )
-        {
-            int32_t temp = 0xA5;
-            wwd_wifi_get_rssi( &temp );
-            BESL_WRITE_16(buffer, temp);
-        }
-        else
-        {
-            BESL_WRITE_16(buffer, temp_random);
-        }
-        buffer = buffer + 2;
-    }
+    *time = (besl_time_t)host_rtos_get_time();
 }
-
 
 uint32_t besl_host_hton32(uint32_t intlong)
 {
@@ -192,4 +163,39 @@ uint32_t besl_host_hton32_ptr(uint8_t * in, uint8_t * out)
     temp = htobe32(temp);
     BESL_WRITE_32(out, temp);
     return temp;
+}
+
+
+void besl_host_hex_bytes_to_chars( char* cptr, const uint8_t* bptr, uint32_t blen )
+{
+    int i,j;
+    uint8_t temp;
+
+    i = 0;
+    j = 0;
+    while( i < blen )
+    {
+        // Convert first nibble of byte to a hex character
+        temp = bptr[i] / 16;
+        if ( temp < 10 )
+        {
+            cptr[j] = temp + '0';
+        }
+        else
+        {
+            cptr[j] = (temp - 10) + 'A';
+        }
+        // Convert second nibble of byte to a hex character
+        temp = bptr[i] % 16;
+        if ( temp < 10 )
+        {
+            cptr[j+1] = temp + '0';
+        }
+        else
+        {
+            cptr[j+1] = (temp - 10) + 'A';
+        }
+        i++;
+        j+=2;
+    }
 }

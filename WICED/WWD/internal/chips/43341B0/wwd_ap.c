@@ -17,6 +17,7 @@
 #include "wwd_events.h"
 #include "wwd_assert.h"
 #include "wwd_management.h"
+#include "wwd_wifi.h"
 #include "network/wwd_buffer_interface.h"
 #include "internal/wwd_sdpcm.h"
 #include "internal/wwd_internal.h"
@@ -362,19 +363,6 @@ wwd_result_t wwd_wifi_stop_ap( void )
     wwd_wifi_ap_is_up = WICED_FALSE;
     return WWD_SUCCESS;
 
-}
-
-wiced_bool_t wwd_wifi_is_packet_from_ap( uint8_t flags2 )
-{
-#define BDC_FLAG2_IF_MASK   0x0f
-    if ((flags2 & BDC_FLAG2_IF_MASK) != 0)
-    {
-        return WICED_TRUE;
-    }
-    else
-    {
-        return WICED_FALSE;
-    }
 }
 
 /** Sets the chip specific AMPDU parameters for AP and STA

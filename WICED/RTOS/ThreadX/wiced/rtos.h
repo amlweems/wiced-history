@@ -53,8 +53,9 @@ extern "C" {
  *    - stack size       : considerably larger than that of wiced_hardware_io_worker_thread because of the networking functions.
  *    - event queue size : larger than that of wiced_hardware_io_worker_thread because networking operation may block
  */
-
+#ifndef HARDWARE_IO_WORKER_THREAD_STACK_SIZE
 #define HARDWARE_IO_WORKER_THREAD_STACK_SIZE     (512)
+#endif
 #define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE      (10)
 #define NETWORKING_WORKER_THREAD_STACK_SIZE   (6*1024)
 #define NETWORKING_WORKER_THREAD_QUEUE_SIZE       (15)

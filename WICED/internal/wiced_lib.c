@@ -23,6 +23,8 @@
  *                      Macros
  ******************************************************/
 
+#define IS_DIGIT(c) ((c >= '0') && (c <= '9'))
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -270,18 +272,46 @@ wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, 
 
     do
     {
-        result = resource_get_readonly_buffer ( res_id, pos, 0x7fffffff, &res_size, &data );
-        if ( result != WICED_SUCCESS )
+        resource_result_t resource_result = resource_get_readonly_buffer ( res_id, pos, 0x7fffffff, &res_size, &data );
+        if ( resource_result != RESOURCE_SUCCESS )
         {
             return result;
         }
 
         result = wiced_tcp_stream_write( tcp_stream, data, (uint16_t) res_size );
         resource_free_readonly_buffer( res_id, data );
+        if ( result != WICED_SUCCESS )
+        {
+            return result;
+        }
         pos += res_size;
     } while ( res_size > 0 );
 
     return result;
+}
+
+int is_digit_str( const char* str )
+{
+    int res = 0;
+    int i = 0;
+
+    if ( str != NULL )
+    {
+        i = (int)strlen(str);
+        res = 1;
+        while ( i > 0 )
+        {
+            if ( !IS_DIGIT(*str) )
+            {
+                res = 0;
+                break;
+            }
+            str++;
+            i--;
+        }
+    }
+
+    return res;
 }
 
 

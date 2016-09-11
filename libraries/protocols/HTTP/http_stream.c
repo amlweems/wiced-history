@@ -268,7 +268,7 @@ wiced_result_t http_send_basic_authorization( http_stream_t* session, char* user
     /* Add Authorisation basic field */
     strcpy( basic_auth.value, BASIC_STR );
 
-    base64_datalen = base64_encode( (unsigned char*) username_password, strlen( username_password ), (unsigned char*)&basic_auth.value[sizeof( BASIC_STR ) - 1], value_size - ( sizeof( BASIC_STR ) - 1 ), BASE64_ENC_STANDARD );
+    base64_datalen = base64_encode( (unsigned char*) username_password, (int32_t) strlen( username_password ), (unsigned char*)&basic_auth.value[sizeof( BASIC_STR ) - 1], value_size - ( sizeof( BASIC_STR ) - 1 ), BASE64_STANDARD );
     if ( base64_datalen < 0 )
     {
         free( basic_auth.value );

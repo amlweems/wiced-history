@@ -187,6 +187,11 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
     return WICED_SUCCESS;
 }
 
+void wiced_tcp_set_type_of_service( wiced_tcp_socket_t* socket, uint32_t tos )
+{
+    socket->conn_handler->pcb.ip->tos = (uint8_t)tos;
+}
+
 wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_interface_t interface, uint16_t port, wiced_socket_callback_t connect_callback, wiced_socket_callback_t receive_callback, wiced_socket_callback_t disconnect_callback)
 {
     int i;
@@ -942,6 +947,11 @@ wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t por
     socket->interface = interface;
 
     return WICED_SUCCESS;
+}
+
+void wiced_udp_set_type_of_service( wiced_udp_socket_t* socket, uint32_t tos )
+{
+    socket->conn_handler->pcb.ip->tos = (uint8_t)tos;
 }
 
 wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_address_t* address, uint16_t port, wiced_packet_t* packet )

@@ -47,7 +47,6 @@
 #include "lwip/tcpip.h"
 #include "lwip/init.h"
 #include "netif/etharp.h"
-#include "netif/ppp_oe.h"
 
 /* global variables */
 static tcpip_init_done_fn tcpip_init_done;

@@ -562,7 +562,7 @@ void platform_uart_irq( platform_uart_driver_t* driver )
     platform_uart_port_t* uart = (platform_uart_port_t*) driver->peripheral->port;
 
     // Clear all interrupts. It's safe to do so because only RXNE interrupt is enabled
-    uart->SR = (uint16_t) ( uart->SR | 0xffff );
+    uart->SR = (uint16_t) uart->SR;
 
     // Update tail
     driver->rx_buffer->tail = driver->rx_buffer->size - driver->peripheral->rx_dma_config.stream->NDTR;

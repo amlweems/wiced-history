@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := SPI_Flash_Library_$(PLATFORM)
+NAME := Lib_SPI_Flash_Library_$(PLATFORM)
 
 $(NAME)_SOURCES := spi_flash.c spi_flash_wiced.c
 

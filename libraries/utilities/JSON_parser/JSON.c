@@ -244,7 +244,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Move value_start token until we encounter a non-digit value */
-                        while ( ( *value_start >= '0' ) && (  *value_start <= '9') )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
                         {
                             value_start--;
                         }
@@ -432,7 +432,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Move value_start token until we encounter a non-digit value */
-                        while ( ( *value_start >= '0' ) && (  *value_start <= '9') )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
                         {
                             value_start--;
                         }
@@ -554,7 +554,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Increment value_start until you reach first number */
-                        while ( ( *value_start >= '0' ) && (  *value_start <= '9') )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
                         {
                             value_start--;
                         }
@@ -653,7 +653,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
 
                         value_start = value_end;
 
-                        while ( ( *value_start >= '0' ) && (  *value_start <= '9') )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
                         {
                             value_start--;
                         }

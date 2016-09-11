@@ -327,7 +327,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
 
         /* Decode SMTP server reply using base64 algorithm */
         INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-        base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_DEC_STANDARD );
+        base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
         wiced_packet_delete( packet );
 
         /* Check if decoded string is username challenge */
@@ -335,7 +335,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
         {
             /* Encode username */
             INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-            base64_encode( (unsigned char*)account->user_name, (uint32_t) strlen( account->user_name ), (unsigned char*)buffer, buffer_length, BASE64_DEC_STANDARD );
+            base64_encode( (unsigned char*)account->user_name, (int32_t) strlen( account->user_name ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
 
             VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, buffer, (uint8_t) buffer_length, NULL, 0));
             VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
@@ -343,7 +343,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
 
             /* Decode SMTP server reply using base64 algorithm */
             INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-            base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_DEC_STANDARD );
+            base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
             wiced_packet_delete( packet );
 
             /* Check if decoded string is password challenge */
@@ -351,7 +351,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
             {
                 /* Encode and send password back to SMTP server */
                 INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-                base64_encode( (unsigned char*)account->password, (uint32_t) strlen( account->password ), (unsigned char*)buffer, buffer_length, BASE64_DEC_STANDARD );
+                base64_encode( (unsigned char*)account->password, (int32_t) strlen( account->password ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
 
                 VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, buffer, (uint8_t) buffer_length, NULL, 0));
                 VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));

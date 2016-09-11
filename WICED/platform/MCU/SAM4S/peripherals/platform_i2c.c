@@ -166,7 +166,6 @@ platform_result_t platform_i2c_init_tx_message( platform_i2c_message_t* message,
     memset( message, 0x00, sizeof(platform_i2c_message_t) );
     message->tx_buffer = tx_buffer;
     message->tx_length = tx_buffer_length;
-    message->combined  = WICED_FALSE;
     message->retries   = retries;
 
     return PLATFORM_SUCCESS;
@@ -181,7 +180,6 @@ platform_result_t platform_i2c_init_rx_message( platform_i2c_message_t* message,
 
     memset(message, 0x00, sizeof(platform_i2c_message_t));
     message->rx_buffer = rx_buffer;
-    message->combined  = WICED_FALSE;
     message->retries   = retries;
     message->rx_length = rx_buffer_length;
 
@@ -198,7 +196,6 @@ platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* me
     memset(message, 0x00, sizeof(platform_i2c_message_t));
     message->rx_buffer = rx_buffer;
     message->tx_buffer = tx_buffer;
-    message->combined  = WICED_TRUE;
     message->retries   = retries;
     message->tx_length = tx_buffer_length;
     message->rx_length = rx_buffer_length;
@@ -219,10 +216,9 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
     for ( i = 0; i < number_of_messages && result == PLATFORM_SUCCESS; i++ )
     {
         platform_i2c_message_t* message_pointer = &messages[i];
+        wiced_assert("Message pointer shouldn't be null", message_pointer != NULL);
         for ( retry_count = 0; retry_count < message_pointer->retries; retry_count++ )
         {
-            wiced_assert("Message pointer shouldn't be null", message_pointer != NULL);
-
             i2c_runtime_data[i2c->i2c_block_id].current_message = message_pointer;
             i2c_runtime_data[i2c->i2c_block_id].data_count      = 0;
             i2c_runtime_data[i2c->i2c_block_id].transfer_status = 0;

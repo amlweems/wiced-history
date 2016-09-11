@@ -115,7 +115,7 @@ void platform_start_app( uint32_t entry_point )
 
 }
 
-int platform_erase_flash( uint16_t start_sector, uint16_t end_sector )
+platform_result_t platform_erase_flash( uint16_t start_sector, uint16_t end_sector )
 {
     uint32_t i;
 
@@ -142,14 +142,15 @@ int platform_erase_flash( uint16_t start_sector, uint16_t end_sector )
 
     FLASH_Lock( );
 
-    return 0;
+    return PLATFORM_SUCCESS;
 }
 
-int platform_write_flash_chunk( uint32_t address, const void* data, uint32_t size )
+platform_result_t platform_write_flash_chunk( uint32_t address, const void* data, uint32_t size )
 {
-    uint32_t write_address  = address;
-    flash_write_t* data_ptr = (flash_write_t*) data;
-    flash_write_t* end_ptr  = (flash_write_t*) &((char*)data)[size];
+    platform_result_t result = PLATFORM_SUCCESS;
+    uint32_t write_address   = address;
+    flash_write_t* data_ptr  = (flash_write_t*) data;
+    flash_write_t* end_ptr   = (flash_write_t*) &((char*)data)[size];
 
     FLASH_Unlock( );
 
@@ -195,15 +196,30 @@ int platform_write_flash_chunk( uint32_t address, const void* data, uint32_t siz
         }
 
     }
-
+    if ( memcmp( (void*)address, (void*)data, size) != 0 )
+    {
+        result = PLATFORM_ERROR;
+    }
     FLASH_Lock();
 
-    return 0;
+    return result;
 }
 
-static wiced_result_t platform_erase_app( void )
+void platform_erase_app_area( uint32_t physical_address, uint32_t size )
 {
-   return platform_erase_flash( PLATFORM_APP_START_SECTOR, PLATFORM_APP_END_SECTOR );
+    /* if app in RAM, no need for erase */
+    if ( physical_address < SRAM_START_ADDR )
+    {
+        if (physical_address == (uint32_t)DCT1_START_ADDR)
+        {
+            platform_erase_flash( PLATFORM_DCT_COPY1_START_SECTOR, PLATFORM_DCT_COPY1_END_SECTOR );
+        }
+        else
+        {
+            platform_erase_flash( PLATFORM_APP_START_SECTOR, PLATFORM_APP_END_SECTOR );
+        }
+    }
+    (void) size;
 }
 
 /* The function would copy data from serial flash to internal flash.
@@ -213,18 +229,7 @@ static wiced_result_t platform_erase_app( void )
 static wiced_result_t platform_copy_app_to_iflash( const image_location_t* app_header_location, uint32_t offset, uint32_t physical_address, uint32_t size )
 {
     /* Bootloader doesn't support BSS sections. */
-    static int erase_app = 1;
     uint8_t buff[ 64 ];
-
-    if ( erase_app == 1 )
-    {
-        /*
-         * A bit of an ungly way to erase internal flash.
-         * However, this function is always running from the boot loader followed by a reset. So risk is minimal.
-         */
-        platform_erase_app( );
-        erase_app = 0;
-    }
 
     while ( size > 0 )
     {
@@ -236,9 +241,9 @@ static wiced_result_t platform_copy_app_to_iflash( const image_location_t* app_h
             offset = 0;
             return WICED_ERROR;
         }
-        offset += write_size;
+        offset           += write_size;
         physical_address += write_size;
-        size -= write_size;
+        size             -= write_size;
     }
     return WICED_SUCCESS;
 }

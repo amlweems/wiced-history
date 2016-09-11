@@ -37,8 +37,9 @@
 /******************************************************
  *                    Constants
  ******************************************************/
-
+#ifndef DHCP_IP_ADDRESS_CACHE_MAX
 #define DHCP_IP_ADDRESS_CACHE_MAX       (5)
+#endif
 
 #define DHCP_THREAD_PRIORITY (WICED_DEFAULT_LIBRARY_PRIORITY)
 #define DHCP_SERVER_RECEIVE_TIMEOUT (500)
@@ -126,7 +127,7 @@ static void           ipv4_to_string                   ( char* buffer, uint32_t 
 
 wiced_result_t wiced_start_dhcp_server(wiced_dhcp_server_t* server, wiced_interface_t interface)
 {
-    DHCP_CHECK_PARAMS( (server == NULL) || ( (interface != WICED_STA_INTERFACE) && (interface != WICED_AP_INTERFACE) && (interface != WICED_CONFIG_INTERFACE) ), WICED_BADARG );
+    DHCP_CHECK_PARAMS( (server == NULL) || ( (interface != WICED_STA_INTERFACE) && (interface != WICED_AP_INTERFACE) && (interface != WICED_P2P_INTERFACE) && (interface != WICED_CONFIG_INTERFACE) ), WICED_BADARG );
 
     server->interface = interface;
 

@@ -107,9 +107,10 @@ wiced_result_t ring_buffer_read( wiced_ring_buffer_t* ring_buffer, uint8_t* data
 {
     uint32_t max_bytes_to_read;
     uint32_t i;
-    uint32_t head = ring_buffer->head;
+    uint32_t head;
 
     wiced_assert("Bad args", ring_buffer != NULL && data != NULL && number_of_bytes_read != NULL);
+    head = ring_buffer->head;
 
     max_bytes_to_read = MIN(data_length, ring_buffer_used_space(ring_buffer));
 

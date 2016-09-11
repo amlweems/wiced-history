@@ -131,7 +131,7 @@ wiced_result_t wiced_time_get_iso8601_time(wiced_iso8601_time_t* iso8601_time)
     /* Calculate year */
     year = (uint16_t)( 1970 + second / SECONDS_IN_365_DAY_YEAR );
     number_of_leap_years = (uint8_t) (( year - 1968 - 1 ) / 4 );
-    second -= (uint64_t)( ( year - 1970 ) * SECONDS_IN_365_DAY_YEAR );
+    second -= (uint64_t)( (uint64_t)( year - 1970 ) * SECONDS_IN_365_DAY_YEAR );
     if ( second > ( number_of_leap_years * SECONDS_IN_A_DAY ) )
     {
         second -= (uint64_t) ( ( number_of_leap_years * SECONDS_IN_A_DAY ) );

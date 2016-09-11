@@ -239,6 +239,7 @@ static int write_dir( FILE* output_handle, const char* dir_name, uint64_t* bytes
         {
             printf( "Error: Output is too big for 32 bit version. Please enable WicedFS 64 bit support.\n");
             free( full_path );
+            free( file_header );
             return -5;
         }
 

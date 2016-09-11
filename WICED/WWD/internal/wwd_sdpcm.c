@@ -252,7 +252,6 @@ static uint16_t                  wwd_sdpcm_requested_ioctl_id;
 static host_semaphore_type_t     wwd_sdpcm_ioctl_mutex;
 static /*@only@*/ wiced_buffer_t wwd_sdpcm_ioctl_response;
 static host_semaphore_type_t     wwd_sdpcm_ioctl_sleep;
-static uint32_t                  wwd_sdpcm_ioctl_abort_count = 0;
 
 /* Bus data credit variables */
 static uint8_t wwd_sdpcm_packet_transmit_sequence_number;
@@ -269,6 +268,10 @@ static wiced_buffer_t /*@owned@*/ /*@null@*/ wwd_sdpcm_send_queue_head   = (wice
 static wiced_buffer_t /*@owned@*/ /*@null@*/ wwd_sdpcm_send_queue_tail   = (wiced_buffer_t) NULL;
 
 static wwd_wifi_raw_packet_processor_t       wwd_sdpcm_raw_packet_processor = NULL;
+
+/* QoS related variables */
+uint8_t sdpcm_highest_rx_tos = 0; // XXX remove later, currently used by 11n certification test applications
+extern uint8_t wwd_tos_map[8];
 
 /******************************************************
  *             SDPCM Logging
@@ -325,10 +328,11 @@ static void add_sdpcm_log_entry( sdpcm_log_direction_t dir, sdpcm_log_type_t typ
  *             Static Function Prototypes
  ******************************************************/
 
-static wiced_buffer_t wwd_sdpcm_get_next_buffer_in_queue ( wiced_buffer_t buffer );
-static void           wwd_sdpcm_set_next_buffer_in_queue ( wiced_buffer_t buffer, wiced_buffer_t prev_buffer );
-static void           wwd_sdpcm_send_common              ( /*@only@*/ wiced_buffer_t buffer, sdpcm_header_type_t header_type );
-static uint8_t        wwd_map_dscp_to_priority           ( uint8_t dscp_val );
+static wiced_buffer_t  wwd_sdpcm_get_next_buffer_in_queue ( wiced_buffer_t buffer );
+static void            wwd_sdpcm_set_next_buffer_in_queue ( wiced_buffer_t buffer, wiced_buffer_t prev_buffer );
+static void            wwd_sdpcm_send_common              ( /*@only@*/ wiced_buffer_t buffer, sdpcm_header_type_t header_type );
+static uint8_t         wwd_map_dscp_to_priority           ( uint8_t dscp_val );
+static wwd_interface_t wwd_wifi_get_source_interface      ( uint8_t flags2 );
 
 /******************************************************
  *             Function definitions
@@ -346,7 +350,6 @@ static uint8_t        wwd_map_dscp_to_priority           ( uint8_t dscp_val );
 wwd_result_t wwd_sdpcm_init( void )
 {
     uint16_t i;
-    wwd_sdpcm_ioctl_abort_count = 0;
 
     /* Create the mutex protecting the packet send queue */
     if ( host_rtos_init_semaphore( &wwd_sdpcm_ioctl_mutex ) != WWD_SUCCESS )
@@ -494,7 +497,8 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     packet = (sdpcm_data_header_t*) host_buffer_get_current_piece_data_pointer( buffer );
 
     if ( ( interface != WWD_STA_INTERFACE ) &&
-         ( interface != WWD_AP_INTERFACE  ) )
+         ( interface != WWD_AP_INTERFACE  ) &&
+         ( interface != WWD_P2P_INTERFACE  ) )
     {
         WPRINT_WWD_DEBUG(("No interface for packet send\n"));
         host_buffer_release( buffer, WWD_NETWORK_TX );
@@ -502,9 +506,30 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     }
 
     /* Prepare the BDC header */
-    packet->bdc_header.flags = 0;
-    packet->bdc_header.flags = (uint8_t) ( BDC_PROTO_VER << BDC_FLAG_VER_SHIFT );
-    packet->bdc_header.flags2 = (uint8_t) ( (interface == WWD_STA_INTERFACE)?CHIP_STA_INTERFACE:CHIP_AP_INTERFACE );
+    packet->bdc_header.flags    = 0;
+    packet->bdc_header.flags    = (uint8_t) ( BDC_PROTO_VER << BDC_FLAG_VER_SHIFT );
+    /* If it's an IPv4 packet set the BDC header priority based on the DSCP field */
+    if ((ether_type == WICED_ETHERTYPE_IPv4) && (dscp != NULL))
+    {
+        if (*dscp != 0) /* If it's equal 0 then it's best effort traffic and nothing needs to be done */
+        {
+            priority = wwd_map_dscp_to_priority( *dscp );
+        }
+    }
+
+    /* If it's for the STA interface then re-map priority to the priority allowed by the AP,
+     * regardless of whether it's an IPv4 packet
+     */
+    if ( interface == WWD_STA_INTERFACE )
+    {
+        packet->bdc_header.priority = wwd_tos_map[priority];
+    }
+    else
+    {
+        packet->bdc_header.priority = priority;
+    }
+
+    packet->bdc_header.flags2   = (uint8_t) ( interface&3 );
     packet->bdc_header.data_offset = 0;
 
     /* If it's an IPv4 packet set the BDC header priority based on the DSCP field */
@@ -574,6 +599,10 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
     uint16_t j;
     uint16_t size;
     uint16_t size_inv;
+    uint32_t flags;
+    uint16_t id;
+    sdpcm_common_header_t*  common_header;
+    sdpcm_cdc_header_t*     cdc_header;
 
     packet = (sdpcm_common_header_t*) host_buffer_get_current_piece_data_pointer( buffer );
 
@@ -622,21 +651,27 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 break;
             }
 
-            /* Ignore a reply for each aborted ioctl attempt to ensure wwd_sdpcm_ioctl_sleep semaphore does not get out of sync */
-            if (wwd_sdpcm_ioctl_abort_count != 0)
+            /* Check that the IOCTL identifier matches the identifier that was sent */
+            common_header = (sdpcm_common_header_t*) host_buffer_get_current_piece_data_pointer( buffer );
+            cdc_header    = (sdpcm_cdc_header_t*) &( (char*) &common_header->sdpcm_header )[ common_header->sdpcm_header.sw_header.header_length ];
+            flags         = ltoh32( cdc_header->flags );
+            id            = (uint16_t) ( ( flags & CDCF_IOC_ID_MASK ) >> CDCF_IOC_ID_SHIFT );
+
+            if ( id == wwd_sdpcm_requested_ioctl_id )
             {
-                --wwd_sdpcm_ioctl_abort_count;
-                host_buffer_release( buffer, WWD_NETWORK_RX );
-                break;
+                /* Save the response packet in a global variable */
+                wwd_sdpcm_ioctl_response = buffer;
+
+                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: IOCTL Response (%d bytes)\n", (unsigned int)buffer, size ) );
+
+                /* Wake the thread which sent the IOCTL/IOVAR so that it will resume */
+                host_rtos_set_semaphore( &wwd_sdpcm_ioctl_sleep, WICED_FALSE );
             }
-
-            /* Save the response packet in a global variable */
-            wwd_sdpcm_ioctl_response = buffer;
-
-            WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: IOCTL Response (%d bytes)\n", (unsigned int)buffer, size ) );
-
-            /* Wake the thread which sent the IOCTL/IOVAR so that it will resume */
-            host_rtos_set_semaphore( &wwd_sdpcm_ioctl_sleep, WICED_FALSE );
+            else
+            {
+                host_buffer_release( buffer, WWD_NETWORK_RX );
+                WPRINT_WWD_DEBUG(("Received a response for a different IOCTL - retry\n"));
+            }
             break;
 
         case DATA_HEADER:
@@ -692,7 +727,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                     }
 
                     /* Send packet to bottom of network stack */
-                    host_network_process_ethernet_data( buffer, ( wwd_wifi_is_packet_from_ap( bdc_header->flags2 ) == WICED_TRUE ) ? WWD_AP_INTERFACE : WWD_STA_INTERFACE );
+                    host_network_process_ethernet_data( buffer, wwd_wifi_get_source_interface( bdc_header->flags2 ) );
                     }
             }
             break;
@@ -741,7 +776,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 wwd_event->reason     = (wwd_event_reason_t)   NTOH32( wwd_event->reason     );
                 wwd_event->auth_type  =                        NTOH32( wwd_event->auth_type  );
                 wwd_event->datalen    =                        NTOH32( wwd_event->datalen    );
-                wwd_event->interface  = ( event->event.raw.ifidx == CHIP_STA_INTERFACE )? WWD_STA_INTERFACE: WWD_AP_INTERFACE;
+                wwd_event->interface  = ( event->event.raw.ifidx & 3);
 
 
                 /* This is necessary because people who defined event statuses and reasons overlapped values. */
@@ -808,7 +843,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
  *  @param type       : SDPCM_SET or SDPCM_GET - indicating whether to set or get the I/O control
  *  @param send_buffer_hnd : A handle for a packet buffer containing the data value to be sent.
  *  @param response_buffer_hnd : A pointer which will receive the handle for the packet buffer containing the response data value received..
- *  @param interface : Which interface to send the iovar to (SDPCM_STA_INTERFACE or SDPCM_AP_INTERFACE)
+ *  @param interface : Which interface to send the iovar to (WWD_STA_INTERFACE or WWD_AP_INTERFACE)
  *
  *  @return    WWD result code
  */
@@ -817,12 +852,11 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
 {
     uint32_t data_length;
     uint32_t flags;
-    uint16_t id;
     wwd_result_t retval;
     sdpcm_control_header_t* send_packet;
-    sdpcm_common_header_t*  recv_packet;
-    sdpcm_cdc_header_t* cdc_header;
-    uint8_t interface_val = (uint8_t) ( (interface == WWD_STA_INTERFACE)?CHIP_STA_INTERFACE:CHIP_AP_INTERFACE );
+    sdpcm_common_header_t*  common_header;
+    sdpcm_cdc_header_t*     cdc_header;
+    uint8_t interface_val = (uint8_t) (interface & 3);
 
     /* Acquire mutex which prevents multiple simultaneous IOCTLs */
     retval = host_rtos_get_semaphore( &wwd_sdpcm_ioctl_mutex, NEVER_TIMEOUT, WICED_FALSE );
@@ -874,33 +908,18 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     /* Store the length of the data and the IO control header and pass "down" */
     wwd_sdpcm_send_common( send_buffer_hnd, CONTROL_HEADER );
 
-    do
+    /* Wait till response has been received  */
+    retval = host_rtos_get_semaphore( &wwd_sdpcm_ioctl_sleep, (uint32_t) WWD_IOCTL_TIMEOUT_MS, WICED_FALSE );
+    if ( retval != WWD_SUCCESS )
     {
-        /* Wait till response has been received  */
-        retval = host_rtos_get_semaphore( &wwd_sdpcm_ioctl_sleep, (uint32_t) WWD_IOCTL_TIMEOUT_MS, WICED_FALSE );
-        if ( retval != WWD_SUCCESS )
-        {
-/*            wiced_assert("IOCTL Timed out\n", 0 != 0 ); */
-            ++wwd_sdpcm_ioctl_abort_count;
-            /* Release the mutex since wwd_sdpcm_ioctl_response will no longer be referenced. */
-            host_rtos_set_semaphore( &wwd_sdpcm_ioctl_mutex, WICED_FALSE );
-            return retval;
-        }
+        /* Release the mutex since wwd_sdpcm_ioctl_response will no longer be referenced. */
+        host_rtos_set_semaphore( &wwd_sdpcm_ioctl_mutex, WICED_FALSE );
+        return retval;
+    }
 
-        /* Cast the response to a CDC + SDPCM header */
-        recv_packet = (sdpcm_common_header_t*) host_buffer_get_current_piece_data_pointer( wwd_sdpcm_ioctl_response );
-        cdc_header = (sdpcm_cdc_header_t*) &((char*)&recv_packet->sdpcm_header)[ recv_packet->sdpcm_header.sw_header.header_length ];
-        flags = ltoh32( cdc_header->flags );
-        id = (uint16_t) ( ( flags & CDCF_IOC_ID_MASK ) >> CDCF_IOC_ID_SHIFT );
-
-        /* Check that the IOCTL identifier matches the identifier that was sent */
-        if ( id != wwd_sdpcm_requested_ioctl_id )
-        {
-            host_buffer_release( wwd_sdpcm_ioctl_response, WWD_NETWORK_RX );
-            WPRINT_WWD_DEBUG(("Received a response for a different IOCTL - retry\n"));
-        }
-    } while ( id != wwd_sdpcm_requested_ioctl_id );
-
+    common_header = (sdpcm_common_header_t*) host_buffer_get_current_piece_data_pointer( wwd_sdpcm_ioctl_response );
+    cdc_header    = (sdpcm_cdc_header_t*) &( (char*) &common_header->sdpcm_header )[ common_header->sdpcm_header.sw_header.header_length ];
+    flags         = ltoh32( cdc_header->flags );
 
     retval = (wwd_result_t) ( WLAN_ENUM_OFFSET -  ltoh32( cdc_header->status ) );
 
@@ -913,7 +932,6 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     else
     {
         host_buffer_release( wwd_sdpcm_ioctl_response, WWD_NETWORK_RX );
-        recv_packet = 0; /* Note: packet will no longer be valid after freeing buffer */
     }
 
     wwd_sdpcm_ioctl_response = NULL;
@@ -1257,7 +1275,6 @@ static void wwd_sdpcm_set_next_buffer_in_queue( wiced_buffer_t buffer, wiced_buf
 }
 
 
-
 /** Map a DSCP value from an IP header to a WMM QoS priority
  *
  * @param dscp_val : DSCP value from IP header
@@ -1292,4 +1309,9 @@ static uint8_t wwd_map_dscp_to_priority( uint8_t val )
     }
 
     return wmm_qos;
+}
+
+static wwd_interface_t wwd_wifi_get_source_interface( uint8_t flags2 )
+{
+    return (wwd_interface_t)(flags2 & BDC_FLAG2_IF_MASK);
 }

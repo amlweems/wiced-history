@@ -258,10 +258,11 @@ void              platform_pmu_wifi_allowed_to_sleep( void );
 
 /* Initialisation Function(s) */
 platform_result_t platform_watchdog_init            ( void );
+platform_result_t platform_reinit_wlan_stdio_uart   ( void );
 
 platform_result_t platform_watchdog_force_reset     ( void );
 void              platform_apps_core_init           ( void );
-uint32_t          platform_filesystem_init          ( void );
+platform_result_t platform_filesystem_init          ( void );
 void              platform_sflash_init              ( void );
 platform_result_t platform_otp_setup                ( void );
 

@@ -427,6 +427,7 @@ WWD_RTOS_DEFINE_ISR( gpio_irq )
             {
                 interrupt_line <<= 1;
             }
+            wiced_assert( "interrupt pin not found", gpio_number < 10 );
             break;
         case EXTI15_10_IRQn:
             interrupt_line = EXTI_Line10;
@@ -434,6 +435,7 @@ WWD_RTOS_DEFINE_ISR( gpio_irq )
             {
                 interrupt_line <<= 1;
             }
+            wiced_assert( "interrupt pin not found", gpio_number < 16 );
             break;
         default:
             return;

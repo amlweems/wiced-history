@@ -581,17 +581,12 @@ static wwd_result_t wwd_bus_sdio_transfer( wwd_bus_transfer_direction_t directio
         if ( result != WWD_SUCCESS )
         {
             return result;
-#if 0
-            if (function == WLAN_FUNCTION && direction == BUS_READ)
-            {
-                (void) wwd_bus_sdio_abort_read( WICED_TRUE ); /* Ignore return as there is not much to be done if this fails */
-                wiced_assert("Attempting to abort read after transfer failure - may not fix bus", 0 != 0 );
-            }
-
-            ++retry_count;
-#endif /* if 0 */
         }
+
+        ++retry_count;
     } while ( ( result != WWD_SUCCESS ) && ( retry_count < (uint8_t) BUS_PROTOCOL_LEVEL_MAX_RETRIES ) );
+
+    wiced_assert( "too many sdio retries", result == WWD_SUCCESS );
 
     return result;
 }

@@ -259,9 +259,9 @@ extern   "C" {
 /* This enables an ARP probe for verifying the assigned DHCP address is
    not owned by another host.  This is recommended, but not required
    by RFC 2131 (4.4.1).      
-
-#define NX_DHCP_CLIENT_SEND_ARP_PROBE  
 */
+#define NX_DHCP_CLIENT_SEND_ARP_PROBE
+
 
 
 #ifdef NX_DHCP_CLIENT_SEND_ARP_PROBE

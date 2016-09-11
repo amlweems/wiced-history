@@ -346,6 +346,7 @@ static int test_compare_dir( wiced_filesystem_t* fs_handle, const char* wdir_nam
                 printf( "Error opening wicedfs file %s\n", wpath );
                 free_list( &sorted_ptr_list, sorted_count );
                 wicedfs_closedir( &wdir );
+                flose(file);
                 return -5;
             }
 
@@ -360,7 +361,7 @@ static int test_compare_dir( wiced_filesystem_t* fs_handle, const char* wdir_nam
                 /* Check that the number of bytes read matches */
                 if ( bnum_read != num_read )
                 {
-                    printf( "Error: num read mismatch %d %d\n", num_read, bnum_read );
+                    printf( "Error: num read mismatch %lu %lu\n", num_read, bnum_read );
                     free_list( &sorted_ptr_list, sorted_count );
                     wicedfs_closedir( &wdir );
                     return -6;

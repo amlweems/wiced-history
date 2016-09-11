@@ -121,16 +121,22 @@ wiced_bool_t host_platform_is_in_interrupt_context( void )
     return ( ( SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk ) != 0 ) ? WICED_TRUE : WICED_FALSE;
 }
 
-void host_platform_get_mac_address( wiced_mac_t* mac )
+wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac )
 {
 #if !defined ( WICED_DISABLE_BOOTLOADER )
     wiced_mac_t* temp_mac;
-    wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF( platform_dct_wifi_config_t, mac_address ), sizeof(wiced_mac_t) );
+    wiced_result_t result;
+    result = wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF( platform_dct_wifi_config_t, mac_address ), sizeof(wiced_mac_t) );
+    if ( result != WICED_SUCCESS )
+    {
+        return (wwd_result_t) result;
+    }
     memcpy( mac->octet, temp_mac, sizeof(wiced_mac_t) );
     wiced_dct_read_unlock( temp_mac, WICED_FALSE );
 #else
     UNUSED_PARAMETER( mac );
 #endif
+    return WWD_SUCCESS;
 }
 
 wwd_result_t host_platform_deinit_wlan_powersave_clock( void )

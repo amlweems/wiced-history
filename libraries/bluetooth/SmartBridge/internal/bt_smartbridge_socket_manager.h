@@ -11,7 +11,7 @@
 
 #include "wiced_utilities.h"
 #include "wiced_bt_smartbridge.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 
 #ifdef __cplusplus
 extern "C" {

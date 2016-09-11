@@ -379,6 +379,13 @@ void sha1_hmac_finish( sha1_context *ctx, unsigned char output[20] );
  */
 void sha1_hmac( const unsigned char *key, int32_t keylen, const unsigned char *input, int32_t ilen, unsigned char output[20] );
 
+
+/** @cond */
+/* Internal weakly defined function declared here to allow overriding */
+void sha1_process( sha1_context *ctx, const unsigned char *data );
+void sha1_process_small( sha1_context *ctx, const unsigned char *data );
+/** @endcond */
+
 /** @} */
 
 /*****************************************************************************/
@@ -1067,7 +1074,7 @@ int32_t rsa_gen_key( rsa_context *ctx, int32_t nbits, int32_t exponent );
  *
  * @return         0 if successful
  */
-int32_t rsa_check_pubkey( rsa_context *ctx );
+int32_t rsa_check_pubkey( const rsa_context *ctx );
 
 /**
  * @brief          Check a private RSA key
@@ -1076,7 +1083,7 @@ int32_t rsa_check_pubkey( rsa_context *ctx );
  *
  * @return         0 if successful
  */
-int32_t rsa_check_privkey( rsa_context *ctx );
+int32_t rsa_check_privkey( const rsa_context *ctx );
 
 /**
  * @brief          Do an RSA public key operation
@@ -1090,7 +1097,7 @@ int32_t rsa_check_privkey( rsa_context *ctx );
  * @note           This function does NOT take care of message padding. Also, be sure to set input[0] = 0.
  * @note           The input and output buffers must be large enough (eg. 128 bytes if RSA-1024 is used).
  */
-int32_t rsa_public( rsa_context *ctx, const unsigned char *input, unsigned char *output );
+int32_t rsa_public( const rsa_context *ctx, const unsigned char *input, unsigned char *output );
 
 /**
  * @brief          Do an RSA private key operation
@@ -1103,7 +1110,7 @@ int32_t rsa_public( rsa_context *ctx, const unsigned char *input, unsigned char 
  *
  * @note           The input and output buffers must be large enough (eg. 128 bytes if RSA-1024 is used).
  */
-int32_t rsa_private( rsa_context *ctx, const unsigned char *input, unsigned char *output );
+int32_t rsa_private( const rsa_context *ctx, const unsigned char *input, unsigned char *output );
 
 /**
  * @brief          Add the message padding, then do an RSA operation
@@ -1118,7 +1125,7 @@ int32_t rsa_private( rsa_context *ctx, const unsigned char *input, unsigned char
  *
  * @note           The output buffer must be as large as the size of ctx->N (eg. 128 bytes if RSA-1024 is used).
  */
-int32_t rsa_pkcs1_encrypt( rsa_context *ctx, int32_t mode, int32_t ilen, const unsigned char *input, unsigned char *output );
+int32_t rsa_pkcs1_encrypt( const rsa_context *ctx, int32_t mode, int32_t ilen, const unsigned char *input, unsigned char *output );
 
 /**
  * @brief          Do an RSA operation, then remove the message padding
@@ -1134,7 +1141,7 @@ int32_t rsa_pkcs1_encrypt( rsa_context *ctx, int32_t mode, int32_t ilen, const u
  *
  * @note           The output buffer must be as large as the size of ctx->N (eg. 128 bytes if RSA-1024 is used)
  */
-int32_t rsa_pkcs1_decrypt( rsa_context *ctx, int32_t mode, int32_t *olen, const unsigned char *input, unsigned char *output, int32_t output_max_len );
+int32_t rsa_pkcs1_decrypt( const rsa_context *ctx, int32_t mode, int32_t *olen, const unsigned char *input, unsigned char *output, int32_t output_max_len );
 
 /**
  * @brief          Do a private RSA to sign a message digest
@@ -1150,7 +1157,7 @@ int32_t rsa_pkcs1_decrypt( rsa_context *ctx, int32_t mode, int32_t *olen, const 
  *
  * @note           The "sig" buffer must be as large as the size of ctx->N (eg. 128 bytes if RSA-1024 is used).
  */
-int32_t rsa_pkcs1_sign( rsa_context *ctx, int32_t mode, int32_t hash_id, int32_t hashlen, const unsigned char *hash, unsigned char *sig );
+int32_t rsa_pkcs1_sign( const rsa_context *ctx, int32_t mode, int32_t hash_id, int32_t hashlen, const unsigned char *hash, unsigned char *sig );
 
 /**
  * @brief          Do a public RSA and check the message digest
@@ -1166,7 +1173,7 @@ int32_t rsa_pkcs1_sign( rsa_context *ctx, int32_t mode, int32_t hash_id, int32_t
  *
  * @note           The "sig" buffer must be as large as the size of ctx->N (eg. 128 bytes if RSA-1024 is used).
  */
-int32_t rsa_pkcs1_verify( rsa_context *ctx, int32_t mode, int32_t hash_id, int32_t hashlen, const unsigned char *hash, const unsigned char *sig );
+int32_t rsa_pkcs1_verify( const rsa_context *ctx, int32_t mode, int32_t hash_id, int32_t hashlen, const unsigned char *hash, const unsigned char *sig );
 
 /**
  * @brief          Free the components of an RSA key
@@ -1301,6 +1308,11 @@ void seed_cbc_decrypt(const seed_context_t* ctx, uint8_t ivec[16], const uint8_t
 
 
 /** @} */
+
+
+extern besl_result_t besl_802_11_generate_pmk              ( const char* password, const unsigned char* ssid, int ssid_length, unsigned char* output );
+extern besl_result_t besl_802_11_generate_random_passphrase( char* passphrase, const int passphrase_length );
+
 
 #ifdef __cplusplus
 } /*extern "C" */

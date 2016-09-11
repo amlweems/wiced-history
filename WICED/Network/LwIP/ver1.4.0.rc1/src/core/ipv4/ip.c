@@ -608,6 +608,7 @@ err_t ip_output_if_opt(struct pbuf *p, ip_addr_t *src, ip_addr_t *dest,
     if (optlen != 0) {
 #if CHECKSUM_GEN_IP_INLINE
       int i;
+      u16_t* payload_ptr;
 #endif /* CHECKSUM_GEN_IP_INLINE */
       /* round up to a multiple of 4 */
       optlen_aligned = ((optlen + 3) & ~3);
@@ -625,8 +626,10 @@ err_t ip_output_if_opt(struct pbuf *p, ip_addr_t *src, ip_addr_t *dest,
         memset(((char*)p->payload) + optlen, 0, optlen_aligned - optlen);
       }
 #if CHECKSUM_GEN_IP_INLINE
+      payload_ptr = p->payload;
       for (i = 0; i < optlen_aligned; i += sizeof(u16_t)) {
-        chk_sum += ((u16_t*)p->payload)[i];
+        chk_sum += (u32_t)(*payload_ptr);
+        ++payload_ptr;
       }
 #endif /* CHECKSUM_GEN_IP_INLINE */
     }

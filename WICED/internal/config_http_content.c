@@ -525,6 +525,7 @@ static int32_t process_config_save( const char* url_parameters, wiced_tcp_stream
         uint32_t end_of_last_offset = 0x0;
         const configuration_entry_t* config_entry;
         uint8_t* app_dct;
+        wiced_result_t result;
 
         /* Calculate how big the app config details are */
         for ( config_entry = app_configuration; config_entry->name != NULL; ++config_entry )
@@ -539,7 +540,18 @@ static int32_t process_config_save( const char* url_parameters, wiced_tcp_stream
             }
         }
 
-        wiced_dct_read_lock( (void**)&app_dct, WICED_TRUE, DCT_APP_SECTION, earliest_offset, end_of_last_offset - earliest_offset );
+        if ( end_of_last_offset <= earliest_offset )
+        {
+            wiced_assert( "Invalid app configuration data", 1 == 0 );
+            goto save_failed;
+        }
+
+        result = wiced_dct_read_lock( (void**)&app_dct, WICED_TRUE, DCT_APP_SECTION, earliest_offset, end_of_last_offset - earliest_offset );
+        if ( result != WICED_SUCCESS )
+        {
+            wiced_assert( "DCT read failed", 1 == 0 );
+            goto save_failed;
+        }
         if ( app_dct != NULL )
         {
             while ( url_parameters[0] == 'v' && url_parameters[3] == '=' )
@@ -579,7 +591,12 @@ static int32_t process_config_save( const char* url_parameters, wiced_tcp_stream
             }
 
             /* Write the app DCT */
-            wiced_dct_write( app_dct, DCT_APP_SECTION, earliest_offset, end_of_last_offset - earliest_offset );
+            result = wiced_dct_write( app_dct, DCT_APP_SECTION, earliest_offset, end_of_last_offset - earliest_offset );
+            if ( result != WICED_SUCCESS )
+            {
+                wiced_assert( "DCT read failed", 1 == 0 );
+                goto save_failed;
+            }
 
             wiced_dct_read_unlock( app_dct, WICED_TRUE );
         }
@@ -587,6 +604,13 @@ static int32_t process_config_save( const char* url_parameters, wiced_tcp_stream
 
     #define CONFIG_SAVE_SUCCESS  "Config saved"
     wiced_tcp_stream_write(stream, CONFIG_SAVE_SUCCESS, sizeof(CONFIG_SAVE_SUCCESS)-1);
+
+    return 0;
+
+save_failed:
+    #define CONFIG_SAVE_FAIL     "Config save failed"
+    wiced_assert( "Save Failed", 1 == 0 );
+    wiced_tcp_stream_write(stream, CONFIG_SAVE_FAIL, sizeof(CONFIG_SAVE_FAIL)-1);
 
     return 0;
 }

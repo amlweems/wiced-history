@@ -31,7 +31,8 @@ $(NAME)_SOURCES += host/WICED/besl_host.c \
                    host/WICED/wiced_tls.c \
                    host/WICED/wiced_wps.c \
                    host/WICED/wiced_p2p.c \
-                   host/WICED/cipher_suites.c
+                   host/WICED/cipher_suites.c \
+                   host/WICED/p2p_internal.c
 
 
 GLOBAL_INCLUDES := host/WICED \

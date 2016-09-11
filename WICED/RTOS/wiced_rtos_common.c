@@ -23,6 +23,7 @@
 #include "wiced_defaults.h"
 #include "wiced_result.h"
 #include "internal/wiced_internal_api.h"
+#include "platform_config.h"
 
 /******************************************************
  *                      Macros
@@ -31,6 +32,8 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+
+#define CPU_CYCLES_PER_MICROSECOND    ( CPU_CLOCK_HZ / 1000000 )
 
 /******************************************************
  *                   Enumerations
@@ -106,6 +109,21 @@ wiced_result_t wiced_rtos_thread_join( wiced_thread_t* thread )
 wiced_result_t wiced_rtos_delay_milliseconds( uint32_t milliseconds )
 {
     return host_rtos_delay_milliseconds( milliseconds );
+}
+
+wiced_result_t wiced_rtos_delay_microseconds( uint32_t microseconds )
+{
+    uint32_t current_time;
+    uint32_t end_time;
+
+    current_time = host_platform_get_cycle_count( );
+    end_time     = current_time + ( microseconds * CPU_CYCLES_PER_MICROSECOND );
+    while ( current_time < end_time )
+    {
+        current_time = host_platform_get_cycle_count( );
+    }
+
+    return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_rtos_init_semaphore( wiced_semaphore_t* semaphore )

@@ -87,7 +87,6 @@
 #include <lwip/stats.h>
 #include <lwip/snmp.h>
 #include "netif/etharp.h"
-#include "netif/ppp_oe.h"
 #include "wwd_bus_protocol.h"
 
 /* Define those to better describe your network interface. */
@@ -121,7 +120,7 @@ static void low_level_init( /*@partial@*/ struct netif *netif )
     netif->hwaddr_len = (u8_t) ETHARP_HWADDR_LEN;
 
     /* Setup the physical address of this IP instance. */
-    if ( wwd_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ), WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    if ( wwd_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ), (wwd_interface_t) (int) netif->state ) != WWD_SUCCESS )
     {
         WPRINT_NETWORK_DEBUG(("Couldn't get MAC address\n"));
         return;
@@ -273,7 +272,9 @@ err_t ethernetif_init( /*@partial@*/ struct netif *netif )
 #endif /* LWIP_NETIF_HOSTNAME */
 
     /* Verify the netif is a valid interface */
-    if ( ( (wwd_interface_t) (int) netif->state != WWD_STA_INTERFACE ) && ( (wwd_interface_t) (int) netif->state != WWD_AP_INTERFACE ) )
+    if ( ( (wwd_interface_t) (int) netif->state != WWD_STA_INTERFACE ) &&
+         ( (wwd_interface_t) (int) netif->state != WWD_AP_INTERFACE  ) &&
+         ( (wwd_interface_t) (int) netif->state != WWD_P2P_INTERFACE ) )
     {
         return ERR_ARG;
     }

@@ -10,7 +10,7 @@
 #pragma once
 
 #include "wiced_rtos.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,27 +52,27 @@ typedef struct bt_packet_pool bt_packet_pool_t;
 #pragma pack(1)
 struct bt_packet
 {
-    uint32_t          packet_id;
-    bt_list_node_t    node;
-    bt_packet_pool_t* pool;
-    bt_packet_owner_t owner;
-    uint8_t*          data_start;
-    uint8_t*          data_end;
-    uint8_t*          packet_end;
-    uint8_t           packet_start[1];
+    uint32_t           packet_id;
+    linked_list_node_t node;
+    bt_packet_pool_t*  pool;
+    bt_packet_owner_t  owner;
+    uint8_t*           data_start;
+    uint8_t*           data_end;
+    uint8_t*           packet_end;
+    uint8_t            packet_start[1];
 };
 
 struct bt_packet_pool
 {
-    uint32_t         pool_id;
-    bt_linked_list_t pool_list;
-    uint8_t*         pool_buffer;
-    wiced_mutex_t    mutex;
-    uint32_t         max_packet_count;
-    uint32_t         header_size;
-    uint32_t         data_size;
-    uint32_t         packet_created;
-    uint32_t         packet_deleted;
+    uint32_t      pool_id;
+    linked_list_t pool_list;
+    uint8_t*      pool_buffer;
+    wiced_mutex_t mutex;
+    uint32_t      max_packet_count;
+    uint32_t      header_size;
+    uint32_t      data_size;
+    uint32_t      packet_created;
+    uint32_t      packet_deleted;
 };
 #pragma pack()
 

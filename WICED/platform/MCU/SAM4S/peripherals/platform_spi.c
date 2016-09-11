@@ -78,8 +78,8 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
     spi_disable_mode_fault_detect( spi->peripheral );
     spi_set_peripheral_chip_select_value( spi->peripheral, 0 );
 
-    spi_set_clock_polarity( spi->peripheral, 0, ( ( config->mode && SPI_CLOCK_IDLE_HIGH )   ? (1) : (0) ) );
-    spi_set_clock_phase( spi->peripheral, 0,    ( ( config->mode && SPI_CLOCK_RISING_EDGE ) ? (1) : (0) ) );
+    spi_set_clock_polarity( spi->peripheral, 0, ( ( config->mode & SPI_CLOCK_IDLE_HIGH )   ? (1) : (0) ) );
+    spi_set_clock_phase( spi->peripheral, 0,    ( ( config->mode & SPI_CLOCK_FALLING_EDGE ) ? (1) : (0) ) );
 
     spi_set_bits_per_transfer( spi->peripheral, 0, SPI_CSR_BITS_8_BIT );
     spi_set_baudrate_div( spi->peripheral, 0, (uint8_t)( CPU_CLOCK_HZ / config->speed ) );

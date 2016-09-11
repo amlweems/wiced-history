@@ -300,7 +300,7 @@ try_cooee_again:
 
         wiced_dct_read_lock( (void**) &ap_zero, WICED_TRUE, DCT_WIFI_CONFIG_SECTION, offsetof(platform_dct_wifi_config_t, stored_ap_list), sizeof(wiced_config_ap_entry_t) );
 
-        memcpy(&ap_zero->details, &ap, sizeof(wiced_scan_result_t));
+        memcpy(&ap_zero->details, &ap, sizeof(wiced_ap_info_t));
         ap_zero->security_key_length = security_key_tlv->length;
         memcpy( ap_zero->security_key, security_key_tlv->data, security_key_tlv->length);
 

@@ -91,7 +91,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef __time_t_defined
 #undef OK
 #undef SO_PASSCRED
-//#undef TX_ENABLE_EVENT_TRACE
+/* #undef TX_ENABLE_EVENT_TRACE */
 #undef FD_SETSIZE
 #undef ERROR
 #undef fd_set
@@ -157,7 +157,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_DHCP_CLIENT_IDENTIFIER_MAX
 #undef NX_DHCP_CLIENT_OPTIONS_MAX
 #undef NX_DHCP_CLIENT_RECORD_TABLE_SIZE
-#undef NX_DHCP_CLIENT_SEND_ARP_PROBE
+/* #undef NX_DHCP_CLIENT_SEND_ARP_PROBE */
 #undef NX_DHCP_CLIENT_SESSION_TIMEOUT
 #undef NX_DHCP_DEFAULT_LEASE_TIME
 #undef NX_DHCP_ENABLE_BOOTP
@@ -251,7 +251,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_IP_RAW
 #undef NX_IP_ROUTING_TABLE_SIZE
 #undef NX_IP_STATUS_CHECK_WAIT_TIME
-//#undef NX_MAX_LISTEN_REQUESTS
+/* #undef NX_MAX_LISTEN_REQUESTS */
 #undef NX_MAX_MULTICAST_GROUPS
 #undef NX_MAX_PHYSICAL_INTERFACES
 #undef NX_MICROSECOND_PER_CPU_TICK

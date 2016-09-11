@@ -19,6 +19,8 @@
 #include "waf_platform.h"
 #include "wiced_framework.h"
 #include "wiced_dct_common.h"
+#include "wiced_apps_common.h"
+#include "elf.h"
 
 /******************************************************
  *                      Macros
@@ -44,6 +46,8 @@
  *               Function Declarations
  ******************************************************/
 
+static void wiced_dct_erase_copy( const sflash_handle_t* const sflash_handle, char copy_num );
+
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -53,23 +57,15 @@ static const uint32_t DCT_section_offsets[ ] =
     [DCT_SECURITY_SECTION]      = OFFSETOF( platform_dct_data_t, security_credentials ),
     [DCT_MFG_INFO_SECTION]      = OFFSETOF( platform_dct_data_t, mfg_info ),
     [DCT_WIFI_CONFIG_SECTION]   = OFFSETOF( platform_dct_data_t, wifi_config ),
+#ifdef WICED_DCT_INCLUDE_BT_CONFIG
+    [DCT_BT_CONFIG_SECTION] = OFFSETOF( platform_dct_data_t, bt_config ),
+#endif
     [DCT_INTERNAL_SECTION]      = 0,
 };
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
-static void wiced_dct_erase_copy( const sflash_handle_t* const sflash_handle, char copy_num )
-{
-    uint32_t sector_num;
-    uint32_t start = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_START_SECTOR : PLATFORM_DCT_COPY2_START_SECTOR;
-    uint32_t end = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_END_SECTOR : PLATFORM_DCT_COPY2_END_SECTOR;
-
-    for ( sector_num = start; sector_num < end; sector_num++ )
-    {
-        sflash_sector_erase( sflash_handle, sector_num * 4096 );
-    }
-}
 
 void* wiced_dct_get_current_address( dct_section_t section )
 {
@@ -78,13 +74,16 @@ void* wiced_dct_get_current_address( dct_section_t section )
     const platform_dct_header_t hdr =
     { .write_incomplete = 0, .is_current_dct = 1, .app_valid = 1, .mfg_info_programmed = 0, .magic_number = BOOTLOADER_MAGIC_NUMBER, .load_app_func = NULL };
 
-    platform_dct_header_t dct1_val;
-    platform_dct_header_t dct2_val;
+    platform_dct_header_t  dct1_val;
+    platform_dct_header_t  dct2_val;
     platform_dct_header_t* dct1 = &dct1_val;
     platform_dct_header_t* dct2 = &dct2_val;
-    sflash_handle_t sflash_handle;
+    sflash_handle_t        sflash_handle;
+
     if ( init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED ) != 0 )
+    {
         return (void*) WICED_ERROR;
+    }
     sflash_read( &sflash_handle, PLATFORM_DCT_COPY1_START_ADDRESS, dct1, sizeof(platform_dct_header_t) );
     sflash_read( &sflash_handle, PLATFORM_DCT_COPY2_START_ADDRESS, dct2, sizeof(platform_dct_header_t) );
 
@@ -138,9 +137,9 @@ static void copy_sflash( const sflash_handle_t* sflash_handle, uint32_t dest_loc
         sflash_read( sflash_handle, src_loc, buff, write_size );
         sflash_write( sflash_handle, dest_loc, buff, write_size );
 
-        src_loc += write_size;
+        src_loc  += write_size;
         dest_loc += write_size;
-        size -= write_size;
+        size     -= write_size;
     }
 }
 
@@ -148,7 +147,7 @@ static void erase_dct_copy( const sflash_handle_t* const sflash_handle, char cop
 {
     uint32_t sector_num;
     uint32_t start = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_START_SECTOR : PLATFORM_DCT_COPY2_START_SECTOR;
-    uint32_t end = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_END_SECTOR : PLATFORM_DCT_COPY2_END_SECTOR;
+    uint32_t end   = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_END_SECTOR : PLATFORM_DCT_COPY2_END_SECTOR;
 
     for ( sector_num = start; sector_num < end; sector_num++ )
     {
@@ -161,11 +160,12 @@ static void erase_dct_copy( const sflash_handle_t* const sflash_handle, char cop
  */
 static int wiced_dct_update_boot( const boot_detail_t* boot_detail )
 {
-    uint32_t                new_dct;
-    sflash_handle_t         sflash_handle;
-    platform_dct_header_t   curr_dct_header;
-    char                    zero_byte = 0;
-    platform_dct_header_t* curr_dct = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
+    uint32_t               new_dct;
+    sflash_handle_t        sflash_handle;
+    platform_dct_header_t  curr_dct_header;
+    char                   zero_byte = 0;
+    platform_dct_header_t* curr_dct  = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
+
     uint32_t bytes_after_header = ( PLATFORM_DCT_COPY1_END_ADDRESS - PLATFORM_DCT_COPY1_START_ADDRESS ) - ( sizeof(platform_dct_header_t) );
     platform_dct_header_t hdr =
     {
@@ -195,12 +195,12 @@ static int wiced_dct_update_boot( const boot_detail_t* boot_detail )
     /* read the header from the old DCT */
     sflash_read( &sflash_handle, (uint32_t) curr_dct, &curr_dct_header, sizeof( curr_dct_header ) );
 
-    hdr.full_size = curr_dct_header.full_size;
-    hdr.used_size = curr_dct_header.used_size;
-    hdr.app_valid = curr_dct_header.app_valid;
-    hdr.load_app_func = curr_dct_header.load_app_func;
+    hdr.full_size           = curr_dct_header.full_size;
+    hdr.used_size           = curr_dct_header.used_size;
+    hdr.app_valid           = curr_dct_header.app_valid;
+    hdr.load_app_func       = curr_dct_header.load_app_func;
     hdr.mfg_info_programmed = curr_dct_header.mfg_info_programmed;
-    hdr.boot_detail = *boot_detail;
+    hdr.boot_detail         = *boot_detail;
     memcpy( hdr.apps_locations, curr_dct_header.apps_locations, sizeof(image_location_t) * DCT_MAX_APP_COUNT );
 
     /* Write the new DCT header data */
@@ -213,15 +213,15 @@ static int wiced_dct_update_boot( const boot_detail_t* boot_detail )
     return 0;
 }
 
-static int wiced_dct_update_app_header_location( uint32_t offset, const image_location_t *new_app_location )
+static int wiced_dct_update_app_header_locations( uint32_t offset, const image_location_t *new_app_location, uint8_t count )
 {
-    uint32_t new_dct;
-    sflash_handle_t sflash_handle;
-    platform_dct_header_t curr_dct_header;
-    char zero_byte = 0;
-    platform_dct_header_t* curr_dct = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
-    uint32_t bytes_after_header = ( PLATFORM_DCT_COPY1_END_ADDRESS - PLATFORM_DCT_COPY1_START_ADDRESS ) - ( sizeof(platform_dct_header_t) );
-    platform_dct_header_t hdr =
+    uint32_t               new_dct;
+    sflash_handle_t        sflash_handle;
+    platform_dct_header_t  curr_dct_header;
+    char                   zero_byte          = 0;
+    platform_dct_header_t* curr_dct           = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
+    uint32_t               bytes_after_header = ( PLATFORM_DCT_COPY1_END_ADDRESS - PLATFORM_DCT_COPY1_START_ADDRESS ) - ( sizeof(platform_dct_header_t) );
+    platform_dct_header_t  hdr =
     {
         .write_incomplete   = 1,
         .is_current_dct     = 1,
@@ -249,14 +249,15 @@ static int wiced_dct_update_app_header_location( uint32_t offset, const image_lo
     /* read the header from the old DCT */
     sflash_read( &sflash_handle, (uint32_t) curr_dct, &curr_dct_header, sizeof( curr_dct_header ) );
 
-    hdr.full_size = curr_dct_header.full_size;
-    hdr.used_size = curr_dct_header.used_size;
-    hdr.app_valid = curr_dct_header.app_valid;
-    hdr.load_app_func = curr_dct_header.load_app_func;
+    hdr.full_size           = curr_dct_header.full_size;
+    hdr.used_size           = curr_dct_header.used_size;
+    hdr.app_valid           = curr_dct_header.app_valid;
+    hdr.load_app_func       = curr_dct_header.load_app_func;
     hdr.mfg_info_programmed = curr_dct_header.mfg_info_programmed;
+
     memcpy( &hdr.boot_detail, &curr_dct_header.boot_detail, sizeof(boot_detail_t) );
     memcpy( hdr.apps_locations, curr_dct_header.apps_locations, sizeof(image_location_t) * DCT_MAX_APP_COUNT );
-    memcpy( ( (uint8_t*) &hdr ) + offset, new_app_location, sizeof(image_location_t) );
+    memcpy( ( (uint8_t*) &hdr ) + offset, new_app_location, sizeof(image_location_t) * count );
 
     /* Write the new DCT header data */
     sflash_write( &sflash_handle, new_dct, &hdr, sizeof( hdr ) );
@@ -270,14 +271,14 @@ static int wiced_dct_update_app_header_location( uint32_t offset, const image_lo
 
 static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32_t data_length, int8_t app_valid, void(*func)( void ) )
 {
-    uint32_t new_dct;
-    platform_dct_header_t curr_dct_header;
-    uint32_t bytes_after_data;
-    uint8_t* new_app_data_addr = NULL;
-    uint8_t* curr_app_data_addr = NULL;
-    platform_dct_header_t* curr_dct = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
-    char zero_byte = 0;
-    sflash_handle_t sflash_handle;
+    uint32_t               new_dct;
+    platform_dct_header_t  curr_dct_header;
+    uint32_t               bytes_after_data;
+    uint8_t*               new_app_data_addr  = NULL;
+    uint8_t*               curr_app_data_addr = NULL;
+    platform_dct_header_t* curr_dct           = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
+    char                   zero_byte          = 0;
+    sflash_handle_t        sflash_handle;
     platform_dct_header_t hdr =
     {
         .write_incomplete = 1,
@@ -318,7 +319,7 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     if ( bytes_after_data != 0 )
     {
         /* There is data after end of requested write - copy it from old DCT to new DCT */
-        new_app_data_addr += data_length;
+        new_app_data_addr  += data_length;
         curr_app_data_addr += data_length;
 
         copy_sflash( &sflash_handle, new_dct + data_start_offset + data_length, (uint32_t) curr_dct + data_start_offset + data_length, bytes_after_data );
@@ -330,6 +331,7 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     /* Copy values from old DCT header to new DCT header */
     hdr.full_size = curr_dct_header.full_size;
     hdr.used_size = curr_dct_header.used_size;
+
     memcpy( &hdr.boot_detail, &curr_dct_header.boot_detail, sizeof(boot_detail_t) );
     memcpy( hdr.apps_locations, curr_dct_header.apps_locations, sizeof(image_location_t) * DCT_MAX_APP_COUNT );
     hdr.app_valid = (char) ( ( app_valid == -1 ) ? curr_dct_header.app_valid : app_valid );
@@ -364,7 +366,7 @@ wiced_result_t wiced_dct_update( const void* info_ptr, dct_section_t section, ui
     }
     else if ( ( section == DCT_INTERNAL_SECTION ) && ( offset >= OFFSETOF( platform_dct_header_t, apps_locations ) ) && ( offset < OFFSETOF( platform_dct_header_t, apps_locations ) + sizeof(image_location_t) * DCT_MAX_APP_COUNT ) && ( size == sizeof(image_location_t) ) )
     {
-        retval = wiced_dct_update_app_header_location( offset, info_ptr );
+        retval = wiced_dct_update_app_header_locations( offset, info_ptr, 1 );
     }
     else
     {
@@ -373,9 +375,87 @@ wiced_result_t wiced_dct_update( const void* info_ptr, dct_section_t section, ui
     return ( retval == 0 ) ? WICED_SUCCESS : WICED_ERROR;
 }
 
+static wiced_result_t wiced_dct_check_apps_locations_valid( image_location_t* app_header_locations )
+{
+    if (   ( /* No FR APP */                    app_header_locations[DCT_FR_APP_INDEX].id  != EXTERNAL_FIXED_LOCATION )
+        || ( /* FR App address incorrect */     app_header_locations[DCT_FR_APP_INDEX].detail.external_fixed.location != (SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FR_APP_INDEX))
+        || ( /* No FR DCT */                    app_header_locations[DCT_DCT_IMAGE_INDEX].id  != EXTERNAL_FIXED_LOCATION )
+        || ( /* DCT address is incorrect */     app_header_locations[DCT_DCT_IMAGE_INDEX].detail.external_fixed.location != (SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_DCT_IMAGE_INDEX))
+        )
+    {
+        return WICED_ERROR;
+    }
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t wiced_dct_load( const image_location_t* dct_location )
+{
+    sflash_handle_t      sflash_handle;
+    elf_header_t         header;
+    elf_program_header_t prog_header;
+    uint32_t             size;
+    uint32_t             offset;
+    uint32_t             dest_loc = PLATFORM_DCT_COPY1_START_ADDRESS;
+    uint8_t              buff[64];
+
+    /* initialize the serial flash */
+    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
+
+    /* Erase the application area */
+    wiced_dct_erase_copy( &sflash_handle, 1 );
+
+    /* Read the image header */
+    wiced_apps_read( dct_location, (uint8_t*) &header, 0, sizeof( header ) );
+
+    if ( header.program_header_entry_count != 1 )
+    {
+        return WICED_ERROR;
+    }
+
+    wiced_apps_read( dct_location, (uint8_t*) &prog_header, header.program_header_offset, sizeof( prog_header ) );
+
+    size   = prog_header.data_size_in_file;
+    offset = prog_header.data_offset;
+
+    while ( size > 0 )
+    {
+        uint32_t write_size = MIN( sizeof(buff), size);
+        wiced_apps_read( dct_location, buff, offset, write_size);
+        sflash_write( &sflash_handle, dest_loc, buff, write_size );
+
+        offset   += write_size;
+        dest_loc += write_size;
+        size     -= write_size;
+    }
+
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_dct_restore_factory_reset( void )
+{
+    uint8_t          apps_count = DCT_MAX_APP_COUNT;
+    image_location_t app_header_locations[ DCT_MAX_APP_COUNT ];
+
+    wiced_dct_read_with_copy( app_header_locations, DCT_INTERNAL_SECTION, DCT_APP_LOCATION_OF(DCT_FR_APP_INDEX), sizeof(image_location_t)* DCT_MAX_APP_COUNT );
+    if (wiced_dct_check_apps_locations_valid ( app_header_locations ) == WICED_ERROR )
+    {
+        /* DCT was corrupted. Restore only FR Application address */
+        app_header_locations[DCT_FR_APP_INDEX].id                                = EXTERNAL_FIXED_LOCATION;
+        app_header_locations[DCT_FR_APP_INDEX].detail.external_fixed.location    = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FR_APP_INDEX;
+        app_header_locations[DCT_DCT_IMAGE_INDEX].id                             = EXTERNAL_FIXED_LOCATION;
+        app_header_locations[DCT_DCT_IMAGE_INDEX].detail.external_fixed.location = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_DCT_IMAGE_INDEX;
+        apps_count = 2;
+    }
+    /* OK Current DCT seems decent, lets keep apps locations. */
+    wiced_dct_load( &app_header_locations[DCT_DCT_IMAGE_INDEX] );
+    wiced_dct_update_app_header_locations( OFFSETOF( platform_dct_header_t, apps_locations ), app_header_locations, apps_count );
+
+    return WICED_SUCCESS;
+}
+
 wiced_result_t wiced_dct_get_app_header_location( uint8_t app_id, image_location_t* app_header_location )
 {
-    if ( app_id > DCT_MAX_APP_COUNT )
+    if ( app_id >= DCT_MAX_APP_COUNT )
     {
         return WICED_ERROR;
     }
@@ -384,9 +464,21 @@ wiced_result_t wiced_dct_get_app_header_location( uint8_t app_id, image_location
 
 wiced_result_t wiced_dct_set_app_header_location( uint8_t app_id, image_location_t* app_header_location )
 {
-    if ( app_id > DCT_MAX_APP_COUNT )
+    if ( app_id >= DCT_MAX_APP_COUNT )
     {
         return WICED_ERROR;
     }
     return wiced_dct_update( app_header_location, DCT_INTERNAL_SECTION, DCT_APP_LOCATION_OF(app_id), sizeof(image_location_t) );
+}
+
+static void wiced_dct_erase_copy( const sflash_handle_t* const sflash_handle, char copy_num )
+{
+    uint32_t sector_num;
+    uint32_t start = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_START_SECTOR : PLATFORM_DCT_COPY2_START_SECTOR;
+    uint32_t end = ( copy_num == 1 ) ? PLATFORM_DCT_COPY1_END_SECTOR : PLATFORM_DCT_COPY2_END_SECTOR;
+
+    for ( sector_num = start; sector_num < end; sector_num++ )
+    {
+        sflash_sector_erase( sflash_handle, sector_num * 4096 );
+    }
 }

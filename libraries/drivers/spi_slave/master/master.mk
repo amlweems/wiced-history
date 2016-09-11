@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := SPI_Master_Library
+NAME := Lib_SPI_Master_Library
 
 $(NAME)_SOURCES := spi_master.c
 

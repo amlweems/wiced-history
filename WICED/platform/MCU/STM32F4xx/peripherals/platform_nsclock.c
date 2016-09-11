@@ -36,7 +36,7 @@
                             count; \
         });
 
-#define absolute_value(a) ( a < 0 ) ? -(a) : (a)
+#define absolute_value(a) ( (a) < 0 ) ? -(a) : (a)
 
 /******************************************************
  *                    Constants
@@ -65,7 +65,7 @@ uint64_t platform_get_nanosecond_clock_value(void)
     /* add values to the ns part of the time which can be divided by 3 */
     /* every time such value is added we will increment our clock by 25ns = 1/40 000000( cycle counter is running on the CPU frequency ),  */
     /* values will be 3, 6, 9, etc */
-    diff = absolute_value(cycles - prev_cycles);
+    diff = absolute_value((int)(cycles - prev_cycles));
     nsclock_nsec += ( diff / 3 ) * 25;
 
     /* when ns counter rolls over, add one second */

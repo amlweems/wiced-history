@@ -236,7 +236,7 @@ wiced_result_t wiced_bt_did_enable( const wiced_bt_did_mandatory_attributes_t* m
 
 wiced_result_t wiced_bt_did_disable( void )
 {
-    bt_packet_t*         packet;
+    bt_packet_t*         packet =  NULL;
     mpaf_event_params_t* params;
 
     SEND_COMMAND( bt_mpaf_sdp_delete_record( did_record_handle ) );

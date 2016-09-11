@@ -154,6 +154,10 @@ wwd_result_t wwd_bus_init( void )
      * Doing many access across AXI-bridge without proper sequencing will lead more instability
      */
     wwd_bus_dma_init( );
+
+    /* Reinitialise STDIO UART if WLAN UART (UART4) is used */
+    platform_reinit_wlan_stdio_uart( );
+
     return WWD_SUCCESS;
 }
 

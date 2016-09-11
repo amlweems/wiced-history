@@ -58,8 +58,8 @@ extern "C" {
 
 /* WAF platform functions */
 void platform_start_app         ( uint32_t vector_table_address );
-void platform_load_app_chunk    (const image_location_t *app_header_location, uint32_t offset, void * physical_address, uint32_t size);
-
+void platform_load_app_chunk    ( const image_location_t *app_header_location, uint32_t offset, void * physical_address, uint32_t size);
+void platform_erase_app_area    ( uint32_t physical_address, uint32_t size );
 
 /* Factory reset required function (defined in platform.c) */
 wiced_bool_t platform_check_factory_reset( void );

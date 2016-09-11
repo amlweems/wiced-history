@@ -68,6 +68,7 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
+                   platform_filesystem.c \
                    WWD/wwd_platform.c \
                    WWD/wwd_$(BUS).c \
                    WAF/waf_platform.c \

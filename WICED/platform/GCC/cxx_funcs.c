@@ -21,7 +21,7 @@ extern "C" {
 
 #define ATEXIT_MAX_FUNCS    128
 
-
+typedef signed   arch_t;
 typedef unsigned uarch_t;
 
 typedef struct
@@ -56,7 +56,7 @@ int __cxa_atexit(void (*f)(void *), void *objptr, void *dso)
 
 void __cxa_finalize(void *f)
 {
-    uarch_t i = __atexit_func_count;
+    arch_t i = __atexit_func_count;
     if (!f)
     {
         /*

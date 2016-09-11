@@ -94,6 +94,10 @@ void platform_init_mcu_infrastructure( void )
     {
         NVIC_SetPriority( i, 0xf );
     }
+
+    /* Enable PIO peripheral clocks */
+    ioport_init();
+
     //NVIC_PriorityGroupConfig( NVIC_PriorityGroup_4 );
 
     /* set priority grouping inside cpu core */

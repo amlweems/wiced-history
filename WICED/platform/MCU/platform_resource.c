@@ -108,6 +108,7 @@ resource_result_t resource_get_readonly_buffer ( const resource_hnd_t* resource,
     {
         *buffer   = &resource->val.mem.data[offset];
         *size_out = resource->size - offset;
+        return RESOURCE_SUCCESS;
     }
 #ifdef USES_RESOURCE_FILESYSTEM
     else
@@ -124,9 +125,10 @@ resource_result_t resource_get_readonly_buffer ( const resource_hnd_t* resource,
             free( (void*) *buffer );
             return result;
         }
+        return RESOURCE_SUCCESS;
     }
 #endif /* ifdef USES_RESOURCE_FILESYSTEM */
-    return RESOURCE_SUCCESS;
+    return RESOURCE_UNSUPPORTED;
 }
 
 resource_result_t resource_free_readonly_buffer( const resource_hnd_t* resource, const void* buffer )

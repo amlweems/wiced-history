@@ -20,6 +20,7 @@
 #include "wwd_assert.h"
 #include "wwd_crypto.h"
 #include "dns.h"
+
 #ifndef WICED_DISABLE_TLS
 #include "wiced_tls.h"
 #include "tls_host_api.h"
@@ -160,20 +161,13 @@ static const wiced_result_t netx_duo_returns[] =
     [NX_PARAMETER_ERROR     ] = WICED_TCPIP_BADARG,
 };
 
-#ifndef WICED_TCP_TX_RETRIES
-#define WICED_TCP_TX_RETRIES       WICED_DEFAULT_TCP_TX_RETRIES
-#endif
-#ifndef WICED_TCP_TX_DEPTH_QUEUE
-#define WICED_TCP_TX_DEPTH_QUEUE    WICED_DEFAULT_TCP_TX_DEPTH_QUEUE
-#endif
-
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
 wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_interface_t interface, uint16_t port, wiced_socket_callback_t connect_callback, wiced_socket_callback_t receive_callback, wiced_socket_callback_t disconnect_callback)
 {
-    int socket_index;
+    int            socket_index;
     wiced_result_t status;
 
     tcp_server->interface = interface;
@@ -242,6 +236,11 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
     return netx_duo_returns[result];
 }
 
+void wiced_tcp_set_type_of_service( wiced_tcp_socket_t* socket, uint32_t tos )
+{
+    socket->socket.nx_tcp_socket_type_of_service = tos << 16;
+}
+
 wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
 {
     UINT result;
@@ -283,7 +282,7 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
             if ( result != WICED_SUCCESS )
             {
                 WPRINT_LIB_INFO( ( "Error starting TLS connection\n" ) );
-                return netx_duo_returns[result];
+                return result;
             }
         }
 #endif /* ifndef WICED_DISABLE_TLS */
@@ -334,7 +333,7 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
         if ( result != WICED_SUCCESS)
         {
             nx_tcp_socket_disconnect( &socket->socket, NX_TIMEOUT(WICED_TCP_DISCONNECT_TIMEOUT) );
-            return netx_duo_returns[result];
+            return result;
         }
     }
 #endif /* ifndef WICED_DISABLE_TLS */
@@ -567,16 +566,18 @@ wiced_result_t wiced_tcp_disconnect( wiced_tcp_socket_t* socket )
     UINT result;
     WICED_LINK_CHECK( socket->socket.nx_tcp_socket_ip_ptr );
 
+#ifndef WICED_DISABLE_TLS
     if ( socket->tls_context != NULL )
     {
         wiced_tls_close_notify( socket );
     }
+#endif
 
     nx_tcp_socket_disconnect( &socket->socket, NX_TIMEOUT(WICED_TCP_DISCONNECT_TIMEOUT ) );
     if ( socket->socket.nx_tcp_socket_client_type == NX_TRUE)
     {
-    /* Un-bind the socket, so the TCP port becomes available for other sockets which are suspended on bind requests. This will also flush the receive queue of the socket */
-    /* We ignore the return of the unbind as there isn't much we can do */
+        /* Un-bind the socket, so the TCP port becomes available for other sockets which are suspended on bind requests. This will also flush the receive queue of the socket */
+        /* We ignore the return of the unbind as there isn't much we can do */
         result = nx_tcp_client_socket_unbind( &socket->socket );
     }
     else
@@ -986,6 +987,11 @@ wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t por
         return netx_duo_returns[result];
     }
     return WICED_TCPIP_SUCCESS;
+}
+
+void wiced_udp_set_type_of_service( wiced_udp_socket_t* socket, uint32_t tos )
+{
+    socket->socket.nx_udp_socket_type_of_service = tos << 16;
 }
 
 wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_address_t* address, uint16_t port, wiced_packet_t* packet )

@@ -57,7 +57,6 @@
 #include "lwip/snmp_structs.h"
 #include "lwip/snmp_msg.h"
 #include "lwip/dns.h"
-#include "netif/ppp_oe.h"
 
 #include <string.h>
 

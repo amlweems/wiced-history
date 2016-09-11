@@ -70,7 +70,7 @@ wiced_result_t bt_packet_pool_init( bt_packet_pool_t* pool, uint32_t packet_coun
         return WICED_BT_OUT_OF_HEAP_SPACE;
     }
 
-    result = bt_linked_list_init( &pool->pool_list );
+    result = linked_list_init( &pool->pool_list );
     if ( result != WICED_BT_SUCCESS )
     {
         return result;
@@ -87,7 +87,7 @@ wiced_result_t bt_packet_pool_init( bt_packet_pool_t* pool, uint32_t packet_coun
     {
         bt_packet_t* packet = (bt_packet_t*)packet_ptr;
 
-        result = bt_linked_list_insert_at_front( &pool->pool_list, &packet->node );
+        result = linked_list_insert_node_at_front( &pool->pool_list, &packet->node );
 
         if ( result == WICED_BT_SUCCESS )
         {
@@ -118,19 +118,19 @@ wiced_result_t bt_packet_pool_deinit( bt_packet_pool_t* pool )
     }
 
     wiced_rtos_deinit_mutex( &pool->mutex );
-    bt_linked_list_get_count( &pool->pool_list, &packet_count );
+    linked_list_get_count( &pool->pool_list, &packet_count );
 
     for ( a = 0; a < packet_count; a++ )
     {
-        bt_list_node_t* removed_node;
+        linked_list_node_t* removed_node;
 
-        if ( bt_linked_list_remove_from_rear( &pool->pool_list, &removed_node ) == WICED_BT_SUCCESS )
+        if ( linked_list_remove_node_from_rear( &pool->pool_list, &removed_node ) == WICED_BT_SUCCESS )
         {
             removed_node->data = NULL;
         }
     }
 
-    bt_linked_list_deinit( &pool->pool_list );
+    linked_list_deinit( &pool->pool_list );
 
     free( pool->pool_buffer );
 
@@ -141,8 +141,8 @@ wiced_result_t bt_packet_pool_deinit( bt_packet_pool_t* pool )
 
 wiced_result_t bt_packet_pool_allocate_packet( bt_packet_pool_t* pool, bt_packet_t** packet )
 {
-    bt_list_node_t* node   = NULL;
-    wiced_result_t  result = WICED_BT_SUCCESS;
+    linked_list_node_t* node   = NULL;
+    wiced_result_t      result = WICED_BT_SUCCESS;
 
     if ( pool == NULL || packet == NULL || pool == DYNAMIC_PACKET_POOL )
     {
@@ -151,7 +151,7 @@ wiced_result_t bt_packet_pool_allocate_packet( bt_packet_pool_t* pool, bt_packet
 
     wiced_rtos_lock_mutex( &pool->mutex );
 
-    result = bt_linked_list_remove_from_rear( &pool->pool_list, &node );
+    result = linked_list_remove_node_from_rear( &pool->pool_list, &node );
 
     if ( result == WICED_BT_SUCCESS )
     {
@@ -165,7 +165,7 @@ wiced_result_t bt_packet_pool_allocate_packet( bt_packet_pool_t* pool, bt_packet
         (*packet)->data_end    = (*packet)->data_start;
         pool->packet_created++;
     }
-    else if ( result == WICED_BT_LIST_EMPTY )
+    else if ( result == WICED_NOT_FOUND )
     {
         result = WICED_BT_PACKET_POOL_EXHAUSTED;
     }
@@ -225,7 +225,7 @@ wiced_result_t bt_packet_pool_free_packet( bt_packet_t* packet )
 
         wiced_rtos_lock_mutex( &packet->pool->mutex );
 
-        result = bt_linked_list_insert_at_front( &packet->pool->pool_list, &packet->node );
+        result = linked_list_insert_node_at_front( &packet->pool->pool_list, &packet->node );
 
         if ( result == WICED_SUCCESS )
         {

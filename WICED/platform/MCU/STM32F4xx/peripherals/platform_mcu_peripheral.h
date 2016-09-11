@@ -247,6 +247,8 @@ void              platform_i2s_irq                    ( uint32_t i2s );
 void              platform_i2s_tx_dma_irq             ( uint32_t i2s );
 
 uint8_t           platform_spi_get_port_number        ( platform_spi_port_t* spi );
+
+platform_result_t platform_filesystem_init            ( void );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

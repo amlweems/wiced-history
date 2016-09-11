@@ -34,6 +34,7 @@ extern "C" {
 
 #define CHIP_STA_INTERFACE   0
 #define CHIP_AP_INTERFACE    1
+#define CHIP_P2P_INTERFACE   2
 
 /* Maximum value of bus data credit difference */
 #define CHIP_MAX_BUS_DATA_CREDIT_DIFF    20
@@ -386,8 +387,8 @@ typedef struct wl_join_params
 /* extended join params */
 typedef struct wl_extjoin_params {
     wlc_ssid_t ssid;                /* {0, ""}: wildcard scan */
-    struct wl_join_scan_params scan;
-    wl_join_assoc_params_t assoc;   /* optional field, but it must include the fixed portion
+    struct wl_join_scan_params scan_params;
+    wl_join_assoc_params_t assoc_params;   /* optional field, but it must include the fixed portion
                      * of the wl_join_assoc_params_t struct when it does
                      * present.
                      */

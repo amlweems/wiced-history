@@ -59,6 +59,13 @@ void platform_start_app( uint32_t entry_point )
     __jump_to( entry_point );
 }
 
+void platform_erase_app_area( uint32_t physical_address, uint32_t size )
+{
+    /* App is in RAM, no need for erase */
+    (void) physical_address;
+    (void) size;
+}
+
 void platform_load_app_chunk(const image_location_t* app_header_location, uint32_t offset, void* physical_address, uint32_t size)
 {
     wiced_apps_read( app_header_location, physical_address, offset, size);

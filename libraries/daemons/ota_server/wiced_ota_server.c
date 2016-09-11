@@ -82,7 +82,7 @@ static int process_upgrade_chunk( ota_http_request_message_t* request, wiced_tcp
     static uint32_t  expected_offset = 0;
     uint32_t         received_offset = 0;
     char             offset_string[13];
-    static uint32_t  last_erased_sector = 0xFFFFFFFF;
+    static wiced_app_t app;
 
 
     offset    = atoi( strstr((char*)request->query_ptr, "offset=") + strlen("offset=") );
@@ -101,16 +101,25 @@ static int process_upgrade_chunk( ota_http_request_message_t* request, wiced_tcp
     if (offset == 0)
     {
         uint32_t    current_size;
-        if (wiced_framework_app_get_size( DCT_APP0_INDEX, &current_size ) != WICED_SUCCESS)
+        if (wiced_framework_app_open( DCT_APP0_INDEX, &app ) != WICED_SUCCESS)
         {
             return -1;
         }
-        if (wiced_framework_app_set_size( DCT_APP0_INDEX, file_size) != WICED_SUCCESS)
+        if (wiced_framework_app_get_size( &app, &current_size ) != WICED_SUCCESS)
         {
             return -1;
         }
-        if (wiced_framework_app_get_size( DCT_APP0_INDEX, &current_size ) != WICED_SUCCESS)
+        if (wiced_framework_app_set_size( &app, file_size) != WICED_SUCCESS)
         {
+            return -1;
+        }
+        if (wiced_framework_app_get_size( &app, &current_size ) != WICED_SUCCESS)
+        {
+            return -1;
+        }
+        if ( current_size < file_size )
+        {
+            printf("Error setting application size!!\n");
             return -1;
         }
     }
@@ -122,7 +131,7 @@ static int process_upgrade_chunk( ota_http_request_message_t* request, wiced_tcp
         if( request->body_chunks[i].size != 0 )
         {
             printf("Writing chunk %lu of size %d from offset %lu \r\n", chunk_count, request->body_chunks[i].size, offset);
-            wiced_framework_app_write_chunk( DCT_APP0_INDEX, offset, request->body_chunks[i].data, request->body_chunks[i].size, &last_erased_sector );
+            wiced_framework_app_write_chunk( &app, request->body_chunks[i].data, request->body_chunks[i].size );
             offset += request->body_chunks[i].size;
         }
     }
@@ -130,6 +139,7 @@ static int process_upgrade_chunk( ota_http_request_message_t* request, wiced_tcp
     if( offset == file_size )
     {
         printf("Uploaded file size = %lu\r\n", offset);
+        wiced_framework_app_close( &app );
         wiced_framework_set_boot ( DCT_APP0_INDEX, PLATFORM_DEFAULT_LOAD );
         printf("Restarting.. \r\n");
         ota_server.reboot_required = WICED_TRUE;

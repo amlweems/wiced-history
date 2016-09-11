@@ -12,7 +12,7 @@
 
 #include "wiced.h"
 #include "wiced_bt.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,14 +60,14 @@ struct wiced_bt_rfcomm_socket
 
     struct
     {
-        void               (*lock)  ( wiced_bt_rfcomm_socket_t* socket );
-        void               (*unlock)( wiced_bt_rfcomm_socket_t* socket );
-        wiced_mutex_t      mutex;
-        uint8_t            status;
-        uint8_t            endpoint;
-        uint8_t            channel;
-        uint8_t            sdp_record_handle;
-        bt_linked_list_t rx_packet_list;
+        void          (*lock)  ( wiced_bt_rfcomm_socket_t* socket );
+        void          (*unlock)( wiced_bt_rfcomm_socket_t* socket );
+        wiced_mutex_t mutex;
+        uint8_t       status;
+        uint8_t       endpoint;
+        uint8_t       channel;
+        uint8_t       sdp_record_handle;
+        linked_list_t rx_packet_list;
     } shared;
 
 };

@@ -17,6 +17,7 @@
 #include "wwd_events.h"
 #include "wwd_assert.h"
 #include "wwd_management.h"
+#include "wwd_wifi.h"
 #include "network/wwd_buffer_interface.h"
 #include "internal/wwd_sdpcm.h"
 #include "internal/wwd_internal.h"
@@ -24,17 +25,33 @@
 #include "platform_toolchain.h"
 
 /******************************************************
- * @cond       Constants
+ *                      Macros
+ ******************************************************/
+
+#define CHECK_IOCTL_BUFFER( buff )                       if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0); return WWD_BUFFER_ALLOC_FAIL; }
+#define CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( buff, sema )  if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return WWD_BUFFER_ALLOC_FAIL; }
+#define CHECK_RETURN( expr )                             { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); return check_res; } }
+#define CHECK_RETURN_WITH_SEMAPHORE( expr, sema )        { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return check_res; } }
+
+
+/******************************************************
+ * @cond               Constants
  ******************************************************/
 
 #define WLC_EVENT_MSG_LINK      (0x01)
 #define RATE_SETTING_11_MBPS    (11000000 / 500000)
 
+/** @endcond */
+
 /* HT/AMPDU specific define */
-#define AMPDU_RX_FACTOR_8K  0   /* max rcv ampdu len (8kb) */
-#define AMPDU_RX_FACTOR_16K 1   /* max rcv ampdu len (16kb) */
-#define AMPDU_RX_FACTOR_32K 2   /* max rcv ampdu len (32kb) */
-#define AMPDU_RX_FACTOR_64K 3   /* max rcv ampdu len (64kb) */
+#define AMPDU_RX_FACTOR_8K  0   /* max receive AMPDU length is 8kb */
+#define AMPDU_RX_FACTOR_16K 1   /* max receive AMPDU length is 16kb */
+#define AMPDU_RX_FACTOR_32K 2   /* max receive AMPDU length is 32kb */
+#define AMPDU_RX_FACTOR_64K 3   /* max receive AMPDU length is 64kb */
+
+/******************************************************
+ *                   Enumerations
+ ******************************************************/
 
 typedef enum
 {
@@ -44,32 +61,16 @@ typedef enum
     BSS_DOWN = 0
 } bss_arg_option_t;
 
-/** @endcond */
-
-#define htod32(i) ((uint32_t)(i))
-#define htod16(i) ((uint16_t)(i))
-#define dtoh32(i) ((uint32_t)(i))
-#define dtoh16(i) ((uint16_t)(i))
-#define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0); return WWD_BUFFER_ALLOC_FAIL; }
-#define CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( buff, sema )  if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return WWD_BUFFER_ALLOC_FAIL; }
-#define CHECK_RETURN( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); return check_res; } }
-#define CHECK_RETURN_WITH_SEMAPHORE( expr, sema )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return check_res; } }
-
 /******************************************************
- *             Local Structures
+ *                 Type Definitions
  ******************************************************/
 
-
 /******************************************************
- *             Static Variables
+ *                    Structures
  ******************************************************/
 
-wiced_bool_t                 wwd_wifi_ap_is_up = WICED_FALSE;
-static host_semaphore_type_t wwd_wifi_sleep_flag;
-static const wwd_event_num_t apsta_events[] = { WLC_E_IF, WLC_E_LINK, WLC_E_NONE };
-
 /******************************************************
- *             Static Function prototypes
+ *               Function Declarations
  ******************************************************/
 
 static void*        wwd_handle_apsta_event ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
@@ -78,7 +79,15 @@ wwd_result_t        wwd_wifi_ap_init       ( wiced_ssid_t* ssid, wiced_security_
 wwd_result_t        wwd_wifi_ap_up         ( void );
 
 /******************************************************
- *             Function definitions
+ *               Variables Definitions
+ ******************************************************/
+
+wiced_bool_t                 wwd_wifi_ap_is_up = WICED_FALSE;
+static host_semaphore_type_t wwd_wifi_sleep_flag;
+static const wwd_event_num_t apsta_events[] = { WLC_E_IF, WLC_E_LINK, WLC_E_NONE };
+
+/******************************************************
+ *               Function Definitions
  ******************************************************/
 
 static void* wwd_handle_apsta_event( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data )
@@ -98,7 +107,7 @@ static void* wwd_handle_apsta_event( const wwd_event_header_t* event_header, con
     {
         wwd_result_t result;
         result = host_rtos_set_semaphore( &wwd_wifi_sleep_flag, WICED_FALSE );
-        wiced_assert( "failed to post ap link semaphore", result == WWD_SUCCESS );
+        wiced_assert( "failed to post AP link semaphore", result == WWD_SUCCESS );
         REFERENCE_DEBUG_ONLY_VARIABLE( result );
     }
     return handler_user_data;
@@ -343,7 +352,7 @@ wwd_result_t wwd_wifi_stop_ap( void )
     CHECK_IOCTL_BUFFER( data );
     data[0] = (uint32_t) CHIP_AP_INTERFACE;
     data[1] = (uint32_t) BSS_DOWN;
-    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_AP_INTERFACE ) );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
 
     /* Wait until AP is brought down */
     result = host_rtos_get_semaphore( &wwd_wifi_sleep_flag, (uint32_t) 10000, WICED_FALSE );
@@ -362,19 +371,6 @@ wwd_result_t wwd_wifi_stop_ap( void )
     wwd_wifi_ap_is_up = WICED_FALSE;
     return WWD_SUCCESS;
 
-}
-
-wiced_bool_t wwd_wifi_is_packet_from_ap( uint8_t flags2 )
-{
-#define BDC_FLAG2_IF_MASK   0x0f
-    if ((flags2 & BDC_FLAG2_IF_MASK) != 0)
-    {
-        return WICED_TRUE;
-    }
-    else
-    {
-        return WICED_FALSE;
-    }
 }
 
 /** Sets the chip specific AMPDU parameters for AP and STA

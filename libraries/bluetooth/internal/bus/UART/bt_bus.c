@@ -18,6 +18,7 @@
 #include "wiced_rtos.h"
 #include "wiced_utilities.h"
 #include "wiced_bt_platform.h"
+#include "platform_bluetooth.h"
 
 /******************************************************
  *                      Macros

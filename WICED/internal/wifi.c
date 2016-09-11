@@ -147,8 +147,10 @@ wiced_result_t wiced_wlan_connectivity_init( void )
     wiced_result_t              result;
     wiced_country_code_t        country;
     platform_dct_wifi_config_t* wifi_config;
+
 #ifdef WPRINT_ENABLE_NETWORK_INFO
-    char                        version[200];
+    wiced_mac_t  mac;
+    char         version[200];
 #endif
 
     if ( wiced_wlan_initialised == WICED_TRUE )
@@ -189,7 +191,6 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 
 #ifdef WPRINT_ENABLE_NETWORK_INFO
     {
-        wiced_mac_t    mac;
         wwd_wifi_get_mac_address( &mac, WWD_STA_INTERFACE );
         WPRINT_NETWORK_INFO(("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac.octet[0],mac.octet[1],mac.octet[2],mac.octet[3],mac.octet[4],mac.octet[5]));
 
@@ -311,36 +312,10 @@ wiced_result_t wiced_join_ap( void )
             CHECK_RETURN( wiced_dct_read_lock( (void**) &ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t,stored_ap_list) + a * sizeof(wiced_config_ap_entry_t) , sizeof(wiced_config_ap_entry_t) ) );
             if ( ap->details.SSID.length != 0 )
             {
-                wiced_result_t      join_result = WICED_ERROR;
-                wiced_scan_result_t temp_scan_result;
+                result = wiced_join_ap_specific( &ap->details, ap->security_key_length, ap->security_key );
 
-                WPRINT_WICED_INFO(("Joining : %s\n", (char*)ap->details.SSID.value));
-
-                result = WICED_STA_JOIN_FAILED;
-
-                memcpy( &temp_scan_result, &ap->details, sizeof( ap->details ) );
-
-                /* Try join AP with last know specific details */
-                if ( !( NULL_MAC(ap->details.BSSID.octet) ) && ap->details.channel != 0 )
+                if ( result == WICED_SUCCESS )
                 {
-                    join_result = (wiced_result_t) wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) ap->security_key, ap->security_key_length, NULL, WWD_STA_INTERFACE );
-                }
-
-                if ( join_result != WICED_SUCCESS )
-                {
-                    /* If join-specific failed, try scan and join AP */
-                    join_result = (wiced_result_t) wwd_wifi_join( &ap->details.SSID, ap->details.security, (uint8_t*) ap->security_key, ap->security_key_length, NULL );
-                }
-
-                if ( join_result == WICED_SUCCESS )
-                {
-                    WPRINT_WICED_INFO( ( "Successfully joined : %s\n", (char*)ap->details.SSID.value ) );
-
-                    wiced_sta_link_up       = WICED_TRUE;
-                    wiced_sta_security_type = ap->details.security;
-
-                    wwd_management_set_event_handler( link_events, wiced_link_events_handler, NULL, WWD_STA_INTERFACE );
-
 #ifdef FIRMWARE_WITH_PMK_CALC_SUPPORT
                     /* Extract the calculated PMK and store it in the DCT to speed up future associations */
                     if ( ap->security_key_length != WSEC_MAX_PSK_LEN )
@@ -360,13 +335,9 @@ wiced_result_t wiced_join_ap( void )
                     }
 #endif /* FIRMWARE_WITH_PMK_CALC_SUPPORT */
 
-                    wiced_dct_read_unlock( (wiced_config_ap_entry_t*) ap, WICED_FALSE );
                     return WICED_SUCCESS;
                 }
-                else
-                {
-                    WPRINT_WICED_INFO(("Failed to join: %s\n", (char*)ap->details.SSID.value));
-                }
+
             }
             wiced_dct_read_unlock( (wiced_config_ap_entry_t*) ap, WICED_FALSE );
         }
@@ -374,12 +345,55 @@ wiced_result_t wiced_join_ap( void )
     return result;
 }
 
-wiced_result_t wiced_leave_ap( void )
+wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t security_key_length, const char security_key[ 64 ] )
+{
+
+    wiced_result_t      join_result = WICED_STA_JOIN_FAILED;
+    wiced_scan_result_t temp_scan_result;
+
+    WPRINT_WICED_INFO(("Joining : %s\n", (char*)details->SSID.value));
+
+    memcpy( &temp_scan_result, details, sizeof( *details ) );
+
+    /* Try join AP with last know specific details */
+    if ( !( NULL_MAC(details->BSSID.octet) ) && details->channel != 0 )
+    {
+        join_result = (wiced_result_t) wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) security_key, security_key_length, NULL, WWD_STA_INTERFACE );
+    }
+
+    if ( join_result != WICED_SUCCESS )
+    {
+        /* If join-specific failed, try scan and join AP */
+        join_result = (wiced_result_t) wwd_wifi_join( &details->SSID, details->security, (uint8_t*) security_key, security_key_length, NULL );
+    }
+
+    if ( join_result == WICED_SUCCESS )
+    {
+        WPRINT_WICED_INFO( ( "Successfully joined : %s\n", (char*)details->SSID.value ) );
+
+        wiced_sta_link_up       = WICED_TRUE;
+        wiced_sta_security_type = details->security;
+
+        wwd_management_set_event_handler( link_events, wiced_link_events_handler, NULL, WWD_STA_INTERFACE );
+        return WICED_SUCCESS;
+    }
+    else
+    {
+        WPRINT_WICED_INFO(("Failed to join: %s\n", (char*)details->SSID.value));
+    }
+    return join_result;
+}
+
+
+wiced_result_t wiced_leave_ap( wiced_interface_t interface )
 {
     /* Deregister the link event handler and leave the current AP */
-    wwd_management_set_event_handler(link_events, NULL, 0, WWD_STA_INTERFACE);
-    wwd_wifi_leave( WWD_STA_INTERFACE );
-    wiced_sta_link_up = WICED_FALSE;
+    wwd_management_set_event_handler(link_events, NULL, 0, interface);
+    wwd_wifi_leave( interface );
+    if ( interface == WICED_STA_INTERFACE )
+    {
+        wiced_sta_link_up = WICED_FALSE;
+    }
     return WICED_SUCCESS;
 }
 
@@ -431,8 +445,7 @@ wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_han
     scan_result_ptr->status    = WICED_SCAN_INCOMPLETE;
     scan_result_ptr->user_data = user_data;
 
-
-    if ( wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_ANY, NULL, NULL, chlist, &extparam, scan_result_handler, (wiced_scan_result_t**) &scan_result_ptr, &scan_handler, WWD_STA_INTERFACE ) != WWD_SUCCESS)
+    if ( wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_ANY, NULL, NULL, chlist, &extparam, scan_result_handler, (wiced_scan_result_t**) &scan_result_ptr, &scan_handler, WWD_STA_INTERFACE ) != WWD_SUCCESS )
     {
         goto error_with_result_ptr;
     }
@@ -463,6 +476,7 @@ wiced_result_t wiced_wps_enrollee(wiced_wps_mode_t mode, const wiced_wps_device_
 
     besl_wps_init ( workspace, (besl_wps_device_detail_t*) details, WPS_ENROLLEE_AGENT, WWD_STA_INTERFACE );
     result = (wiced_result_t) besl_wps_start( workspace, (besl_wps_mode_t) mode, password, (besl_wps_credential_t*) credentials, credential_count );
+    host_rtos_delay_milliseconds( 10 ); /* Delay required to allow WPS thread to run and initialize */
     if ( result == WICED_SUCCESS )
     {
         besl_wps_wait_till_complete( workspace );
@@ -550,7 +564,7 @@ static wiced_result_t handshake_error_callback( void* arg )
     UNUSED_PARAMETER( arg );
 
     /* Explicitly leave AP and then rejoin */
-    wiced_leave_ap();
+    wiced_leave_ap( WICED_STA_INTERFACE );
 
     for ( retries = WICED_JOIN_RETRY_ATTEMPTS; retries != 0; --retries )
     {
@@ -869,6 +883,7 @@ static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_da
             if ( wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, (event_handler_t) scan_handler->results_handler, (void*) ( result_iter ) ) != WICED_SUCCESS )
             {
                 free( result_iter  );
+                break;
             }
         }
 
@@ -888,7 +903,7 @@ static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_da
     }
 
     /* Check if we've seen this AP before, if not then mac_iter will point to the place where we should put the new result */
-    for ( mac_iter = scan_bssid_list; ( mac_iter < scan_bssid_list + current_bssid_list_length + 1 ); ++mac_iter )
+    for ( mac_iter = scan_bssid_list; ( mac_iter < scan_bssid_list + current_bssid_list_length ); ++mac_iter )
     {
         /* Check for matching MAC address */
         if ( CMP_MAC( mac_iter->octet, current_result->ap_details.BSSID.octet ) )
@@ -925,8 +940,11 @@ static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_da
         }
 
         /* New BSSID - add it to the list */
-        memcpy( &mac_iter->octet, current_result->ap_details.BSSID.octet, sizeof(wiced_mac_t) );
-        current_bssid_list_length++;
+        if ( current_bssid_list_length < SCAN_BSSID_LIST_LENGTH )
+        {
+            memcpy( &mac_iter->octet, current_result->ap_details.BSSID.octet, sizeof(wiced_mac_t) );
+            current_bssid_list_length++;
+        }
 
         /* Post event in worker thread */
         if ( wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, (event_handler_t) scan_handler->results_handler, (void*) ( scan_result_ptr ) ) != WICED_SUCCESS )

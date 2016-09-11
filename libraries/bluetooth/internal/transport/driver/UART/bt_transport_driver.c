@@ -15,7 +15,7 @@
 #include "wiced.h"
 #include "bt_bus.h"
 #include "bt_transport_driver.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 
 /******************************************************
  *                      Macros
@@ -59,7 +59,7 @@ static volatile wiced_bool_t                  driver_initialised      = WICED_FA
 static volatile wiced_bool_t                  uart_thread_running     = WICED_FALSE;
 static wiced_thread_t                         uart_thread;
 static wiced_mutex_t                          packet_list_mutex;
-static bt_linked_list_t                       uart_rx_packet_list;
+static linked_list_t                          uart_rx_packet_list;
 
 /******************************************************
  *               Function Definitions
@@ -94,7 +94,7 @@ wiced_result_t bt_transport_driver_init( bt_transport_driver_event_handler_t eve
     /* Create a linked list to hold packet momentarily before being passed to
      * the transport thread.
      */
-    result = bt_linked_list_init( &uart_rx_packet_list );
+    result = linked_list_init( &uart_rx_packet_list );
     if ( result != WICED_BT_SUCCESS )
     {
         wiced_assert("Error creating UART RX packet linked list\n", result == WICED_SUCCESS );
@@ -145,7 +145,7 @@ wiced_result_t bt_transport_driver_deinit( void )
     uart_thread_running = WICED_FALSE;
     wiced_rtos_delete_thread( &uart_thread );
     wiced_rtos_deinit_mutex( &packet_list_mutex );
-    bt_linked_list_deinit( &uart_rx_packet_list );
+    linked_list_deinit( &uart_rx_packet_list );
     driver_event_handler    = NULL;
     driver_bus_read_handler = NULL;
     driver_initialised      = WICED_FALSE;
@@ -170,10 +170,10 @@ wiced_result_t bt_transport_driver_send_packet( bt_packet_t* packet )
 wiced_result_t bt_transport_driver_receive_packet( bt_packet_t** packet )
 {
     uint32_t        count;
-    bt_list_node_t* node;
+    linked_list_node_t* node;
     wiced_result_t  result;
 
-    bt_linked_list_get_count( &uart_rx_packet_list, &count );
+    linked_list_get_count( &uart_rx_packet_list, &count );
 
     if ( count == 0 )
     {
@@ -182,7 +182,7 @@ wiced_result_t bt_transport_driver_receive_packet( bt_packet_t** packet )
 
     wiced_rtos_lock_mutex( &packet_list_mutex );
 
-    result = bt_linked_list_remove_from_front( &uart_rx_packet_list, &node );
+    result = linked_list_remove_node_from_front( &uart_rx_packet_list, &node );
     if ( result == WICED_BT_SUCCESS )
     {
         *packet = (bt_packet_t*)node->data;
@@ -208,8 +208,8 @@ static void bt_transport_driver_uart_thread_main( uint32_t arg )
 
         /* Read successful. Notify upper layer via driver_callback that a new packet is available */
         wiced_rtos_lock_mutex( &packet_list_mutex );
-        bt_linked_list_set_node_data( &packet->node, (void*)packet );
-        bt_linked_list_insert_at_rear( &uart_rx_packet_list, &packet->node );
+        linked_list_set_node_data( &packet->node, (void*)packet );
+        linked_list_insert_node_at_rear( &uart_rx_packet_list, &packet->node );
         wiced_rtos_unlock_mutex( &packet_list_mutex );
         driver_event_handler( TRANSPORT_DRIVER_INCOMING_PACKET_READY );
     }

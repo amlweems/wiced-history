@@ -343,7 +343,6 @@ static int extract_directory( const char* dir_name, const char* root_output_dire
             if ( result != 0 )
             {
                 printf( "Error closing fcurr_output_directory_nameile %s\n", curr_output_file_path );
-                fclose( output_handle );
                 wicedfs_fclose( &input_handle );
                 free( curr_output_file_path );
                 free( curr_input_file_path );

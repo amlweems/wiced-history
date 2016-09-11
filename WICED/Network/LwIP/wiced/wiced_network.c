@@ -27,11 +27,13 @@
 #include "dns.h"
 #include "internal/wiced_internal_api.h"
 #include "lwip/dns.h"
-#include "lwip/dns.h"
+#include "wiced_p2p.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
+
+#define IF_UP( interface )    ( ip_networking_up[ (interface&3) ] )
 
 /******************************************************
  *                    Constants
@@ -55,8 +57,36 @@
  *                 Static Variables
  ******************************************************/
 
+#ifdef WICED_WIFI_USE_STA_INTERFACE
+    static struct netif       sta_ip_handle;
+    #define STA_IP_HANDLE    &sta_ip_handle
+#else
+    #define STA_IP_HANDLE    NULL
+#endif
+
+#ifdef WICED_WIFI_USE_AP_INTERFACE
+    static struct netif      ap_ip_handle;
+    #define AP_IP_HANDLE    &ap_ip_handle
+#else
+    #define AP_IP_HANDLE    NULL
+#endif
+
+#ifdef WICED_WIFI_USE_P2P_INTERFACE
+    static struct netif       p2p_ip_handle;
+    #define P2P_IP_HANDLE    &p2p_ip_handle
+#else
+    #define P2P_IP_HANDLE    NULL
+#endif
+
+NX_IP* wiced_ip_handle[ 3 ] =
+{
+    [WICED_STA_INTERFACE] = STA_IP_HANDLE,
+    [WICED_AP_INTERFACE]  = AP_IP_HANDLE,
+    [WICED_P2P_INTERFACE] = P2P_IP_HANDLE
+};
+
 /* Network objects */
-struct netif        wiced_ip_handle[2];
+struct netif        wiced_ip_handle[3];
 struct dhcp         wiced_dhcp_handle;
 static wiced_bool_t        wiced_using_dhcp;
 static wiced_dhcp_server_t internal_dhcp_server;
@@ -68,9 +98,11 @@ const wiced_ip_address_t INITIALISER_IPV4_ADDRESS( wiced_ip_broadcast, 0xFFFFFFF
 static wiced_network_link_callback_t link_up_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
 static wiced_network_link_callback_t link_down_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
 
-#define IF_UP( interface )    ( ip_networking_up[ (interface==WICED_STA_INTERFACE)? 0:1 ] )
+static wiced_bool_t ip_networking_up[3];
 
-static wiced_bool_t ip_networking_up[2];
+/* Wi-Fi power save state */
+static uint8_t wifi_powersave_mode = 0;
+static uint16_t wifi_return_to_sleep_delay = 0;
 
 /******************************************************
  *               Static Function Declarations
@@ -91,6 +123,7 @@ wiced_result_t wiced_network_init( void )
 
     ip_networking_up[0] = WICED_FALSE;
     ip_networking_up[1] = WICED_FALSE;
+    ip_networking_up[2] = WICED_FALSE;
 
     /* Create a semaphore to signal when LwIP has finished initialising */
     lwip_done_sema = xSemaphoreCreateCounting( 1, 0 );
@@ -229,7 +262,7 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
     {
         if ( interface == WICED_STA_INTERFACE )
         {
-            wiced_leave_ap( );
+            wiced_leave_ap( interface );
         }
         else
         {
@@ -238,6 +271,11 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
     }
 
     return result;
+}
+
+wiced_bool_t wiced_network_is_ip_up( wiced_interface_t interface )
+{
+    return IF_UP(interface);
 }
 
 wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings )
@@ -357,7 +395,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         }
     }
 
-    ip_networking_up[interface&1] = WICED_TRUE;
+    IF_UP(interface) = WICED_TRUE;
 
     WPRINT_NETWORK_INFO( ( "Network ready IP: %u.%u.%u.%u\n", (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 24 ) & 0xff ),
         (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 16 ) & 0xff ),
@@ -378,10 +416,11 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
  */
 wiced_result_t wiced_network_down( wiced_interface_t interface )
 {
-    if ( ip_networking_up[interface&1] == WICED_TRUE )
+    if ( IF_UP(interface) == WICED_TRUE )
     {
         /* Cleanup DNS client and DHCP server/client depending on interface */
-        if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE ) )
+        if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE )
+                                                 || ( ( interface == WICED_P2P_INTERFACE ) && ( wwd_wifi_p2p_go_is_up == WICED_TRUE ) ) )
         {
             wiced_stop_dhcp_server( &internal_dhcp_server );
 
@@ -401,7 +440,7 @@ wiced_result_t wiced_network_down( wiced_interface_t interface )
         /* Delete the network interface */
         netif_remove( &IP_HANDLE(interface) );
 
-        ip_networking_up[interface&1] = WICED_FALSE;
+        IF_UP(interface) = WICED_FALSE;
     }
 
     /* Stop Wi-Fi */
@@ -411,9 +450,20 @@ wiced_result_t wiced_network_down( wiced_interface_t interface )
         {
             wiced_stop_ap( );
         }
+        else if ( interface == WICED_P2P_INTERFACE )
+        {
+            if ( wwd_wifi_p2p_go_is_up )
+            {
+                wwd_wifi_p2p_go_is_up = WICED_FALSE;
+            }
+            else
+            {
+                wiced_leave_ap( interface );
+            }
+        }
         else
         {
-            wiced_leave_ap();
+            wiced_leave_ap( interface );
         }
     }
 
@@ -457,6 +507,18 @@ wiced_result_t wiced_network_link_down_handler( void* arg )
         }
     }
 
+    /* Kick the radio chip if it's in power save mode in case the link down event is due to missing beacons. Setting the chip to the same power save mode is sufficient. */
+    wifi_powersave_mode = wiced_wifi_get_powersave_mode();
+    if ( wifi_powersave_mode == PM1_POWERSAVE_MODE )
+    {
+        wiced_wifi_enable_powersave();
+    }
+    else if ( wifi_powersave_mode == PM2_POWERSAVE_MODE )
+    {
+        wifi_return_to_sleep_delay = wiced_wifi_get_return_to_sleep_delay();
+        wiced_wifi_enable_powersave_with_throughput( wifi_return_to_sleep_delay );
+    }
+
     return WICED_SUCCESS;
 }
 
@@ -464,6 +526,7 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
 {
     int i = 0;
     ip_addr_t ip_addr;
+    wiced_result_t result = WICED_SUCCESS;
 
     UNUSED_PARAMETER( arg );
 
@@ -471,6 +534,16 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
 
     if ( wiced_using_dhcp == WICED_TRUE )
     {
+        /* Save the current power save state */
+        wifi_powersave_mode        = wiced_wifi_get_powersave_mode();
+        wifi_return_to_sleep_delay = wiced_wifi_get_return_to_sleep_delay();
+
+        /* Disable power save for the DHCP exchange */
+        if ( wifi_powersave_mode != NO_POWERSAVE_MODE )
+        {
+            wiced_wifi_disable_powersave( );
+        }
+
         /* For DHCP only, we should reset netif IP address. We don't want to re-use previous netif IP address given from previous DHCP session */
         ip_addr_set_zero( &ip_addr );
         netif_set_ipaddr( &IP_HANDLE(WICED_STA_INTERFACE), &ip_addr);
@@ -479,9 +552,22 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
         if ( dhcp_start( &IP_HANDLE(WICED_STA_INTERFACE)) != ERR_OK )
         {
             WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\n" ) );
-            return WICED_ERROR;
+            result = WICED_ERROR;
+        }
+
+        /* Wait a little to allow DHCP a chance to complete, but we can't block here */
+        host_rtos_delay_milliseconds( 10 );
+
+        if ( wifi_powersave_mode == PM1_POWERSAVE_MODE )
+        {
+            wiced_wifi_enable_powersave( );
+        }
+        else if ( wifi_powersave_mode == PM2_POWERSAVE_MODE )
+        {
+            wiced_wifi_enable_powersave_with_throughput( wifi_return_to_sleep_delay );
         }
     }
+
     /* Inform all subscribers about an event */
     for ( i = 0; i < WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS; i++ )
     {
@@ -491,7 +577,7 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
         }
     }
 
-    return WICED_SUCCESS;
+    return result;
 }
 
 wiced_result_t wiced_network_link_renew_handler( void )

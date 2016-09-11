@@ -110,6 +110,7 @@ typedef enum
     SOCKET_MESSAGE_EVENT,
     SOCKET_CONNECT_EVENT,
     SOCKET_DISCONNECT_EVENT,
+    SOCKET_ERROR_EVENT,
 } http_server_event_t;
 
 typedef enum
@@ -159,8 +160,7 @@ static wiced_result_t            wiced_http_server_get_packet_data              
 static wiced_result_t            wiced_http_server_set_http_message_body_type_for_socket( wiced_tcp_socket_t* socket, char* url, uint16_t url_length, wiced_http_message_body_t* message_body_descriptor );
 static wiced_http_packet_state_t wiced_get_http_packet_state_and_socket_context         ( wiced_tcp_socket_t* socket, wiced_http_message_context_t* socket_http_context );
 static wiced_result_t            wiced_reset_current_message_body_context_for_socket    ( wiced_tcp_socket_t* socket );
-static wiced_result_t            wiced_http_reset_external_socket_close_request                             ( void );
-static wiced_bool_t              wiced_http_get_socket_close_request                               ( void );
+static wiced_bool_t              wiced_http_get_socket_close_request                    ( void );
 /******************************************************
  *                 Static Variables
  ******************************************************/
@@ -169,15 +169,12 @@ static wiced_queue_t                           server_event_queue;
 static http_server_packet_process_callback_t   packet_process_callback = NULL;
 static uint8_t                                 socket_http_message_context_counter = 0;
 static wiced_http_message_context_t            socket_http_message_context[WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS];
+static wiced_bool_t                            external_close_request_received = WICED_FALSE;
 
 static const char* http_mime_array[ MIME_UNSUPPORTED ] =
 {
     MIME_TABLE( EXPAND_AS_MIME_TABLE )
 };
-
-static wiced_bool_t external_close_request_received = WICED_FALSE;
-
-static wiced_tcp_socket_t* socket_in_use;
 
 /******************************************************
  *               Function Definitions
@@ -298,11 +295,12 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
     char*                         message_data_length_string;
     char*                         mime;
     wiced_http_packet_state_t     http_packet_state;
-    char*                         start_of_url           = NULL; /* Suppress compiler warning */
-    uint16_t                      url_length             = 0;    /* Suppress compiler warning */
-    wiced_http_message_context_t* socket_context         = NULL;
-    wiced_result_t                result                 = WICED_ERROR;
-    wiced_bool_t                  processing_http_packet = WICED_TRUE;
+    char*                         start_of_url           = NULL;       /* Suppress compiler warning */
+    uint16_t                      url_length             = 0;          /* Suppress compiler warning */
+    wiced_http_message_context_t* socket_context         = NULL;       /* Suppress compiler warning */
+    wiced_result_t                result;
+    wiced_bool_t                  processing_http_packet          = WICED_TRUE;
+
     wiced_http_message_body_t     http_message_body =
     {
             .data                         = NULL,
@@ -313,16 +311,19 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
             .request_type                 = REQUEST_UNDEFINED
     };
 
-    wiced_http_reset_external_socket_close_request();
-
     if ( packet == NULL )
     {
         return WICED_ERROR;
     }
 
-    socket_in_use = socket;
+    result = wiced_http_server_get_packet_data( socket, packet, &request_string, &request_length );
 
-    WICED_VERIFY( wiced_http_server_get_packet_data( socket, packet, &request_string, &request_length ) );
+    *close_request_received = wiced_http_get_socket_close_request();
+
+    if( result != WICED_SUCCESS )
+    {
+        return result;
+    }
 
     /* Check socket context and check if this socket received all data in http message or was it split */
     http_packet_state = wiced_get_http_packet_state_and_socket_context( socket, socket_context );
@@ -332,7 +333,10 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
         switch( http_packet_state )
         {
             case HTTP_DATA_ONLY_FRAME_STATE:
-
+                if( socket_context == NULL )
+                {
+                    return WICED_ERROR;
+                }
                 socket_context->message_body_descriptor.data = (uint8_t*)request_string;
 
                 if( request_length <= socket_context->message_body_descriptor.total_message_data_remaining )
@@ -448,8 +452,6 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
                 }
 
                 result = process_url_request( (wiced_tcp_socket_t*)socket, page_database, start_of_url, new_url_length, &http_message_body );
-
-                *close_request_received = wiced_http_get_socket_close_request();
 
                 processing_http_packet = WICED_FALSE;
                 break;
@@ -886,12 +888,17 @@ static wiced_result_t wiced_http_server_get_packet_data( wiced_tcp_socket_t* soc
 
     result = wiced_packet_get_data( packet, 0, (uint8_t**)data, request_length, &available_data_length );
 
+    if( result != WICED_SUCCESS )
+    {
+        return result;
+    }
+
     if ( packet_process_callback != NULL )
     {
         result = packet_process_callback( socket, (uint8_t**)data, request_length );
     }
 
-    return  result;
+    return result;
 }
 
 static wiced_result_t wiced_http_server_set_http_message_body_type_for_socket( wiced_tcp_socket_t* socket, char* url, uint16_t url_length, wiced_http_message_body_t* message_body_descriptor )
@@ -938,7 +945,7 @@ static wiced_result_t wiced_reset_current_message_body_context_for_socket( wiced
 
     wiced_get_http_packet_state_and_socket_context( socket, http_message_context );
 
-    if( socket_http_message_context_counter )
+    if( ( socket_http_message_context_counter != 0 ) && ( http_message_context != NULL ) )
     {
 
         http_message_context->http_packet_state = HTTP_HEADER_AND_DATA_FRAME_STATE;
@@ -959,59 +966,69 @@ wiced_result_t wiced_http_current_socket_close_request( void )
     return WICED_SUCCESS;
 }
 
-static wiced_result_t wiced_http_reset_external_socket_close_request ( void )
-{
-    external_close_request_received = WICED_FALSE;
-
-    return WICED_SUCCESS;
-}
-
 static wiced_bool_t wiced_http_get_socket_close_request ( void )
 {
-    return external_close_request_received;
+    wiced_bool_t close_request;
+
+    close_request = external_close_request_received;
+
+    external_close_request_received = WICED_FALSE;
+
+    return close_request;
 }
 
 static void http_server_thread_main(uint32_t arg)
 {
     wiced_http_server_t*   server                    = (wiced_http_server_t*) arg;
     wiced_packet_t*        packet                    = NULL;
-    wiced_bool_t           close_request_from_client = WICED_FALSE;
+    wiced_bool_t           close_request             = WICED_FALSE;
     server_event_message_t current_event;
+    wiced_result_t         result;
 
     while ( server->quit != WICED_TRUE )
     {
-        wiced_rtos_pop_from_queue( &server_event_queue, &current_event, WICED_NEVER_TIMEOUT );
+        result = wiced_rtos_pop_from_queue( &server_event_queue, &current_event, WICED_NEVER_TIMEOUT );
 
-          switch( current_event.event_type )
-          {
-              case SOCKET_DISCONNECT_EVENT:
-                  wiced_tcp_server_disconnect_socket( &server->tcp_server, current_event.socket );
-                  break;
+        if( result != WICED_SUCCESS )
+        {
+            current_event.socket = NULL;
+            current_event.event_type = SOCKET_ERROR_EVENT;
+        }
 
-              case SOCKET_CONNECT_EVENT:
-                  wiced_tcp_server_accept( &server->tcp_server, current_event.socket );
-                  break;
+        switch( current_event.event_type )
+        {
+            case SOCKET_DISCONNECT_EVENT:
+                wiced_tcp_server_disconnect_socket( &server->tcp_server, current_event.socket );
+                break;
 
-              case SOCKET_MESSAGE_EVENT:
-                  wiced_tcp_receive( current_event.socket, &packet, WICED_NO_WAIT );
+            case SOCKET_CONNECT_EVENT:
+                wiced_tcp_server_accept( &server->tcp_server, current_event.socket );
+                break;
 
-                  if ( packet != NULL )
-                  {
-                      http_server_parse_packet( server->page_database, current_event.socket , packet, &close_request_from_client );
+            case SOCKET_MESSAGE_EVENT:
+                wiced_tcp_receive( current_event.socket, &packet, WICED_NO_WAIT );
 
-                      wiced_packet_delete( packet );
+                if ( packet != NULL )
+                {
+                    http_server_parse_packet( server->page_database, current_event.socket , packet, &close_request );
 
-                      if ( close_request_from_client )
-                      {
-                          wiced_tcp_server_disconnect_socket( &server->tcp_server, current_event.socket );
-                      }
-                  }
+                    wiced_packet_delete( packet );
 
-                  break;
+                    if ( close_request == WICED_TRUE )
+                    {
+                        wiced_tcp_server_disconnect_socket( &server->tcp_server, current_event.socket );
+                    }
+                }
 
-              default:
-                  break;
-          }
+                break;
+
+            case SOCKET_ERROR_EVENT:
+                /* Fall through */
+                break;
+
+            default:
+                break;
+        }
     }
 
     wiced_tcp_server_stop( &server->tcp_server );

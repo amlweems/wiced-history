@@ -33,7 +33,7 @@
  *                      Macros
  ******************************************************/
 
-#define IF_TO_IP( inteface )   ( ip_ptr[ ((interface==WWD_STA_INTERFACE)?0:1) ] )     /* STA = 0,  AP = 1 */
+#define IF_TO_IP( interface )   ( ip_ptr[ (interface)&3 ] )     /* STA = 0,  AP = 1, P2P = 2 */
 
 /******************************************************
  *                    Constants
@@ -71,7 +71,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
  ******************************************************/
 
 /* Saves pointers to the IP instances so that the receive function knows where to send data */
-static NX_IP* ip_ptr[2] = { NULL, NULL };
+static NX_IP* ip_ptr[3] = { NULL, NULL, NULL };
 
 /* WICED specific NetX variable used to control the TCP RX queue depth when NetX is released as a library */
 const ULONG nx_tcp_max_out_of_order_packets = WICED_TCP_RX_DEPTH_QUEUE;
@@ -90,6 +90,11 @@ VOID wiced_ap_netx_driver_entry( NX_IP_DRIVER* driver )
     wiced_netx_driver_entry( driver, WWD_AP_INTERFACE );
 }
 
+VOID wiced_p2p_netx_driver_entry( NX_IP_DRIVER* driver )
+{
+    wiced_netx_driver_entry( driver, WWD_P2P_INTERFACE );
+}
+
 static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface )
 {
     NX_PACKET*  packet_ptr;
@@ -103,7 +108,8 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
     driver->nx_ip_driver_status = NX_NOT_SUCCESSFUL;
 
     if ( ( interface != WWD_STA_INTERFACE ) &&
-         ( interface != WWD_AP_INTERFACE ) )
+         ( interface != WWD_AP_INTERFACE ) &&
+         ( interface != WWD_P2P_INTERFACE ))
     {
         wiced_assert( "Bad interface", 0 != 0 );
         return;
@@ -127,7 +133,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
             break;
 
         case NX_LINK_ENABLE:
-            if ( wwd_wifi_get_mac_address( &mac, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+            if ( wwd_wifi_get_mac_address( &mac, interface ) != WWD_SUCCESS )
             {
                 ip->nx_ip_driver_link_up = NX_FALSE;
                 break;
@@ -278,13 +284,46 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
 
     /* Check if interface is valid, if not, drop frame */
     if ( ( interface != WWD_STA_INTERFACE ) &&
-         ( interface != WWD_AP_INTERFACE ) )
+         ( interface != WWD_AP_INTERFACE ) &&
+         ( interface != WWD_P2P_INTERFACE ) )
     {
         nx_packet_release(packet_ptr);
         return;
     }
 
     ethertype = (USHORT)(buff[12] << 8 | buff[13]);
+
+    /* Check if this is an 802.1Q VLAN tagged packet */
+    if ( ethertype == WICED_ETHERTYPE_8021Q )
+    {
+        /* Need to remove the 4 octet VLAN Tag, by moving src and dest addresses 4 octets to the right,
+         * and then read the actual ethertype. The VLAN ID and priority fields are currently ignored. */
+        uint8_t temp_buffer[12];
+        memcpy( temp_buffer, packet_ptr->nx_packet_prepend_ptr, 12 );
+        memcpy( packet_ptr->nx_packet_prepend_ptr + 4, temp_buffer, 12 );
+
+        packet_ptr->nx_packet_prepend_ptr = packet_ptr->nx_packet_prepend_ptr + 4;
+        packet_ptr->nx_packet_length      = packet_ptr->nx_packet_length - 4;
+
+        buff      = packet_ptr->nx_packet_prepend_ptr;
+        ethertype = (USHORT) ( buff[12] << 8 | buff[13] );
+    }
+
+    /* Check if this is an 802.1Q VLAN tagged packet */
+    if ( ethertype == WICED_ETHERTYPE_8021Q )
+    {
+        /* Need to remove the 4 octet VLAN Tag, by moving src and dest addresses 4 octets to the right,
+         * and then read the actual ethertype. The VLAN ID and priority fields are currently ignored. */
+        uint8_t temp_buffer[12];
+        memcpy( temp_buffer, packet_ptr->nx_packet_prepend_ptr, 12 );
+        memcpy( packet_ptr->nx_packet_prepend_ptr + 4, temp_buffer, 12 );
+
+        packet_ptr->nx_packet_prepend_ptr = packet_ptr->nx_packet_prepend_ptr + 4;
+        packet_ptr->nx_packet_length      = packet_ptr->nx_packet_length - 4;
+
+        buff      = packet_ptr->nx_packet_prepend_ptr;
+        ethertype = (USHORT) ( buff[12] << 8 | buff[13] );
+    }
 
     /* Check if this is an 802.1Q VLAN tagged packet */
     if ( ethertype == WICED_ETHERTYPE_8021Q )

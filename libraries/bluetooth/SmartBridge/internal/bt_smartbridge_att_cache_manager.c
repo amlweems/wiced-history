@@ -13,7 +13,7 @@
  */
 
 #include "bt_smartbridge_att_cache_manager.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 #include "bt_smart_gatt.h"
 #include "wiced.h"
 #include "wiced_bt_smartbridge.h"
@@ -71,7 +71,7 @@ sizeof( bt_smartbridge_att_cache_t ) * ( cache_count - 1 )
 #pragma pack(1)
 typedef struct bt_smartbridge_att_cache
 {
-    bt_list_node_t                  node;
+    linked_list_node_t              node;
     wiced_bool_t                    is_active;
     wiced_bool_t                    is_discovering;
     wiced_bt_smart_device_t         remote_device;
@@ -82,11 +82,11 @@ typedef struct bt_smartbridge_att_cache
 
 typedef struct
 {
-    uint32_t                    count;
-    bt_linked_list_t            free_list;
-    bt_linked_list_t            used_list;
-    wiced_mutex_t               mutex;
-    bt_smartbridge_att_cache_t  pool[1];
+    uint32_t                   count;
+    linked_list_t              free_list;
+    linked_list_t              used_list;
+    wiced_mutex_t              mutex;
+    bt_smartbridge_att_cache_t pool[1];
 } bt_smartbridge_att_cache_manager_t;
 #pragma pack()
 
@@ -98,8 +98,8 @@ static wiced_result_t smartbridge_att_cache_get_free_cache          ( bt_smartbr
 static wiced_result_t smartbridge_att_cache_insert_to_used_list     ( bt_smartbridge_att_cache_t* instance );
 static wiced_result_t smartbridge_att_cache_return_to_free_list     ( bt_smartbridge_att_cache_t* instance );
 static wiced_result_t smartbridge_att_cache_discover_all            ( bt_smartbridge_att_cache_t* cache, uint16_t connection_handle );
-static wiced_bool_t   smartbridge_att_cache_find_by_device_callback ( bt_list_node_t* node_to_compare, void* user_data );
-static wiced_bool_t   smartbridge_att_cache_get_free_callback       ( bt_list_node_t* node_to_compare, void* user_data );
+static wiced_bool_t   smartbridge_att_cache_find_by_device_callback ( linked_list_node_t* node_to_compare, void* user_data );
+static wiced_bool_t   smartbridge_att_cache_get_free_callback       ( linked_list_node_t* node_to_compare, void* user_data );
 
 /******************************************************
  *               Variable Definitions
@@ -135,14 +135,14 @@ wiced_result_t bt_smartbridge_att_cache_enable( uint32_t cache_count )
     att_cache_manager = manager;
     manager->count    = cache_count;
 
-    result = bt_linked_list_init( &manager->free_list );
+    result = linked_list_init( &manager->free_list );
     if ( result != WICED_BT_SUCCESS )
     {
         WPRINT_LIB_INFO( ( "Error creating linked list\n" ) );
         goto error;
     }
 
-    result = bt_linked_list_init( &manager->used_list );
+    result = linked_list_init( &manager->used_list );
     if ( result != WICED_BT_SUCCESS )
     {
         WPRINT_LIB_INFO( ( "Error creating linked list\n" ) );
@@ -169,7 +169,7 @@ wiced_result_t bt_smartbridge_att_cache_enable( uint32_t cache_count )
         manager->pool[a].node.data = (void*)&manager->pool[a];
 
         /* Insert cached attribute instance into free list */
-        result = bt_linked_list_insert_at_rear( &manager->free_list, &manager->pool[a].node );
+        result = linked_list_insert_node_at_rear( &manager->free_list, &manager->pool[a].node );
         if ( result != WICED_BT_SUCCESS )
         {
             goto error;
@@ -186,7 +186,7 @@ wiced_result_t bt_smartbridge_att_cache_enable( uint32_t cache_count )
 wiced_result_t bt_smartbridge_att_cache_disable( void )
 {
     uint32_t a;
-    bt_list_node_t* node = NULL;
+    linked_list_node_t* node = NULL;
     bt_smartbridge_att_cache_manager_t* manager = att_cache_manager;
 
     if ( att_cache_manager == NULL )
@@ -197,23 +197,23 @@ wiced_result_t bt_smartbridge_att_cache_disable( void )
     /* Set status at the beginning to prevent cached attributes being used even when deinitialisation failed */
     att_cache_manager = NULL;
 
-    while ( bt_linked_list_remove_from_front( &manager->free_list, &node ) == WICED_BT_SUCCESS )
+    while ( linked_list_remove_node_from_front( &manager->free_list, &node ) == WICED_BT_SUCCESS )
     {
         bt_smartbridge_att_cache_t* cache = (bt_smartbridge_att_cache_t*)node->data;
 
         wiced_bt_smart_attribute_delete_list( &cache->attribute_list );
     }
 
-    bt_linked_list_deinit( &manager->free_list );
+    linked_list_deinit( &manager->free_list );
 
-    while ( bt_linked_list_remove_from_front( &manager->used_list, &node ) == WICED_BT_SUCCESS )
+    while ( linked_list_remove_node_from_front( &manager->used_list, &node ) == WICED_BT_SUCCESS )
     {
         bt_smartbridge_att_cache_t* cache = (bt_smartbridge_att_cache_t*)node->data;
 
         wiced_bt_smart_attribute_delete_list( &cache->attribute_list );
     }
 
-    bt_linked_list_deinit( &manager->used_list );
+    linked_list_deinit( &manager->used_list );
     wiced_rtos_deinit_mutex( &manager->mutex );
 
     /* Deinitialise mutexes for protecting access to cached attributes */
@@ -318,8 +318,8 @@ wiced_result_t bt_smartbridge_att_cache_unlock( bt_smartbridge_att_cache_t* cach
 
 wiced_result_t bt_smartbridge_att_cache_find( const wiced_bt_smart_device_t* remote_device, bt_smartbridge_att_cache_t** cache )
 {
-    wiced_result_t  result;
-    bt_list_node_t* node_found;
+    wiced_result_t      result;
+    linked_list_node_t* node_found;
 
     if ( remote_device == NULL || cache == NULL )
     {
@@ -338,7 +338,7 @@ wiced_result_t bt_smartbridge_att_cache_find( const wiced_bt_smart_device_t* rem
         return result;
     }
 
-    result = bt_linked_list_find( &att_cache_manager->used_list, smartbridge_att_cache_find_by_device_callback, (void*)remote_device, &node_found );
+    result = linked_list_find_node( &att_cache_manager->used_list, smartbridge_att_cache_find_by_device_callback, (void*)remote_device, &node_found );
     if ( result == WICED_BT_SUCCESS )
     {
         *cache = (bt_smartbridge_att_cache_t*)node_found->data;
@@ -404,8 +404,8 @@ wiced_result_t bt_smartbridge_att_cache_generate( const wiced_bt_smart_device_t*
 
 static wiced_result_t smartbridge_att_cache_get_free_cache( bt_smartbridge_att_cache_t** free_cache )
 {
-    wiced_result_t  result;
-    bt_list_node_t* node;
+    wiced_result_t      result;
+    linked_list_node_t* node;
 
     if ( att_cache_manager == NULL )
     {
@@ -420,15 +420,15 @@ static wiced_result_t smartbridge_att_cache_get_free_cache( bt_smartbridge_att_c
     }
 
     /* Remove from front of free list */
-    result = bt_linked_list_remove_from_front( &att_cache_manager->free_list, &node );
+    result = linked_list_remove_node_from_front( &att_cache_manager->free_list, &node );
 
     /* Free list is empty. Remove the oldest one from used list */
     if ( result != WICED_BT_SUCCESS )
     {
-        result = bt_linked_list_find( &att_cache_manager->used_list, smartbridge_att_cache_get_free_callback, NULL, &node );
+        result = linked_list_find_node( &att_cache_manager->used_list, smartbridge_att_cache_get_free_callback, NULL, &node );
         if ( result == WICED_BT_SUCCESS )
         {
-            result = bt_linked_list_remove( &att_cache_manager->used_list, node );
+            result = linked_list_remove_node( &att_cache_manager->used_list, node );
             if ( result == WICED_BT_SUCCESS )
             {
                 wiced_bt_smart_attribute_list_t* list = (wiced_bt_smart_attribute_list_t*)node->data;
@@ -466,7 +466,7 @@ static wiced_result_t smartbridge_att_cache_insert_to_used_list( bt_smartbridge_
         return result;
     }
 
-    result = bt_linked_list_insert_at_rear( &att_cache_manager->used_list, &cache->node );
+    result = linked_list_insert_node_at_rear( &att_cache_manager->used_list, &cache->node );
 
     /* Unlock protection */
     wiced_rtos_unlock_mutex( &att_cache_manager->mutex );
@@ -490,7 +490,7 @@ static wiced_result_t smartbridge_att_cache_return_to_free_list( bt_smartbridge_
         return result;
     }
 
-    result = bt_linked_list_insert_at_rear( &att_cache_manager->free_list, &cache->node );
+    result = linked_list_insert_node_at_rear( &att_cache_manager->free_list, &cache->node );
 
     /* Unlock protection */
     wiced_rtos_unlock_mutex( &att_cache_manager->mutex );
@@ -754,7 +754,7 @@ static wiced_result_t smartbridge_att_cache_discover_all( bt_smartbridge_att_cac
     return error_code_var;
 }
 
-static wiced_bool_t   smartbridge_att_cache_find_by_device_callback( bt_list_node_t* node_to_compare, void* user_data )
+static wiced_bool_t   smartbridge_att_cache_find_by_device_callback( linked_list_node_t* node_to_compare, void* user_data )
 {
     bt_smartbridge_att_cache_t* cached_attributes = (bt_smartbridge_att_cache_t*)node_to_compare->data;
     wiced_bt_smart_device_t*    remote_device     = (wiced_bt_smart_device_t*)user_data;
@@ -762,7 +762,7 @@ static wiced_bool_t   smartbridge_att_cache_find_by_device_callback( bt_list_nod
     return ( ( memcmp( cached_attributes->remote_device.address.address, remote_device->address.address, sizeof( remote_device->address.address ) ) == 0 ) && ( cached_attributes->remote_device.address_type == remote_device->address_type) ) ? WICED_TRUE : WICED_FALSE;
 }
 
-static wiced_bool_t   smartbridge_att_cache_get_free_callback( bt_list_node_t* node_to_compare, void* user_data )
+static wiced_bool_t   smartbridge_att_cache_get_free_callback( linked_list_node_t* node_to_compare, void* user_data )
 {
     bt_smartbridge_att_cache_t* cache = (bt_smartbridge_att_cache_t*)node_to_compare->data;
 

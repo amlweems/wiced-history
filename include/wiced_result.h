@@ -87,6 +87,7 @@ typedef enum
     PLATFORM_RESULT_LIST(  WICED_PLATFORM_ )  /* 6000 - 6999 */
     TCPIP_RESULT_LIST   (  WICED_TCPIP_    )  /* 7000 - 7999 */
     BT_RESULT_LIST      (  WICED_BT_       )  /* 8000 - 8999 */
+    P2P_RESULT_LIST     (  WICED_P2P_      )  /* 9000 - 9999 */
 } wiced_result_t;
 
 /******************************************************

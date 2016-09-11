@@ -36,6 +36,11 @@ SECTIONS
         . = ALIGN(0x4);
 
         link_const_variable_data_location = .;
+        wifi_firmware_image_location = .;
+        *(.rodata.wifi_firmware_image)
+        wifi_firmware_image_end = .;
+        . = ALIGN(0x4);
+        *(.rodata.wifi_nvram_image)
         *(.rodata .rodata.* .gnu.linkonce.r.*)
         link_const_variable_data_end = .;
 

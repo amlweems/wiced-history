@@ -20,7 +20,7 @@ extern "C" {
  *                      Macros
  ******************************************************/
 
-#define WICED_TO_WWD_INTERFACE( interface )    ((interface==WICED_STA_INTERFACE)? WWD_STA_INTERFACE:WWD_AP_INTERFACE)
+#define WICED_TO_WWD_INTERFACE( interface )    ((interface)&3)
 
 /******************************************************
  *                    Constants
@@ -71,7 +71,8 @@ extern wiced_result_t wiced_rtos_deinit( void );
 extern wiced_result_t wiced_network_init  ( void );
 extern wiced_result_t wiced_network_deinit( void );
 extern wiced_result_t wiced_join_ap       ( void );
-extern wiced_result_t wiced_leave_ap      ( void );
+extern wiced_result_t wiced_leave_ap      ( wiced_interface_t interface );
+extern wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t security_key_length, const char security_key[ 64 ] );
 extern wiced_result_t wiced_start_ap      ( wiced_ssid_t* ssid, wiced_security_t security, const char* key, uint8_t channel);
 extern wiced_result_t wiced_stop_ap       ( void );
 extern wiced_result_t wiced_ip_up         ( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings );

@@ -70,10 +70,12 @@ extern char bcm439x_platform_inited;
 host_semaphore_type_t sflash_mutex;
 sflash_handle_t       wicedfs_sflash_handle;
 wiced_filesystem_t    resource_fs_handle;
+static  wiced_app_t   fs_app;
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
+
 void platform_sflash_init( void )
 {
 
@@ -82,32 +84,35 @@ void platform_sflash_init( void )
     host_rtos_set_semaphore( &sflash_mutex, WICED_FALSE );
 
 }
-uint32_t platform_filesystem_init( void )
-{
-    int              result;
-    image_location_t filesystem_location;
-    app_header_t     app_header;
-    sflash_handle_t  sflash_handle;
-    wicedfs_usize_t  base;
 
-    /* This is current a hack, The filesystem should use the APPS read and write */
-    wiced_dct_get_app_header_location( DCT_FILESYSTEM_IMAGE_INDEX, &filesystem_location );
-    init_sflash( &sflash_handle, 0, SFLASH_WRITE_ALLOWED );
-    sflash_read( &sflash_handle, filesystem_location.detail.external_fixed.location, &app_header, sizeof(app_header_t) );
-    base = app_header.sectors[ 0 ].start * 4096UL;
-    result = wicedfs_init( base, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
+platform_result_t platform_filesystem_init( void )
+{
+    int             result;
+    sflash_handle_t sflash_handle;
+
+    if ( init_sflash( &sflash_handle, 0, SFLASH_WRITE_ALLOWED ) != WICED_SUCCESS )
+    {
+        return PLATFORM_ERROR;
+    }
+
+    if ( wiced_framework_app_open( DCT_FILESYSTEM_IMAGE_INDEX, &fs_app ) != WICED_SUCCESS )
+    {
+        return PLATFORM_ERROR;
+    }
+
+    result = wicedfs_init( 0, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
     wiced_assert( "wicedfs init fail", result == 0 );
     REFERENCE_DEBUG_ONLY_VARIABLE( result );
 
-    return base;
+    return ( result == 0 ) ? PLATFORM_SUCCESS : PLATFORM_ERROR;
 }
 
 static wicedfs_usize_t read_callback( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos )
 {
-    int retval;
-    retval = sflash_read( (const sflash_handle_t*) user_param, ( pos ), ( buf ), ( size ) );
-
-    return ( ( 0 == retval ) ? size : 0 );
+    wiced_result_t retval;
+    (void) user_param;
+    retval = wiced_framework_app_read_chunk( &fs_app, pos, (uint8_t*) buf, size );
+    return ( ( WICED_SUCCESS == retval ) ? size : 0 );
 }
 
 #ifndef SPI_DRIVER_SFLASH

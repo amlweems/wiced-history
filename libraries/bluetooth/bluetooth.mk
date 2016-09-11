@@ -99,7 +99,6 @@ GLOBAL_INCLUDES  := include \
                     internal/framework/management \
                     internal/framework/packet \
                     internal/framework/utilities \
-                    internal/framework/utilities/linked_list \
                     internal/stack \
                     internal/transport/driver \
                     internal/transport/thread
@@ -160,5 +159,6 @@ $(NAME)_SOURCES  += internal/bus/$(BT_TRANSPORT_BUS)/bt_bus.c \
                     internal/transport/driver/$(BT_TRANSPORT_BUS)/bt_transport_driver.c \
                     internal/transport/thread/bt_transport_thread.c \
                     internal/framework/packet/bt_packet.c \
-                    internal/framework/management/bt_management.c \
-                    internal/framework/utilities/linked_list/bt_linked_list.c
+                    internal/framework/management/bt_management.c
+
+$(NAME)_COMPONENTS += libraries/utilities/linked_list

@@ -25,7 +25,7 @@ extern "C"
  *                      Macros
  ******************************************************/
 
-#define IP_HANDLE(interface)         (wiced_ip_handle[(interface==WICED_STA_INTERFACE)?0:1])
+#define IP_HANDLE(interface)   (*wiced_ip_handle[(interface)&3])
 
 /******************************************************
  *                    Constants
@@ -110,8 +110,8 @@ typedef struct
 /*
  * Note: These objects are for internal use only!
  */
-extern NX_IP          wiced_ip_handle       [2];
-extern NX_PACKET_POOL wiced_packet_pools    [2]; /* 0=TX, 1=RX */
+extern NX_IP*         wiced_ip_handle   [3];
+extern NX_PACKET_POOL wiced_packet_pools[2]; /* 0=TX, 1=RX */
 
 /******************************************************
  *               Function Declarations

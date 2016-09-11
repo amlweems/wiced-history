@@ -11,7 +11,7 @@
 
 #include "wiced_utilities.h"
 #include "wiced_bt_smart_interface.h"
-#include "bt_linked_list.h"
+#include "linked_list.h"
 
 /** @file
  *  Defines functions for bridging Bluetooth Smart with Wi-Fi
@@ -76,7 +76,7 @@ typedef wiced_result_t (*wiced_bt_smartbridge_bonding_callback_t)      ( wiced_b
  */
 struct wiced_bt_smartbridge_socket
 {
-    bt_list_node_t                                node;                           /**< Socket list node                                              */
+    linked_list_node_t                            node;                           /**< Socket list node                                              */
     wiced_bt_smart_device_t                       remote_device;                  /**< Remote Bluetooth device WICED is connected with (bridging)    */
     uint16_t                                      connection_handle;              /**< Connection handle                                             */
     uint16_t                                      last_notified_attribute_handle; /**< Last notified attribute handle                                */

@@ -1,16 +1,6 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.1.1 - README
+Broadcom WICED Software Development Kit 3.1.2 - README
 =====================================================================
-
----------------------------------------------------------------------
-\\\\\\\\\\\\\\\\\\\\\\\\\ IMPORTANT NOTICE //////////////////////////
----------------------------------------------------------------------
-Early 3.1.x versions may not include all functionality provided 
-in previous SDK releases. KNOWN LIMITATIONS for this release are 
-described in the 'Known Limitations & Notes' section of this document.
-
-
----------------------------------------------------------------------
 
 The WICED SDK provides a full compliment of application level APIs, 
 libraries and tools needed to design & implement secure embedded wireless
@@ -26,7 +16,7 @@ Major features of the WICED SDK include ...
     - BCM43362 Wi-Fi SoC
     - BCM43341 Wi-Fi + Bluetooth combo SoC
   - Support for various MCU host platforms
-    - ST Microelectronics : STM32F1xx, STM32F2xx, STM32F4xx
+    - ST Microelectronics : STM32F2xx, STM32F4xx
     - Atmel : AT91SAM4S16B
     - Freescale : K60
     - NXP : LPC17xx
@@ -37,7 +27,6 @@ Major features of the WICED SDK include ...
     - SoftAP & Secure HTTP server
     - Wi-Fi Protected Setup
     - Apple Wireless Accessory Configuration (WAC) Protocol
-    - Cooee(TM)
   - Simple API to provide access to MCU peripherals including UART, SPI, I2C, Timers, RTC, ADCs, DACs, etc
   - Support for multiple toolchains including GNU and IAR
   - Support for Apple AirPlay and HomeKit
@@ -75,8 +64,7 @@ Applications included with the SDK are outlined below.
    - mfg_test     : Manufacturing Test application to enable radio performance and certification testing
  apps/waf  : WICED Application Framework
    - bootloader   : Bootloader application used in conjunction with the WICED Application Framework
-   - ota_upgrade  : Over the Air Upgrade application
-   - sflash_write : Serial flash library used to configure a serial flash for factory reset  
+   - sflash_write : Serial flash application used to write data into external serial flash
  apps/wwd : Wiced Wi-Fi Driver Applications to demonstrate advanced usage of the low layer Wi-Fi driver
     
 To obtain a complete list of build commands and options, enter the following text in the
@@ -131,7 +119,7 @@ Networking Features (IPv4 & IPv6)
  * DHCP (Client & Server)
  * DNS (Client & Redirect Server)
  * mDNS/DNS-SD Zeroconf Network Discovery (Broadcom Gedday)
- * SSL3.0 & TLS1.0/1.1 (object file with host abstraction layer; free for use with WICED *ONLY*)
+ * TLS1.0/1.1/1.2 (object file with host abstraction layer; free for use with WICED *ONLY*)
  * HTTP / HTTPS (Client & Server)
  * SNTP
  * SMTP
@@ -156,7 +144,6 @@ Application Features
    * Factory reset
    * Automated configuration via softAP & webserver
    * Wi-Fi Easy Setup
-     * Cooee (BETA)
    * Apple Wireless Accessory Configuration (WAC) protocol (available to Apple MFi licensees *ONLY*)
    * System Monitor to manage the watchdog
 
@@ -180,40 +167,33 @@ Hardware Platforms
 Known Limitations & Notes
 ---------------------------------------------------------------------
 
- * Features not yet supported in WICED-SDK-3.1.1
-   - Wi-Fi Direct
+ * Features not yet supported in WICED-SDK-3.1.2
    - IAR Embedded Workspace native support
    - wiced_wifi_get_counters() is not functional
 
  * Platform Limitations
-   -----------------+-----------+-----------+-----------+-----------+-----+---------+---------+ 
-   Platform Feature | STM32F1xx | STM32F2xx | STM32F4xx | AT91SAM4S | K60 | LPC17xx | BCM439x |
-    Implementation  |           |           |           |           |     |         |         |
-   -----------------|-----------+-----------+-----------+-----------+-----+---------+---------+
-   MCU powersave    |     Y     |     Y     |     N     |     Y     |  N  |    N    |    Y    |
-   Wi-Fi Powersave  |     N(1)  |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
-   I2C API          |     Y     |     Y     |     N     |     N     |  N  |    N    |    Y    |
-   ADC/PWM API      |    Y/Y    |    Y/Y    |    Y/Y    |    Y/N    |  N  |    N    |    N    |
-   OTA upgrade      |     N     |     Y     |     N     |     N     |  N  |    N    |    N    |
-   Real Time Clock  |     N     |     Y     |     N     |     N     |  N  |    N    |    N    |
-   -----------------+-----------+-----------+-----------+-----------+-----+---------+---------+  
+   -----------------+-----------+-----------+-----------+-----+---------+---------+ 
+   Platform Feature | STM32F2xx | STM32F4xx | AT91SAM4S | K60 | LPC17xx | BCM439x |
+    Implementation  |           |           |           |     |         |         |
+   -----------------|-----------+-----------+-----------+-----+---------+---------+
+   MCU powersave    |     Y     |     N     |     Y     |  N  |    N    |    Y    |
+   Wi-Fi Powersave  |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
+   I2C API          |     Y     |     N     |     N     |  N  |    N    |    Y    |
+   ADC/PWM API      |    Y/Y    |    Y/Y    |    Y/N    |  N  |    N    |    N    |
+   OTA upgrade      |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
+   Real Time Clock  |     Y     |     N     |     N     |  N  |    N    |    N    |
+   -----------------+-----------+-----------+-----------+-----+---------+---------+  
    
-   * WICED-SDK-3.1.1 Platform Restrictions
+   * WICED-SDK-3.1.2 Platform Restrictions
        STM32F1xx is not yet supported
        Freescale K60 is not yet supported
        BCM943341WCD1
-         - WPS is not supported (unreliable)
-
-   * BCM943362WCD2 Platform Restrictions (not applicable to WICED-SDK-3.1.1)
-       The STM32F103 MCU on this platform only has 64kB RAM and 512kB Flash.
-       Many applications that include more advanced networking features
-       will NOT run on this platform! Either the application will not fit into
-       Flash, or the application may run out of RAM at runtime and hang.
-       Tips to use this platform:
-         - Store the Wi-Fi firmware in external serial flash (or use the Wi-Fi 
-           firmware inside the Factory Reset image in serial flash)
-         - Do not use advanced networking features like TLS & mDNS
-         - Do not build applications using debug mode
+         - Wi-Fi Direct not support
+         - SPI bus not supported
+       BCM4390WCD2
+         - Wi-Fi Direct not supported
+         - WPS may timeout with some access points
+         - Software reset not yet supported. OTA upgrade requires manual reset 
      
    * Wi-Fi Powersave (1)
        The WLAN chip requires an external 32kHz sleep clock input during powersave.
@@ -233,10 +213,6 @@ Known Limitations & Notes
 
  * AP mode when running with WPA/WPA2 encryption is limited to 4 STA clients
  
- * WICED HTTPS server connection with LwIP is unreliable. This issue will be addressed in the next release
- 
- * OTA upgrade is supported for STM32F2xx, STM32F4xx and BCM94390 platforms *ONLY*
-
 Tools
 ---------------------------------------------------------------------
 The GNU ARM toolchain is from Yagarto, http://yagarto.de

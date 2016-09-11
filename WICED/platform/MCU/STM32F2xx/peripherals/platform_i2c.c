@@ -23,7 +23,7 @@
  *                      Macros
  ******************************************************/
 
-#define DMA_FLAG_TC(stream_id) dma_flag_tc(stream_id)
+#define DMA_FLAG_TC(stream_id)           dma_flag_tc(stream_id)
 
 /******************************************************
  *                    Constants
@@ -52,6 +52,16 @@
  *               Static Function Declarations
  ******************************************************/
 
+static platform_result_t i2c_dma_config_and_execute( const platform_i2c_t* i2c, platform_i2c_message_t* message, wiced_bool_t tx_dma );
+static platform_result_t i2c_dma_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_rx_with_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_tx_with_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_transfer_message_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_address_device( const platform_i2c_t* i2c, const platform_i2c_config_t* config, int retries, uint8_t direction );
+static platform_result_t i2c_tx_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_rx_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message );
+static platform_result_t i2c_wait_for_event( I2C_TypeDef* i2c, uint32_t event_id, uint32_t number_of_waits );
+
 /******************************************************
  *               Variable Definitions
  ******************************************************/
@@ -69,7 +79,6 @@ static const uint32_t dma_transfer_complete_flags[] =
     [6] = DMA_FLAG_TCIF6,
     [7] = DMA_FLAG_TCIF7,
 };
-
 
 /******************************************************
  *               Function Definitions
@@ -95,7 +104,7 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
     platform_gpio_set_alternate_function( i2c->pin_scl->port, i2c->pin_scl->pin_number, GPIO_OType_OD, GPIO_PuPd_NOPULL, i2c->gpio_af );
     platform_gpio_set_alternate_function( i2c->pin_sda->port, i2c->pin_sda->pin_number, GPIO_OType_OD, GPIO_PuPd_NOPULL, i2c->gpio_af );
 
-    if ( config->flags & I2C_DEVICE_USE_DMA )
+    if ( ( config->flags & I2C_DEVICE_USE_DMA ) != 0 )
     {
         // Enable the DMA clock
         RCC_AHB1PeriphClockCmd( i2c->tx_dma_peripheral_clock, ENABLE );
@@ -153,9 +162,9 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
     I2C_Cmd( i2c->port, ENABLE );
     I2C_Init( i2c->port, &I2C_InitStructure );
 
-    if ( config->flags & I2C_DEVICE_USE_DMA )
+    /* Enable DMA on the I2C bus if requested */
+    if ( ( config->flags & I2C_DEVICE_USE_DMA ) != 0 )
     {
-        // Enable DMA on the I2C bus
         I2C_DMACmd( i2c->port, ENABLE );
     }
 
@@ -186,80 +195,122 @@ platform_result_t platform_i2c_deinit( const platform_i2c_t* i2c, const platform
     return PLATFORM_SUCCESS;
 }
 
-static platform_result_t i2c_wait_for_event( I2C_TypeDef* i2c, uint32_t event_id, uint32_t number_of_waits )
-{
-    while ( I2C_CheckEvent( i2c, event_id ) != SUCCESS )
-    {
-        number_of_waits--;
-        if ( number_of_waits == 0 )
-        {
-            return PLATFORM_TIMEOUT;
-        }
-    }
-
-    return PLATFORM_SUCCESS;
-}
-
 wiced_bool_t platform_i2c_probe_device( const platform_i2c_t* i2c, const platform_i2c_config_t* config, int retries )
 {
-    platform_result_t result;
-    int i;
+    platform_result_t result = PLATFORM_ERROR;
 
     wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) );
 
     platform_mcu_powersave_disable();
 
-    for ( i = 0; i < retries; i++ )
-    {
-        /* generate a start condition and address a i2c in write mode */
-        I2C_GenerateSTART( i2c->port, ENABLE );
+    result = i2c_address_device( i2c, config, retries, I2C_Direction_Transmitter );
 
-        /* wait till start condition is generated and the bus becomes free */
-        result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-        if ( result != PLATFORM_SUCCESS )
-        {
-            // FIXME platform_mcu_powersave_enable();
-            return WICED_FALSE;
-        }
-
-        if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-        {
-            /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
-            I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), I2C_Direction_Transmitter );
-
-            /* wait till address gets sent and the direction bit is sent and */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                /* keep on pinging */
-                continue;
-            }
-            else
-            {
-                break;
-            }
-        }
-        else
-        {
-            // TODO
-            /* send 10 bits of the address and wait for an acknowledge */
-        }
-    }
-
-    /* generate a stop condition */
     I2C_GenerateSTOP( i2c->port, ENABLE );
 
     platform_mcu_powersave_enable();
 
-    /* Check if the i2c didn't respond */
-    if ( i == retries )
+    return ( result == PLATFORM_SUCCESS) ? WICED_TRUE : WICED_FALSE;
+}
+
+platform_result_t platform_i2c_init_tx_message( platform_i2c_message_t* message, const void* tx_buffer, uint16_t tx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
+{
+    wiced_assert( "bad argument", ( message != NULL ) && ( tx_buffer != NULL ) && ( tx_buffer_length != 0 ) );
+
+    memset( message, 0x00, sizeof( *message ) );
+    message->tx_buffer = tx_buffer;
+    message->retries   = retries;
+    message->tx_length = tx_buffer_length;
+
+    if ( disable_dma )
     {
-        return WICED_FALSE;
+        message->flags = I2C_MESSAGE_NO_DMA;
     }
     else
     {
-        return WICED_TRUE;
+        message->flags = I2C_MESSAGE_USE_DMA;
     }
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_i2c_init_rx_message( platform_i2c_message_t* message, void* rx_buffer, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
+{
+    wiced_assert( "bad argument", ( message != NULL ) && ( rx_buffer != NULL ) && ( rx_buffer_length != 0 ) );
+
+    memset( message, 0x00, sizeof( *message ) );
+
+    message->rx_buffer = rx_buffer;
+    message->retries   = retries;
+    message->rx_length = rx_buffer_length;
+
+    if ( disable_dma )
+    {
+        message->flags = I2C_MESSAGE_NO_DMA;
+    }
+    else
+    {
+        message->flags = I2C_MESSAGE_USE_DMA;
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
+{
+    wiced_assert( "bad argument", ( message != NULL ) && ( tx_buffer != NULL ) && ( tx_buffer_length != 0 ) && ( rx_buffer != NULL ) && ( rx_buffer_length != 0 ) );
+
+    memset( message, 0x00, sizeof( *message ) );
+
+    message->rx_buffer = rx_buffer;
+    message->tx_buffer = tx_buffer;
+    message->retries   = retries;
+    message->tx_length = tx_buffer_length;
+    message->rx_length = rx_buffer_length;
+
+    if ( disable_dma )
+    {
+        message->flags = I2C_MESSAGE_NO_DMA;
+    }
+    else
+    {
+        message->flags = I2C_MESSAGE_USE_DMA;
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* messages, uint16_t number_of_messages )
+{
+    platform_result_t result = PLATFORM_ERROR;
+    int               i      = 0;
+
+    wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) && ( messages != 0 ) && ( number_of_messages != 0 ) );
+
+    platform_mcu_powersave_disable();
+
+    for ( i = 0; i < number_of_messages; i++ )
+    {
+        if ( ( config->flags & I2C_DEVICE_USE_DMA ) && ( ( messages[ i ].flags & I2C_MESSAGE_USE_DMA ) == 1 ) )
+        {
+            result = i2c_dma_transfer( i2c, config, &messages[ i ] );
+            if ( result != PLATFORM_SUCCESS )
+            {
+                goto exit;
+            }
+        }
+        else
+        {
+            result = i2c_transfer_message_no_dma( i2c, config, &messages[ i ] );
+            if ( result != PLATFORM_SUCCESS )
+            {
+                goto exit;
+            }
+        }
+    }
+
+exit:
+    platform_mcu_powersave_enable();
+    return result;
 }
 
 static platform_result_t i2c_dma_config_and_execute( const platform_i2c_t* i2c, platform_i2c_message_t* message, wiced_bool_t tx_dma )
@@ -339,578 +390,238 @@ static platform_result_t i2c_dma_config_and_execute( const platform_i2c_t* i2c, 
 static platform_result_t i2c_dma_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
 {
     platform_result_t result;
-    uint32_t counter;
-    int i = 0;
 
-    if ( message->combined == WICED_TRUE )
+    if ( message->tx_buffer != NULL )
     {
-        /* combined transaction case, please refer to Philips I2C document to have an understanding of a combined fragment */
-
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
+        result = i2c_tx_with_dma( i2c, config, message );
+        if ( result != PLATFORM_SUCCESS )
         {
-            /* generate a start condition and address a i2c in write mode */
-            I2C_GenerateSTART( i2c->port, ENABLE );
-
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
-
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), I2C_Direction_Transmitter );
-
-                /* wait till address gets sent and the direction bit is sent and */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                if ( result == PLATFORM_SUCCESS )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
+            goto exit;
         }
+    }
 
-        if ( i == message->retries )
-        {
-            return PLATFORM_TIMEOUT;
-        }
+    if ( message->rx_buffer != NULL )
+    {
+        result = i2c_rx_with_dma( i2c, config, message );
+    }
 
-        /* configure dma tx channel for i2c */
-        i2c_dma_config_and_execute( i2c, message, WICED_TRUE );
+exit:
+    /* generate a stop condition */
+    I2C_GenerateSTOP( i2c->port, ENABLE );
 
-        /* wait till the byte is actually sent from the i2c peripheral */
-        counter = 1000;
-        while ( I2C_GetFlagStatus( i2c->port, I2C_FLAG_BTF ) == RESET )
-        {
-            --counter;
-            if ( counter == 0 )
-            {
-                return PLATFORM_ERROR;
-            }
-        }
+    return result;
+}
 
-        /* generate start condition again and address a i2c in read mode */
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
-        {
-            /* generate a start condition */
-            I2C_GenerateSTART( i2c->port, ENABLE );
+static platform_result_t i2c_rx_with_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
+{
+    uint32_t counter;
 
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
+    i2c_address_device( i2c, config, message->retries, I2C_Direction_Receiver );
 
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), I2C_Direction_Receiver );
-
-                /* wait till address gets sent and the direction bit is sent and */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                if ( result == PLATFORM_SUCCESS )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
-        }
-
-        if ( i == message->retries )
-        {
-            return PLATFORM_TIMEOUT;
-        }
-
-        /* receive data from the slave i2c */
-        if ( message->rx_length == 1 )
-        {
-            /* disable acknowledgement before we start receiving bytes, this is a single byte transmission */
-            I2C_AcknowledgeConfig( i2c->port, DISABLE );
-        }
-        else
-        {
-            /* enable acknowledgement before we start receiving bytes, this is a single byte transmission */
-            I2C_AcknowledgeConfig( i2c->port, ENABLE );
-        }
-
-        /* start dma which will read bytes */
-        i2c_dma_config_and_execute( i2c, message, WICED_FALSE );
-        /* maybe we will have to wait on the BTF flag!!! */
+    /* Disable acknowledgement if receive a single byte */
+    if ( message->rx_length == 1 )
+    {
+        I2C_AcknowledgeConfig( i2c->port, DISABLE );
     }
     else
     {
+        /* enable acknowledgement before we start receiving multiple bytes */
+        I2C_AcknowledgeConfig( i2c->port, ENABLE );
+    }
 
-        /* read or write transaction */
+    /* start dma which will read bytes */
+    i2c_dma_config_and_execute( i2c, message, WICED_FALSE );
 
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
+    /* wait til the last byte is received */
+    counter = 1000;
+    while ( I2C_GetFlagStatus( i2c->port, I2C_FLAG_BTF ) == RESET )
+    {
+        --counter;
+        if ( counter == 0 )
         {
-            /* generate a start condition */
-            I2C_GenerateSTART( i2c->port, ENABLE );
-
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
-
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), ( ( message->tx_buffer ) ? I2C_Direction_Transmitter : I2C_Direction_Receiver ) );
-
-                /* wait till address gets sent and the direction bit is sent */
-                if ( message->tx_buffer )
-                {
-                    result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                }
-                else
-                {
-                    result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                }
-
-                if ( result == PLATFORM_SUCCESS )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
-        }
-        if ( i == message->retries )
-        {
-            return PLATFORM_TIMEOUT;
-        }
-
-        if ( message->tx_buffer )
-        {
-            /* write transaction */
-            /* configure dma tx channel for i2c */
-            i2c_dma_config_and_execute( i2c, message, WICED_TRUE );
-
-            /* wait till the byte is actually sent from the i2c peripheral */
-            counter = 1000;
-            while ( I2C_GetFlagStatus( i2c->port, I2C_FLAG_BTF ) == RESET )
-            {
-                --counter;
-                if ( counter == 0 )
-                {
-                    return PLATFORM_ERROR;
-                }
-            }
-        }
-        else
-        {
-            /* read transaction */
-            if ( message->rx_length == 1 )
-            {
-                /* disable acknowledgement before we are going to receive a single byte */
-                I2C_AcknowledgeConfig( i2c->port, DISABLE );
-            }
-            else
-            {
-                /* enable acknowledgement before we start receiving multiple bytes */
-                I2C_AcknowledgeConfig( i2c->port, ENABLE );
-            }
-
-            /* start dma which will read bytes */
-            i2c_dma_config_and_execute( i2c, message, WICED_FALSE );
-
-            /* wait til the last byte is received */
-            counter = 1000;
-            while ( I2C_GetFlagStatus( i2c->port, I2C_FLAG_BTF ) == RESET )
-            {
-                --counter;
-                if ( counter == 0 )
-                {
-                    return PLATFORM_ERROR;
-                }
-            }
+            return PLATFORM_ERROR;
         }
     }
 
-    /* generate a stop condition */
-    I2C_GenerateSTOP( i2c->port, ENABLE );
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t i2c_tx_with_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
+{
+    uint32_t counter;
+
+    i2c_address_device(i2c, config, message->retries, I2C_Direction_Transmitter );
+
+    /* Configure DMA tx channel for i2c */
+    i2c_dma_config_and_execute( i2c, message, WICED_TRUE );
+
+    /* Wait till the byte is actually sent from the i2c peripheral */
+    counter = 1000;
+    while ( I2C_GetFlagStatus( i2c->port, I2C_FLAG_BTF ) == RESET )
+    {
+        --counter;
+        if ( counter == 0 )
+        {
+            return PLATFORM_ERROR;
+        }
+    }
+
     return PLATFORM_SUCCESS;
 }
 
 static platform_result_t i2c_transfer_message_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
 {
     platform_result_t result;
-    int i = 0;
 
-    if ( message->combined == WICED_TRUE )
+    if ( message->tx_buffer != NULL )
     {
-        const char* tmp_ptr;
-        uint8_t* tmp_rd_ptr;
-
-        /* combined transaction case, please refer to Philips I2C document to have an understanding of a combined fragment */
-
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
+        result = i2c_tx_no_dma( i2c, config, message );
+        if ( result != PLATFORM_SUCCESS )
         {
-            /* generate a start condition and address a i2c in write mode */
-            I2C_GenerateSTART( i2c->port, ENABLE );
-
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
-
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), I2C_Direction_Transmitter );
-
-                /* wait till address gets sent and the direction bit is sent and */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                if ( result == PLATFORM_SUCCESS )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
+            goto exit;
         }
+    }
 
-        if ( i == message->retries )
+    if ( message->rx_buffer != NULL )
+    {
+        result = i2c_rx_no_dma( i2c, config, message );
+    }
+
+exit:
+    /* generate a stop condition */
+    I2C_GenerateSTOP( i2c->port, ENABLE );
+
+    return result;
+
+}
+
+static platform_result_t i2c_address_device( const platform_i2c_t* i2c, const platform_i2c_config_t* config, int retries, uint8_t direction )
+{
+    platform_result_t result;
+
+    /* Some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
+    for ( ; retries != 0 ; --retries )
+    {
+        /* Generate a start condition and address a i2c in write mode */
+        I2C_GenerateSTART( i2c->port, ENABLE );
+
+        /* wait till start condition is generated and the bus becomes free */
+        result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
+        if ( result != PLATFORM_SUCCESS )
         {
             return PLATFORM_TIMEOUT;
         }
 
-        tmp_ptr = (const char*) message->tx_buffer;
-
-        /* send data to the i2c i2c */
-        for ( i = 0; i < message->tx_length; i++ )
+        if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
         {
-            I2C_SendData( i2c->port, (uint8_t) tmp_ptr[ i ] );
+            /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
+            I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), direction );
 
-            /* wait till it actually gets transferred and acknowledged */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_TRANSMITTED, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
+            /* wait till address gets sent and the direction bit is sent and */
+            result = i2c_wait_for_event( i2c->port, (direction == I2C_Direction_Transmitter) ? I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED : I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
+            if ( result == PLATFORM_SUCCESS )
             {
-                return result;
+                return PLATFORM_SUCCESS;
             }
         }
 
-        /* generate start condition again and address a i2c in read mode */
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
+        /* TODO: Support other address widths */
+    }
+
+    return PLATFORM_TIMEOUT;
+}
+
+static platform_result_t i2c_tx_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
+{
+    platform_result_t result;
+    int               i;
+
+    /* Send data */
+    result = i2c_address_device( i2c, config, message->retries, I2C_Direction_Transmitter );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        return result;
+    }
+
+    for ( i = 0; i < message->tx_length; i++ )
+    {
+        I2C_SendData( i2c->port, ((uint8_t*)message->tx_buffer)[ i ] );
+
+        /* wait till it actually gets transferred and acknowledged */
+        result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_TRANSMITTED, I2C_FLAG_CHECK_TIMEOUT );
+        if ( result != PLATFORM_SUCCESS )
         {
-            /* generate a start condition */
-            I2C_GenerateSTART( i2c->port, ENABLE );
-
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address and R/W bit set to write of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), I2C_Direction_Receiver );
-
-                /* wait till address gets sent and the direction bit is sent and */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                if ( result != PLATFORM_SUCCESS )
-                {
-                    /* keep on pinging, if a i2c doesnt respond */
-                    continue;
-                }
-                else
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
+            return result;
         }
-        if ( i == message->retries )
+    }
+
+    return result;
+}
+
+static platform_result_t i2c_rx_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
+{
+    platform_result_t result;
+    int               i;
+
+    result = i2c_address_device( i2c, config, message->retries, I2C_Direction_Receiver );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        return result;
+    }
+
+    /* Disable acknowledgement if this is a single byte transmission */
+    if ( message->rx_length == 1 )
+    {
+        I2C_AcknowledgeConfig( i2c->port, DISABLE );
+    }
+    else
+    {
+        I2C_AcknowledgeConfig( i2c->port, ENABLE );
+    }
+
+    /* Start reading bytes */
+    for ( i = 0; i < message->rx_length; i++ )
+    {
+        /* wait till something is in the i2c data register */
+        result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_RECEIVED, I2C_FLAG_CHECK_TIMEOUT );
+        if ( result != PLATFORM_SUCCESS )
         {
-            return PLATFORM_TIMEOUT;
+            return result;
         }
 
-        /* receive data from the slave i2c */
-        if ( message->rx_length == 1 )
+        /* get data */
+        ((uint8_t*)message->rx_buffer)[ i ] = I2C_ReceiveData( i2c->port );
+
+        /* Check if last byte has been received */
+        if ( i == ( message->rx_length - 1 ) )
         {
-            /* disable acknowledgement before we start receiving bytes, this is a single byte transmission */
+        }
+        else /* Check if the second last byte has been received */
+        if ( i == ( message->rx_length - 2 ) )
+        {
+            /* setup NACK for the last byte to be received */
             I2C_AcknowledgeConfig( i2c->port, DISABLE );
         }
         else
         {
-            /* enable acknowledgement before we start receiving bytes, this is a single byte transmission */
+            /* setup an acknowledgement beforehand for every byte that is to be received */
             I2C_AcknowledgeConfig( i2c->port, ENABLE );
         }
-        tmp_rd_ptr = (uint8_t*) message->rx_buffer;
-        /* start reading bytes */
-        for ( i = 0; i < message->rx_length; i++ )
-        {
-            /* wait till something is in the i2c data register */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_RECEIVED, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return result;
-            }
-
-            /* get data */
-            tmp_rd_ptr[ i ] = I2C_ReceiveData( i2c->port );
-            if ( i == ( message->rx_length - 1 ) )
-            {
-                /* setup NACK for the last byte to be received */
-                I2C_AcknowledgeConfig( i2c->port, DISABLE );
-            }
-            else
-            {
-                /* setup an acknowledgement beforehand for every byte that is to be received */
-                I2C_AcknowledgeConfig( i2c->port, ENABLE );
-            }
-        }
     }
-    else
+
+    return result;
+}
+
+static platform_result_t i2c_wait_for_event( I2C_TypeDef* i2c, uint32_t event_id, uint32_t number_of_waits )
+{
+    while ( I2C_CheckEvent( i2c, event_id ) != SUCCESS )
     {
-
-        /* read or write transaction */
-
-        /* some chips( authentication and security related chips ) has to be addressed several times before they acknowledge their address */
-        for ( i = 0; i < message->retries; i++ )
-        {
-            /* generate a start condition */
-            I2C_GenerateSTART( i2c->port, ENABLE );
-
-            /* wait till start condition is generated and the bus becomes free */
-            result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_MODE_SELECT, I2C_FLAG_CHECK_TIMEOUT );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                return PLATFORM_TIMEOUT;
-            }
-            if ( config->address_width == I2C_ADDRESS_WIDTH_7BIT )
-            {
-                /* send the address of the requested i2c, wait for an acknowledge */
-                I2C_Send7bitAddress( i2c->port, (uint8_t) ( config->address << 1 ), ( ( message->tx_buffer ) ? I2C_Direction_Transmitter : I2C_Direction_Receiver ) );
-
-                /* wait till address gets sent and the direction bit is sent */
-                if ( message->tx_buffer )
-                {
-                    result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                }
-                else
-                {
-                    result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED, I2C_FLAG_CHECK_LONG_TIMEOUT );
-                }
-                if ( result != PLATFORM_SUCCESS )
-                {
-                    continue;
-                }
-                else
-                {
-                    break;
-                }
-            }
-            else
-            {
-                //TODO
-                /* send 10 bits of the address and wait for an acknowledge */
-            }
-        }
-        if ( i == message->retries )
+        number_of_waits--;
+        if ( number_of_waits == 0 )
         {
             return PLATFORM_TIMEOUT;
         }
-
-        if ( message->tx_buffer )
-        {
-            /* write transaction */
-
-            const char* temp_ptr = (const char*) message->tx_buffer;
-            /* send data to the i2c i2c */
-            for ( i = 0; i < message->tx_length; i++ )
-            {
-                I2C_SendData( i2c->port, (uint8_t) temp_ptr[ i ] );
-
-                /* wait till it actually gets transferred and acknowledged */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_TRANSMITTED, I2C_FLAG_CHECK_TIMEOUT );
-                if ( result != PLATFORM_SUCCESS )
-                {
-                    return result;
-                }
-            }
-        }
-        else
-        {
-            /* read transaction */
-
-            uint8_t* tmp_ptr = (uint8_t*) message->rx_buffer;
-            if ( message->rx_length == 1 )
-            {
-                /* disable acknowledgement before we are going to receive a single byte */
-                I2C_AcknowledgeConfig( i2c->port, DISABLE );
-            }
-            else
-            {
-                /* enable acknowledgement before we start receiving multiple bytes */
-                I2C_AcknowledgeConfig( i2c->port, ENABLE );
-            }
-            /* receive data from the i2c i2c */
-            for ( i = 0; i < message->rx_length; i++ )
-            {
-                /* wait till something is in the i2c data register */
-                result = i2c_wait_for_event( i2c->port, I2C_EVENT_MASTER_BYTE_RECEIVED, I2C_FLAG_CHECK_TIMEOUT );
-                if ( result != PLATFORM_SUCCESS )
-                {
-                    return result;
-                }
-
-                /* get data */
-                tmp_ptr[ i ] = I2C_ReceiveData( i2c->port );
-                if ( i == ( message->rx_length - 1 ) )
-                {
-                    /* setup NACK for the last byte to be received */
-                    I2C_AcknowledgeConfig( i2c->port, DISABLE );
-                }
-                else
-                {
-                    /* setup an acknowledgement beforehand for every byte that is to be received */
-                    I2C_AcknowledgeConfig( i2c->port, ENABLE );
-                }
-            }
-        }
-    }
-
-    /* generate a stop condition */
-    I2C_GenerateSTOP( i2c->port, ENABLE );
-    return PLATFORM_SUCCESS;
-
-}
-
-platform_result_t platform_i2c_init_tx_message( platform_i2c_message_t* message, const void* tx_buffer, uint16_t tx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
-{
-    wiced_assert( "bad argument", ( message != NULL ) && ( tx_buffer != NULL ) && ( tx_buffer_length != 0 ) );
-
-    memset( message, 0x00, sizeof( *message ) );
-    message->tx_buffer = tx_buffer;
-    message->combined  = WICED_FALSE;
-    message->retries   = retries;
-    message->tx_length = tx_buffer_length;
-
-    if ( disable_dma )
-    {
-        message->flags = I2C_MESSAGE_NO_DMA;
-    }
-    else
-    {
-        message->flags = I2C_MESSAGE_USE_DMA;
     }
 
     return PLATFORM_SUCCESS;
 }
-
-platform_result_t platform_i2c_init_rx_message( platform_i2c_message_t* message, void* rx_buffer, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
-{
-    wiced_assert( "bad argument", ( message != NULL ) && ( rx_buffer != NULL ) && ( rx_buffer_length != 0 ) );
-
-    memset( message, 0x00, sizeof( *message ) );
-
-    message->rx_buffer = rx_buffer;
-    message->combined  = WICED_FALSE;
-    message->retries   = retries;
-    message->rx_length = rx_buffer_length;
-
-    if ( disable_dma )
-    {
-        message->flags = I2C_MESSAGE_NO_DMA;
-    }
-    else
-    {
-        message->flags = I2C_MESSAGE_USE_DMA;
-    }
-
-    return PLATFORM_SUCCESS;
-}
-
-platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
-{
-    wiced_assert( "bad argument", ( message != NULL ) && ( tx_buffer != NULL ) && ( tx_buffer_length != 0 ) && ( rx_buffer != NULL ) && ( rx_buffer_length != 0 ) );
-
-    memset( message, 0x00, sizeof( *message ) );
-
-    message->rx_buffer = rx_buffer;
-    message->tx_buffer = tx_buffer;
-    message->combined  = WICED_TRUE;
-    message->retries   = retries;
-    message->tx_length = tx_buffer_length;
-    message->rx_length = rx_buffer_length;
-
-    if ( disable_dma )
-    {
-        message->flags = I2C_MESSAGE_NO_DMA;
-    }
-    else
-    {
-        message->flags = I2C_MESSAGE_USE_DMA;
-    }
-
-    return PLATFORM_SUCCESS;
-}
-
-platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* messages, uint16_t number_of_messages )
-{
-    platform_result_t result;
-    int i = 0;
-
-    wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) && ( messages != 0 ) && ( number_of_messages != 0 ) );
-
-    platform_mcu_powersave_disable();
-
-    for ( i = 0; i < number_of_messages; i++ )
-    {
-        if ( ( config->flags & I2C_DEVICE_USE_DMA ) && ( ( messages[ i ].flags & I2C_MESSAGE_USE_DMA ) == 1 ) )
-        {
-            result = i2c_dma_transfer( i2c, config, &messages[ i ] );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                platform_mcu_powersave_enable();
-                return PLATFORM_ERROR;
-            }
-        }
-        else
-        {
-            result = i2c_transfer_message_no_dma( i2c, config, &messages[ i ] );
-            if ( result != PLATFORM_SUCCESS )
-            {
-                platform_mcu_powersave_enable();
-                return PLATFORM_ERROR;
-            }
-        }
-    }
-
-    platform_mcu_powersave_enable();
-    return PLATFORM_SUCCESS;
-}
-

@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Ring_Buffer
+NAME := Lib_Ring_Buffer
 
 GLOBAL_INCLUDES := .
 

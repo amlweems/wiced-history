@@ -477,7 +477,7 @@ wiced_result_t wiced_bt_rfcomm_init_socket( wiced_bt_rfcomm_socket_t* socket, wi
         return result;
     }
 
-    result = bt_linked_list_init( &socket->shared.rx_packet_list );
+    result = linked_list_init( &socket->shared.rx_packet_list );
     if ( result != WICED_BT_SUCCESS )
     {
         WPRINT_LIB_ERROR( ("Error initting RX packet list\n") );
@@ -513,7 +513,7 @@ wiced_result_t wiced_bt_rfcomm_deinit_socket( wiced_bt_rfcomm_socket_t* socket )
 
     wiced_rtos_deinit_semaphore( &socket->semaphore );
     wiced_rtos_deinit_mutex( &socket->shared.mutex );
-    bt_linked_list_deinit( &socket->shared.rx_packet_list );
+    linked_list_deinit( &socket->shared.rx_packet_list );
     memset( socket, 0, sizeof( *socket ) );
     return WICED_BT_SUCCESS;
 }
@@ -639,9 +639,9 @@ wiced_result_t wiced_bt_rfcomm_receive_packet( wiced_bt_rfcomm_socket_t* socket,
     else if ( result == WICED_BT_SUCCESS )
     {
         /* Data is available. Retreive data */
-        bt_list_node_t* removed_node;
+        linked_list_node_t* removed_node;
 
-        result = bt_linked_list_remove_from_front( &socket->shared.rx_packet_list, &removed_node );
+        result = linked_list_remove_node_from_front( &socket->shared.rx_packet_list, &removed_node );
 
         if ( result == WICED_BT_SUCCESS )
         {
@@ -807,7 +807,7 @@ static void rfcomm_mpaf_rx_data_handler( uint8_t endpoint, bt_packet_t* packet, 
 
     socket->shared.lock( socket );
 
-    bt_linked_list_insert_at_rear( &socket->shared.rx_packet_list, &packet->node );
+    linked_list_insert_node_at_rear( &socket->shared.rx_packet_list, &packet->node );
 
     socket->shared.unlock( socket );
 

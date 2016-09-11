@@ -2,6 +2,63 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.1.2 : 01 December 2014
+-----------------------------------------------------------
+* Applications
+  * Improved BT audio demo application
+  * Greatly expanded Wi-Fi Direct support in test.console (referenced as P2P)
+  * Added websocket_client snippet application
+  * Added new NFC snippet apps: 
+    * snip.nfc.config_token_client
+    * snip.nfc.config_token_server
+    * snip.nfc.tag_reader
+    * snip.nfc.tag_writer 
+* Libraries, Protocols, Drivers
+  * Apple HomeKit
+    * Compatible with HAT version 1.0 (66)
+    * Added API to add/remove accessories/services/characteristics on the fly 
+    * Added Garage door opener service, fan service, thermostat service
+    * Redesigned API for building accessory database
+    * Added developer header file that exposes internal API required for development or testing by use
+      ( will get populated with subsequent releases )
+    * HomeKit will now close socket connection if it encounters unencrypted data during encrypted session
+    * Added Auth data and remote fields
+    * Added update list in callback wiced_homekit_actions_on_remote_value_update, to indicate which characteristic was changed
+    * Added Characteristic and Accessory ID parameter to identify callback
+    * Reduced size of characteristic structure
+    * LIMITATIONS: Apple HomeKit now supports ThreadX-NetX_Duo *ONLY*. Support for other RTOS/Network Stack
+                   combinations will be added in subsequent releases
+  * Updated all library makefiles to start their NAME with "Lib_"
+  * Added new linked_list utility
+  * Added NFC driver ( currently only supported in BCM943341WCD1)
+  * HTTP server improvements
+  * Websocket protocol improvements
+* Platforms & WICED Wi-Fi Driver (WWD)
+  * Added MFi support to BCM943341WCD1
+  * Improved 43341 firmware image
+  * Improved 43362 firmware image (5.90.230.12)
+  * Improved support for UART4 for the BCM94390WCD2
+  * Improved I2C driver for STM32F2xx and STM32F4xx
+  * Split wiced_join_ap() into two functions to allow joining AP which is not in the DCT
+  * Fixed internal scan_result_handler() to avoid corruption when in the presence of more than 100 APs
+  * Added const to stdio_config variable
+  * Fixed SAM4S DCT
+* WICED API
+  * NetX and NetX_Duo now send ARP probe after obtaining IP address via DHCP
+  * New wwd_wifi_get_noise() API
+  * Updated cryptographic functions to use const function arguments where applicable
+  * Extensive Wi-Fi Direct update in BESL
+  * Added support for third P2P interface (Wi-Fi Direct)
+  * Changed wiced_ip_handle[] to use pointers to reduce memory usage for unused interfaces.
+  * Added wiced_rtos_delay_microseconds() API
+* WICED Toolchain
+  * Stopped GCC from assuming C89 for non-pedantic files
+  * Fixed map file parser
+  * New OSX toolchain
+  * Changed default optimization setting from -O3 to -Os
+* WICED Application Framework (WAF)
+  * Added support for SAM4S OTA 
+
 Changes for WICED-SDK 3.1.1 : 13 October 2014
 -----------------------------------------------------------
 * Applications

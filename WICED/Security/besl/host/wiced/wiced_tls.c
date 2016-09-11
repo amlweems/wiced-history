@@ -22,6 +22,8 @@
 #include "wiced_time.h"
 #include "wwd_assert.h"
 #include "wwd_buffer_interface.h"
+#include "besl_host_interface.h"
+
 
 /******************************************************
  *                      Macros
@@ -238,7 +240,7 @@ void* tls_host_malloc( const char* name, uint32_t size)
 
 void tls_host_free(void* p)
 {
-    free( p );
+    besl_host_free( p );
 }
 
 void* tls_host_get_defragmentation_buffer ( uint16_t size )
@@ -248,7 +250,7 @@ void* tls_host_get_defragmentation_buffer ( uint16_t size )
 
 void  tls_host_free_defragmentation_buffer( void* buffer )
 {
-    free( buffer );
+    tls_host_free( buffer );
 }
 
 /*
@@ -275,7 +277,7 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
             uint16_t amount_to_copy;
             if ( wiced_packet_create_tcp( ssl->send_context, (uint16_t)length, (wiced_packet_t**) &temp_packet, &packet_buffer, &actual_packet_size ) != WICED_SUCCESS )
             {
-                free(buffer);
+                tls_host_free(buffer);
                 return 1;
             }
             if ( ssl->state == SSL_HANDSHAKE_OVER )
@@ -292,7 +294,7 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
             tls_host_send_packet(ssl->send_context, temp_packet);
         }
 
-        free(buffer);
+        tls_host_free(buffer);
     }
 
     return( 0 );
@@ -512,7 +514,7 @@ wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certi
     result = wiced_tls_load_certificate( root_ca_certificates, trusted_ca_certificates );
     if ( result != WICED_SUCCESS )
     {
-        free( root_ca_certificates );
+        tls_host_free( root_ca_certificates );
         root_ca_certificates = NULL;
         return result;
     }
@@ -525,7 +527,7 @@ wiced_result_t wiced_tls_deinit_root_ca_certificates( void )
     if ( root_ca_certificates != NULL )
     {
         x509_free(root_ca_certificates);
-        free( root_ca_certificates );
+        tls_host_free( root_ca_certificates );
         root_ca_certificates = NULL;
     }
     return WICED_SUCCESS;

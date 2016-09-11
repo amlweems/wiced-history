@@ -25,6 +25,14 @@
 #include "default_wifi_config_dct.h"
 #endif /* #ifdef WIFI_CONFIG_APPLICATION_DEFINED */
 
+#ifdef WICED_DCT_INCLUDE_BT_CONFIG
+#ifdef BT_CONFIG_APPLICATION_DEFINED
+#include "bt_config_dct.h"
+#else/* #ifdef BT_CONFIG_APPLICATION_DEFINED */
+#include "default_bt_config_dct.h"
+#endif /* #ifdef BT_CONFIG_APPLICATION_DEFINED */
+#endif /* #ifdef WICED_DCT_INCLUDE_BT_CONFIG */
+
 #include "generated_mac_address.txt"
 
 /******************************************************
@@ -122,27 +130,17 @@ static const platform_dct_data_t initial_dct =
     .dct_header.apps_locations[ DCT_FILESYSTEM_IMAGE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FILESYSTEM_IMAGE_INDEX,
     .dct_header.apps_locations[ DCT_WIFI_FIRMWARE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_WIFI_FIRMWARE_INDEX,
 
-#ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM
-#if 0
-    .dct_header.boot_detail.entry_point = 0,
-    .dct_header.boot_detail.load_details.load_once = 0,
-    .dct_header.boot_detail.load_details.valid = 1,
-    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FILESYSTEM_FILE,
-    .dct_header.boot_detail.load_details.source.detail.filesytem_filename = "app.elf",
-    .dct_header.boot_detail.load_details.destination.id = INTERNAL,
-#else
+#ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_EXTERNAL_LOCATION
     .dct_header.boot_detail.entry_point = 0,
     .dct_header.boot_detail.load_details.valid = 1,
     .dct_header.boot_detail.load_details.load_once = 0,
     .dct_header.boot_detail.load_details.source.id = EXTERNAL_FIXED_LOCATION,
     .dct_header.boot_detail.load_details.source.detail.external_fixed.location = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_APP0_INDEX,
     .dct_header.boot_detail.load_details.destination.id = INTERNAL,
-#endif
 #else
     .dct_header.boot_detail.entry_point = 0,
     .dct_header.boot_detail.load_details.valid = 0,
-    //.dct_header.boot_detail.load_details.valid = 1,
-    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FIXED_LOCATION,
+    .dct_header.boot_detail.load_details.source.id = NONE,
     .dct_header.boot_detail.load_details.source.detail.external_fixed.location = 0,
     .dct_header.boot_detail.load_details.destination.id = INTERNAL,
 #endif /* ifdef USES_RESOURCE_FILESYSTEM */
@@ -164,6 +162,15 @@ static const platform_dct_data_t initial_dct =
     .wifi_config.country_code        = WICED_DEFAULT_COUNTRY_CODE,
 #endif
     .wifi_config.mac_address.octet   = DCT_GENERATED_MAC_ADDRESS,
+#ifdef WICED_DCT_INCLUDE_BT_CONFIG
+     .bt_config.bluetooth_device_address            = WICED_BLUETOOTH_DEVICE_ADDRESS,
+     .bt_config.bluetooth_device_name               = WICED_BLUETOOTH_DEVICE_NAME,
+#ifdef WICED_BLUETOOTH_SSP_DEBUG_MODE
+     .bt_config.ssp_debug_mode                      = WICED_BLUETOOTH_SSP_DEBUG_MODE
+#else
+     .bt_config.ssp_debug_mode                      = WICED_FALSE
+#endif
+#endif
 };
 
 #if defined ( __IAR_SYSTEMS_ICC__ )
