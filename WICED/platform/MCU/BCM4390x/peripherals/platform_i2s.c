@@ -35,6 +35,8 @@
  *                      Macros
  ******************************************************/
 
+#define XTAL_FREQUENCY              37400000
+#define TWO_POW24                   16777216
 /* FIXME This belongs in i2s_core.h. */
 #define I2S_INTRECE_LAZY_FC_MASK    0xFF000000
 #define I2S_INTRECE_LAZY_FC_SHIFT   24
@@ -704,13 +706,6 @@ static void i2s_cleanup( platform_i2s_port_t port )
 
 #define AUDIOPLL_PC2_I_NDIV_FRAC(_V_)           (((_V_) << AUDIOPLL_PC2_I_NDIV_FRAC_SHIFT) & AUDIOPLL_PC2_I_NDIV_FRAC_MASK)
 
-inline static void i2s_pll_enable_post_dividers(si_t *sih, const platform_audio_pll_channels_t ch)
-{
-    si_pmu_pllcontrol(sih,
-            AUDIOPLL_PLLCTL0,
-            AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX_MASK(ch),
-            AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX(ch, AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX_ENABLED));
-}
 
 static inline void i2s_pll_configure_channel(si_t *sih, const platform_audio_pll_channels_t ch, uint8_t i_mdiv)
 {
@@ -731,6 +726,15 @@ static inline void i2s_pll_configure_channel(si_t *sih, const platform_audio_pll
             AUDIOPLL_PC1_I_M1DIV_CHX_MASK(ch),
             AUDIOPLL_PC1_I_M1DIV_CHX(ch, i_mdiv));
 }
+inline static void i2s_pll_enable_post_dividers(si_t *sih, const platform_audio_pll_channels_t ch)
+{
+    si_pmu_pllcontrol(sih,
+            AUDIOPLL_PLLCTL0,
+            AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX_MASK(ch),
+            AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX(ch, AUDIOPLL_PC0_I_ENB_CLKOUT_SINGLE_CHX_ENABLED));
+}
+
+
 
 inline static void i2s_pll_enable_clk(si_t *sih, const platform_audio_pll_channels_t ch)
 {
@@ -745,6 +749,91 @@ inline static void i2s_pll_enable_clk(si_t *sih, const platform_audio_pll_channe
             cc6_clk_enab[ch],
             cc6_clk_enab[ch]);
 }
+
+wiced_result_t wiced_i2s_pll_set_fractional_divider(wiced_i2s_t i2s, float value)
+{
+    wiced_result_t     result = WICED_ERROR;
+    platform_i2s_port_t  port = I2S_INTERFACE(i2s)->port_info->port;
+    i2s_control_t    *control = I2S_CONTROL(port);
+    si_t                 *sih = I2S_CONTROL(port)->sih;
+    uint32_t     new_frac_div = 0;
+    double                VCO = 0.0f;
+    double            new_VCO = 0.0f;
+    double new_frac_div_float = 0.0f;
+    wiced_bool_t      b_apply = WICED_FALSE;
+    int        ch = 2;
+    enum  {
+        FREQUENCY_44p1K=0,
+        FREQUENCY_48K
+    };
+
+    static const struct i2s_pll_config
+    {
+            uint8_t     i_mdiv;
+            uint32_t    frequency;
+            uint32_t    mclk;
+            uint32_t    i_ndiv_frac;
+            uint16_t    i_ndiv_int;
+            double      vco;
+    } i2s_pll_config[] =
+    {
+            /* 11.2896MHz */
+            {.frequency=44100, .mclk = 11289600,  .i_ndiv_int = 38,  .i_ndiv_frac = 10707273, .i_mdiv = 64, .vco = 722534399.91 },
+            /* 12.288MHz */
+            {.frequency=48000, .mclk = 12288000,  .i_ndiv_int = 39,  .i_ndiv_frac =  7159475, .i_mdiv = 60, .vco = 737279999.93 },
+    };
+
+    /**
+     * Value contains the change in PPM (applies to either VCO or MCLK)
+     * This needs to be converted to the fractional value.
+     */
+
+    if( control->sample_rate == i2s_pll_config[FREQUENCY_48K].frequency )
+    {
+        VCO                = i2s_pll_config[FREQUENCY_48K].vco;
+        new_VCO            = ( VCO * ( (double)1.0f + ( value / (double)1000000.0f) ) );
+        new_frac_div_float = ( ( ( 2 * new_VCO ) / (double)XTAL_FREQUENCY )  - (double)i2s_pll_config[FREQUENCY_48K].i_ndiv_int ) * TWO_POW24;
+        new_frac_div       = (uint32_t) new_frac_div_float;
+        /* integral divider can't exceed (TWO_POW24 - 1) ! */
+        b_apply            = (new_frac_div < TWO_POW24) ? WICED_TRUE : WICED_FALSE;
+    }
+    else if( control->sample_rate == i2s_pll_config[FREQUENCY_44p1K].frequency )
+    {
+        VCO                = i2s_pll_config[FREQUENCY_44p1K].vco;
+        new_VCO            = (  VCO * ( (double)1.0f + ( value / (double)1000000.0f) ) );
+        new_frac_div_float = ( ( ( 2 * new_VCO ) / (double)XTAL_FREQUENCY )  - (double)i2s_pll_config[FREQUENCY_44p1K].i_ndiv_int ) * TWO_POW24;
+        new_frac_div       = (uint32_t) new_frac_div_float;
+        /* integral divider can't exceed (TWO_POW24 - 1) ! */
+        b_apply            = (new_frac_div < TWO_POW24) ? WICED_TRUE : WICED_FALSE;
+    }
+
+    if ( b_apply == WICED_TRUE )
+    {
+        si_pmu_pllcontrol(sih,
+                          AUDIOPLL_PLLCTL2,
+                          AUDIOPLL_PC2_I_NDIV_FRAC_MASK,
+                          AUDIOPLL_PC2_I_NDIV_FRAC(new_frac_div));
+
+        i2s_pll_configure_channel(sih, BCM4390X_AUDIO_PLL_AUDIO_SYNC, 0x4 /* recommended */);
+
+        si_pmu_pllupd(sih);
+
+        /* Enable post divider outputs. */
+        i2s_pll_enable_post_dividers(sih, ch);
+        i2s_pll_enable_post_dividers(sih, BCM4390X_AUDIO_PLL_AUDIO_SYNC);
+        si_pmu_pllupd(sih);
+
+        /* Clk_ht enables for apll_clk m1_clk and m2_clk. */
+        i2s_pll_enable_clk(sih, ch);
+        i2s_pll_enable_clk(sih, BCM4390X_AUDIO_PLL_AUDIO_SYNC);
+
+        result = WICED_SUCCESS;
+    }
+
+    return result;
+}
+
+
 
 static wiced_result_t i2s_disable_pll( si_t *sih )
 {
@@ -1296,18 +1385,10 @@ static void service_transfer_complete( platform_i2s_port_t port, platform_i2s_di
     stream->periods_count = wiced_audio_buffer_platform_get_periods(stream->sh);
 
     /* We have got more to transfer; schedule transfer. */
-    if (stream->periods_count >= 1)
+    if (stream->periods_count > 1) //should be >1 since two periods are transferred in wiced_i2s_start().
     {
         I2S_INC_POSITION(stream);
         (*I2S_OPS(dir)->post_dma_descriptor)(port);
-    }
-    else
-    {
-        //WICED_TRIGGER_BREAKPOINT();
-        stream->is_xrun = 1;
-        stream->sw_xrun++;
-        wiced_audio_buffer_platform_event(stream->sh, WICED_AUDIO_UNDERRUN);
-        i2s_stop_stream(port, dir);
     }
 }
 
@@ -1325,7 +1406,6 @@ static void service_xrun( platform_i2s_port_t port, platform_i2s_direction_t dir
         //WICED_TRIGGER_BREAKPOINT();
         stream->is_xrun = 1;
         wiced_audio_buffer_platform_event(stream->sh, WICED_AUDIO_UNDERRUN);
-        i2s_stop_stream(port, dir);
     }
 }
 

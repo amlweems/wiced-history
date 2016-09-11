@@ -35,8 +35,10 @@ extern "C"
         #define wiced_assert( error_string, assertion ) do { if (!(assertion)) { WICED_ASSERTION_FAIL_ACTION();} } while(0)
     #endif
 #else
-    #define wiced_assert( error_string, assertion )
+    #define wiced_assert( error_string, assertion )     do { (void)(assertion); } while(0)
 #endif
+
+#define wiced_verify( error_string, assertion )
 
 #ifdef __GNUC__
 #define WICED_UNUSED_VAR __attribute__ ((unused))

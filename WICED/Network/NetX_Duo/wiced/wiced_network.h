@@ -70,6 +70,16 @@ typedef enum
 
 typedef NX_PACKET wiced_packet_t;
 
+typedef enum
+{
+    WICED_SOCKET_CLOSED,
+    WICED_SOCKET_CLOSING,
+    WICED_SOCKET_CONNECTING,
+    WICED_SOCKET_CONNECTED,
+    WICED_SOCKET_DATA_PENDING,
+    WICED_SOCKET_LISTEN,
+    WICED_SOCKET_ERROR
+} wiced_socket_state_t;
 /******************************************************
  *                    Structures
  ******************************************************/
@@ -81,12 +91,12 @@ typedef NX_PACKET wiced_packet_t;
  */
 typedef struct
 {
-    NX_TCP_SOCKET               socket;
-    uint32_t                    socket_magic_number;
-    wiced_tls_simple_context_t* tls_context;
-    wiced_bool_t                context_malloced;
-    uint32_t                    callbacks[3];
-    void*                       arg;
+    NX_TCP_SOCKET        socket;
+    uint32_t             socket_magic_number;
+    wiced_tls_context_t* tls_context;
+    wiced_bool_t         context_malloced;
+    uint32_t             callbacks[3];
+    void*                arg;
 } wiced_tcp_socket_t;
 
 typedef struct
@@ -99,9 +109,10 @@ typedef struct
 
 typedef struct
 {
-    linked_list_t socket_list;
-    int           interface;
-    uint16_t      port;
+    linked_list_t         socket_list;
+    int                   interface;
+    uint16_t              port;
+    wiced_tls_identity_t* tls_identity;
 } wiced_tcp_server_t;
 
 typedef struct

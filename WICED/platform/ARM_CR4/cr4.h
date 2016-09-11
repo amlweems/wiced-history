@@ -24,11 +24,6 @@ extern "C" {
  *                      Macros
  ******************************************************/
 
-#if defined( __GNUC__ ) && ( ! defined( __clang__ ) )
-/* XXX More appropriate inclusion in platform_toolchain.h? */
-#define ALWAYS_INLINE __attribute__((always_inline))  /* Required for ROM to ensure there are not repeated */
-#endif /* if defined( __GNUC__ ) && ( ! defined( __clang__ ) ) */
-
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -73,8 +68,6 @@ static inline ALWAYS_INLINE uint32_t get_IFSR( void )
     return value;
 }
 
-
-
 /**
  * Read the Data Fault Address Register
  */
@@ -95,7 +88,6 @@ static inline ALWAYS_INLINE uint32_t get_DFSR( void )
     return value;
 }
 
-
 /**
  * Read the Program Counter and Processor Status Register
  */
@@ -103,6 +95,16 @@ static inline ALWAYS_INLINE uint32_t get_CPSR( void )
 {
     uint32_t value;
     __asm__( "mrs %0, cpsr" : "=r" (value) : );
+    return value;
+}
+
+/**
+ * Read the Link Register
+ */
+static inline ALWAYS_INLINE uint32_t get_LR( void )
+{
+    uint32_t value;
+    __asm__( "mov %0, lr" : "=r" (value) : );
     return value;
 }
 
@@ -122,6 +124,9 @@ static inline ALWAYS_INLINE void cpu_data_synchronisation_barrier( void )
     __asm__( "dsb" : : : "memory");
 }
 
+/*
+ * Initialize performance monitoring registers
+ */
 static inline void cr4_init_cycle_counter( void )
 {
     /* Reset cycle counter. Performance Monitors Control Register - PMCR */
@@ -132,6 +137,9 @@ static inline void cr4_init_cycle_counter( void )
     __asm__ __volatile__ ("MCR p15, 0, %0, c9, c12, 3" : : "r"(0x80000000));
 }
 
+/*
+ * Read cycle counter
+ */
 static inline ALWAYS_INLINE uint32_t cr4_get_cycle_counter( void )
 {
     uint32_t count;
@@ -139,11 +147,30 @@ static inline ALWAYS_INLINE uint32_t cr4_get_cycle_counter( void )
     return count;
 }
 
+/*
+ * Read overflow status register
+ */
+static inline ALWAYS_INLINE uint32_t cr4_get_overflow_flag_status( void )
+{
+    uint32_t flag;
+    __asm__ __volatile__ ("MRC p15, 0, %0, c9, c12, 3" : "=r"(flag));
+    return flag;
+}
+
+/*
+ * Return whether cycle counter overflowed
+ */
+static inline ALWAYS_INLINE int cr4_is_cycle_counter_overflowed( void )
+{
+    return ( cr4_get_overflow_flag_status() & 0x80000000 ) ? 1 : 0;
+}
+
 
 /*
  * Should be defined by MCU
  */
 void platform_backplane_debug( void );
+void platform_exception_debug( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

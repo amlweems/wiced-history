@@ -55,9 +55,8 @@ extern "C"
  * 12 bytes - SDPCM header
  * 2 bytes  - Extra offset for SDPCM headers that come as 14 bytes
  * 4 bytes  - BDC header
- * 4 bytes  - offset for one extra BDC reserved long int.
  */
-#define MAX_SDPCM_HEADER_LENGTH (22)
+#define MAX_SDPCM_HEADER_LENGTH (18)
 
 /**
  * The maximum space in bytes required for headers in front of the Ethernet header.

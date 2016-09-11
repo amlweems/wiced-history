@@ -18,7 +18,11 @@ FAMILY := BCM439x
 # Host MCU alias for OpenOCD
 HOST_OPENOCD := $(FAMILY)
 
-VALID_BUSES := SoC/4390
+VALID_BUSES := SoC.4390
+
+ifndef BUS
+BUS := SoC.4390
+endif
 
 GLOBAL_INCLUDES := . \
                    .. \
@@ -83,10 +87,18 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_unhandled_isr.c \
                    platform_filesystem.c \
                    platform_mcu_powersave.c \
-                   WAF/waf_platform.c \
-                   WWD/wwd_bus.c \
                    WWD/wwd_platform.c \
-                   WWD/BCM439x_packet.c
+                   WWD/BCM439x_packet.c \
+                   WAF/waf_platform.c \
+                   WWD/wwd_bus.c
+
+ifdef NO_WIFI
+$(NAME)_COMPONENTS += WICED/WWD
+ifndef NETWORK
+NETWORK := NoNS
+$(NAME)_COMPONENTS += WICED/network/NoNS
+endif
+endif
 
 $(NAME)_INCLUDES += WWD/internal/include
 $(NAME)_DEFINES += _HNDRTE_

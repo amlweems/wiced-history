@@ -1,7 +1,13 @@
 /*
- * Fundamental constants relating to TCP Protocol
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * Fundamental constants relating to TCP Protocol
  *
  * $Id: bcmtcp.h 458523 2014-02-27 02:26:47Z shinuk $
  */

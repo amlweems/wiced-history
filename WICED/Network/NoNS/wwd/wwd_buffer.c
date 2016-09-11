@@ -7,17 +7,21 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-
-#include "network/wwd_buffer_interface.h"
+#if defined ( IAR_TOOLCHAIN )
+#include "platform_cmis.h"
+#endif
 #include <string.h>
 #include <stdint.h>
+#include "wwd_buffer.h"
+#include "wwd_constants.h"
 #include "wwd_assert.h"
+#include "network/wwd_buffer_interface.h"
 
 static /*@null@*/ wiced_buffer_t internal_buffer           = 0;
 static uint16_t                      internal_buffer_max_size  = 0;
 static uint16_t                      internal_buffer_curr_size = 0;
 
-wwd_result_t host_buffer_init( void * native_arg )
+wwd_result_t wwd_buffer_init( void * native_arg )
 {
     wiced_assert("Error: Invalid native_arg\n", native_arg != NULL);
 

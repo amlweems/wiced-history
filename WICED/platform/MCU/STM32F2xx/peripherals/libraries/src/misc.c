@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    misc.c
   * @author  MCD Application Team
-  * @version V1.0.0
-  * @date    18-April-2011
+  * @version V1.1.2
+  * @date    05-March-2012 
   * @brief   This file provides all the miscellaneous firmware functions (add-on
   *          to CMSIS functions).
   *          
@@ -55,14 +55,20 @@
   ******************************************************************************
   * @attention
   *
-  * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
-  * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
-  * TIME. AS A RESULT, STMICROELECTRONICS SHALL NOT BE HELD LIABLE FOR ANY
-  * DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
-  * FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE
-  * CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
+  * <h2><center>&copy; COPYRIGHT 2012 STMicroelectronics</center></h2>
   *
-  * <h2><center>&copy; COPYRIGHT 2011 STMicroelectronics</center></h2>
+  * Licensed under MCD-ST Liberty SW License Agreement V2, (the "License");
+  * You may not use this file except in compliance with the License.
+  * You may obtain a copy of the License at:
+  *
+  *        http://www.st.com/software_license_agreement_liberty_v2
+  *
+  * Unless required by applicable law or agreed to in writing, software 
+  * distributed under the License is distributed on an "AS IS" BASIS, 
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
   ******************************************************************************
   */
 
@@ -129,9 +135,8 @@ void NVIC_PriorityGroupConfig(uint32_t NVIC_PriorityGroup)
   */
 void NVIC_Init(NVIC_InitTypeDef* NVIC_InitStruct)
 {
-  /* WICED changes */
-  uint8_t tmppriority = 0x00;
-  //uint8_t tmppriority = 0x00, tmppre = 0x00, tmpsub = 0x0F;
+  uint8_t tmppriority = 0x00, tmppre = 0x00, tmpsub = 0x0F;
+  
   /* Check the parameters */
   assert_param(IS_FUNCTIONAL_STATE(NVIC_InitStruct->NVIC_IRQChannelCmd));
   assert_param(IS_NVIC_PREEMPTION_PRIORITY(NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority));  
@@ -139,33 +144,18 @@ void NVIC_Init(NVIC_InitTypeDef* NVIC_InitStruct)
     
   if (NVIC_InitStruct->NVIC_IRQChannelCmd != DISABLE)
   {
-    /* WICED changes */
-    uint8_t mask;
-    static const uint8_t mask_values[]= { 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F, 0xFF };
-
     /* Compute the Corresponding IRQ Priority --------------------------------*/    
-    /* WICED_CHANGES */
-    tmppriority = ( (SCB->AIRCR) & (uint32_t)0x700 ) >> 0x08;
-    mask = mask_values[tmppriority];
+    tmppriority = (0x700 - ((SCB->AIRCR) & (uint32_t)0x700))>> 0x08;
+    tmppre = (0x4 - tmppriority);
+    tmpsub = tmpsub >> tmppriority;
 
-    tmppriority = NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority << ( tmppriority + 1 );
-    /* clear all bits that are related to the sub-priority field */
-    tmppriority&= ~mask;
-    /* add sub-priority fields, clear everything that cant fit to the sub-priority field */
-    tmppriority |=  (uint8_t)(NVIC_InitStruct->NVIC_IRQChannelSubPriority & mask);
+    tmppriority = NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority << tmppre;
+    tmppriority |=  (uint8_t)(NVIC_InitStruct->NVIC_IRQChannelSubPriority & tmpsub);
+        
+    tmppriority = tmppriority << 0x04;
         
     NVIC->IP[NVIC_InitStruct->NVIC_IRQChannel] = tmppriority;
-    /* previous st code */
-//    tmppriority = (0x700 - ((SCB->AIRCR) & (uint32_t)0x700))>> 0x08;
-//    tmppre = (0x4 - tmppriority);
-//    tmpsub = tmpsub >> tmppriority;
-//
-//    tmppriority = NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority << tmppre;
-//    tmppriority |=  (uint8_t)(NVIC_InitStruct->NVIC_IRQChannelSubPriority & tmpsub);
-//
-//    tmppriority = tmppriority << 0x04;
-//
-//    NVIC->IP[NVIC_InitStruct->NVIC_IRQChannel] = tmppriority;
+    
     /* Enable the Selected IRQ Channels --------------------------------------*/
     NVIC->ISER[NVIC_InitStruct->NVIC_IRQChannel >> 0x05] =
       (uint32_t)0x01 << (NVIC_InitStruct->NVIC_IRQChannel & (uint8_t)0x1F);
@@ -256,4 +246,4 @@ void SysTick_CLKSourceConfig(uint32_t SysTick_CLKSource)
   * @}
   */
 
-/******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

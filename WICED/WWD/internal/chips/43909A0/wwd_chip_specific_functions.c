@@ -22,6 +22,8 @@
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 
 #include "platform_map.h"
+#include "platform_mcu_peripheral.h"
+#include "wiced_deep_sleep.h"
 
 /******************************************************
  *                      Macros
@@ -118,12 +120,13 @@ static wifi_console_t *c;
 wifi_console_t console;
 static wlan_shared_t sh;
 static uint console_addr = 0;
+static uint WICED_DEEP_SLEEP_SAVED_VAR(con_lastpos) = 0;
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
+static wwd_result_t wwd_wifi_read_wlan_log_unsafe( char* buffer, uint32_t buffer_size )
 {
     char ch;
     uint32_t n;
@@ -174,6 +177,9 @@ wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
         }
     }
 
+    /* Retrieve last read position */
+    c->last = con_lastpos;
+
     index = ltoh32( c->log.idx );
 
     /* Protect against corrupt value */
@@ -212,6 +218,9 @@ wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
                 {
                     c->last = c->bufsize - n;
                 }
+                /* Save last read position */
+                con_lastpos = c->last;
+
                 return WWD_SUCCESS;
             }
             ch = c->buf[ c->last ];
@@ -231,6 +240,27 @@ wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
             WPRINT_APP_INFO( ("CONSOLE: %s\n", buffer) );
         }
     }
+    /* Save last read position */
+    con_lastpos = c->last;
 
     return WWD_SUCCESS;
+}
+
+wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
+{
+    wwd_result_t result;
+
+    PLATFORM_WLAN_POWERSAVE_RES_UP();
+
+    result = wwd_wifi_read_wlan_log_unsafe( buffer, buffer_size );
+
+    PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_FALSE );
+
+    return result;
+}
+
+wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t* country_code )
+{
+    UNUSED_PARAMETER(country_code);
+    return WWD_UNSUPPORTED;
 }

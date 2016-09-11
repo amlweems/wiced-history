@@ -89,12 +89,13 @@ typedef void(*wiced_i2s_rx_callback_t)( uint8_t* buffer, uint16_t read_size,  ui
  *               Function Declarations
  ******************************************************/
 
-wiced_result_t wiced_i2s_init                    ( wiced_audio_session_ref sh, wiced_i2s_t i2s, wiced_i2s_params_t* params, uint32_t* mclk);
-wiced_result_t wiced_i2s_deinit                  ( wiced_i2s_t i2s);
-wiced_result_t wiced_i2s_set_audio_buffer_details( wiced_i2s_t i2s, wiced_audio_buffer_header_t *audio_buffer_ptr);
-wiced_result_t wiced_i2s_start                   ( wiced_i2s_t i2s);
-wiced_result_t wiced_i2s_stop                    ( wiced_i2s_t);
-wiced_result_t wiced_i2s_get_current_hw_pointer  ( wiced_i2s_t i2s, uint32_t* hw_pointer );
+wiced_result_t wiced_i2s_init                      ( wiced_audio_session_ref sh, wiced_i2s_t i2s, wiced_i2s_params_t* params, uint32_t* mclk);
+wiced_result_t wiced_i2s_deinit                    ( wiced_i2s_t i2s);
+wiced_result_t wiced_i2s_set_audio_buffer_details  ( wiced_i2s_t i2s, wiced_audio_buffer_header_t *audio_buffer_ptr);
+wiced_result_t wiced_i2s_start                     ( wiced_i2s_t i2s);
+wiced_result_t wiced_i2s_stop                      ( wiced_i2s_t i2s);
+wiced_result_t wiced_i2s_get_current_hw_pointer    ( wiced_i2s_t i2s, uint32_t* hw_pointer );
+wiced_result_t wiced_i2s_pll_set_fractional_divider( wiced_i2s_t i2s, float value );
 
 
 #ifdef __cplusplus

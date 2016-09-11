@@ -12,6 +12,7 @@
 
 
 #include "wwd_buffer.h"
+#include "internal/wwd_thread_internal.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -101,6 +101,11 @@
  *                 Type Definitions
  ******************************************************/
 
+typedef int ( *sflash_write_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@observer@*/ const void* const data_addr, unsigned int size );
+typedef int ( *sflash_read_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size );
+
 /******************************************************
  *                    Structures
  ******************************************************/
@@ -126,7 +131,7 @@ wiced_result_t wiced_apps_get_size( const image_location_t* app_header_location,
 
     /* Loop on each entry and erase the sectors*/
     *size = 0;
-    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
+    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     for ( index = 0; index < app_header.count; index++ )
     {
@@ -148,6 +153,7 @@ static uint16_t wiced_apps_find_last_sector( image_location_t* app_header_locati
     uint16_t        next_sector = 0;
     uint8_t         index;
 
+    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     for ( index = 0; index < app_header.count; index++ )
     {
@@ -181,7 +187,7 @@ static wiced_result_t wiced_apps_find_empty_location( image_location_t* new_head
         {
             uint16_t app_last_sector;
 
-            init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
+            init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
             app_last_sector = wiced_apps_find_last_sector( &existing_header_location );
             deinit_sflash( &sflash_handle );
             if ( existing_header_location.detail.external_fixed.location >= new_header_location->detail.external_fixed.location )
@@ -214,7 +220,7 @@ wiced_result_t wiced_apps_set_size( image_location_t* app_header_location, uint3
     uint32_t        available_sectors;
     uint32_t        sectors_needed;
 
-    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
+    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     for ( index = 0; index < app_header.count; index++ )
     {
@@ -289,14 +295,30 @@ static wiced_result_t wiced_apps_get_physical_address( app_header_t *app_header,
     for ( index = 0; index < app_header->count; index++ )
     {
         uint32_t current_size = app_header->sectors[ index ].count * SFLASH_SECTOR_SIZE;
+
+        if ( app_header->secure )
+        {
+            /* If secure sector, reduce the metadata_size from total size */
+            current_size -= SECURE_SFLASH_METADATA_SIZE( current_size );
+        }
         if ( ( offset >= current_offset ) && ( offset < ( current_offset + current_size ) ) )
         {
             uint32_t diff = offset - current_offset;
-            *address = app_header->sectors[ index ].start * SFLASH_SECTOR_SIZE + diff;
+
+            if ( app_header->secure )
+            {
+                /* Get the Secure address */
+                *address = ( app_header->sectors[ index ].start * SFLASH_SECTOR_SIZE ) + SECURE_SECTOR_ADDRESS( diff ) + OFFSET_WITHIN_SECURE_SECTOR( diff );
+            }
+            else
+            {
+                *address = app_header->sectors[ index ].start * SFLASH_SECTOR_SIZE + diff;
+            }
+
             *size = current_size - diff;
             return WICED_SUCCESS;
         }
-        current_offset += app_header->sectors[ index ].count * SFLASH_SECTOR_SIZE;
+        current_offset += current_size;
     }
     return WICED_ERROR;
 }
@@ -331,10 +353,14 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
     sflash_handle_t sflash_handle;
     app_header_t    app_header;
     uint32_t        address, available_size;
+    sflash_write_t  sflash_write_func;
 
     init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     deinit_sflash( &sflash_handle );
+
+    sflash_write_func = ( app_header.secure ? &sflash_write_secure : &sflash_write );
+
     while ( size )
     {
         if ( wiced_apps_get_physical_address( &app_header, offset, &address, &available_size ) != WICED_SUCCESS )
@@ -354,7 +380,7 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
                     *last_erased_sector = wiced_apps_erase_sections( address, size, *last_erased_sector );
                 };
                 init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
-                sflash_write( &sflash_handle, address, data, size );
+                sflash_write_func( &sflash_handle, address, data, size );
                 deinit_sflash( &sflash_handle );
                 size = 0;
             }
@@ -366,7 +392,7 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
                     *last_erased_sector = wiced_apps_erase_sections( address, size, *last_erased_sector );
                 };
                 init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
-                sflash_write( &sflash_handle, address, data, available_size );
+                sflash_write_func( &sflash_handle, address, data, available_size );
                 deinit_sflash( &sflash_handle );
                 size   -= available_size;
                 offset += available_size;
@@ -383,15 +409,21 @@ wiced_result_t wiced_apps_read( const image_location_t* app_header_location, uin
     sflash_handle_t sflash_handle;
     app_header_t    app_header;
     uint32_t        address, available_size;
+    wiced_result_t  result = WICED_SUCCESS;
+    sflash_read_t  sflash_read_func;
 
-    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
+    init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
-    while ( size )
+
+    sflash_read_func = ( app_header.secure ? &sflash_read_secure : &sflash_read );
+
+    while ( ( size ) && ( result ==  WICED_SUCCESS ) )
     {
         if ( wiced_apps_get_physical_address( &app_header, offset, &address, &available_size ) != WICED_SUCCESS )
         {
             /* offset is not within the app size, error */
-            return WICED_ERROR;
+            result = WICED_ERROR;
+            goto done;
         }
         else
         {
@@ -399,19 +431,20 @@ wiced_result_t wiced_apps_read( const image_location_t* app_header_location, uin
             if ( size <= available_size )
             {
                 /* it all fit in to this sector */
-                sflash_read( &sflash_handle, address, data, size );
+                result = sflash_read_func( &sflash_handle, address, data, size );
                 size = 0;
             }
             else
             {
-                sflash_read( &sflash_handle, address, data, available_size );
+                result = sflash_read_func( &sflash_handle, address, data, available_size );
                 size   -= available_size;
                 offset += available_size;
                 data   += available_size;
             }
         }
     }
-    deinit_sflash( &sflash_handle);
+done:
+    deinit_sflash( &sflash_handle );
     /* We need to add a new app header at the end of the log section */
-    return WICED_SUCCESS;
+    return result;
 }

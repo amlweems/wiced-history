@@ -27,7 +27,7 @@ static NX_PACKET_POOL* application_defined_rx_pool = NULL;
 static NX_PACKET_POOL* application_defined_tx_pool = NULL;
 
 
-wwd_result_t host_buffer_init( void * pools_in )
+wwd_result_t wwd_buffer_init( void * pools_in )
 {
     wiced_assert("Error: Invalid buffer pools\n", pools_in != NULL);
     tx_pool = &( (NX_PACKET_POOL*) pools_in )[0];

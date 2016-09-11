@@ -124,8 +124,12 @@ typedef struct
 **/
 typedef struct
 {
-    char* adc_name_str;
-    char* dac_name_str;
+    char*    adc_name_str;      //!<Audio-Input path
+    char*    dac_name_str;      //!<Audio-output path
+    uint32_t app_dct_offset;    /*!<From what offset, bluetooth library can use the DCT_APP_SECTION.
+                                    This offset is required when Application(and other libraries)also uses DCT_APP_SECTION.
+                                    By default, when no other entity(library/app) is using DCT_APP_SECTION, it would be zero.
+                                */
 }wiced_bt_audio_pref_t;
 
 /** \brief Initialize bluetooth library.

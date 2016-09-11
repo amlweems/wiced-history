@@ -56,6 +56,7 @@
 #define TROPICSSL_BIGNUM_H
 
 #include <stdint.h>
+#include "crypto_structures.h"
 
 #define TROPICSSL_ERR_MPI_FILE_IO_ERROR                     -0x0002
 #define TROPICSSL_ERR_MPI_BAD_INPUT_DATA                    -0x0004
@@ -96,16 +97,6 @@ typedef uint32_t  t_dbl;
 /**
  * \brief          MPI structure
  */
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-typedef struct
-{
-    int32_t s;              /*!<  integer sign      */
-    int32_t n;              /*!<  total # of limbs  */
-    uint32_t *p;           /*!<  pointer to limbs  */
-}
-mpi;
-#endif
 
 #ifdef __cplusplus
 extern "C" {

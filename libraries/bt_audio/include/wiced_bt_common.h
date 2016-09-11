@@ -26,6 +26,12 @@ extern "C" {
 
 #include "wiced_result.h"
 
+/* This represents: sizeof(bt_paired_device_info_t) * maximum_number_of_bluetooth connections */
+#define WICED_BT_AUDIO_DCT_PAIRED_DEVICES_TABLE_SIZE       480 //( 60 * 8 )
+/* Used for indexing in device table */
+#define WICED_BT_AUDIO_DCT_PAIRED_DEVICES_INDEX_SIZE       8   //( 1 * 8 )
+#define WICED_BT_AUDIO_DCT_MAX_SIZE                ( WICED_BT_AUDIO_DCT_PAIRED_DEVICES_TABLE_SIZE + \
+                                                     WICED_BT_AUDIO_DCT_PAIRED_DEVICES_INDEX_SIZE )
 /**
 *       \brief Bluetooth Device Address
 **/

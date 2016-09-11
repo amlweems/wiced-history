@@ -12,10 +12,10 @@
  *
  */
 #include "wwd_constants.h"
-#include "wiced_tcpip.h"
 #include "wiced_tls.h"
+#include "wiced_utilities.h"
 #include "tls_host_api.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "wwd_buffer_interface.h"
 #include "crypto_constants.h"
 #include "crypto_structures.h"
@@ -25,7 +25,9 @@
 #include "besl_host_interface.h"
 #include "wiced_security.h"
 #include "internal/wiced_internal_api.h"
-
+#include "wiced_tcpip_tls_api.h"
+#include "x509.h"
+#include <string.h>
 
 #ifndef DISABLE_EAP_TLS
 #include "wiced_supplicant.h"
@@ -71,9 +73,9 @@
 
 static int32_t tls_get_session( ssl_context *ssl );
 static int32_t tls_set_session( ssl_context *ssl );
-static wiced_result_t tls_packetize_buffered_data( wiced_tls_context_t* context, wiced_packet_t** packet );
+static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* context, wiced_packet_t** packet );
 
-static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const char* cert_string );
+static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const uint8_t* certificate_data, uint32_t certificate_length, wiced_tls_certificate_format_t certificate_format );
 static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string );
 
 /******************************************************
@@ -90,41 +92,91 @@ static int session_list_initialized = 0;
 static const cipher_suite_t* my_ciphers[] =
 {
         /* First: Ephemeral Diffie Hellman with 256 bit cipher, in order of MAC strength */
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_256_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_256_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA,
+#endif
 
         /* Next: Ephemeral Diffie Hellman with 128 bit cipher, in order of MAC strength */
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_DHE_RSA_WITH_AES_128_CBC_SHA256,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
+#endif
+#if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_128_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA,
+#endif
 
         /* Next: Regular Diffie Hellman with 256 bit cipher, in order of MAC strength */
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_RSA_WITH_AES_256_CBC_SHA256,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_256_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_RSA_WITH_AES_256_CBC_SHA,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_256_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_RSA_WITH_CAMELLIA_256_CBC_SHA,
+#endif
 
         /* Next: Regular Diffie Hellman with 128 bit cipher, in order of MAC strength */
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_RSA_WITH_AES_128_CBC_SHA256,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_RSA_WITH_AES_128_CBC_SHA,
+#endif
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_CAMELLIA_128_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_RSA_WITH_CAMELLIA_128_CBC_SHA,
+#endif
 
         /* Finally: Other ciphers */
+#if defined( USE_RSA_KEYSCHEME ) && defined( USE_SEED_CBC_CIPHER ) && defined( USE_SHA_MAC )
         &TLS_RSA_WITH_SEED_CBC_SHA,
+#endif
 
 //        &TLS_RSA_WITH_RC4_128_MD5,         /* Insecure */
 //        &TLS_RSA_WITH_RC4_128_SHA,         /* Insecure */
 //        &TLS_RSA_WITH_3DES_EDE_CBC_SHA,    /* Insecure */
 //        &TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA /* Insecure */
 
+#if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA_MAC )
+        &TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+#endif
+#if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA_MAC )
+        &TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+#endif
+#if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
+        &TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+#endif
+#if defined( USE_ECDH_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CBC_CIPHER ) && defined( USE_SHA256_MAC )
+        &TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
+#endif
+#if defined( USE_ECDH_ECDSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA384_MAC )
+        &TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
+#endif
+
         0   /* List termination */
 };
 
-wiced_tls_certificate_t* root_ca_certificates = NULL;
+x509_cert* root_ca_certificates = NULL;
 
 /* DH prime */
 static const unsigned char diffie_hellman_prime_P[] =
@@ -333,7 +385,7 @@ static int32_t tls_get_session( ssl_context *ssl )
         if ( ( !cur->length ) || ( ssl->session->cipher != cur->cipher ) || ( ssl->session->length != cur->length ) )
             continue;
 
-        if ( memcmp( ssl->session->id, cur->id, (size_t)cur->length ) != 0 )
+        if ( memcmp( ssl->session->id, cur->id, (size_t) MIN(cur->length, sizeof( cur->id )) ) != 0 )
             continue;
 
         /* if timeout is non-zero, timeout frees matched session slot after t=timeout.
@@ -423,103 +475,195 @@ static int32_t tls_set_session( ssl_context *ssl )
     return ( 0 );
 }
 
-static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const char* cert_string )
+static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const uint8_t* certificate_data, uint32_t certificate_length, wiced_tls_certificate_format_t certificate_format )
 {
-    if ( x509parse_crt( certificate, (unsigned char *) cert_string, (uint32_t) strlen( cert_string ) ) != 0 )
+    besl_result_t result;
+    uint32_t der_certificate_length;
+    uint32_t total_der_bytes;
+
+    /* Allocate space for temporary processing */
+    certificate->processed_certificate_data = tls_host_malloc( "cert", sizeof(x509_cert) );
+    if ( certificate->processed_certificate_data == NULL )
     {
-        wiced_assert("Certificate parse error", 0 != 0 );
-        return BESL_CERT_PARSE_FAIL;
+        return BESL_TLS_ERROR_OUT_OF_MEMORY;
     }
-    else
+
+    memset( certificate->processed_certificate_data, 0, sizeof(x509_cert) );
+
+    switch ( certificate_format )
     {
-        return BESL_SUCCESS;
+        case TLS_CERTIFICATE_IN_DER_FORMAT:
+            if ( x509_parse_certificate_data( certificate->processed_certificate_data, certificate_data, certificate_length ) != 0 )
+            {
+                result = BESL_CERT_PARSE_FAIL;
+                goto end;
+            }
+            certificate->certificate_data        = certificate_data;
+            certificate->certificate_data_length = certificate_length;
+            break;
+
+        case TLS_CERTIFICATE_IN_PEM_FORMAT:
+            x509_convert_pem_to_der( certificate_data, certificate_length, &certificate->certificate_data, &total_der_bytes );
+            certificate->certificate_data_malloced = WICED_TRUE;
+            certificate->certificate_data_length = total_der_bytes;
+
+            der_certificate_length = x509_read_cert_length( certificate->certificate_data );
+            if ( x509_parse_certificate_data( certificate->processed_certificate_data, certificate->certificate_data, der_certificate_length ) != 0 )
+            {
+                result = BESL_CERT_PARSE_FAIL;
+                goto end;
+            }
+            break;
     }
+
+    /* Take ownership of the public_key and common_name */
+    certificate->public_key  = certificate->processed_certificate_data->public_key;
+
+    x509_name* name_iter = &certificate->processed_certificate_data->subject;
+    for (; name_iter != NULL; name_iter = name_iter->next)
+    {
+        if (name_iter->val.p[name_iter->val.len] == 0x30)
+        {
+            char* temp = tls_host_malloc("tls", name_iter->val.len+1);
+            if (temp == NULL)
+            {
+                result = BESL_TLS_ERROR_OUT_OF_MEMORY;
+                goto end;
+            }
+            memcpy(temp, name_iter->val.p, name_iter->val.len);
+            temp[name_iter->val.len] = 0;
+
+            certificate->common_name = temp;
+            break;
+        }
+    }
+    //certificate->common_name = certificate->processed_certificate_data->subject;
+
+    /* NULL the public_key pointer in the temporary certificate so x509_free() doesn't free the memory */
+    certificate->processed_certificate_data->public_key = NULL;
+
+    x509_free( certificate->processed_certificate_data );
+    tls_host_free( certificate->processed_certificate_data );
+    certificate->processed_certificate_data = NULL;
+
+    return BESL_SUCCESS;
+
+end:
+    x509_free( certificate->processed_certificate_data );
+    tls_host_free( certificate->processed_certificate_data );
+    certificate->processed_certificate_data = NULL;
+
+    if ( certificate->certificate_data_malloced == WICED_TRUE )
+    {
+        tls_host_free( (void*)certificate->certificate_data );
+    }
+
+    return result;
 }
 
 static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string )
 {
-    if ( x509parse_key( key, (unsigned char *) key_string, (uint32_t) strlen( key_string ), NULL, 0 ) != 0 )
+    if ( key->type == TLS_RSA_KEY )
     {
-        wiced_assert("Key parse error", 0 != 0 );
-        return BESL_KEY_PARSE_FAIL;
+        if ( x509parse_key( (rsa_context*)key, (unsigned char *) key_string, (uint32_t) strlen( key_string ), NULL, 0 ) != 0 )
+        {
+            wiced_assert( "Key parse error", 0 != 0 );
+            return BESL_KEY_PARSE_FAIL;
+        }
     }
     else
     {
-        return BESL_SUCCESS;
+        // Fill ECC key
     }
+
+    return BESL_SUCCESS;
 }
 
-wiced_result_t wiced_tls_init_simple_context( wiced_tls_simple_context_t* context, const char* peer_cn )
+wiced_result_t wiced_tls_init_context( wiced_tls_context_t* context, wiced_tls_identity_t* identity, const char* peer_cn )
 {
-    memset(context, 0, sizeof(wiced_tls_simple_context_t));
-    context->context_type    = WICED_TLS_SIMPLE_CONTEXT;
+    memset( context, 0, sizeof(wiced_tls_context_t) );
+
+    context->context_id      = WICED_TLS_CONTEXT_ID;
+    context->identity        = identity;
     context->context.peer_cn = peer_cn;
+
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_init_advanced_context( wiced_tls_advanced_context_t* context, const char* certificate, const char* key)
+wiced_result_t wiced_tls_init_identity( wiced_tls_identity_t* identity, const char* private_key, const uint8_t* certificate_data, uint32_t certificate_length )
 {
-    wiced_result_t result;
+    besl_result_t result;
 
-    wiced_assert("Bad args", (certificate != NULL) && (key != NULL));
+    wiced_assert( "Bad args", (identity != NULL) && (private_key != NULL) && (certificate_data != NULL) );
 
-    memset( context, 0, sizeof(wiced_tls_advanced_context_t) );
-    context->context_type = WICED_TLS_ADVANCED_CONTEXT;
+    memset( identity, 0, sizeof( *identity ) );
 
-    result = (wiced_result_t) wiced_tls_load_certificate( &context->certificate, certificate );
-    if ( result != WICED_SUCCESS )
+    result = wiced_tls_load_key( (wiced_tls_key_t*)&identity->private_key, private_key );
+    if ( result != BESL_SUCCESS )
     {
         return result;
     }
 
-    result = (wiced_result_t) wiced_tls_load_key( &context->key, key );
-    if ( result != WICED_SUCCESS )
+    result = wiced_tls_load_certificate( &identity->certificate, certificate_data, certificate_length, TLS_CERTIFICATE_IN_PEM_FORMAT );
+    if ( result != BESL_SUCCESS )
     {
         return result;
     }
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_reset_context( wiced_tls_simple_context_t* tls_context )
+wiced_result_t wiced_tls_deinit_identity( wiced_tls_identity_t* tls_identity)
+{
+    if ( tls_identity->certificate.processed_certificate_data != NULL )
+    {
+        x509_free( tls_identity->certificate.processed_certificate_data );
+        tls_identity->certificate.processed_certificate_data = NULL;
+    }
+    rsa_free( (rsa_context*)&tls_identity->private_key.rsa );
+    tls_host_free( (void*)tls_identity->certificate.common_name );
+
+    if ( tls_identity->certificate.certificate_data_malloced == WICED_TRUE )
+    {
+        tls_host_free( (void*)tls_identity->certificate.certificate_data );
+    }
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_tls_reset_context( wiced_tls_context_t* tls_context )
 {
     ssl_free( &tls_context->context);
 
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_deinit_context( wiced_tls_simple_context_t* tls_context )
+wiced_result_t wiced_tls_deinit_context( wiced_tls_context_t* tls_context )
 {
-    /* Check if context is of an advanced variety. Note that the server and advanced client context are exactly the same */
-    if (tls_context->context_type == WICED_TLS_ADVANCED_CONTEXT)
-    {
-        x509_free(&((wiced_tls_advanced_context_t*)tls_context)->certificate);
-        rsa_free(&((wiced_tls_advanced_context_t*)tls_context)->key);
-    }
-
     ssl_free( &tls_context->context);
 
+    memset( tls_context, 0, sizeof( *tls_context ) );
     return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certificates )
 {
-    wiced_result_t result;
-    wiced_tls_deinit_root_ca_certificates();
+    int result;
 
-    root_ca_certificates = tls_host_malloc("tls", sizeof(wiced_tls_certificate_t));
+    wiced_tls_deinit_root_ca_certificates( );
+
+    root_ca_certificates = tls_host_malloc( "tls", sizeof(*root_ca_certificates) );
     if ( root_ca_certificates == NULL )
     {
         return WICED_OUT_OF_HEAP_SPACE;
     }
 
-    memset(root_ca_certificates, 0, sizeof(wiced_tls_certificate_t));
+    memset( root_ca_certificates, 0, sizeof(*root_ca_certificates) );
 
-    result = (wiced_result_t) wiced_tls_load_certificate( root_ca_certificates, trusted_ca_certificates );
-    if ( result != WICED_SUCCESS )
+    result = x509_parse_certificate( root_ca_certificates, (const uint8_t*)trusted_ca_certificates, strlen( (const char*)trusted_ca_certificates ) );
+    if ( result != 0 )
     {
         tls_host_free( root_ca_certificates );
         root_ca_certificates = NULL;
-        return result;
+        return WICED_ERROR;
     }
 
     return WICED_SUCCESS;
@@ -529,7 +673,8 @@ wiced_result_t wiced_tls_deinit_root_ca_certificates( void )
 {
     if ( root_ca_certificates != NULL )
     {
-        x509_free(root_ca_certificates);
+        tls_host_free( (void*)root_ca_certificates->raw.p );
+        x509_free( root_ca_certificates );
         tls_host_free( root_ca_certificates );
         root_ca_certificates = NULL;
     }
@@ -545,14 +690,14 @@ wiced_result_t wiced_tcp_enable_tls( wiced_tcp_socket_t* socket, void* context )
 
 wiced_result_t wiced_tcp_start_tls( wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification )
 {
-    return wiced_generic_start_tls_with_ciphers( (wiced_tls_simple_context_t*)socket->tls_context, socket, type, verification, my_ciphers, TLS_TCP_TRANSPORT );
+    return wiced_generic_start_tls_with_ciphers( socket->tls_context, socket, type, verification, my_ciphers, TLS_TCP_TRANSPORT );
 }
 
 #ifndef DISABLE_EAP_TLS
 wiced_result_t wiced_supplicant_start_tls( supplicant_workspace_t* supplicant, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification )
 {
     host_rtos_delay_milliseconds( 10 );
-    return wiced_generic_start_tls_with_ciphers( (wiced_tls_simple_context_t*)supplicant->tls_context, supplicant, type, verification, my_ciphers, TLS_EAP_TRANSPORT );
+    return wiced_generic_start_tls_with_ciphers( supplicant->tls_context, supplicant, type, verification, my_ciphers, TLS_EAP_TRANSPORT );
 }
 
 wiced_result_t wiced_supplicant_enable_tls( supplicant_workspace_t* supplicant, void* context )
@@ -563,30 +708,33 @@ wiced_result_t wiced_supplicant_enable_tls( supplicant_workspace_t* supplicant, 
 
 #endif /* DISABLE_EAP_TLS */
 
-wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_simple_context_t* tls_context, void* referee, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], tls_transport_protocol_t transport_protocol )
+wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_context_t* tls_context, void* referee, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], tls_transport_protocol_t transport_protocol )
 {
-    microrng_state              rngstate;
-    int                         prev_state;
-    uint64_t                    start_time;
-    tls_result_t                result;
+    microrng_state  rngstate;
+    int             prev_state;
+    uint64_t        start_time;
+    tls_result_t    result;
+
+    if ( tls_context->context_id != WICED_TLS_CONTEXT_ID )
+    {
+        return WICED_TLS_ERROR_UNITIALIZED_CONTEXT;
+    }
 
     /* Initialize the session data */
     if ( transport_protocol != TLS_EAP_TRANSPORT )
     {
         memset( &tls_context->session, 0, sizeof(wiced_tls_session_t) );
     }
-    memset( &tls_context->context, 0, sizeof(wiced_tls_context_t) );
+
+    if ( ssl_init( &tls_context->context ) != 0 )
+    {
+        wiced_assert( "Error initialising SSL", 0 != 0 );
+        return WICED_TLS_INIT_FAIL;
+    }
 
     /* Prepare session and entropy */
     tls_context->session.age = MAX_TLS_SESSION_AGE;
-    wwd_wifi_get_random( &rngstate.entropy, 4 );
-
-    /* Initialize session context */ /* TODO: Ideally this should be done once for a socket */
-    if ( ssl_init( &tls_context->context ) != 0 )
-    {
-        wiced_assert("Error initialising SSL", 0!=0 );
-        return WICED_TLS_INIT_FAIL;
-    }
+    wiced_crypto_get_random( &rngstate.entropy, 4 );
 
     tls_context->context.transport_protocol = transport_protocol;
 
@@ -602,7 +750,7 @@ wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_simple_context_t*
     ssl_set_session ( &tls_context->context, SESSION_CAN_BE_RESUMED, 1000000, &tls_context->session );
 
     /* Assert if user has not created correct TLS context for the TLS endpoint type */
-    wiced_assert("TLS servers must have an advanced TLS context", !((type == WICED_TLS_AS_SERVER) && (tls_context->context_type != WICED_TLS_ADVANCED_CONTEXT)));
+    wiced_assert("TLS servers must have an advanced TLS context", !((type == WICED_TLS_AS_SERVER) && (tls_context->identity == NULL)));
 
     if ( root_ca_certificates != NULL )
     {
@@ -614,11 +762,14 @@ wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_simple_context_t*
         ssl_set_authmode( &tls_context->context, SSL_VERIFY_NONE );
     }
 
-    if ( tls_context->context_type == WICED_TLS_ADVANCED_CONTEXT )
+    if ( tls_context->identity != NULL )
     {
-        wiced_tls_advanced_context_t* advanced_context = (wiced_tls_advanced_context_t*)tls_context;
-        ssl_set_own_cert( &advanced_context->context, &advanced_context->certificate, &advanced_context->key );
-
+        tls_context->context.identity = tls_context->identity;
+        if ( tls_context->context.identity->private_key.common.type == TLS_RSA_KEY )
+        {
+            tls_context->context.identity->private_key.rsa.f_rng = microrng_rand;
+            tls_context->context.identity->private_key.rsa.p_rng = &rngstate;
+        }
         ssl_set_dh_param( &tls_context->context, diffie_hellman_prime_P, sizeof( diffie_hellman_prime_P ), diffie_hellman_prime_G, sizeof( diffie_hellman_prime_G ) );
     }
 
@@ -674,7 +825,7 @@ exit_with_inited_context:
     return (wiced_result_t) result;
 }
 
-wiced_result_t wiced_tls_calculate_overhead( wiced_tls_context_t* context, uint16_t available_space, uint16_t* header, uint16_t* footer )
+wiced_result_t wiced_tls_calculate_overhead( wiced_tls_workspace_t* context, uint16_t available_space, uint16_t* header, uint16_t* footer )
 {
     *header = 0;
     *footer = 0;
@@ -702,7 +853,7 @@ wiced_result_t wiced_tls_calculate_overhead( wiced_tls_context_t* context, uint1
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_encrypt_packet( wiced_tls_context_t* context, wiced_packet_t* packet )
+wiced_result_t wiced_tls_encrypt_packet( wiced_tls_workspace_t* workspace, wiced_packet_t* packet )
 {
     uint8_t* data;
     uint16_t length;
@@ -720,11 +871,11 @@ wiced_result_t wiced_tls_encrypt_packet( wiced_tls_context_t* context, wiced_pac
 
     record                = (tls_record_t*) data;
     record->type          = SSL_MSG_APPLICATION_DATA;
-    record->major_version = (uint8_t)context->major_ver;
-    record->minor_version = (uint8_t)context->minor_ver;
+    record->major_version = (uint8_t)workspace->major_ver;
+    record->minor_version = (uint8_t)workspace->minor_ver;
     record->length        = htobe16( length );
 
-    result = (wiced_result_t) tls_encrypt_record( context, record, length );
+    result = (wiced_result_t) tls_encrypt_record( workspace, record, length );
     if ( result != WICED_SUCCESS )
     {
         return result;
@@ -747,7 +898,7 @@ wiced_result_t wiced_tls_send_buffer(wiced_tcp_socket_t* socket, void* buffer, u
 wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout )
 {
     wiced_result_t result;
-    wiced_tls_context_t* context = &socket->tls_context->context;
+    wiced_tls_workspace_t* context = &socket->tls_context->context;
 
     wiced_assert("Bad args", (socket != NULL) && (packet != NULL));
 
@@ -766,6 +917,7 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
         {
             return result;
         }
+
         /* Check if this record has been defragmented */
         if ( (void*)record == context->defragmentation_buffer )
         {
@@ -817,7 +969,7 @@ wiced_result_t wiced_tls_close_notify( wiced_tcp_socket_t* socket )
 }
 
 
-static wiced_result_t tls_packetize_buffered_data( wiced_tls_context_t* context, wiced_packet_t** packet )
+static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* context, wiced_packet_t** packet )
 {
     uint8_t* data;
     uint16_t length;

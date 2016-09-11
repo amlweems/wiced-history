@@ -23,6 +23,7 @@
 #include "p2p_structures.h"
 #include "p2p_frame_writer.h"
 #include "wwd_buffer_interface.h"
+#include <string.h>
 
 /******************************************************
  *                      Macros
@@ -91,30 +92,12 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     workspace->group_formation_timeout        = device_details->group_formation_timeout;
     workspace->device_name_length             = strlen(device_details->wps_device_details.device_name);
     memcpy( workspace->listen_channel.country_string, &device_details->listen_channel.country_string,  3 );
-    memcpy( workspace->device_name,                    device_details->wps_device_details.device_name, workspace->device_name_length );
-
-    /* Turn off all the other Wi-Fi interfaces */
-    wiced_network_down( WICED_STA_INTERFACE );
-    wiced_network_down( WICED_AP_INTERFACE );
-    wiced_network_down( WICED_P2P_INTERFACE );
-
-    /* Query the AP interface to ensure that it is up XXX is this always going to be 36? */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 36, IOVAR_STR_BSSCFG_SSID );
-    CHECK_IOCTL_BUFFER( data );
-    memset(data, 0, 36);
-    data[0] = (uint32_t) WWD_AP_INTERFACE;
-    wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
+    memcpy( workspace->device_name, device_details->wps_device_details.device_name, workspace->device_name_length );
 
     /* Turn roaming off for P2P */
     data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, "roam_off");
     CHECK_IOCTL_BUFFER( data );
     *data = 1;
-    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
-
-    /* Override MAC address because they do */
-    data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(besl_mac_t), "p2p_da_override");
-    CHECK_IOCTL_BUFFER( data );
-    memset(data, 0, sizeof(besl_mac_t));
     CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Turn off MPC or action frame sequence numbers are broken as well as other things */
@@ -146,18 +129,19 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
 
     if ( result != WWD_SUCCESS )
     {
-        BESL_DEBUG(("unable to read p2p interface\r\n"));
+        BESL_DEBUG(("Unable to read p2p interface\n"));
         return (besl_result_t) result;
     }
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     wl_p2p_ifq_t* go_if = (wl_p2p_ifq_t*)data;
     BESL_DEBUG(("p2p interface %u, %s\n", (unsigned int)go_if->bsscfgidx, go_if->ifname));
-    workspace->p2p_interface = go_if->bsscfgidx;
+    wwd_update_host_interface_to_bss_index_mapping( WWD_P2P_INTERFACE, go_if->bsscfgidx );
+
     host_buffer_release( response, WWD_NETWORK_RX );
 
     /* Get the P2P interface address */
-    besl_host_get_mac_address(&workspace->device_info.p2p_device_address, workspace->p2p_interface);
+    besl_host_get_mac_address(&workspace->device_info.p2p_device_address, WWD_P2P_INTERFACE);
 
     BESL_DEBUG(("STA MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", workspace->device_info.p2p_device_address.octet[0],
         workspace->device_info.p2p_device_address.octet[1],
@@ -175,18 +159,18 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     /* Bring up P2P interface */
     CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, 0 ) );
 
-    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, workspace->p2p_interface) );
+    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, WWD_P2P_INTERFACE) );
 
     /* Set wsec to WPA2-AES in the discovery bsscfg to ensure our P2P probe responses have the privacy bit set in the 802.11 WPA IE.
      * Some peer devices may not initiate WPS with us if this bit is not set. */
-    data = wwd_sdpcm_get_iovar_buffer(&buffer, 8, "bsscfg:wsec");
+    data = wwd_sdpcm_get_iovar_buffer(&buffer, 8, "bsscfg:" IOVAR_STR_WSEC);
     CHECK_IOCTL_BUFFER( data );
-    data[0] = workspace->p2p_interface;
+    data[0] = wwd_get_bss_index( WWD_P2P_INTERFACE );
     data[1] = WICED_SECURITY_WPA2_AES_PSK;
     CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
-    /*  Add P2P event handler on the STA interface since the P2P interface is not yet up */
-    CHECK_RETURN( (besl_result_t) wwd_management_set_event_handler( p2p_discovery_events, p2p_event_handler, workspace, WWD_STA_INTERFACE ) );
+    /*  Add P2P event handler on the STA interface since the P2P interface is not yet up XXX */
+    CHECK_RETURN( (besl_result_t) wwd_management_set_event_handler( p2p_discovery_events, p2p_event_handler, workspace, WWD_P2P_INTERFACE ) );
 
     /* Create the P2P thread */
     p2p_thread_start( workspace );
@@ -194,12 +178,12 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     return BESL_SUCCESS;
 }
 
-// XXX make this p2p_init_common and have a separate function for initialising a GO from an application
 besl_result_t besl_p2p_init_common( p2p_workspace_t* workspace, const besl_p2p_device_detail_t* device_details )
 {
     uint8_t a;
     uint8_t random_suffix[2];
 
+    workspace->p2p_interface                   = WWD_P2P_INTERFACE;
     workspace->channel_list.operating_class    = device_details->operating_channel.operating_class;
     workspace->channel_list.number_of_channels = device_details->channel_list.number_of_channels;
     memcpy( &workspace->channel_list.channel_list, device_details->channel_list.channel_list, device_details->channel_list.number_of_channels );
@@ -256,7 +240,6 @@ besl_result_t besl_p2p_init_common( p2p_workspace_t* workspace, const besl_p2p_d
     return BESL_SUCCESS;
 }
 
-
 besl_result_t besl_p2p_deinit( p2p_workspace_t* workspace )
 {
     return p2p_deinit( workspace );
@@ -299,7 +282,7 @@ p2p_discovered_device_t* besl_p2p_host_find_device(p2p_workspace_t* workspace, c
 
 
 // XXX need to change this function so it accepts a destination MAC address as one of the arguments. May also need to know action frame type and sub-type.
-besl_result_t besl_p2p_send_action_frame( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, p2p_action_frame_writer_t writer, uint32_t channel, wwd_interface_t interface, uint32_t dwell_time )
+besl_result_t besl_p2p_send_action_frame( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, p2p_action_frame_writer_t writer, uint32_t channel, uint32_t dwell_time )
 {
     wiced_buffer_t  buffer;
     wl_af_params_t* frame;
@@ -308,9 +291,9 @@ besl_result_t besl_p2p_send_action_frame( p2p_workspace_t* workspace, const p2p_
 
     workspace->current_channel = channel;
 
-    uint32_t* a = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_af_params_t) + 4, "bsscfg:actframe" );
+    uint32_t* a = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_af_params_t) + 4, "bsscfg:" IOVAR_STR_ACTFRAME );
     CHECK_IOCTL_BUFFER( a );
-    *a = workspace->p2p_interface;
+    *a = wwd_get_bss_index( WWD_P2P_INTERFACE );
     frame = (wl_af_params_t*) ( a + 1 );
     frame->channel    = channel;
     frame->dwell_time = dwell_time;
@@ -435,27 +418,40 @@ besl_result_t besl_p2p_get_discovered_peers( p2p_workspace_t* workspace, p2p_dis
 besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
 {
     uint32_t*             data;
-    wwd_result_t          result;
+    besl_result_t         result;
     wiced_buffer_t        buffer;
     wiced_buffer_t        response;
-    uint8_t               pmk[DOT11_PMK_LEN + 8]; // PMK storage must be 40 octets in length for use in the function that converts from passphrase to pmk
+    uint8_t               pmk[DOT11_PMK_LEN + 8]; /* PMK storage must be 40 octets in length for use in the function that converts from passphrase to pmk */
     uint8_t               security_key[64];
     wsec_pmk_t*           psk;
+    uint32_t              bss_index;
 
     BESL_DEBUG( ("Group owner start entry\n") );
+
+    if ( wiced_network_is_up( WWD_AP_INTERFACE ) )
+    {
+        BESL_DEBUG(( "Error: Soft AP already up\n" ));
+        return (besl_result_t)WWD_AP_ALREADY_UP;
+    }
+
+    /* Some platforms require removal of the Soft AP interface before the GO can be created. If the IOVAR fails because it is unsupported then it is non-fatal. */
+    data   = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bsscfg:" IOVAR_STR_INTERFACE_REMOVE );
+    CHECK_IOCTL_BUFFER( data );
+    *data  = WWD_AP_INTERFACE;
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
+    {
+        BESL_DEBUG( ( "Error: Unable to remove Soft AP interface %u\n", (unsigned int)result) );
+        if ( result != (besl_result_t)WWD_WLAN_UNSUPPORTED)
+        {
+            return result;
+        }
+    }
 
     /* Clear the p2p event queue before bringing up group owner */
     if ( workspace->p2p_thread_running == 1 )
     {
         p2p_clear_event_queue();
     }
-
-    workspace->p2p_wps_agent = besl_host_calloc( "p2p go wps agent", 1, sizeof(wps_agent_t) );
-    if ( workspace->p2p_wps_agent == NULL )
-    {
-        return BESL_ERROR_OUT_OF_MEMORY;
-    }
-    memset( workspace->p2p_wps_agent, 0, sizeof(wps_agent_t) );
 
     /* Re-init some parts of the p2p workspace since we may be coming from group negotiation */
     memset( workspace->discovered_devices, 0, sizeof(p2p_discovered_device_t) * P2P_MAX_DISCOVERED_DEVICES );
@@ -482,20 +478,8 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
         memcpy( security_key, workspace->p2p_passphrase, 64 );
     }
 
-    /* Turn off all the other Wi-Fi interfaces */
-    wiced_network_down( WICED_STA_INTERFACE );
-    wiced_network_down( WICED_AP_INTERFACE );
-    wiced_network_down( WICED_P2P_INTERFACE );
-
-    /* Query the AP interface to ensure that it has been initialized before creating P2P interface */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 36, IOVAR_STR_BSSCFG_SSID );
-    CHECK_IOCTL_BUFFER( data );
-    memset(data, 0, 36);
-    data[0] = (uint32_t) WWD_AP_INTERFACE;
-    wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
     /* Save the original STA MAC address */
-    besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE );
+    besl_host_get_mac_address(&workspace->original_mac_address, 0 );
 
     /* Create device address */
     memcpy(&workspace->p2p_device_address, &workspace->original_mac_address, sizeof(besl_mac_t));
@@ -511,12 +495,6 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, "roam_off");
     CHECK_IOCTL_BUFFER( data );
     *data = 1;
-    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
-
-    /* Override MAC address */
-    data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(besl_mac_t), "p2p_da_override");
-    CHECK_IOCTL_BUFFER( data );
-    memset(data, 0, sizeof(besl_mac_t));
     CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Turn off MPC or action frame sequence numbers are broken as well as other things */
@@ -542,64 +520,90 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     p2p_if->chan_spec = workspace->operating_channel.channel | WL_CHANSPEC_BAND_2G | WL_CHANSPEC_BW_20 | WL_CHANSPEC_CTL_SB_NONE;
 
     memcpy( &p2p_if->mac_address, &workspace->p2p_interface_address, sizeof(besl_mac_t) );
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-    if (result != WWD_SUCCESS)
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("p2p_ifadd fail\r\n"));
+        BESL_DEBUG(("p2p_ifadd fail\n"));
+        return result;
     }
-    uint32_t scb_timeout = 20;
-    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) sizeof(uint32_t) );
-    CHECK_IOCTL_BUFFER( data );
-    *data = scb_timeout;
-    result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_SCB_TIMEOUT, buffer, 0, WWD_STA_INTERFACE );
-    if (result != WWD_SUCCESS)
-    {
-        BESL_DEBUG(("set scb timeout fail\r\n"));
-    }
+
+    /* Once past this point call p2p_deinit() before returning an error, unless it's not possible to get an IOCTL buffer, in which case just return an error. */
+    workspace->group_owner_is_up = 1;
 
     /* Read the p2p interface so it comes up */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) sizeof(besl_mac_t), "p2p_if" );
     CHECK_IOCTL_BUFFER( data );
     memcpy(data, &workspace->p2p_interface_address, sizeof(besl_mac_t));
-    result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to read go p2p interface\r\n"));
-        return (besl_result_t) result;
+        BESL_DEBUG(("unable to read go p2p interface\n"));
+        p2p_deinit( workspace );
+        return result;
     }
+    data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
+    if ( data == NULL )
+    {
+        // XXX assert something is very wrong if this happens
+        p2p_deinit( workspace );
+        return BESL_P2P_ERROR_FAIL;
+    }
+    wl_p2p_ifq_t* go_if = (wl_p2p_ifq_t*)data;
+    BESL_DEBUG(("p2p bss index %u, %s\n", (unsigned int)go_if->bsscfgidx, go_if->ifname));
+    bss_index = go_if->bsscfgidx;
+    wwd_update_host_interface_to_bss_index_mapping( WWD_P2P_INTERFACE, bss_index );
+    besl_host_get_mac_address(&workspace->p2p_interface_address, WWD_P2P_INTERFACE );
+    BESL_DEBUG(("GO MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", workspace->p2p_interface_address.octet[0],
+            workspace->p2p_interface_address.octet[1],
+            workspace->p2p_interface_address.octet[2],
+            workspace->p2p_interface_address.octet[3],
+            workspace->p2p_interface_address.octet[4],
+            workspace->p2p_interface_address.octet[5]));
+
     host_buffer_release( response, WWD_NETWORK_RX );
 
-    /* Bring up P2P interface - if we don't bring up the interface then things are flaky, e.g. negotiation request goes out with NULL BSSID and destination etc */
+    /* Bring up P2P interface */
     CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer(&buffer, 0 ) );
-    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, workspace->p2p_interface) );
+    if ( ( result = wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
+    {
+        BESL_DEBUG(("Unable to read p2p interface\n"));
+        p2p_deinit( workspace );
+        return result;
+    }
 
     /* Set the SSID */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, IOVAR_STR_BSSCFG_SSID );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, "bsscfg:" IOVAR_STR_SSID );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = (uint32_t) WWD_P2P_INTERFACE; /* Set the bsscfg index */
-    data[1] = strlen( workspace->group_candidate.ssid ); /* Set the ssid length */
+    data[0] = bss_index; /* Set the bsscfg index */
+    data[1] = MIN( workspace->group_candidate.ssid_length, 32 ); /* Set the ssid length */
     memcpy( &data[2], (uint8_t*)&workspace->group_candidate.ssid, data[1] );
-    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
-
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
-    CHECK_IOCTL_BUFFER( data );
-    data[0] = (uint32_t) WWD_P2P_INTERFACE;
-    data[1] = (uint32_t) ( ( (WICED_SECURITY_WPA2_AES_PSK | WPS_ENABLED) & ( ~WPS_ENABLED ) ) | SES_OW_ENABLED );
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set wsec\r\n"));
+        BESL_DEBUG(("Unable to set P2P SSID\n"));
+        p2p_deinit( workspace );
+        return result;
+    }
+
+    /* Set the security type */
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WSEC );
+    CHECK_IOCTL_BUFFER( data );
+    data[0] = bss_index;
+    data[1] = (uint32_t) ( ( (WICED_SECURITY_WPA2_AES_PSK | WPS_ENABLED) & ( ~WPS_ENABLED ) ) | SES_OW_ENABLED );
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
+    {
+        BESL_DEBUG(("Unable to set wsec\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     /* Set the wpa auth */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WPA_AUTH );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WPA_AUTH );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = (uint32_t) WWD_P2P_INTERFACE;
+    data[0] = bss_index;
     data[1] = (uint32_t) WPA2_AUTH_PSK;
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set wpa auth\r\n"));
+        BESL_DEBUG(("Unable to set wpa auth\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     /* Set the security key */
@@ -609,72 +613,93 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     psk->key_len = 64;
     psk->flags   = (uint16_t) WSEC_PASSPHRASE;
     host_rtos_delay_milliseconds( 1 ); // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
-    result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC_PMK, buffer, 0, WWD_P2P_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC_PMK, buffer, 0, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set passphrase\r\n"));
+        BESL_DEBUG(("Unable to set passphrase\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     /* Restrict the number of associated devices */
     data   = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bss_maxassoc" );
     CHECK_IOCTL_BUFFER( data );
     *data  = P2P_MAX_ASSOCIATED_DEVICES;
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set max associated devices\r\n"));
+        BESL_DEBUG(("Unable to set max associated devices\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     /* Set DTIM period */
     data   = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data  = (uint32_t) WICED_DEFAULT_SOFT_AP_DTIM_PERIOD;
-    result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_DTIMPRD, buffer, 0, WWD_P2P_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_DTIMPRD, buffer, 0, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set dtim period\r\n"));
+        BESL_DEBUG(("Unable to set dtim period\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
+    uint32_t scb_timeout = 20;
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) sizeof(uint32_t) );
+    CHECK_IOCTL_BUFFER( data );
+    *data = scb_timeout;
+    if ( ( result = ( besl_result_t )wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_SCB_TIMEOUT, buffer, 0, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS)
+    {
+        BESL_DEBUG(("Set scb timeout fail\n"));
+        p2p_deinit( workspace );
+        return result;
+    }
+
+    /* XXX check that this call does something */
     wwd_wifi_set_block_ack_window_size( WWD_P2P_INTERFACE );
 
-    /* Restrict the BSS Rate Set to OFDM */
+    /* Restrict the BSS Rate Set to OFDM XXX is this still necessary */
     data   = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bss_rateset" );
     CHECK_IOCTL_BUFFER( data );
     *data  = (uint32_t)1;
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to set BSS rate set\r\n"));
+        BESL_DEBUG(("Unable to set BSS rate set\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     /* Bring up the BSS */
     data    = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = (uint32_t) WWD_P2P_INTERFACE;
-    data[1] = (uint32_t) 1; //BSS_UP;
-    result  = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    data[0] = bss_index;
+    data[1] = (uint32_t) 1;
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(("unable to bring up BSS\r\n"));
+        BESL_DEBUG(("Unable to bring up BSS\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
-    besl_host_set_mac_address(&workspace->p2p_interface_address, WWD_STA_INTERFACE ); /* This is done so that deauthentication frames are sent with correct transmitter address */
-
     wwd_wifi_p2p_go_is_up = WICED_TRUE;
-
-    workspace->p2p_interface = WWD_P2P_INTERFACE;
     memcpy( &workspace->device_info.p2p_device_address, &workspace->p2p_device_address, sizeof(besl_mac_t) );
 
     /* Bring up IP layer on P2P interface */
     result = (wwd_result_t) wiced_ip_up( WICED_P2P_INTERFACE, WICED_USE_INTERNAL_DHCP_SERVER, &p2p_ip_settings );
-    if ( result != WWD_SUCCESS )
+    if ( result != BESL_SUCCESS )
     {
-        workspace->p2p_current_state = P2P_STATE_FAILURE;
-        workspace->p2p_result = BESL_P2P_ERROR_FAIL;
-        return (besl_result_t) result;
+        BESL_DEBUG(("Unable to bring up IP layer\n"));
+        p2p_deinit( workspace );
+        return result;
     }
 
     host_rtos_delay_milliseconds( 10 ); // Delay to allow the DHCP thread to run or it may not be up when moving from negotiation to group owner
+
+    workspace->p2p_wps_agent = besl_host_calloc( "p2p go wps agent", 1, sizeof(wps_agent_t) );
+    if ( workspace->p2p_wps_agent == NULL )
+    {
+        p2p_deinit( workspace );
+        return BESL_ERROR_OUT_OF_MEMORY;
+    }
+    memset( workspace->p2p_wps_agent, 0, sizeof(wps_agent_t) );
 
     workspace->p2p_wps_agent->is_p2p_registrar = 1;
     workspace->p2p_wps_agent->wps_agent_owner = workspace;
@@ -685,11 +710,11 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     workspace->p2p_wps_credential.passphrase_length = workspace->p2p_passphrase_length;
     memcpy( workspace->p2p_wps_credential.passphrase, workspace->p2p_passphrase, workspace->p2p_wps_credential.passphrase_length );
     result = (wwd_result_t) besl_wps_init( workspace->p2p_wps_agent, workspace->wps_device_details, WPS_REGISTRAR_AGENT, WWD_P2P_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( result != BESL_SUCCESS )
     {
-        BESL_DEBUG(("besl_p2p_group_owner_start: error besl init %d\r\n", result));
-        //stop_ap(0, NULL);
-        return (besl_result_t) result;
+        BESL_DEBUG(("besl_p2p_group_owner_start: error besl init %d\n", result));
+        p2p_deinit( workspace );
+        return result;
     }
     workspace->p2p_wps_agent->wps_result_callback = workspace->p2p_wps_result_callback;
 
@@ -711,16 +736,15 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
 
     workspace->p2p_current_state = P2P_STATE_GROUP_OWNER;
     workspace->i_am_group_owner  = 1;
-    workspace->group_owner_is_up = 1;
     workspace->p2p_result        = BESL_SUCCESS;
 
     /*  Add P2P event handler */
-    result = wwd_management_set_event_handler( p2p_group_owner_events, p2p_event_handler, workspace, WWD_P2P_INTERFACE );
-    if ( result != WWD_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_management_set_event_handler( p2p_group_owner_events, p2p_event_handler, workspace, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
         BESL_ERROR(("Unable to set group owner event handler\n"));
+        p2p_deinit( workspace );
+        return result;
     }
-    wiced_assert("", result == WWD_SUCCESS);
 
     /* If the p2p thread is already running then we are here as a result of group owner negotiation and we don't want to start another thread. If the p2p thread
      * is not running then we are here as a result of starting an autonomous group owner and we do need to start the p2p thread.
@@ -756,7 +780,7 @@ besl_result_t besl_p2p_client_enable_powersave( p2p_workspace_t* workspace, uint
     data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = power_save_mode;
-    return (besl_result_t) wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, workspace->p2p_interface );
+    return (besl_result_t) wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, WWD_P2P_INTERFACE );
 }
 
 wiced_bool_t besl_p2p_group_owner_is_up( void )

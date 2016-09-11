@@ -577,10 +577,11 @@ extern wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable );
 /** Send a pre-prepared action frame
  *
  * @param action_frame   : A pointer to a pre-prepared action frame structure
+ * @param interface      : The interface that is sending the action frame (WWD_STA_INTERFACE, WWD_AP_INTERFACE or WWD_P2P_INTERFACE)
  *
  * @return WWD_SUCCESS or Error code
  */
-extern wwd_result_t wwd_wifi_send_action_frame( const wiced_action_frame_t* action_frame );
+extern wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame, wwd_interface_t interface );
 
 /** Retrieve the latest STA EDCF AC parameters
  *
@@ -754,6 +755,25 @@ extern wwd_result_t wwd_wifi_get_noise( int32_t *noise );
  */
 extern wwd_result_t wwd_wifi_get_supported_band_list( wiced_band_list_t* band_list );
 
+/** Set the preferred band for association by the radio chip
+ *  Defined only on STA interface
+ *
+ * @param band : preferred band (auto, 2.4 GHz or 5 GHz)
+ *
+ * @return  WWD_SUCCESS : if success
+ *          Error code   : if setting the preferred band was not successful
+ */
+wwd_result_t wwd_wifi_set_preferred_association_band( int32_t band );
+
+/** Get the preferred band for association by the radio chip
+ *
+ * @param band : pointer to a variable that will hold the band information (auto, 2.4 GHz or 5 GHz)
+ *
+ * @return  WWD_SUCCESS : if success
+ *          Error code  : if not successful
+ */
+wwd_result_t wwd_wifi_get_preferred_association_band( int32_t* band );
+
 /** Sets HT mode for the given interface
  *
  *  NOTE:
@@ -777,6 +797,14 @@ extern wwd_result_t wwd_wifi_set_ht_mode( wwd_interface_t interface, wiced_ht_mo
  *          Error code    : error code to indicate the type of error, if HT mode could not be successfully get
  */
 extern wwd_result_t wwd_wifi_get_ht_mode( wwd_interface_t interface, wiced_ht_mode_t* ht_mode );
+
+/** Gets the BSS index that the given interface is mapped to in Wiced
+ *
+ * @param interface       : the interface for which to get the BSS index
+ *
+ * @return  BSS index
+ */
+extern uint32_t     wwd_get_bss_index( wwd_interface_t interface );
 
 /*@+exportlocal@*/
 /** @} */
@@ -847,6 +875,35 @@ extern wwd_result_t wwd_wifi_set_iovar_value( const char* iovar, uint32_t  value
 extern wwd_result_t wwd_wifi_get_iovar_value( const char* iovar, uint32_t* value, wwd_interface_t interface );
 extern wwd_result_t wwd_wifi_set_ioctl_value( uint32_t ioctl, uint32_t  value, wwd_interface_t interface );
 extern wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, wwd_interface_t interface );
+
+/** Set a custom WLAN country code
+ *
+ * @param[in] country_code: Country code information
+ * @return     @ref wwd_result_t
+ */
+extern wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t* country_code );
+
+
+/*****************************************************************************/
+/** @addtogroup utility       Utility functions
+ *  @ingroup wifi
+ *  WICED Utility Wi-Fi functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+
+/**
+ ******************************************************************************
+ * Prints partial details of a scan result on a single line
+ *
+ * @param[in] record  A pointer to the wiced_scan_result_t record
+ *
+ */
+void print_scan_result( wiced_scan_result_t* record );
+
+/** @} */
 
 /*@+exportlocal@*/
 

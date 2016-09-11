@@ -17,6 +17,7 @@
 #include "platform_map.h"
 #include "platform_isr_interface.h"
 #include "platform_isr.h"
+#include "platform_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,7 +73,7 @@ typedef enum ExtIRQn
   ChipCommon_ExtIRQn             = 0,
   Timer_ExtIRQn                  = 1,
   Core2_ExtIRQn                  = 2,
-  Core3_ExtIRQn                  = 3,
+  USB_REMAPPED_ExtIRQn           = 3,
   M2M_ExtIRQn                    = 4,
   GMAC_ExtIRQn                   = 5,
   I2S0_ExtIRQn                   = 6,
@@ -227,6 +228,8 @@ typedef enum
     SFLASH_ACTIONCODE_3ADDRESS_1DATA = 0x03,
     SFLASH_ACTIONCODE_3ADDRESS_4DATA = 0x04,
     SFLASH_ACTIONCODE_4DATA_ONLY = 0x08,
+    SFLASH_ACTIONCODE_2DATA = 0x09,
+    SFLASH_ACTIONCODE_4DATA = 0x0a,
     SFLASH_ACTIONCODE_MAX_ENUM
 } bcm43909_sflash_actioncode_t;
 
@@ -568,18 +571,24 @@ typedef struct
     rtc_keep_rtc_t       keep_rtc;          /* Offset 0x30 */
 } rtc_regs_t;
 
+typedef enum
+{
+    pmu_res_clkreq_wlan_group = 0,
+    pmu_res_clkreq_apps_group = 1
+} pmu_res_clkreq_group_t;
+
 typedef union
 {
     uint32_t raw;
     struct
     {
-        unsigned int time:24;             /* 23:0 */
-        unsigned int int_enable:1;        /* 24 */
-        unsigned int req_active:1;        /* 25 */
-        unsigned int force_alp_request:1; /* 26 */
-        unsigned int force_ht_request:1;  /* 27 */
-        unsigned int force_hq_required:1; /* 28 */
-        unsigned int clkreq_group_sel:3;  /* 31:29 */
+        unsigned int           time:24;             /* 23:0 */
+        unsigned int           int_enable:1;        /* 24 */
+        unsigned int           req_active:1;        /* 25 */
+        unsigned int           force_alp_request:1; /* 26 */
+        unsigned int           force_ht_request:1;  /* 27 */
+        unsigned int           force_hq_required:1; /* 28 */
+        pmu_res_clkreq_group_t clkreq_group_sel:3;  /* 31:29 */
     } bits;
 } pmu_res_req_timer_t;
 
@@ -605,11 +614,11 @@ typedef union
     uint32_t raw;
     struct
     {
-        unsigned int force_alp_request:1; /* 0 */
-        unsigned int force_ht_request:1;  /* 1 */
-        unsigned int force_hq_required:1; /* 2 */
-        unsigned int clkreq_group_sel:3;  /* 5:3 */
-        unsigned int reserved1:26;
+        unsigned int           force_alp_request:1; /* 0 */
+        unsigned int           force_ht_request:1;  /* 1 */
+        unsigned int           force_hq_required:1; /* 2 */
+        pmu_res_clkreq_group_t clkreq_group_sel:3;  /* 5:3 */
+        unsigned int           reserved1:26;
     } bits;
 } pmu_intctrl_t;
 
@@ -1176,6 +1185,21 @@ typedef union
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_MASK           (0x7 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_320            (0x0 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_160            (0x1 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_120            (0x2 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_80             (0x3 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_60             (0x4 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_48             (0x5 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_24             (0x6 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_REG             7
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT           13
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_MASK            (0x7 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_160             (0x0 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_120             (0x1 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_80              (0x2 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_60              (0x3 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_48              (0x4 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_APPS_BP_FREQ_24              (0x5 << GCI_CHIPCONTROL_APPS_BP_FREQ_SHIFT)
 
 #define GCI_CHIPCONTROL_HIB_WAKE_COUNT_REG           10
 #define GCI_CHIPCONTROL_HIB_WAKE_COUNT_SHIFT         0
@@ -1231,6 +1255,7 @@ typedef union
 #define GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_REG   11
 #define GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_SHIFT 17
 #define GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_MASK  (1 << GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_SHIFT)
+#define GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_SET   (1 << GCI_CHIPCONTROL_BP_CLK_FROM_ARMCR4_CLK_SHIFT)
 
 #define GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_REG       11
 #define GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_SHIFT     26
@@ -1267,6 +1292,25 @@ typedef union
 #define PMU_REGULATOR_LPLDO1_MASK                    (0x7 << PMU_REGULATOR_LPLDO1_SHIFT)
 #define PMU_REGULATOR_LPLDO1_0_9_V                   (0x4 << PMU_REGULATOR_LPLDO1_SHIFT)
 #define PMU_REGULATOR_LPLDO1_1_0_V                   (0x6 << PMU_REGULATOR_LPLDO1_SHIFT)
+
+#define PMU_RES_UPDOWN_TIME_UP_SHIFT                 16
+#define PMU_RES_UPDOWN_TIME_UP_MASK                  (0x3FF << PMU_RES_UPDOWN_TIME_UP_SHIFT)
+#define PMU_RES_UPDOWN_TIME_UP_VAL(v)                (((v) << PMU_RES_UPDOWN_TIME_UP_SHIFT) & PMU_RES_UPDOWN_TIME_UP_MASK)
+
+#define PMU_RES_UPDOWN_TIME_DOWN_SHIFT               0
+#define PMU_RES_UPDOWN_TIME_DOWN_MASK                (0x3FF << PMU_RES_UPDOWN_TIME_DOWN_SHIFT)
+#define PMU_RES_UPDOWN_TIME_DOWN_VAL(v)              (((v) << PMU_RES_UPDOWN_TIME_DOWN_SHIFT) & PMU_RES_UPDOWN_TIME_DOWN_MASK)
+
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_REG               8
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_SHIFT     0
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_MASK      (0xF << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_SHIFT)
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_VAL(v)    (((v) << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_SHIFT) & PMU_CHIPCONTROL_APP_POWER_UP_DELAY_DIGITAL_MASK)
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_SHIFT     11
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_MASK      (0xF << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_SHIFT)
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_VAL(v)    (((v) << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_SHIFT) & PMU_CHIPCONTROL_APP_POWER_UP_DELAY_SOCSRAM_MASK)
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT        22
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_MASK         (0xF << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT)
+#define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_VAL(v)       (((v) << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT) & PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_MASK)
 
 #define PMU_RES_MASK(bit)                            ( 1UL << (bit) )
 #define PMU_RES_LPLDO_PU                             0
@@ -1325,7 +1369,7 @@ typedef union
                                                        PMU_RES_MASK( PMU_RES_APP_DIGITAL_PWRSW )         | \
                                                        PMU_RES_MASK( PMU_RES_APP_CORE_READY )            | \
                                                        PMU_RES_MASK( PMU_RES_APP_CORE_READY_BUF ) )
-#define PMU_RES_APPS_UP_MASK                         ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
+#define PMU_RES_APPS_BASE_UP_MASK                    ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
                                                        PMU_RES_MASK( PMU_RES_BAND_GAP_PU )               | \
                                                        PMU_RES_MASK( PMU_RES_SLEEP_REGOFF_PULL_DOWN_EN ) | \
                                                        PMU_RES_MASK( PMU_RES_CBUCK_LPOM_PU )             | \
@@ -1334,11 +1378,17 @@ typedef union
                                                        PMU_RES_MASK( PMU_RES_APP_VDDM_PWRSW )            | \
                                                        PMU_RES_MASK( PMU_RES_LNLDO )                     | \
                                                        PMU_RES_MASK( PMU_RES_LDO3P3 )                    | \
-                                                       PMU_RES_MASK( PMU_RES_OTP_PU )                    | \
+                                                       PMU_RES_MASK( PMU_RES_OTP_PU ) )
+
+#if PLATFORM_WLAN_ASSISTED_WAKEUP
+#define PMU_RES_APPS_UP_MASK                         PMU_RES_APPS_BASE_UP_MASK
+#else
+#define PMU_RES_APPS_UP_MASK                         ( PMU_RES_APPS_BASE_UP_MASK                         | \
                                                        PMU_RES_MASK( PMU_RES_APP_DIGITAL_PWRSW )         | \
                                                        PMU_RES_MASK( PMU_RES_APP_CORE_READY )            | \
                                                        PMU_RES_MASK( PMU_RES_APP_CORE_READY_BUF )        | \
                                                        PMU_RES_HT_MASK )
+#endif /* PLATFORM_WLAN_ASSISTED_WAKEUP */
 #define PMU_RES_WLAN_UP_MASK                         ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
                                                        PMU_RES_MASK( PMU_RES_BAND_GAP_PU )               | \
                                                        PMU_RES_MASK( PMU_RES_SLEEP_REGOFF_PULL_DOWN_EN ) | \
@@ -1359,8 +1409,7 @@ typedef union
                                                        PMU_RES_MASK( PMU_RES_SR_VDDM_PWRSW )             | \
                                                        PMU_RES_MASK( PMU_RES_SR_SUBCORE_AND_PHY_PWRSW )  | \
                                                        PMU_RES_MASK( PMU_RES_SR_SLEEP ) )
-#define PMU_RES_WLAN_FAST_UP_MASK                    ( PMU_RES_MASK( PMU_RES_WL_CORE_READY )             | \
-                                                       PMU_RES_MASK( PMU_RES_WL_CORE_READY_BUF ) )
+#define PMU_RES_WLAN_UP_EVENT                        PMU_RES_WL_CORE_READY_BUF
 #define PMU_RES_MAX_CLEAR_MASK                       0x0
 #define PMU_RES_MAX_SET_MASK                         PMU_RES_HT_MASK /* HT resource bits may come cleared after bootrom. */
 
@@ -1371,9 +1420,9 @@ typedef union
 
 #define PMU_CONTROL_RESETCONTROL_SHIFT               13
 #define PMU_CONTROL_RESETCONTROL_MASK                (0x3 << PMU_CONTROL_RESETCONTROL_SHIFT)
-#define PMU_CONTROL_RESETCONTROL_UNTOUCHED           (0x0 << PMU_CONTROL_RESETCONTROL_SHIFT)
-#define PMU_CONTROL_RESETCONTROL_RESET               (0x1 << PMU_CONTROL_RESETCONTROL_SHIFT)
-#define PMU_CONTROL_RESETCONTROL_RESTORE_RES_MASKS   (0x2 << PMU_CONTROL_RESETCONTROL_SHIFT)
+#define PMU_CONTROL_RESETCONTROL_UNTOUCHED           (0x0 << PMU_CONTROL_RESETCONTROL_SHIFT) /* reset the backplane and leave PMU state untouched */
+#define PMU_CONTROL_RESETCONTROL_RESET               (0x1 << PMU_CONTROL_RESETCONTROL_SHIFT) /* equivalent to PMU watchdog reset */
+#define PMU_CONTROL_RESETCONTROL_RESTORE_RES_MASKS   (0x2 << PMU_CONTROL_RESETCONTROL_SHIFT) /* reset the backplane and reload min_res_mask and max_res_mask from the power-on-reset values */
 
 #define PMU_SLOWCLKPERIOD_ALP_PERIOD_MASK            0x3FFF
 
@@ -1381,7 +1430,7 @@ typedef union
 #define OOB_AOUT_PMU_INTR0                           18
 #define OOB_AOUT_PMU_INTR1                           20
 
-#define OOB_APPSCR4_TIMER_IRQ_NUM                     0
+#define OOB_APPSCR4_TIMER_IRQ_NUM                    0
 
 STRUCTURE_CHECK(  1, chipcommon_regs_t, core_ctrl_status.bist_status, 0x0C );
 STRUCTURE_CHECK(  2, chipcommon_regs_t, otp.otp_ctrl_1, 0xF4 );

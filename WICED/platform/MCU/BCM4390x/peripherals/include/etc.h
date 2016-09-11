@@ -1,8 +1,14 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Common [OS-independent] header file for
  * Broadcom BCM47XX 10/100Mbps Ethernet Device Driver
- *
- * $Copyright Open Broadcom Corporation$
  *
  * $Id: etc.h 475115 2014-05-03 06:23:15Z sudhirbs $
  */

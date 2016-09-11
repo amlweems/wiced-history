@@ -175,7 +175,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                 wiced_bool_t answer_found = WICED_FALSE;
 
                 /* Extract the data */
-                wiced_packet_get_data( packet, 0, (uint8_t**) &iter.header, &data_length, &available_data_length );
+                if ( wiced_packet_get_data( packet, 0, (uint8_t**) &iter.header, &data_length, &available_data_length ) != WICED_SUCCESS )
+                {
+                    goto exit;
+                }
                 iter.iter = (uint8_t*) ( iter.header ) + sizeof(dns_message_header_t);
 
                 /* Check if the message is a response (otherwise its a query) */
@@ -209,6 +212,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                                     free( (char*) temp_hostname );
                                 }
                                 temp_hostname = dns_read_name( record.rdata, (dns_message_header_t*) name.start_of_packet );
+                                if ( temp_hostname == NULL )
+                                {
+                                    goto exit;
+                                }
                                 hostname_length = (uint16_t) strlen( temp_hostname );
 
                                 #if WICED_DNS_DEBUG
@@ -313,7 +320,7 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
         }
     }
 
-    exit:
+exit:
     wiced_udp_delete_socket( &socket );
 
     if ( temp_hostname != hostname )
@@ -721,7 +728,7 @@ wiced_result_t dns_write_record ( dns_message_iterator_t* iter, const char* name
             result = dns_write_name( iter, name );
             wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
 
-            result = dns_write_bytes( iter, &nsec_data->block_number,  (uint16_t) ( 2 + nsec_data->bitmap_size ) );
+            result = dns_write_bytes( iter, &nsec_data->block_number,  (uint16_t) sizeof( nsec_data->block_number ) );
             wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
             break;
         }

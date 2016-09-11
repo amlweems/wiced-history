@@ -10,9 +10,6 @@
 
 NAME := Supplicant_BESL
 
-# Verify that NoNS isn't being used.
-ifneq ($(NETWORK),NoNS)
-
 ifneq ($(wildcard $(CURDIR)BESL.$(HOST_ARCH).release.a),)
 ifeq ($(HOST_HARDWARE_CRYPTO),1)
 # Micro specific prebuilt library with hardware crypto support
@@ -51,6 +48,5 @@ GLOBAL_DEFINES  := ADD_LWIP_EAPOL_SUPPORT  NXD_EXTENDED_BSD_SOCKET_SUPPORT OPENS
 $(NAME)_COMPONENTS += utilities/base64
 $(NAME)_COMPONENTS += utilities/TLV
 
-$(NAME)_COMPONENTS += BESL/crypto_open
-
-endif # ifneq ($(NETWORK),NoNS)
+$(NAME)_COMPONENTS += BESL/crypto_open \
+                      crypto/micro-ecc

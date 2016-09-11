@@ -111,6 +111,18 @@ typedef struct
     wiced_bt_device_address_t   bda;
 } wiced_bt_ble_address_t;
 
+/* Structure defined for Vendor Specific Command complete callback */
+typedef struct
+{
+    UINT16  opcode;
+    UINT16  param_len;
+    UINT8   *p_param_buf;
+} tBTM_MESH_VSC_CMPL;
+/* Callback function for when a vendor specific event occurs. 
+* The length and array of returned parameter bytes are included.
+* This asynchronous event is enabled/disabled by calling wiced_bt_register_vsc_event
+*/
+typedef void (tBTM_MESH_VS_EVT_CB) (UINT8 len, UINT8 *p);
 #ifdef __cplusplus
 }
 #endif

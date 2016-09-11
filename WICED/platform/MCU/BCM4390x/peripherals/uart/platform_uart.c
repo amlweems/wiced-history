@@ -471,7 +471,7 @@ static platform_result_t uart_slow_init_internal( platform_uart_driver_t* driver
     CHIPCOMMON_CORE_CTRL_REG |= ( 1 << 3 );
 
     /* Get current ALP clock value */
-    alp_clock_value = osl_alp_clock();
+    alp_clock_value = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
 
     wiced_assert("ALP clock value can not be identified properly", alp_clock_value != 0);
 
@@ -569,12 +569,12 @@ static platform_result_t uart_fast_init_internal( platform_uart_driver_t* driver
     if ( driver->interface->src_clk == CLOCK_HT )
     {
         CHIPCOMMON_SECI_CONFIG_REG |= (CC_SECI_CONFIG_HT_CLOCK);
-        clk_value = osl_ht_clock();
+        clk_value = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_FAST_UART );
     }
     else if ( driver->interface->src_clk == CLOCK_ALP )
     {
         CHIPCOMMON_SECI_CONFIG_REG &= ~(CC_SECI_CONFIG_HT_CLOCK);
-        clk_value = osl_alp_clock();
+        clk_value = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
     }
     else
     {
@@ -781,9 +781,11 @@ platform_result_t platform_uart_deinit( platform_uart_driver_t* driver )
 }
 
 #if !defined(BCM4390X_UART_SLOW_POLL_MODE) || !defined(BCM4390X_UART_FAST_POLL_MODE)
-static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
 {
-    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != 0 ) );
+    platform_result_t result = PLATFORM_ERROR;
+
+    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( data_size_left_to_read != NULL ) && ( *data_size_left_to_read != 0 ) );
     wiced_assert( "not inited", ( driver->rx_buffer != NULL ) );
 
     if ( driver->rx_buffer != NULL )
@@ -791,14 +793,19 @@ static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver,
         uint32_t bytes_read = 0;
         uint32_t read_index = 0;
 
-        while ( expected_data_size > 0 )
+        result = PLATFORM_SUCCESS;
+
+        while ( *data_size_left_to_read > 0 )
         {
-            uint32_t flags;
+            wwd_result_t sem_result;
+            uint32_t     flags;
 
             /* Get the semaphore whenever a byte needs to be consumed from the ring buffer */
-            if ( host_rtos_get_semaphore( &driver->rx_complete, timeout_ms, WICED_TRUE ) != WWD_SUCCESS )
+            sem_result = host_rtos_get_semaphore( &driver->rx_complete, timeout_ms, WICED_TRUE );
+            if ( sem_result != WWD_SUCCESS )
             {
-                /* Failure to get the semaphore */
+                /* Can't get the semaphore */
+                result = ( sem_result == WWD_TIMEOUT ) ? PLATFORM_TIMEOUT : PLATFORM_ERROR;
                 break;
             }
 
@@ -807,8 +814,8 @@ static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver,
 
             /* Read the byte from the ring buffer */
             ring_buffer_read( driver->rx_buffer, &data_in[read_index], 1, &bytes_read );
-            read_index         += bytes_read;
-            expected_data_size -= bytes_read;
+            read_index              += bytes_read;
+            *data_size_left_to_read -= bytes_read;
 
             /* Make sure the UART interrupts are re-enabled, they could have
              * been disabled by the ISR if ring buffer was about to overflow */
@@ -819,12 +826,12 @@ static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver,
         }
     }
 
-    return ( expected_data_size == 0 ) ? PLATFORM_SUCCESS : PLATFORM_ERROR;
+    return result;
 }
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE || !BCM4390X_UART_FAST_POLL_MODE */
 
 #ifdef BCM4390X_UART_SLOW_POLL_MODE
-platform_result_t uart_slow_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t uart_slow_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
 {
     wwd_time_t   total_start_time   = host_rtos_get_time( );
     wwd_time_t   total_elapsed_time = 0;
@@ -846,26 +853,21 @@ platform_result_t uart_slow_receive_bytes_poll( platform_uart_driver_t* driver, 
 
         if ( read_elapsed_time >= read_timeout_ms )
         {
-            return PLATFORM_TIMEOUT;
+            break;
         }
 
         *data_in++ = uart_slow_base->rx_tx_dll;
-        expected_data_size--;
+        (*data_size_left_to_read)--;
         total_elapsed_time = host_rtos_get_time() - total_start_time;
 
-    } while ( ( expected_data_size != 0 ) && ( total_elapsed_time < timeout_ms ) );
+    } while ( ( *data_size_left_to_read != 0 ) && ( total_elapsed_time < timeout_ms ) );
 
-    if ( total_elapsed_time >= timeout_ms )
-    {
-        return PLATFORM_TIMEOUT;
-    }
-
-    return PLATFORM_SUCCESS;
+    return ( *data_size_left_to_read == 0 ) ? PLATFORM_SUCCESS : PLATFORM_TIMEOUT;
 }
 #endif /* BCM4390X_UART_SLOW_POLL_MODE */
 
 #ifdef BCM4390X_UART_FAST_POLL_MODE
-platform_result_t uart_fast_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t uart_fast_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
 {
     wwd_time_t   total_start_time   = host_rtos_get_time( );
     wwd_time_t   total_elapsed_time = 0;
@@ -887,40 +889,49 @@ platform_result_t uart_fast_receive_bytes_poll( platform_uart_driver_t* driver, 
 
         if ( read_elapsed_time >= read_timeout_ms )
         {
-            return PLATFORM_TIMEOUT;
+            break;
         }
 
         *data_in++ = uart_fast_base->data;
-        expected_data_size--;
+        (*data_size_left_to_read)--;
         total_elapsed_time = host_rtos_get_time() - total_start_time;
 
-    } while ( ( expected_data_size != 0 ) && ( total_elapsed_time < timeout_ms ) );
+    } while ( ( *data_size_left_to_read != 0 ) && ( total_elapsed_time < timeout_ms ) );
 
-    if ( total_elapsed_time >= timeout_ms )
-    {
-        return PLATFORM_TIMEOUT;
-    }
-
-    return PLATFORM_SUCCESS;
+    return ( *data_size_left_to_read == 0 ) ? PLATFORM_SUCCESS : PLATFORM_TIMEOUT;
 }
 #endif /* BCM4390X_UART_FAST_POLL_MODE */
 
-platform_result_t uart_slow_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
+static wiced_bool_t uart_slow_wait_transmit_fifo_empty( void )
 {
-    do
-    {
-        wwd_time_t   start_time   = host_rtos_get_time();
-        wwd_time_t   elapsed_time = 0;
+    const wwd_time_t start_time = host_rtos_get_time();
+    const uint8_t    empty_mask = UART_SLOW_LSR_TDHR | UART_SLOW_LSR_THRE;
 
-        /* Wait until Transmit Register of the Slow UART is empty */
-        while ( ( ( uart_slow_base->lsr & (UART_SLOW_LSR_TDHR | UART_SLOW_LSR_THRE) ) == 0 ) && ( elapsed_time < UART_SLOW_MAX_TRANSMIT_WAIT_TIME ) )
-        {
-            elapsed_time = host_rtos_get_time( ) - start_time;
-        }
+    while ( ( uart_slow_base->lsr & empty_mask ) != empty_mask )
+    {
+        const wwd_time_t elapsed_time = host_rtos_get_time( ) - start_time;
 
         if ( elapsed_time >= UART_SLOW_MAX_TRANSMIT_WAIT_TIME )
         {
-            return PLATFORM_TIMEOUT;
+            return WICED_FALSE;
+        }
+    }
+
+    return WICED_TRUE;
+}
+
+platform_result_t uart_slow_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
+{
+    platform_result_t result = PLATFORM_SUCCESS;
+
+    PLATFORM_ALP_CLOCK_RES_UP();
+
+    do
+    {
+        if ( uart_slow_wait_transmit_fifo_empty() != WICED_TRUE )
+        {
+            result = PLATFORM_TIMEOUT;
+            break;
         }
 
         uart_slow_base->rx_tx_dll = *data_out++;
@@ -928,7 +939,9 @@ platform_result_t uart_slow_transmit_bytes( platform_uart_driver_t* driver, cons
 
     } while ( size != 0 );
 
-    return PLATFORM_SUCCESS;
+    PLATFORM_ALP_CLOCK_RES_DOWN( uart_slow_wait_transmit_fifo_empty, WICED_FALSE );
+
+    return result;
 }
 
 platform_result_t uart_fast_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
@@ -957,18 +970,8 @@ platform_result_t uart_fast_transmit_bytes( platform_uart_driver_t* driver, cons
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
+static platform_result_t platform_uart_transmit_bytes_common( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
 {
-    wiced_assert( "bad argument", ( driver != NULL ) && ( data_out != NULL ) && ( size != 0 ) );
-
-#ifdef CONS_LOG_BUFFER_SUPPORT
-#ifdef CONS_LOG_BUFFER_ONLY
-    return cons_transmit_bytes(driver, data_out, size);
-#else
-    cons_transmit_bytes(driver, data_out, size);
-#endif  /* CONS_LOG_BUFFER_ONLY */
-#endif  /* CONS_LOG_BUFFER_SUPPORT */
-
     if ( driver->interface->port == UART_SLOW )
     {
         return uart_slow_transmit_bytes( driver, data_out, size );
@@ -981,28 +984,62 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
     return PLATFORM_UNSUPPORTED;
 }
 
-platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
 {
-    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != 0 ) );
+    wiced_assert( "bad argument", ( driver != NULL ) && ( data_out != NULL ) && ( size != 0 ) );
+
+#ifdef CONS_LOG_BUFFER_SUPPORT
+#ifdef CONS_LOG_BUFFER_ONLY
+    return cons_transmit_bytes(driver, data_out, size);
+#else
+    cons_transmit_bytes(driver, data_out, size);
+#endif  /* CONS_LOG_BUFFER_ONLY */
+#endif  /* CONS_LOG_BUFFER_SUPPORT */
+
+    return platform_uart_transmit_bytes_common( driver, data_out, size );
+}
+
+platform_result_t platform_uart_exception_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
+{
+    /* Called in exception context and must not use interrupts. */
+
+    if ( ( driver == NULL ) || ( data_out == NULL ) || ( size == 0 ) )
+    {
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    return platform_uart_transmit_bytes_common( driver, data_out, size );
+}
+
+platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms )
+{
+    platform_result_t result = PLATFORM_UNSUPPORTED;
+    uint32_t          data_size_left_to_read;
+
+    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != NULL )  && ( *expected_data_size != 0 ) );
+
+    data_size_left_to_read = *expected_data_size;
 
     if ( driver->interface->port == UART_SLOW )
     {
 #ifndef BCM4390X_UART_SLOW_POLL_MODE
-        return uart_receive_bytes_irq( driver, data_in, expected_data_size, timeout_ms );
+        result = uart_receive_bytes_irq( driver, data_in, &data_size_left_to_read, timeout_ms );
 #else
-        return uart_slow_receive_bytes_poll( driver, data_in, expected_data_size, timeout_ms );
+        result = uart_slow_receive_bytes_poll( driver, data_in, &data_size_left_to_read, timeout_ms );
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE */
     }
     else if ( driver->interface->port == UART_FAST )
     {
 #ifndef BCM4390X_UART_FAST_POLL_MODE
-        return uart_receive_bytes_irq( driver, data_in, expected_data_size, timeout_ms );
+        result = uart_receive_bytes_irq( driver, data_in, &data_size_left_to_read, timeout_ms );
 #else
-        return uart_fast_receive_bytes_poll( driver, data_in, expected_data_size, timeout_ms );
+        result = uart_fast_receive_bytes_poll( driver, data_in, &data_size_left_to_read, timeout_ms );
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
     }
 
-    return PLATFORM_UNSUPPORTED;
+    *expected_data_size -= data_size_left_to_read;
+
+    return result;
 }
 
 /******************************************************

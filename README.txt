@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.3.1 - README
+Broadcom WICED Software Development Kit 3.4.0 - README
 =====================================================================
 
 The WICED SDK provides a full compliment of application level APIs, 
@@ -230,7 +230,14 @@ Known Limitations & Notes
                 .cfg file that matches your hardware debugger 
                 (ie. BCM9WCD1EVAL1.cfg for WICED Evaluation Boards) 
 
- * AP mode when running with Wi-Fi Direct is limited to 2 STA clients
+ * For the 43362, AP mode when running with Wi-Fi Direct is limited to 2 STA clients
+
+ * P2P feature
+     If the board's MAC address is locally administered then it needs to be modified
+     to become a global address or P2P will not initialize.
+     First build the application using the SDK, then find the
+     generated_mac_address.txt file and modify the MAC address.
+     Ex: Change text "macaddr=02:0A:F7:9c:76:f2" to "macaddr=00:0A:F7:9c:76:f2"
  
 Tools
 ---------------------------------------------------------------------

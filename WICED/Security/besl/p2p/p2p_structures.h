@@ -47,7 +47,6 @@ typedef struct
 {
     besl_mac_t  mac_address;
     uint8_t     interface_type;
-    uint8_t     _padding; // XXX why is this here?
     uint16_t    chan_spec;
 } wl_p2p_if_t;
 
@@ -350,7 +349,7 @@ typedef struct
     uint8_t            configuration_timeout;
     uint16_t           p2p_capability;
     uint8_t            ssid_length;
-    char               ssid[32];
+    uint8_t            ssid[32];
 } p2p_group_details_t;
 
 typedef struct
@@ -438,7 +437,7 @@ typedef struct
     uint8_t                         group_owner_tie_breaker;
     uint16_t                        configuration_timeout;
     uint32_t                        p2p_action_frame_cookie;
-    uint32_t                        p2p_interface;
+    uint32_t                        p2p_interface;               /* Wiced host interface for use when bringing up IP stack etc */
     p2p_state_machine_state_t       p2p_current_state;
     p2p_discovered_device_t         discovered_devices[P2P_MAX_DISCOVERED_DEVICES];
     p2p_discovered_device_t*        candidate_device;

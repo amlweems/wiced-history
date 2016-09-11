@@ -12,7 +12,6 @@
  * LwIP TCP/IP library
  */
 
-#include "wiced.h"
 #include "wiced_network.h"
 #include "wiced_ping.h"
 #include "lwip/api.h"
@@ -21,16 +20,16 @@
 #include "lwip/udp.h"
 #include "lwip/tcp_impl.h"
 #include "lwip/ip.h"
-#include "RTOS/wwd_rtos_interface.h"
-#include "wiced_tcpip.h"
-#include "wwd_assert.h"
-#include "wwd_crypto.h"
 #include "lwipopts.h"
 #include "queue.h"
 #include "semphr.h"
 #include "dns.h"
+#include "RTOS/wwd_rtos_interface.h"
+#include "wiced_tcpip.h"
 #include "wiced_tls.h"
-#include "tls_host_api.h"
+#include "wiced_tcpip_tls_api.h"
+#include "wwd_assert.h"
+#include "wiced_crypto.h"
 #include "internal/wiced_internal_api.h"
 
 /******************************************************
@@ -164,7 +163,7 @@ wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_int
     /* create accept sockets */
     for ( i = 0; i < WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS; i++ )
     {
-        tcp_server->accept_socket_state[ i ]                                            = WICED_SOCKET_CLOSED;
+        tcp_server->accept_socket[ i ].socket_state                                     = WICED_SOCKET_CLOSED;
         tcp_server->accept_socket[ i ].is_bound                                         = WICED_FALSE;
         tcp_server->accept_socket[ i ].interface                                        = interface;
         tcp_server->accept_socket[ i ].conn_handler                                     = tcp_server->listen_socket.conn_handler;
@@ -212,7 +211,7 @@ wiced_result_t wiced_tcp_server_disconnect_socket( wiced_tcp_server_t* tcp_serve
         socket->conn_handler   = tcp_server->listen_socket.conn_handler;
     }
 
-    tcp_server->accept_socket_state[ index ] = WICED_SOCKET_CLOSED;
+    tcp_server->accept_socket[ index ].socket_state = WICED_SOCKET_CLOSED;
 
     return WICED_SUCCESS;
 }
@@ -280,6 +279,21 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
     socket->interface = interface;
 
     return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_tcp_get_socket_state( wiced_tcp_socket_t* socket, wiced_socket_state_t* socket_state )
+{
+
+    if( socket == NULL )
+    {
+        *socket_state = WICED_SOCKET_ERROR;
+        return WICED_BADARG;
+    }
+
+    *socket_state = socket->socket_state;
+
+    return WICED_SUCCESS;
+
 }
 
 void wiced_tcp_set_type_of_service( wiced_tcp_socket_t* socket, uint32_t tos )
@@ -504,7 +518,7 @@ wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet
     {
         if ( socket->conn_handler != NULL )
         {
-            status = netconn_write( socket->conn_handler, data, length, NETCONN_COPY | NETCONN_DONTBLOCK );
+            status = netconn_write( socket->conn_handler, data, length, NETCONN_COPY );
         }
         else
         {
@@ -513,7 +527,7 @@ wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet
     }
     else
     {
-        status = netconn_write( socket->accept_handler, data, length, NETCONN_COPY | NETCONN_DONTBLOCK );
+        status = netconn_write( socket->accept_handler, data, length, NETCONN_COPY );
     }
 
     if ( status != ERR_OK )
@@ -854,20 +868,9 @@ wiced_result_t wiced_ip_get_netmask( wiced_interface_t interface, wiced_ip_addre
     return WICED_TCPIP_SUCCESS;
 }
 
-wiced_result_t wiced_tcp_server_add_tls( wiced_tcp_server_t* tcp_server, wiced_tls_advanced_context_t* context, const char* server_cert, const char* server_key )
+wiced_result_t wiced_tcp_server_enable_tls( wiced_tcp_server_t* tcp_server, wiced_tls_identity_t* identity )
 {
-    int i;
-
-    wiced_tls_init_advanced_context( context, server_cert, server_key );
-
-    wiced_tcp_enable_tls( &tcp_server->listen_socket, context );
-
-    /* create accept sockets */
-    for ( i = 0; i < WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS; i++ )
-    {
-        wiced_tcp_enable_tls( &tcp_server->accept_socket[ i ], context );
-    }
-
+    tcp_server->tls_identity = identity;
     return WICED_TCPIP_SUCCESS;
 }
 
@@ -933,6 +936,9 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
             return result;
         }
     }
+
+    socket->socket_state = WICED_SOCKET_CONNECTED;
+
     return WICED_SUCCESS;
 }
 
@@ -950,6 +956,7 @@ wiced_result_t wiced_tcp_disconnect( wiced_tcp_socket_t* socket )
         err_t res = netconn_delete( socket->accept_handler );
         if ( res != ERR_OK )
         {
+            socket->socket_state = WICED_SOCKET_ERROR;
             return LWIP_TO_WICED_ERR( res );
         }
 
@@ -961,6 +968,8 @@ wiced_result_t wiced_tcp_disconnect( wiced_tcp_socket_t* socket )
         socket->conn_handler = NULL;
         socket->is_bound     = WICED_FALSE;
     }
+
+    socket->socket_state = WICED_SOCKET_CLOSED;
 
     return WICED_SUCCESS;
 }
@@ -1155,6 +1164,7 @@ static void internal_netconn_tcp_socket_callback( struct netconn *conn, enum net
         case NETCONN_EVT_RCVPLUS:
             if ( length > 0 )
             {
+                socket->socket_state = WICED_SOCKET_CONNECTED;
                 internal_defer_callback_to_wiced_network_thread( socket, WICED_TCP_RECEIVE_CALLBACK_INDEX );
             }
             else
@@ -1165,10 +1175,12 @@ static void internal_netconn_tcp_socket_callback( struct netconn *conn, enum net
                 if ( ( socket->accept_handler != NULL ) && ( conn == socket->accept_handler ) )
                 {
                     internal_defer_callback_to_wiced_network_thread( socket, WICED_TCP_DISCONNECT_CALLBACK_INDEX );
+                    socket->socket_state = WICED_SOCKET_CLOSED;
                 }
                 else
                 {
                     internal_defer_callback_to_wiced_network_thread( socket, WICED_TCP_CONNECT_CALLBACK_INDEX );
+                    socket->socket_state = WICED_SOCKET_CONNECTING;
                 }
             }
             break;
@@ -1176,6 +1188,7 @@ static void internal_netconn_tcp_socket_callback( struct netconn *conn, enum net
         case NETCONN_EVT_ERROR:
             /*  Connection was reseted externally, inform about disconnect */
             internal_defer_callback_to_wiced_network_thread( socket, WICED_TCP_DISCONNECT_CALLBACK_INDEX );
+            socket->socket_state = WICED_SOCKET_CLOSED;
             break;
 
         case NETCONN_EVT_RCVMINUS:
@@ -1214,6 +1227,7 @@ static void internal_netconn_tcp_server_socket_callback( struct netconn *conn, e
                     {
                         if ( ( server->data_pending_on_socket >= 0  ) && ( server->data_pending_on_socket < WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS ) )
                         {
+                            server->accept_socket[server->data_pending_on_socket].socket_state = WICED_SOCKET_CONNECTED;
                             internal_defer_callback_to_wiced_network_thread( (void*)&server->accept_socket[server->data_pending_on_socket], WICED_TCP_RECEIVE_CALLBACK_INDEX );
                             server->data_pending_on_socket = -1;
                         }
@@ -1222,8 +1236,8 @@ static void internal_netconn_tcp_server_socket_callback( struct netconn *conn, e
                     {
                         if ( internal_tcp_server_find_free_socket( server, &socket_index ) == WICED_SUCCESS )
                         {
-                            server->accept_socket_state[socket_index] = WICED_SOCKET_CONNECTING;
-                            server->data_pending_on_socket            = socket_index;
+                            server->accept_socket[socket_index].socket_state = WICED_SOCKET_CONNECTING;
+                            server->data_pending_on_socket                   = socket_index;
                             internal_defer_callback_to_wiced_network_thread( &server->accept_socket[socket_index], WICED_TCP_CONNECT_CALLBACK_INDEX );
                         }
                     }
@@ -1232,13 +1246,13 @@ static void internal_netconn_tcp_server_socket_callback( struct netconn *conn, e
                 {
                     if  ( length > 0 )
                     {
-                        server->accept_socket_state[socket_index] = WICED_SOCKET_CONNECTED;
+                        server->accept_socket[socket_index].socket_state = WICED_SOCKET_CONNECTED;
                         internal_defer_callback_to_wiced_network_thread( &server->accept_socket[socket_index], WICED_TCP_RECEIVE_CALLBACK_INDEX );
                     }
-                    else if ( ( server->accept_socket_state[socket_index] != WICED_SOCKET_CLOSED ) )
+                    else if ( ( server->accept_socket[socket_index].socket_state != WICED_SOCKET_CLOSED ) )
                     {
                         server->data_pending_on_socket            = -1;
-                        server->accept_socket_state[socket_index] = WICED_SOCKET_CLOSING;
+                        server->accept_socket[socket_index].socket_state = WICED_SOCKET_CLOSING;
                         internal_defer_callback_to_wiced_network_thread( &server->accept_socket[socket_index], WICED_TCP_DISCONNECT_CALLBACK_INDEX );
                     }
                 }
@@ -1259,7 +1273,7 @@ static wiced_result_t internal_tcp_server_find_free_socket (wiced_tcp_server_t* 
     int i;
     for (i = 0; i < WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS; i++)
     {
-        if( tcp_server->accept_socket_state[i] == WICED_SOCKET_CLOSED )
+        if( tcp_server->accept_socket[i].socket_state == WICED_SOCKET_CLOSED )
         {
             *index = i;
             return WICED_SUCCESS;

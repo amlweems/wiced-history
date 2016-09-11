@@ -53,23 +53,7 @@
 #ifndef TROPICSSL_SHA2_H
 #define TROPICSSL_SHA2_H
 
-#include <stdint.h>
-
-/**
- * \brief          SHA-256 context structure
- */
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    uint32_t total[2];    /*!< number of bytes processed  */
-    uint32_t state[8];    /*!< intermediate digest state  */
-    unsigned char buffer[64];    /*!< data block being processed */
-
-    unsigned char ipad[64];    /*!< HMAC: inner padding        */
-    unsigned char opad[64];    /*!< HMAC: outer padding        */
-    int32_t is224;        /*!< 0 => SHA-256, else SHA-224 */
-} sha2_context;
-#endif
+#include "crypto_structures.h"
 
 #ifdef __cplusplus
 extern "C" {

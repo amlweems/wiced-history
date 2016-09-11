@@ -53,6 +53,37 @@
 /* ChipCommon GPIO IntStatus and IntMask register bit */
 #define GPIO_CC_INT_STATUS_MASK         (1 << 0)
 
+/*
+ * If pin bit present in this mask then:
+ *     a) IRQ_TRIGGER_BOTH_EDGES is supported.
+ *     b) All edge interrupts are emulated by using level interrupts
+ *        and switching their polarity in driver.
+ * Otherwise:
+ *     a) IRQ_TRIGGER_BOTH_EDGES is NOT supported for this pin.
+ *     b) IRQ_TRIGGER_RISING_EDGE and IRQ_TRIGGER_FALLING_EDGE are
+ *        implemented using hardware support.
+ * Configuration is per-pin. One pin can be configured to use first method
+ * while another second method.
+ *
+ * Level interrupts are not affected by this mask,
+ * so following is applied to edge interrupts only:
+ *     a) If need to have guaranteed delivery, then second method
+ *        should be used as it does not depend on ISR latency.
+ *        E.g. if programmed as IRQ_TRIGGER_RISING_EDGE and pin has
+ *        quick transition from low to high and then back, ISR would
+ *        see low->high transition in case of second method and not
+ *        guaranteed in case of first method.
+ *        But this is for first transition only, all subsequent may be
+ *        not detected if ISR was triggered too late.
+ *     b) If IRQ_TRIGGER_BOTH_EDGES is needed,
+ *        then first method is what suggested to use.
+ *     c) First method is suggested to use with buttons as it seems
+ *        better cope with button bouncing.
+ */
+#ifndef GPIO_EDGE_HANDLING_VIA_LEVEL_MASK
+#define GPIO_EDGE_HANDLING_VIA_LEVEL_MASK    (0xFFFFFFFF)
+#endif
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -141,6 +172,7 @@ typedef struct
 {
     platform_gpio_irq_callback_t handler;  /* User callback function for this GPIO IRQ */
     void*                        arg;      /* User argument passed to callback function */
+    platform_gpio_irq_trigger_t  trigger;  /* What triggers interrupt, e.g. high level, low level, raising edge, etc */
 } platform_gpio_irq_data_t;
 
 /******************************************************
@@ -2066,7 +2098,6 @@ platform_result_t platform_gpio_output_high( const platform_gpio_t* gpio )
 
 wiced_bool_t platform_gpio_input_get( const platform_gpio_t* gpio )
 {
-    uint32_t flags;
     wiced_bool_t gpio_input;
     int cc_gpio_bit = PIN_FUNCTION_UNSUPPORTED;
 
@@ -2083,12 +2114,8 @@ wiced_bool_t platform_gpio_input_get( const platform_gpio_t* gpio )
         return PLATFORM_UNSUPPORTED;
     }
 
-    WICED_SAVE_INTERRUPTS(flags);
-
     /* Get the GPIO pin input */
     gpio_input = ( ( PLATFORM_CHIPCOMMON->gpio.input & ( 1 << cc_gpio_bit ) ) == 0 ) ? WICED_FALSE : WICED_TRUE;
-
-    WICED_RESTORE_INTERRUPTS(flags);
 
     return gpio_input;
 }
@@ -2096,6 +2123,7 @@ wiced_bool_t platform_gpio_input_get( const platform_gpio_t* gpio )
 platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platform_gpio_irq_trigger_t trigger, platform_gpio_irq_callback_t handler, void* arg )
 {
     wiced_bool_t level_trigger_enable;
+    wiced_bool_t edge_handling_via_level;
     uint32_t cc_gpio_bit_mask;
     int cc_gpio_bit;
     uint32_t flags;
@@ -2103,25 +2131,6 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
     if ((handler == NULL) || (gpio == NULL) || (gpio->pin >= PIN_MAX))
     {
         return PLATFORM_ERROR;
-    }
-
-    /* Identify the GPIO interrupt trigger type */
-    switch(trigger)
-    {
-        case IRQ_TRIGGER_RISING_EDGE:
-        case IRQ_TRIGGER_FALLING_EDGE:
-            level_trigger_enable = WICED_FALSE;
-            break;
-
-        case IRQ_TRIGGER_LEVEL_HIGH:
-        case IRQ_TRIGGER_LEVEL_LOW:
-            level_trigger_enable = WICED_TRUE;
-            break;
-
-        case IRQ_TRIGGER_BOTH_EDGES:
-        default:
-            /* Unsupported trigger type */
-            return PLATFORM_UNSUPPORTED;
     }
 
     /* Lookup the ChipCommon GPIO number for this pin */
@@ -2134,6 +2143,31 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
     }
 
     cc_gpio_bit_mask = (1 << cc_gpio_bit);
+    edge_handling_via_level = (GPIO_EDGE_HANDLING_VIA_LEVEL_MASK & cc_gpio_bit_mask) ? WICED_TRUE : WICED_FALSE;
+
+    /* Identify the GPIO interrupt trigger type */
+    switch (trigger)
+    {
+        case IRQ_TRIGGER_BOTH_EDGES:
+            if (!edge_handling_via_level)
+            {
+                /* Both edges are not supported without emulation via level interrupts */
+                return PLATFORM_UNSUPPORTED;
+            }
+        case IRQ_TRIGGER_RISING_EDGE:
+        case IRQ_TRIGGER_FALLING_EDGE:
+            level_trigger_enable = WICED_FALSE;
+            break;
+
+        case IRQ_TRIGGER_LEVEL_HIGH:
+        case IRQ_TRIGGER_LEVEL_LOW:
+            level_trigger_enable = WICED_TRUE;
+            break;
+
+        default:
+            wiced_assert("bad trigger type", 0);
+            return PLATFORM_UNSUPPORTED;
+    }
 
     if ((PLATFORM_CHIPCOMMON->gpio.output_enable & cc_gpio_bit_mask) != 0)
     {
@@ -2143,7 +2177,7 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
 
     WICED_SAVE_INTERRUPTS(flags);
 
-    /* Clear the GPIO pin interrupt bits */
+    /* Disable GPIO interrupts */
     PLATFORM_CHIPCOMMON->gpio.int_mask &= ~cc_gpio_bit_mask;
     PLATFORM_CHIPCOMMON->gpio.event_int_mask &= ~cc_gpio_bit_mask;
 
@@ -2157,6 +2191,28 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
         else if (trigger == IRQ_TRIGGER_LEVEL_LOW)
         {
             PLATFORM_CHIPCOMMON->gpio.int_polarity |= cc_gpio_bit_mask;
+        }
+        else
+        {
+            wiced_assert("bad trigger type", 0);
+        }
+
+        /* Enable the GPIO level interrupt */
+        PLATFORM_CHIPCOMMON->gpio.int_mask |= cc_gpio_bit_mask;
+    }
+    else if (edge_handling_via_level == WICED_TRUE)
+    {
+        /*
+         * Use level interrupts to emulate edge interrupts.
+         * Initial polarity is opposite to current value.
+         */
+        if (PLATFORM_CHIPCOMMON->gpio.input & cc_gpio_bit_mask)
+        {
+            PLATFORM_CHIPCOMMON->gpio.int_polarity |= cc_gpio_bit_mask;
+        }
+        else
+        {
+            PLATFORM_CHIPCOMMON->gpio.int_polarity &= ~cc_gpio_bit_mask;
         }
 
         /* Enable the GPIO level interrupt */
@@ -2172,6 +2228,10 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
         {
             PLATFORM_CHIPCOMMON->gpio.event_int_polarity |= cc_gpio_bit_mask;
         }
+        else
+        {
+            wiced_assert("bad trigger type", 0);
+        }
 
         /* Clear and enable the GPIO edge interrupt */
         PLATFORM_CHIPCOMMON->gpio.event |= cc_gpio_bit_mask;
@@ -2181,6 +2241,7 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
     gpio_irq_mapping[cc_gpio_bit] = gpio->pin;
     gpio_irq_data[cc_gpio_bit].handler = handler;
     gpio_irq_data[cc_gpio_bit].arg = arg;
+    gpio_irq_data[cc_gpio_bit].trigger = trigger;
 
     WICED_RESTORE_INTERRUPTS(flags);
 
@@ -2215,7 +2276,6 @@ platform_result_t platform_gpio_irq_disable( const platform_gpio_t* gpio )
 
             gpio_irq_mapping[cc_gpio_bit] = PIN_MAX;
             gpio_irq_data[cc_gpio_bit].handler = NULL;
-            gpio_irq_data[cc_gpio_bit].arg = NULL;
 
             WICED_RESTORE_INTERRUPTS(flags);
         }
@@ -2226,43 +2286,73 @@ platform_result_t platform_gpio_irq_disable( const platform_gpio_t* gpio )
 
 void platform_gpio_irq( void )
 {
-    uint32_t input;
-    uint32_t int_polarity;
-    uint32_t int_mask;
-    uint32_t event;
-    uint32_t event_int_mask;
-    uint32_t edge_triggered;
-    uint32_t level_triggered;
-    uint32_t cc_gpio_bit_mask;
-    int cc_gpio_bit;
+    uint32_t input = PLATFORM_CHIPCOMMON->gpio.input;
+    uint32_t orig_level_polarity = PLATFORM_CHIPCOMMON->gpio.int_polarity;
+    uint32_t level_polarity = orig_level_polarity;
+    uint32_t level_triggered = (input ^ level_polarity) & PLATFORM_CHIPCOMMON->gpio.int_mask;
+    uint32_t edge_triggered = PLATFORM_CHIPCOMMON->gpio.event & PLATFORM_CHIPCOMMON->gpio.event_int_mask;
+    int bit;
 
-    /* Read the GPIO registers */
-    input = PLATFORM_CHIPCOMMON->gpio.input;
-    event = PLATFORM_CHIPCOMMON->gpio.event;
-    int_mask = PLATFORM_CHIPCOMMON->gpio.int_mask;
-    int_polarity = PLATFORM_CHIPCOMMON->gpio.int_polarity;
-    event_int_mask = PLATFORM_CHIPCOMMON->gpio.event_int_mask;
-
-    /* Traverse the GPIO pins and process any level or edge triggered interrupts */
-    for (cc_gpio_bit = 0 ; cc_gpio_bit < GPIO_TOTAL_PIN_NUMBERS ; cc_gpio_bit++)
+    if (edge_triggered != 0)
     {
-        cc_gpio_bit_mask = (1 << cc_gpio_bit);
-        edge_triggered = (event & event_int_mask) & cc_gpio_bit_mask;
-        level_triggered = ((input ^ int_polarity) & int_mask) & cc_gpio_bit_mask;
+        PLATFORM_CHIPCOMMON->gpio.event = edge_triggered;
+    }
 
-        if ((edge_triggered != 0) || (level_triggered != 0))
+    for (bit = 0 ; bit < GPIO_TOTAL_PIN_NUMBERS ; bit++)
+    {
+        uint32_t mask = 1 << bit;
+
+        if ((edge_triggered | level_triggered) & mask)
         {
-            if (edge_triggered != 0)
-            {
-                /* Clear the GPIO edge trigger event */
-                PLATFORM_CHIPCOMMON->gpio.event |= cc_gpio_bit_mask;
-            }
+            platform_gpio_irq_data_t* irq_data = &gpio_irq_data[bit];
 
-            if (gpio_irq_data[cc_gpio_bit].handler != NULL)
+            wiced_assert("must be configured as one type", ((edge_triggered & mask) != (level_triggered & mask)));
+            wiced_assert("must be configured", (irq_data->handler != NULL));
+
+            if (edge_triggered & mask)
             {
-                /* Invoke the GPIO interrupt handler */
-                gpio_irq_data[cc_gpio_bit].handler(gpio_irq_data[cc_gpio_bit].arg);
+                irq_data->handler(irq_data->arg);
+            }
+            else
+            {
+                switch (irq_data->trigger)
+                {
+                    case IRQ_TRIGGER_LEVEL_HIGH:
+                    case IRQ_TRIGGER_LEVEL_LOW:
+                        irq_data->handler(irq_data->arg);
+                        break;
+
+                    case IRQ_TRIGGER_RISING_EDGE:
+                        if ((input & mask) != 0)
+                        {
+                            irq_data->handler(irq_data->arg);
+                        }
+                        level_polarity ^= mask;
+                        break;
+
+                    case IRQ_TRIGGER_FALLING_EDGE:
+                        if ((input & mask) == 0)
+                        {
+                            irq_data->handler(irq_data->arg);
+                        }
+                        level_polarity ^= mask;
+                        break;
+
+                    case IRQ_TRIGGER_BOTH_EDGES:
+                        irq_data->handler(irq_data->arg);
+                        level_polarity ^= mask;
+                        break;
+
+                    default:
+                        wiced_assert("bad trigger", 0);
+                        break;
+                }
             }
         }
+    }
+
+    if (level_polarity != orig_level_polarity)
+    {
+        PLATFORM_CHIPCOMMON->gpio.int_polarity = level_polarity;
     }
 }

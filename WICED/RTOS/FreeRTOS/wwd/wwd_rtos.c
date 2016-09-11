@@ -35,7 +35,7 @@
 
 const uint32_t  ms_to_tick_ratio = (uint32_t)( 1000 / configTICK_RATE_HZ );
 
-extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTaskName );
+extern void vApplicationStackOverflowHook( TaskHandle_t *pxTask, signed portCHAR *pcTaskName );
 
 /******************************************************
  *             Function definitions
@@ -63,7 +63,7 @@ wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thr
 
     wiced_assert( "Warning: FreeRTOS does not utilize pre-allocated thread stacks. allocated space is wasted\n", stack == NULL );
 
-    result = xTaskCreate( (pdTASK_CODE)entry_function, (const signed char * )name, (unsigned short)(stack_size / sizeof( portSTACK_TYPE )), (void*)arg, (unsigned portBASE_TYPE) priority, thread );
+    result = xTaskCreate( (TaskFunction_t)entry_function, name, (unsigned short)(stack_size / sizeof( portSTACK_TYPE )), (void*)arg, (unsigned portBASE_TYPE) priority, thread );
 
     taskYIELD();
 
@@ -160,7 +160,7 @@ wwd_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t
 {
     UNUSED_PARAMETER( will_set_in_isr );
 
-    if ( pdTRUE == xSemaphoreTake( *semaphore, (portTickType) ( timeout_ms * ( 1000/configTICK_RATE_HZ ) ) ) )
+    if ( pdTRUE == xSemaphoreTake( *semaphore, (TickType_t) ( timeout_ms * ( 1000/configTICK_RATE_HZ ) ) ) )
     {
         return WWD_SUCCESS;
     }
@@ -271,7 +271,7 @@ wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
 
     if ( ( num_ms / ( 1000 / configTICK_RATE_HZ ) ) != 0 )
     {
-        vTaskDelay( (portTickType) ( num_ms / ( 1000 / configTICK_RATE_HZ ) ) );
+        vTaskDelay( (TickType_t) ( num_ms / ( 1000 / configTICK_RATE_HZ ) ) );
     }
 
     remainder = num_ms % ( 1000 / configTICK_RATE_HZ );
@@ -292,7 +292,7 @@ wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
 
 }
 
-void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTaskName )
+void vApplicationStackOverflowHook( TaskHandle_t *pxTask, signed portCHAR *pcTaskName )
 {
     UNUSED_PARAMETER( pxTask );
     UNUSED_PARAMETER( pcTaskName ); /* unused parameter in release build */
@@ -325,7 +325,7 @@ wwd_result_t host_rtos_init_queue( /*@special@*/ /*@out@*/ host_queue_type_t* qu
 
 wwd_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    signed portBASE_TYPE retval = xQueueSendToBack( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) );
+    signed portBASE_TYPE retval = xQueueSendToBack( *queue, message, (TickType_t) ( timeout_ms / ms_to_tick_ratio ) );
     if ( retval != pdPASS )
     {
         return WWD_QUEUE_ERROR;
@@ -337,7 +337,7 @@ wwd_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, u
 
 wwd_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    signed portBASE_TYPE retval = xQueueReceive( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) );
+    signed portBASE_TYPE retval = xQueueReceive( *queue, message, (TickType_t) ( timeout_ms / ms_to_tick_ratio ) );
     if ( retval == errQUEUE_EMPTY )
     {
         return WWD_TIMEOUT;

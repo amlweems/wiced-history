@@ -55,25 +55,7 @@
 #ifndef TROPICSSL_AES_H
 #define TROPICSSL_AES_H
 
-#include <stdint.h>
-
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-typedef enum
-{
-    AES_ENCRYPT = 1,
-    AES_DECRYPT = 0,
-} aes_mode_type_t;
-#endif
-
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    uint32_t  number_of_rounds;
-    uint32_t* round_keys;
-    uint32_t  unaligned_data[68];
-} aes_context_t;
-#endif
+#include "crypto_structures.h"
 
 #ifdef __cplusplus
 extern "C" {

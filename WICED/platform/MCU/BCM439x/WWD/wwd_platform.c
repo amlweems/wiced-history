@@ -18,6 +18,7 @@
 #include "platform/wwd_platform_interface.h"
 #include "platform_cmsis.h"
 #include "platform_config.h"
+#include "wwd_rtos_interface.h"
 
 /******************************************************
  *                      Macros

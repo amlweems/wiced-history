@@ -49,8 +49,16 @@ extern "C"
 /* Interrupt line 0 to 15. Each line is shared among the same numbered pins across all GPIO ports */
 #define NUMBER_OF_GPIO_IRQ_LINES  (16)
 
-/* USART1 to 6 */
-#define NUMBER_OF_UART_PORTS      (6)
+/* USART1 to 8 where applicable */
+#if defined(STM32F446xx) || defined(STM32F40_41xxx)
+    #define NUMBER_OF_UART_PORTS      (6)
+#endif
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    #define NUMBER_OF_UART_PORTS      (8)
+#endif
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    #define NUMBER_OF_UART_PORTS      (3)    // USART1, USART2, and USART6
+#endif
 
 /* Invalid UART port number */
 #define INVALID_UART_PORT_NUMBER  (0xff)
@@ -60,8 +68,19 @@ extern "C"
 #define STDIO_BUFFER_SIZE         (64)
 #endif
 
-/* SPI1 to SPI3 */
+/* SPI1 to SPI6 where applicable */
+#if defined(STM32F40_41xxx)
 #define NUMBER_OF_SPI_PORTS       (3)
+#endif
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#define NUMBER_OF_SPI_PORTS       (6)
+#endif
+#if defined(STM32F401xx) || defined(STM32F446xx)
+#define NUMBER_OF_SPI_PORTS       (4)
+#endif
+#if defined(STM32F411xE)
+#define NUMBER_OF_SPI_PORTS       (5)
+#endif
 
 /******************************************************
  *                   Enumerations

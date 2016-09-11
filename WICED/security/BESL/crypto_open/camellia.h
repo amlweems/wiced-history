@@ -50,20 +50,10 @@
 #ifndef TROPICSSL_CAMELLIA_H
 #define TROPICSSL_CAMELLIA_H
 
-#include <stdint.h>
+#include "crypto_structures.h"
 
 #define CAMELLIA_ENCRYPT     1
 #define CAMELLIA_DECRYPT     0
-
-/**
- * \brief          CAMELLIA context structure
- */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    int nr;            /*!<  number of rounds  */
-    uint32_t rk[68];    /*!<  CAMELLIA round keys    */
-} camellia_context;
-#endif
 
 #ifdef __cplusplus
 extern "C" {

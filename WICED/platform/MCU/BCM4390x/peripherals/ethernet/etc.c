@@ -1,9 +1,16 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Common [OS-independent] portion of
  * Broadcom Home Networking Division 10/100 Mbit/s Ethernet
  * Device Driver.
  *
- * $Copyright Open Broadcom Corporation$
  * $Id: etc.c 479508 2014-05-21 10:21:25Z amitsi $
  */
 

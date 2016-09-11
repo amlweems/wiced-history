@@ -22,7 +22,7 @@
 #include "string.h"
 #include "wps_host_interface.h"
 #include "wwd_wifi.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "wwd_events.h"
 #include "stdlib.h"
 #include "wps_constants.h"
@@ -48,6 +48,7 @@
 #define AUTHORIZED_MAC_LIST_LENGTH        (1)
 #define ACTIVE_WPS_WORKSPACE_ARRAY_SIZE   (3)
 #define DOT11_CAP_PRIVACY                 0x0010  /* d11 cap. privacy */
+#define DOT11_IE_ID_VENDOR_SPECIFIC       ( 221 )
 #define KDK_REQUIRED_CRYPTO_MATERIAL      (WPS_CRYPTO_MATERIAL_ENROLLEE_NONCE | WPS_CRYPTO_MATERIAL_REGISTRAR_NONCE | WPS_CRYPTO_MATERIAL_ENROLLEE_MAC_ADDRESS)
 
 /* Time related constants */
@@ -439,24 +440,17 @@ void wiced_wps_thread_main( uint32_t arg )
 {
     wiced_time_t          current_time;
     wps_result_t          result;
-    besl_event_message_t   message;
+    besl_event_message_t  message;
     wps_agent_t*          workspace = (wps_agent_t*)arg;
     wps_host_workspace_t* host      = (wps_host_workspace_t*) workspace->wps_host_workspace;
-    wwd_interface_t       interface;
     wps_result_t          wps_result;
+    uint32_t              bss_index;
 
     workspace->wps_result = WPS_IN_PROGRESS;
-    if ( ( workspace->is_p2p_enrollee == 1 ) || ( workspace->is_p2p_registrar == 1 ) )
-    {
-        interface = WWD_P2P_INTERFACE;
-    }
-    else
-    {
-        interface = WWD_STA_INTERFACE;
-    }
 
     /* Now that our queue is initialized we can flag the workspace as active */
     IF_TO_WORKSPACE( workspace->interface ) = workspace;
+    bss_index = wwd_get_bss_index( workspace->interface );
 
     wps_prepare_workspace_crypto( workspace );
 
@@ -472,21 +466,24 @@ void wiced_wps_thread_main( uint32_t arg )
         {
             /* Allow clients to connect to AP using Open authentication for WPS handshake */
             wiced_buffer_t buffer;
-            uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+            uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WSEC );
             if (data == NULL)
             {
                 wiced_assert("Allocation failed\n", 0 == 1);
                 return;
             }
-            BESL_WRITE_32( &data[ 0 ], workspace->interface );
+            BESL_WRITE_32( &data[ 0 ], bss_index );
             BESL_WRITE_32( &data[ 1 ], ( host->stuff.registrar.ap_details->security | SES_OW_ENABLED ) );
-            wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
+            if ( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+            {
+                workspace->wps_result = WPS_ERROR_UNABLE_TO_SET_WLAN_SECURITY;
+            }
         }
     }
     else
     {
         WPS_INFO(("Starting WPS Enrollee\n"));
-        wps_enrollee_start( workspace, interface );
+        wps_enrollee_start( workspace, workspace->interface );
     }
 
     while ( workspace->wps_result == WPS_IN_PROGRESS )
@@ -547,7 +544,7 @@ void wiced_wps_thread_main( uint32_t arg )
                 besl_host_leave( workspace->interface );
             }
 
-            wps_reset_workspace( workspace, interface );
+            wps_reset_workspace( workspace, workspace->interface );
         }
     }
 
@@ -589,15 +586,18 @@ void wiced_wps_thread_main( uint32_t arg )
         {
             /* Remove ability for clients to connect to AP using Open authentication */
             wiced_buffer_t buffer;
-            uint32_t*      data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+            uint32_t*      data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WSEC );
             if ( data == NULL )
             {
                 wiced_assert( "Allocation failed\n", 0 == 1 );
                 return;
             }
-            BESL_WRITE_32(&data[0], workspace->interface );
+            BESL_WRITE_32(&data[0], bss_index );
             BESL_WRITE_32(&data[1], ( host->stuff.registrar.ap_details->security ));
-            wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
+            if ( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+            {
+                WPS_INFO(( "WPS unable to set WLAN security\n" ));
+            }
         }
         /* Re-advertise WPS. The IEs are removed in wps_deinit_workspace() */
         wps_advertise_registrar( workspace, 0 );
@@ -662,7 +662,7 @@ void besl_wps_generate_pin( char* wps_pin_string )
     /* Generate a random number between 1 and 9999999 */
     while ( random == 0 )
     {
-        wwd_wifi_get_random( r, 4 );
+        wiced_crypto_get_random( r, 4 );
         random = (uint32_t)(r[0] * r[1]) % 9999999;
     }
 
@@ -1059,7 +1059,7 @@ static void* wps_softap_event_handler( const wwd_event_header_t* event_header, c
                 do
                 {
                     /* Scan result for vendor specific IE */
-                    tlv8 = tlv_find_tlv8( data, length, DOT11_MNG_VS_ID );
+                    tlv8 = tlv_find_tlv8( data, length, DOT11_IE_ID_VENDOR_SPECIFIC );
                     if ( tlv8 == NULL )
                     {
                         break;

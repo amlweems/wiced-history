@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 
+
 struct sflash_capabilities;
 
 
@@ -48,6 +49,15 @@ typedef /*@abstract@*/ /*@immutable@*/ struct
     sflash_write_allowed_t write_allowed;
 } sflash_handle_t;
 
+#define SFLASH_SHA256_HASH_SIZE             32
+#define SECURE_SECTOR_METADATA_SIZE         SFLASH_SHA256_HASH_SIZE
+#define SECURE_SECTOR_DATA_SIZE             ( SECURE_SECTOR_SIZE - SECURE_SECTOR_METADATA_SIZE )
+#define SECURE_SECTOR_SIZE                  4096 /* SECURE_SECTOR_DATA_SIZE + SECURE_SECTOR_METADATA_SIZE */
+#define SWAP( T, x, y )                     do { T temp = x; x = y; y = temp; } while ( 0 )
+#define ALIGN_TO_SECTOR_ADDRESS( x )        ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE )
+#define SECURE_SFLASH_METADATA_SIZE( x )    ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE )
+#define SECURE_SECTOR_ADDRESS( x )          ( ( ( ( ( x ) + ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE ) )
+#define OFFSET_WITHIN_SECURE_SECTOR( x )    ( ( x ) % SECURE_SECTOR_DATA_SIZE )
 
 /**
  *  Initializes a SPI Flash chip
@@ -96,6 +106,18 @@ int sflash_read         ( const sflash_handle_t* const handle, unsigned long dev
  */
 int sflash_write        ( const sflash_handle_t* const handle, unsigned long device_address,  /*@observer@*/ const void* const data_addr, unsigned int size );
 
+/**
+ *  Secure-Write data to a SPI Flash chip (Encrypt and Authenticate data sector by sector before being written)
+ *
+ * @param[in]  handle            Handle structure that was initialized with @ref init_sflash
+ * @param[in]  device_address    The location on the SPI flash where writing will start
+ * @param[in]  data_addr         Pointer to the buffer in memory that contains the data being written
+ * @param[in]  size              Number of bytes to write to the chip
+ *
+ * @return @ref wiced_result_t
+ */
+
+int sflash_write_secure ( const sflash_handle_t* const handle, unsigned long device_address,  /*@observer@*/ const void* const data_addr, unsigned int size );
 
 /**
  *  Erase the contents of a SPI Flash chip
@@ -118,6 +140,8 @@ int sflash_chip_erase   ( const sflash_handle_t* const handle );
 int sflash_sector_erase ( const sflash_handle_t* const handle, unsigned long device_address );
 
 
+int sflash_block_erase  ( const sflash_handle_t* const handle, unsigned long device_address );
+
 /**
  *  Erase one sector of a SPI Flash chip
  *
@@ -127,6 +151,25 @@ int sflash_sector_erase ( const sflash_handle_t* const handle, unsigned long dev
  * @return @ref wiced_result_t
  */
 int sflash_get_size     ( const sflash_handle_t* const handle, /*@out@*/ unsigned long* size );
+
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+int sflash_clear_flag_register( const sflash_handle_t* const handle);
+int sflash_read_flag_register( const sflash_handle_t* const handle, unsigned char* const dest_addr );
+#endif
+
+/**
+ *  Reads data from a SPI Flash chip, Decrypts/Authenticates the data read, returns error if
+ *  Authentication fails
+ *
+ * @param[in]  handle            Handle structure that was initialized with @ref init_sflash
+ * @param[in]  device_address    The location on the SPI flash where reading will start
+ * @param[out] data_addr         Destination buffer in memory that will receive the data
+ * @param[in]  size              Number of bytes to read from the chip
+ *
+ * @return @ref wiced_result_t
+ */
+
+int sflash_read_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size );
 
 
 #ifdef __cplusplus

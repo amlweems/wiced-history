@@ -391,7 +391,7 @@ struct wiced_event_header_struct
     uint32_t             auth_type;
     uint32_t             datalen;
     wiced_mac_t          addr;
-    wwd_interface_t      interface;
+    uint8_t              interface; /* Do not use wwd_interface_t here */
 };
 #pragma pack()
 

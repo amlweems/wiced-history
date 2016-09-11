@@ -11,7 +11,7 @@
 NAME := WWD_FreeRTOS_Interface_$(PLATFORM)
 
 GLOBAL_INCLUDES := . \
-                   ./$(PLATFORM_FULL)
+                   ./$(PLATFORM_DIRECTORY)
 
 $(NAME)_SOURCES := wwd_rtos.c
 

@@ -1,8 +1,15 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Required functions exported by the port-specific (os-dependent) driver
  * to common (os-independent) driver code.
  *
- * $Copyright Open Broadcom Corporation$
  * $Id: et_export.h 475115 2014-05-03 06:23:15Z sudhirbs $
  */
 

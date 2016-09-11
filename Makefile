@@ -166,7 +166,7 @@ include $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk
 
 build/$(CLEANED_BUILD_STRING)/config.mk: $(SOURCE_ROOT)Makefile $(MAKEFILES_PATH)/wiced_config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk $(WICED_SDK_MAKEFILES)
 	$(QUIET)$(ECHO) $(if $(WICED_SDK_MAKEFILES),Applying changes made to: $?,Making config file for first time)
-	$(QUIET)$(MAKE) -r $(SILENT) -f $(MAKEFILES_PATH)/wiced_config.mk $(DIR_BUILD_STRING)
+	$(QUIET)$(MAKE) -r $(SILENT) -f $(MAKEFILES_PATH)/wiced_config.mk $(CLEANED_BUILD_STRING)
 endif
 
 ifeq ($(IAR),1)
@@ -188,7 +188,7 @@ $(PASSDOWN_TARGETS):
 
 main_app: build/$(CLEANED_BUILD_STRING)/config.mk $(WICED_SDK_PRE_APP_BUILDS) $(MAKEFILES_PATH)/wiced_elf.mk
 	$(QUIET)$(COMMON_TOOLS_PATH)mkdir -p $(OUTPUT_DIR)/binary $(OUTPUT_DIR)/modules $(OUTPUT_DIR)/libraries $(OUTPUT_DIR)/resources
-	$(QUIET)$(MAKE) -r $(JOBSNO) $(SILENT) -f $(MAKEFILES_PATH)/wiced_elf.mk $(DIR_BUILD_STRING) $(PASSDOWN_TARGETS)
+	$(QUIET)$(MAKE) -r $(JOBSNO) $(SILENT) -f $(MAKEFILES_PATH)/wiced_elf.mk $(CLEANED_BUILD_STRING) $(PASSDOWN_TARGETS)
 	$(QUIET)$(ECHO) Build complete
 
 ifeq ($(SUB_BUILD),)

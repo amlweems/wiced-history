@@ -20,8 +20,8 @@ ENTRY( _low_start );
 
 MEMORY
 {
-    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 4K /* Use half of 8K AON memory as hard limit for tiny bootloader */
-    RAM              (rwx)  : ORIGIN = 0x0069F000, LENGTH = 4K /* Using the ROM bootloader's Stack , High enough that APP would not overwrite*/
+    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 5K /* Use half of 8K AON memory as hard limit for tiny bootloader */
+    RAM              (rwx)  : ORIGIN = 0x00697000, LENGTH = 32K /* Uses the top 32K of SRAM */
 }
 
 SECTIONS
@@ -101,6 +101,15 @@ SECTIONS
 
         *(.data*)
     } > RAM AT > AONRAM
+
+    .dma (NOLOAD) : /* Zero initialised memory used DMA descriptors */
+    {
+        . = ALIGN(32);
+
+        link_dma_location = .;
+        *(.dma.*)
+        link_dma_end = ALIGN(4);
+    } > RAM
 
     .bss : /* Zero initialised memory used for zero initialised variables */
     {

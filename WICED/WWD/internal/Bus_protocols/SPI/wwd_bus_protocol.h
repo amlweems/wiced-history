@@ -12,6 +12,7 @@
 #define INCLUDED_SPI_WWD_BUS_PROTOCOL_H
 
 #include <stdint.h>
+#include "internal/wwd_thread_internal.h"
 
 #ifdef __cplusplus
 extern "C" {

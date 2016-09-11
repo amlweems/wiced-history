@@ -31,7 +31,11 @@
 #define F1_READY_TIMEOUT_LOOPS (1000)
 #define FEADBEAD_TIMEOUT_MS    (5000)
 #define ALP_AVAIL_TIMEOUT_MS   (100)
+
+#ifndef HT_AVAIL_TIMEOUT_MS
 #define HT_AVAIL_TIMEOUT_MS    (1000)
+#endif
+
 /* Taken from FALCON_5_90_195_26 dhd/sys/dhd_sdio.c. For 43362, MUST be >= 8 and word-aligned otherwise dongle fw crashes */
 #define SPI_F2_WATERMARK       (32)
 
@@ -140,6 +144,7 @@ static gspi_log_entry_t  gspi_log_data[GSPI_LOG_SIZE];
 
 static void add_log_entry( gspi_log_direction_t dir, wwd_bus_function_t function, uint32_t address, unsigned long length, char* gspi_data )
 {
+    UNUSED_PARAMETER(gspi_data);
     gspi_log_data[next_gspi_log_pos].direction = dir;
     gspi_log_data[next_gspi_log_pos].function = function;
     gspi_log_data[next_gspi_log_pos].address = address;
@@ -485,7 +490,7 @@ wwd_result_t wwd_bus_init( void )
         return WWD_TIMEOUT;
     }
 
-    bus_is_up = WICED_TRUE;
+    wwd_bus_ensure_is_up();
 
     return result;
 }
@@ -640,7 +645,7 @@ wwd_result_t wwd_bus_ensure_is_up( void )
         VERIFY_RESULT( wwd_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, &csr_reg_value ) );
         --attempts;
     }
-    while ( ( ( csr_reg_value & SBSDIO_HT_AVAIL_REQ ) == 0 ) && ( attempts != 0 ) && ( host_rtos_delay_milliseconds( 1 ), 1 == 1 ) );
+    while ( ( ( csr_reg_value & SBSDIO_HT_AVAIL ) == 0 ) && ( attempts != 0 ) && ( host_rtos_delay_milliseconds( 1 ), 1 == 1 ) );
 
     if ( attempts == 0 )
     {

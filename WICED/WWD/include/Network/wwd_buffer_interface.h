@@ -71,15 +71,14 @@ typedef struct
  * buffering scheme in use.
  * Some implementations of the packet buffer interface may need additional
  * information for initialization, especially the location of packet buffer
- * pool(s). These can be passed via the 'native_arg' parameter. The @ref wwd_management_init
- * function passes the value directly from it's parameters.
+ * pool(s). These can be passed via the 'native_arg' parameter.
  *
- * @param native_arg  An implementation specific argument passed from @ref wwd_management_init
+ * @param native_arg  An implementation specific argument
  *
  * @return WWD_SUCCESS = Success, Error code = Failure
  */
 
-extern wwd_result_t host_buffer_init( /*@null@*/ void* native_arg );
+extern wwd_result_t wwd_buffer_init( /*@null@*/ void* native_arg );
 
 /**
  * @brief Allocates a packet buffer

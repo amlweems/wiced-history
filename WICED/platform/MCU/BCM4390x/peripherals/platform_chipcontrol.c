@@ -15,15 +15,9 @@
  *                      Macros
  ******************************************************/
 
-#define GCI_INDIRECT_ADDR_REG                   (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x040))
-#define GCI_CHIP_CONTROL_REG                    (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x200))
-#define GCI_CHIP_STATUS_REG                     (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x204))
-
-#define PMU_INDIRECT_ADDR_REG                   (volatile uint32_t*)(PLATFORM_PMU_REGBASE(0x650))
-#define PMU_CHIP_CONTROL_REG                    (volatile uint32_t*)(PLATFORM_PMU_REGBASE(0x654))
-
-#define PMU_REGULATOR_CONTROL_INDIRECT_ADDR_REG (volatile uint32_t*)(PLATFORM_PMU_REGBASE(0x658))
-#define PMU_REGULATOR_CONTROL_REG               (volatile uint32_t*)(PLATFORM_PMU_REGBASE(0x65C))
+#define GCI_INDIRECT_ADDR_REG    (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x040))
+#define GCI_CHIP_CONTROL_REG     (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x200))
+#define GCI_CHIP_STATUS_REG      (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x204))
 
 /******************************************************
  *                    Constants
@@ -102,18 +96,36 @@ uint32_t platform_gci_chipcontrol(uint8_t reg_offset, uint32_t clear_mask, uint3
 uint32_t platform_gci_chipstatus(uint8_t reg_offset)
 {
     return platform_chipstatus(GCI_INDIRECT_ADDR_REG, GCI_CHIP_STATUS_REG,
-                                reg_offset);
+                               reg_offset);
 }
 
 uint32_t platform_pmu_chipcontrol(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
 {
-    return platform_chipcontrol(PMU_INDIRECT_ADDR_REG, PMU_CHIP_CONTROL_REG,
+    return platform_chipcontrol(&PLATFORM_PMU->chipcontrol_addr, &PLATFORM_PMU->chipcontrol_data,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_pmu_res_updown_time(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(&PLATFORM_PMU->res_table_sel, &PLATFORM_PMU->res_updn_timer,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_pmu_res_dep_mask(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(&PLATFORM_PMU->res_table_sel, &PLATFORM_PMU->res_dep_mask,
                                 reg_offset, clear_mask, set_mask);
 }
 
 uint32_t platform_pmu_regulatorcontrol(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
 {
-    return platform_chipcontrol(PMU_REGULATOR_CONTROL_INDIRECT_ADDR_REG, PMU_REGULATOR_CONTROL_REG,
+    return platform_chipcontrol(&PLATFORM_PMU->regcontrol_addr, &PLATFORM_PMU->regcontrol_data,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_pmu_pllcontrol(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(&PLATFORM_PMU->pllcontrol_addr, &PLATFORM_PMU->pllcontrol_data,
                                 reg_offset, clear_mask, set_mask);
 }
 

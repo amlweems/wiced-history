@@ -135,6 +135,13 @@ typedef struct
     uint8_t  sr;
 } mclk_lrclk_map_t;
 
+typedef struct
+{
+    uint8_t reg;
+    uint8_t value_h;
+    uint8_t value_l;
+} i2c_wm8533_payload_t;
+
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -183,148 +190,102 @@ static wiced_result_t wm8533_reg_read ( wm8533_device_data_t* wm8533, uint8_t re
 static wiced_result_t wm8533_configure ( void* driver_data, wiced_audio_config_t *config, uint32_t* mclk);
 static wiced_result_t wm8533_init      ( void* driver_data );
 static wiced_result_t wm8533_start_play( void* driver_data );
-static wiced_result_t wm8533_pause     ( void* driver_data );
-static wiced_result_t wm8533_resume    ( void* driver_data );
+static wiced_result_t wm8533_stop_play ( void* driver_data );
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-static wiced_result_t wm8533_i2c_reg_write(wiced_i2c_device_t *device, uint8_t reg, uint16_t value)
+static wiced_result_t wm8533_i2c_reg_write( wiced_i2c_device_t *device, uint8_t reg, uint16_t value )
 {
-    wiced_result_t result;
     static wiced_i2c_message_t msg[1];
-    struct i2c_wm8533_payload
-    {
-        uint8_t reg;
-        uint8_t value_h;
-        uint8_t value_l;
-    };
-    struct i2c_wm8533_payload payload;
+    i2c_wm8533_payload_t payload;
 
     payload.reg = reg;
     payload.value_h = ( (value & 0xFF00) >> 8 )  ;
     payload.value_l = ( value & 0x00FF );
 
-    result = wiced_i2c_init_tx_message(msg, &payload, 3, I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
-    if (WICED_SUCCESS == result)
-    {
-        result = wiced_i2c_transfer(device, msg, 1);
-    }
-    return result;
+    WICED_VERIFY( wiced_i2c_init_tx_message( msg, &payload, 3, I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY ) );
+
+   return wiced_i2c_transfer( device, msg, 1 );
 }
 
 #if 0
 static wiced_result_t wm8533_i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint16_t *value)
 {
-    wiced_result_t result;
     static wiced_i2c_message_t msg[1];
     uint8_t value_read[2];
-    result = wiced_i2c_init_combined_message(msg, &reg, value_read, sizeof(reg), sizeof(value_read), I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
-    if (WICED_SUCCESS == result)
-    {
-        result = wiced_i2c_transfer(device, msg, 1);
-        *value = ( value_read[0] << 8 ) + value_read[1];
-    }
-    return result;
+    WICED_VERIFY( wiced_i2c_init_combined_message( msg, &reg, value_read, sizeof(reg), sizeof(value_read), I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY ) );
+
+    WICED_VERIFY( wiced_i2c_transfer(device, msg, 1) );
+    *value = ( value_read[0] << 8 ) + value_read[1];
+
+    return WICED_SUCCESS;
 }
 #else
-static wiced_result_t wm8533_i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint16_t *value)
+static wiced_result_t wm8533_i2c_reg_read( wiced_i2c_device_t *device, uint8_t reg, uint16_t *value )
 {
-    wiced_result_t result;
     wiced_i2c_message_t msg[2];
     uint8_t value_read[2];
 
-    result = WICED_SUCCESS;
-
     /* Reset device's register counter by issuing a TX. */
-    if (WICED_SUCCESS == result)
-    {
-        result = wiced_i2c_init_tx_message(&msg[0], &reg, 1, I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
-    }
+    WICED_VERIFY( wiced_i2c_init_tx_message( &msg[0], &reg, 1, I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY ) );
 
     /* Initialize RX message. */
-    if (WICED_SUCCESS == result)
-    {
-        result = wiced_i2c_init_rx_message(&msg[1], value_read, sizeof(value_read), I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
-    }
+    WICED_VERIFY( wiced_i2c_init_rx_message( &msg[1], value_read, sizeof(value_read), I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY ) );
 
     /* Transfer. */
-    if (WICED_SUCCESS == result)
-    {
-        result = wiced_i2c_transfer(device, msg, 2);
-    }
+    WICED_VERIFY( wiced_i2c_transfer( device, msg, 2 ) );
 
     /* Swap bytes. */
-    if (WICED_SUCCESS == result)
-    {
-        *value = ( value_read[0] << 8 ) + value_read[1];
-    }
+    *value = ( value_read[0] << 8 ) + value_read[1];
 
-    return result;
+    return WICED_SUCCESS;
 }
 #endif
 
 static wiced_result_t wm8533_init ( void* driver_data )
 {
     wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )driver_data;
-    wiced_result_t result;
+    uint16_t psctrl_value;
 
     /* Enable I2C clocks, init I2C peripheral. */
-    result = wiced_i2c_init(wm8533->i2c_data);
+    WICED_VERIFY( wiced_i2c_init( wm8533->i2c_data ) );
 
     /* Initialize GPIOs. */
-    if (WICED_SUCCESS == result)
-    {
-        if( wm8533->cifmode != WICED_GPIO_MAX )
-        {
-//            result = wiced_gpio_init(wm8533->cifmode, OUTPUT_PUSH_PULL);
-        }
-    }
-    if (WICED_SUCCESS == result)
-    {
-        if( wm8533->addr0 != WICED_GPIO_MAX )
-        {
-//            result = wiced_gpio_init(wm8533->addr0, OUTPUT_PUSH_PULL);
-        }
-    }
+//    if( wm8533->cifmode != WICED_GPIO_MAX )
+//    {
+//        WICED_VERIFY( wiced_gpio_init( wm8533->cifmode, OUTPUT_PUSH_PULL ) );
+//    }
+//    if( wm8533->addr0 != WICED_GPIO_MAX )
+//    {
+//        WICED_VERIFY( wiced_gpio_init( wm8533->addr0, OUTPUT_PUSH_PULL ) );
+//    }
 
     /* Configure DAC's control interface to I2C. */
-    if (WICED_SUCCESS == result)
-    {
-        if( wm8533->cifmode != WICED_GPIO_MAX )
-        {
-//            result = wiced_gpio_output_low(wm8533->cifmode);
-        }
-    }
+//    if( wm8533->cifmode != WICED_GPIO_MAX )
+//    {
+//        WICED_VERIFY( wiced_gpio_output_low( wm8533->cifmode ) );
+//    }
 
-        /* Configure DAC's I2C address to 0x1A (0011010b) */
-    if (WICED_SUCCESS == result)
-    {
-        if( wm8533->addr0 != WICED_GPIO_MAX )
-        {
-//            result = wiced_gpio_output_low(wm8533->addr0);
-        }
-    }
-    if (WICED_SUCCESS == result)
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_DOWN << SYS_ENA_FIELD_SHIFT );
-        /* first stage, all analog block and digital signal blocks are powered off */
-        /* the control interface is turned on only */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
+    /* Configure DAC's I2C address to 0x1A (0011010b) */
+//    if( wm8533->addr0 != WICED_GPIO_MAX )
+//    {
+//        WICED_VERIFY( wiced_gpio_output_low( wm8533->addr0 ) );
+//    }
+
+
+    psctrl_value = ( SYS_ENA_POWER_DOWN << SYS_ENA_FIELD_SHIFT );
+    /* first stage, all analog block and digital signal blocks are powered off */
+    /* the control interface is turned on only */
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_PSCTRL1, psctrl_value ) );
 
     /* Reset CODEC registers. */
     /* When running as I2S master, registers don't appear to get
      * set correctly when the CODEC is being configured (seen when moving between
      * 44.1kHz to 48kHz FS).
      */
-    if( WICED_SUCCESS == result )
-    {
-        result = wm8533_reg_write(wm8533, WM8533_REG_CHIP_ID, 0 );
-    }
+    WICED_VERIFY( wm8533_reg_write(wm8533, WM8533_REG_CHIP_ID, 0 ) );
 
     /* set the format to I2S */
     //if( WICED_SUCCESS == result )
@@ -335,63 +296,35 @@ static wiced_result_t wm8533_init ( void* driver_data )
     /* set volume to approximately 8 db = 1b0, to both channels */
     /* where 190h is 0 db, and every 0.25db step is adding extra 1 */
     /* update immediately */
-    if( WICED_SUCCESS == result )
-        /* (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x1B0 << DIGITAL_VOLUME_DB_VALUE ) */
-        result = wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINL, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x190 /*0x1B0*/ << DIGITAL_VOLUME_DB_VALUE ) );
+    /* (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x1B0 << DIGITAL_VOLUME_DB_VALUE ) */
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_DAC_GAINL, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x190 /*0x1B0*/ << DIGITAL_VOLUME_DB_VALUE ) ) );
 
-    if( WICED_SUCCESS == result )
-        result = wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINR, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x190 /*0x1B0*/ << DIGITAL_VOLUME_DB_VALUE ) );
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_DAC_GAINR, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( 0x190 /*0x1B0*/ << DIGITAL_VOLUME_DB_VALUE ) ) );
 
     /* enable RAMP volume increase and decrease */
-    if( WICED_SUCCESS == result )
-        result = wm8533_reg_write(wm8533, WM8533_REG_DAC_CTRL3, (1 << VOLUME_DOWN_RAMP_FIELD) | ( 1 << VOLUME_UP_RAMP_FIELD_SHIFT ) );
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_DAC_CTRL3, (1 << VOLUME_DOWN_RAMP_FIELD) | ( 1 << VOLUME_UP_RAMP_FIELD_SHIFT ) ) );
 
     /* use zero cross */
-    if( WICED_SUCCESS == result )
-        result = wm8533_reg_write(wm8533, WM8533_REG_DAC_CTRL3, (1 << DAC_ZERO_CROSS_FIELD_SHIFT ) );
+    WICED_VERIFY( wm8533_reg_write(wm8533, WM8533_REG_DAC_CTRL3, (1 << DAC_ZERO_CROSS_FIELD_SHIFT ) ) );
 
     /* Set codec to power up mode with soft mute on */
-    if( WICED_SUCCESS == result )
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_UP_WITH_MUTE << SYS_ENA_FIELD_SHIFT );
-        /* Second stage of powering the device up, SYS_ENA= 0x02 */
-        /* all blocks are enabled, the digital soft mute (100 db attenuation) is turned on */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
+    psctrl_value = ( SYS_ENA_POWER_UP_WITH_MUTE << SYS_ENA_FIELD_SHIFT );
+
+    /* Second stage of powering the device up, SYS_ENA= 0x02 */
+    /* all blocks are enabled, the digital soft mute (100 db attenuation) is turned on */
+    WICED_VERIFY( wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value) );
 
     /* Set codec to power up mode */
-    if( WICED_SUCCESS == result )
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_UP << SYS_ENA_FIELD_SHIFT );
-        /* Third stage of powering the device up, SYS_ENA= 0x03 */
-        /* digital soft mute (100 db attenuation) is released, the device blocks are all powered up */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
-
-    if( WICED_SUCCESS == result )
-    {
-        uint16_t chip_id;
-        uint16_t rev_id;
-        result = wm8533_reg_read( wm8533, WM8533_REG_CHIP_ID, &chip_id );
-        if (WICED_SUCCESS == result)
-            result = wm8533_reg_read( wm8533, WM8533_REG_CHIP_ID, &rev_id );
-#ifdef NOTYET
-        if (WICED_SUCCESS == result)
-            printf("Codec found %04X, %04X", chip_id, rev_id);
-#endif /* NOTYET */
-    }
-    return result;
+    psctrl_value = ( SYS_ENA_POWER_UP << SYS_ENA_FIELD_SHIFT );
+    /* Third stage of powering the device up, SYS_ENA= 0x03 */
+    /* digital soft mute (100 db attenuation) is released, the device blocks are all powered up */
+    return wm8533_reg_write( wm8533, WM8533_REG_PSCTRL1, psctrl_value );
 }
 
 /* This function can only be called from the platform initialization routine */
 wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const char* name )
 {
-    wiced_result_t result;
-    if( device_data == 0 )
+    if( device_data == NULL )
     {
         return WICED_BADARG;
     }
@@ -399,118 +332,104 @@ wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const 
     wm8533_interface.name = name;
 
     /* Register a device to the audio device list and keep device data internally from this point */
-    result = wiced_register_audio_device(name, &wm8533_interface);
-    if( result != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
+    return wiced_register_audio_device(name, &wm8533_interface);
 }
 
 wiced_result_t wm8533_configure( void *driver_data, wiced_audio_config_t *config, uint32_t* mclk)
 {
     wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )driver_data;
-    wiced_result_t result;
-    uint16_t ctrl1, ctrl2;
-    size_t i;
-    wiced_bool_t mclk_is_found= WICED_FALSE;
-    uint mclk_lrck_ratio = 0;
-
-    result = WICED_SUCCESS;
+    wiced_result_t        result;
+    uint16_t              ctrl1;
+    uint16_t              ctrl2;
+    size_t                i;
+    wiced_bool_t          mclk_is_found = WICED_FALSE;
+    uint                  mclk_lrck_ratio = 0;
+    uint16_t              psctrl_value;
 
     /*
      * Configure platform.
      */
 
-    if (WICED_SUCCESS == result)
+    if( *mclk == 0 )
     {
-        if( *mclk == 0 )
+        switch (wm8533->fmt & WM8533_FMT_MASTER_MASK)
         {
-            switch (wm8533->fmt & WM8533_FMT_MASTER_MASK)
-            {
-                case WM8533_FMT_CCS_CFM:
-                    /* Codec is a master and generates i2s bit and lr clocks */
-                    /* Codec can be a master only when an external clock source is connected to it */
-                    /* Find a configuration that agrees with the platform. */
-                    for (i=0; i<sizeof(mclk_lrclk_map)/sizeof(mclk_lrclk_map[0]); i++)
+            case WM8533_FMT_CCS_CFM:
+                /* Codec is a master and generates i2s bit and lr clocks */
+                /* Codec can be a master only when an external clock source is connected to it */
+                /* Find a configuration that agrees with the platform. */
+                for (i=0; i<sizeof(mclk_lrclk_map)/sizeof(mclk_lrclk_map[0]); i++)
+                {
+                    if (mclk_lrclk_map[i].fs == config->sample_rate)
                     {
-                        if (mclk_lrclk_map[i].fs == config->sample_rate)
+                        /* Keep trying until the platform selects a valid configuration. */
+                        result = wm8533_platform_configure(wm8533, mclk_lrclk_map[i].mclk, mclk_lrclk_map[i].fs, config->bits_per_sample);
+                        if ( result == WICED_SUCCESS )
                         {
-                            /* Keep trying until the platform selects a valid configuration. */
-                            result = wm8533_platform_configure(wm8533, mclk_lrclk_map[i].mclk, mclk_lrclk_map[i].fs, config->bits_per_sample);
-                            if (WICED_SUCCESS == result)
-                            {
-                                mclk_lrck_ratio = mclk_lrclk_map[i].sr;
-                                mclk_is_found = WICED_TRUE;
-                                break;
-                            }
+                            mclk_lrck_ratio = mclk_lrclk_map[i].sr;
+                            mclk_is_found = WICED_TRUE;
+                            break;
                         }
                     }
-                    if( mclk_is_found == WICED_FALSE )
-                    {
-                        return WICED_ERROR;
-                    }
-                    break;
-
-                case WM8533_FMT_CCS_CFS:
-                    /* codec is a frame slave, I2S pll has been setup already  */
-
-                    break;
-                default:
-                    /* Everything else is unsupported. */
-                    result = WICED_UNSUPPORTED;
-            }
-        }
-        else
-        {
-            for (i=0; i<sizeof(mclk_lrclk_map)/sizeof(mclk_lrclk_map[0]); i++)
-            {
-                if (mclk_lrclk_map[i].mclk == *mclk)
-                {
-                    mclk_lrck_ratio = mclk_lrclk_map[i].sr;
-                    break;
                 }
+                if( mclk_is_found == WICED_FALSE )
+                {
+                    return WICED_ERROR;
+                }
+                break;
+
+            case WM8533_FMT_CCS_CFS:
+                /* codec is a frame slave, I2S pll has been setup already  */
+
+                break;
+            default:
+                /* Everything else is unsupported. */
+                return WICED_UNSUPPORTED;
+        }
+    }
+    else
+    {
+        result = WICED_UNSUPPORTED;
+        for (i=0; i<sizeof(mclk_lrclk_map)/sizeof(mclk_lrclk_map[0]); i++)
+        {
+            if ( (mclk_lrclk_map[i].mclk == *mclk) && (config->sample_rate == mclk_lrclk_map[i].fs) )
+            {
+                result = WICED_SUCCESS;
+                mclk_lrck_ratio = mclk_lrclk_map[i].sr;
+                break;
             }
         }
     }
+
     /*
      * Configure CODEC.
      */
 
     /* Read AIF_CTRL1. */
-    if (WICED_SUCCESS == result)
-        result = wm8533_reg_read(wm8533, WM8533_REG_AIF_CTRL1, &ctrl1);
+    WICED_VERIFY( wm8533_reg_read( wm8533, WM8533_REG_AIF_CTRL1, &ctrl1 ) );
+
     /* Read AIF_CTRL2. */
-    if (WICED_SUCCESS == result)
-        result = wm8533_reg_read(wm8533, WM8533_REG_AIF_CTRL2, &ctrl2);
+    WICED_VERIFY( wm8533_reg_read( wm8533, WM8533_REG_AIF_CTRL2, &ctrl2 ) );
 
     /* Reset AIF_CTRL1. */
     ctrl1 &= ~(
-    /* Audio data interface format. */
-        AIF_FMT_BITS << AIF_FMT_SHIFT |
-    /* Master/slave select. */
-        AIF_MSTR_BITS << AIF_MSTR_SHIFT |
-    /* Audio data word length. */
-        AIF_WL_BITS << AIF_WL_SHIFT
-    );
+                  AIF_FMT_BITS << AIF_FMT_SHIFT   |  /* Audio data interface format. */
+                  AIF_MSTR_BITS << AIF_MSTR_SHIFT |  /* Master/slave select. */
+                  AIF_WL_BITS << AIF_WL_SHIFT        /* Audio data word length. */
+              );
 
     /* Reset AIF_CTRL2. */
     ctrl2 &= ~(
-    /* Sample rate; MCLK:LRCLK ratio. */
-        AIF_SR_BITS << AIF_SR_SHIFT |
-    /* Bit clock divider. */
-        AIF_BCLKDIV_BITS << AIF_BCLKDIV_SHIFT
-    );
+                  AIF_SR_BITS << AIF_SR_SHIFT           | /* Sample rate; MCLK:LRCLK ratio. */
+                  AIF_BCLKDIV_BITS << AIF_BCLKDIV_SHIFT   /* Bit clock divider. */
+              );
 
-    if (WICED_SUCCESS == result)
+    /* Audio data interface format. */
+    /* Must agree with I2S bus settings. */
+    ctrl1 |= CODEC_STANDARD << AIF_FMT_SHIFT;
+
+    switch ( wm8533->fmt & WM8533_FMT_MASTER_MASK )
     {
-        /* Audio data interface format. */
-        /* Must agree with I2S bus settings. */
-        ctrl1 |= CODEC_STANDARD << AIF_FMT_SHIFT;
-
-        switch (wm8533->fmt & WM8533_FMT_MASTER_MASK)
-        {
         case WM8533_FMT_CCS_CFM:
             /* CODEC is frame master. */
             ctrl1 |= AIF_MSTR_MASTER << AIF_MSTR_SHIFT;
@@ -524,75 +443,52 @@ wiced_result_t wm8533_configure( void *driver_data, wiced_audio_config_t *config
             break;
         default:
             /* Everything else is unsupported. */
-            result = WICED_UNSUPPORTED;
-        }
+            return WICED_UNSUPPORTED;
     }
-    if (WICED_SUCCESS == result)
+
+    /* XXX Dependent on STM32F4x settings (guessed per section 27.4.4 STM32F4 reference manual).
+     * FIXME Move me to platform!
+    */
+    switch ( config->bits_per_sample )
     {
-        /* XXX Dependent on STM32F4x settings (guessed per section 27.4.4 STM32F4 reference manual).
-         * FIXME Move me to platform!
-        */
-        switch (config->bits_per_sample)
-        {
         case 16:
-            ctrl1 |= AIF_WL_16_BITS << AIF_WL_SHIFT;
+            ctrl1 |= AIF_WL_16_BITS   << AIF_WL_SHIFT;
             ctrl2 |= AIF_BCLKDIV_32FS << AIF_BCLKDIV_SHIFT;
             break;
         case 24:
-            ctrl1 |= AIF_WL_24_BITS << AIF_WL_SHIFT;
+            ctrl1 |= AIF_WL_24_BITS   << AIF_WL_SHIFT;
             ctrl2 |= AIF_BCLKDIV_64FS << AIF_BCLKDIV_SHIFT;
             break;
         case 32:
-            ctrl1 |= AIF_WL_32_BITS << AIF_WL_SHIFT;
+            ctrl1 |= AIF_WL_32_BITS   << AIF_WL_SHIFT;
             ctrl2 |= AIF_BCLKDIV_64FS << AIF_BCLKDIV_SHIFT;
             break;
         default:
-            result = WICED_UNSUPPORTED;
-        }
+            return WICED_UNSUPPORTED;
     }
 
     /* Write AIF_CTRL1. */
-    if (WICED_SUCCESS == result)
-        result = wm8533_reg_write(wm8533, WM8533_REG_AIF_CTRL1, ctrl1);
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_AIF_CTRL1, ctrl1 ) );
+
     /* Write AIF_CTRL2. */
-    if (WICED_SUCCESS == result)
-        result = wm8533_reg_write(wm8533, WM8533_REG_AIF_CTRL2, ctrl2);
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_AIF_CTRL2, ctrl2 ) );
 
-    if (WICED_SUCCESS == result)
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_DOWN << SYS_ENA_FIELD_SHIFT );
-        /* first stage, all analog block and digital signal blocks are powered off */
-        /* the control interface is turned on only */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
-
+    psctrl_value = ( SYS_ENA_POWER_DOWN << SYS_ENA_FIELD_SHIFT );
+    /* first stage, all analog block and digital signal blocks are powered off */
+    /* the control interface is turned on only */
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_PSCTRL1, psctrl_value ) );
 
     /* Set codec to power up mode with soft mute on */
-    if( WICED_SUCCESS == result )
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_UP_WITH_MUTE << SYS_ENA_FIELD_SHIFT );
-        /* Second stage of powering the device up, SYS_ENA= 0x02 */
-        /* all blocks are enabled, the digital soft mute (100 db attenuation) is turned on */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
+    psctrl_value = ( SYS_ENA_POWER_UP_WITH_MUTE << SYS_ENA_FIELD_SHIFT );
+    /* Second stage of powering the device up, SYS_ENA= 0x02 */
+    /* all blocks are enabled, the digital soft mute (100 db attenuation) is turned on */
+    WICED_VERIFY( wm8533_reg_write( wm8533, WM8533_REG_PSCTRL1, psctrl_value ) );
 
     /* Set codec to power up mode */
-    if( WICED_SUCCESS == result )
-    {
-        uint16_t psctrl_value;
-        psctrl_value = 0;
-        psctrl_value = ( SYS_ENA_POWER_UP << SYS_ENA_FIELD_SHIFT );
-        /* Third stage of powering the device up, SYS_ENA= 0x03 */
-        /* digital soft mute (100 db attenuation) is released, the device blocks are all powered up */
-        result = wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
-    }
-
-
-    return result;
+    psctrl_value = ( SYS_ENA_POWER_UP << SYS_ENA_FIELD_SHIFT );
+    /* Third stage of powering the device up, SYS_ENA= 0x03 */
+    /* digital soft mute (100 db attenuation) is released, the device blocks are all powered up */
+    return wm8533_reg_write(wm8533, WM8533_REG_PSCTRL1, psctrl_value);
 }
 
 #ifdef NOTYET
@@ -639,15 +535,7 @@ wiced_result_t wm8533_start_play ( void* driver_data )
 }
 
 
-wiced_result_t wm8533_pause ( void* driver_data )
-{
-    wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )driver_data;
-    UNUSED_PARAMETER(wm8533);
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wm8533_resume ( void* driver_data )
+wiced_result_t wm8533_stop_play ( void* driver_data )
 {
     wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )driver_data;
     UNUSED_PARAMETER(wm8533);
@@ -658,7 +546,6 @@ wiced_result_t wm8533_resume ( void* driver_data )
 wiced_result_t wm8533_deinit ( void* driver_data )
 {
     wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )driver_data;
-    wiced_result_t result;
 
     /* XXX: assert for running state. */
 
@@ -666,23 +553,20 @@ wiced_result_t wm8533_deinit ( void* driver_data )
      * power-down sequence specified in the datasheet.
      */
 
-    result = WICED_SUCCESS;
-
     /* Reset CODEC to initial state. */
 //  result = wm8533_reset();
 
 #ifdef NOTYET
     /* Power off CODEC. */
-    if (WICED_SUCCESS == result)
-        result = wm8533_reg_write(0x02, 0x01);
+    WICED_VERIFY( wm8533_reg_write( 0x02, 0x01 ) );
 #endif /* NOTYET */
 
     /* Clean-up configuration if applicable. */
-    if (NULL != give_more_samples_callback)
+    if ( give_more_samples_callback != NULL )
     {
-        result = wiced_i2s_deinit(wm8533->data_port);
-        if (WICED_SUCCESS == result)
-            give_more_samples_callback=NULL;
+        WICED_VERIFY( wiced_i2s_deinit( wm8533->data_port ) );
+
+        give_more_samples_callback = NULL;
     }
 
     /* Don't deinitialize I2C since it might be used by other modules.
@@ -695,12 +579,12 @@ wiced_result_t wm8533_deinit ( void* driver_data )
 
 /* Set of Low level DAC access API, will be called from wiced_audio_device_param_set */
 
-static wiced_result_t wm8533_reg_write( wm8533_device_data_t* wm8533, uint8_t address, uint16_t reg_data )
+static inline wiced_result_t wm8533_reg_write( wm8533_device_data_t* wm8533, uint8_t address, uint16_t reg_data )
 {
     return wm8533_i2c_reg_write(wm8533->i2c_data, address, reg_data);
 }
 
-static wiced_result_t wm8533_reg_read(wm8533_device_data_t* wm8533, uint8_t address, uint16_t* reg_data)
+static inline wiced_result_t wm8533_reg_read(wm8533_device_data_t* wm8533, uint8_t address, uint16_t* reg_data)
 {
     return wm8533_i2c_reg_read(wm8533->i2c_data, address, reg_data);
 }
@@ -747,19 +631,17 @@ static wiced_result_t cs43l22_pcm_channel_volume(wm8533_device_data_t* wm8533, c
 
 static wiced_result_t wm8533_set_volume( void* driver_data, double decibels )
 {
-
-    int db_steps;
-    uint16_t gain_reg_value;
-    wiced_result_t result;
-
-    wm8533_device_data_t* wm8533= (wm8533_device_data_t*)driver_data;
+    int                   db_steps;
+    uint16_t              gain_reg_value;
+    wm8533_device_data_t* wm8533 = (wm8533_device_data_t*)driver_data;
 
     /* set to max level if the value is very high */
     if( decibels > MAX_WM8533_DB_LEVEL )
     {
         decibels = MAX_WM8533_DB_LEVEL;
       /* set to minimum possible if the level is to low */
-    } else if( decibels < MIN_WM8533_DB_LEVEL )
+    }
+    else if( decibels < MIN_WM8533_DB_LEVEL )
     {
         decibels = MIN_WM8533_DB_LEVEL;
     }
@@ -769,21 +651,20 @@ static wiced_result_t wm8533_set_volume( void* driver_data, double decibels )
     {
         db_steps = (int)( (decibels * (-1.0)) / GAIN_ADJUSTMENT_STEP );
         gain_reg_value = GAIN_REG_VALUE_ON_ZERO_DB - db_steps;
-    } else if( decibels == 0 )
+    }
+    else if( decibels == 0 )
     {
         gain_reg_value = GAIN_REG_VALUE_ON_ZERO_DB;
-    } else
+    }
+    else
     {
         db_steps = (int)( (decibels / GAIN_ADJUSTMENT_STEP) );
         gain_reg_value = GAIN_REG_VALUE_ON_ZERO_DB + db_steps;
     }
 
-    result = wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINL, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( gain_reg_value  << DIGITAL_VOLUME_DB_VALUE ) );
-    wiced_assert("Cant set volume on the dac's left channel", result == WICED_SUCCESS);
-    result = wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINR, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( gain_reg_value  << DIGITAL_VOLUME_DB_VALUE ) );
-    wiced_assert("Cant set volume on the dac's right channel",result == WICED_SUCCESS);
+    WICED_VERIFY( wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINL, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( gain_reg_value  << DIGITAL_VOLUME_DB_VALUE ) ) );
 
-    return result;
+    return wm8533_reg_write(wm8533, WM8533_REG_DAC_GAINR, (1 << DIGITAL_VOLUME_UPDATE_FIELD_SHIFT) | ( uint16_t )( gain_reg_value  << DIGITAL_VOLUME_DB_VALUE ) );
 }
 
 static wiced_result_t wm8533_get_volume_range( void* driver_data, double *min_volume_in_decibels, double *max_volume_in_decibels )
@@ -954,9 +835,8 @@ wiced_audio_device_interface_t wm8533_interface =
         .audio_device_init          = wm8533_init,
         .audio_device_deinit        = wm8533_deinit,
         .audio_device_configure     = wm8533_configure,
-        .audio_device_start_streaming          = wm8533_start_play,
-        .audio_device_pause         = wm8533_pause,
-        .audio_device_resume        = wm8533_resume,
+        .audio_device_start_streaming = wm8533_start_play,
+        .audio_device_stop_streaming = wm8533_stop_play,
         .audio_device_set_volume    = wm8533_set_volume,
         .audio_device_set_treble    = NULL,
         .audio_device_set_bass      = NULL,

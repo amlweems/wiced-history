@@ -42,6 +42,7 @@
 #define M2MDMA_CORE_REV         0
 #define CRYPTO_CORE_REV         0
 #define GCI_CORE_REV            4
+#define USB20H_CORE_REV         5
 
 typedef struct si_private
 {
@@ -124,6 +125,12 @@ static si_private_t core_info[] =
         .curwrap = NULL,
         .coreid  = GCI_CORE_ID,
         .corerev = GCI_CORE_REV,
+    },
+    {
+        .curmap  = (void*)PLATFORM_EHCI_REGBASE(0x0),
+        .curwrap = (void*)PLATFORM_USB20H_MASTER_WRAPPER_REGBASE(0x0),
+        .coreid  = USB20H_CORE_ID,
+        .corerev = USB20H_CORE_REV,
     },
     {
         .curmap  = NULL,

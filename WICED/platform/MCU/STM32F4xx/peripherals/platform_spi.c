@@ -79,6 +79,15 @@ static const platform_peripheral_clock_function_t spi_peripheral_clock_functions
     [0] = RCC_APB2PeriphClockCmd,
     [1] = RCC_APB1PeriphClockCmd,
     [2] = RCC_APB1PeriphClockCmd,
+#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [3] = RCC_APB2PeriphClockCmd,
+#endif
+#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [4] = RCC_APB2PeriphClockCmd,
+#endif
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [5] = RCC_APB2PeriphClockCmd,
+#endif
 };
 
 /* SPI peripheral clocks */
@@ -87,6 +96,15 @@ static const uint32_t spi_peripheral_clocks[NUMBER_OF_SPI_PORTS] =
     [0] = RCC_APB2Periph_SPI1,
     [1] = RCC_APB1Periph_SPI2,
     [2] = RCC_APB1Periph_SPI3,
+#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [3] = RCC_APB2Periph_SPI4,
+#endif
+#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [4] = RCC_APB2Periph_SPI5,
+#endif
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [5] = RCC_APB2Periph_SPI6,
+#endif
 };
 
 /******************************************************
@@ -341,11 +359,15 @@ static platform_result_t calculate_prescaler( uint32_t speed, uint16_t* prescale
 {
     uint8_t i;
 
+    RCC_ClocksTypeDef rcc_clock_frequencies;
+
     wiced_assert("Bad args", prescaler != NULL);
+
+    RCC_GetClocksFreq( &rcc_clock_frequencies );
 
     for( i = 0 ; i < MAX_NUM_SPI_PRESCALERS ; i++ )
     {
-        if( ( 60000000 / spi_baudrate_prescalers[i].factor ) <= speed )
+        if( ( rcc_clock_frequencies.PCLK2_Frequency / spi_baudrate_prescalers[i].factor ) <= speed )
         {
             *prescaler = spi_baudrate_prescalers[i].prescaler_value;
             return PLATFORM_SUCCESS;

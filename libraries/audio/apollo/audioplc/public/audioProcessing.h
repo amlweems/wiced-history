@@ -8,6 +8,7 @@
  * written permission of Broadcom Corporation.
  */
 /* $Id: audioProcessing.h 1.5 2011/03/22 21:39:06 rzopf Exp $ */
+
 /* $Log: audioProcessing.h $
  * Revision 1.5  2011/03/22 21:39:06  rzopf
  * code cleanup.
@@ -26,6 +27,7 @@
  *
  * */
 
+/* Copyright 2011 Broadcom Corporation.  All Rights Reserved. */
 /* Author: Rob Zopf                                           */
 /* January 6, 2011                                            */
 
@@ -60,14 +62,11 @@ extern "C" {
  * Return   -
  *
  *************************************************************************************/
-void audioDecoding(void *CodecMemHandle, struct AUDIOPLC_STRUCT *aplc, int CodecType, short *indices, int FrameType, int frmsz,
-                   short *outbuf, int *aSrcUsed, int *aOutDstLen, int nChan);
+int audioDecoding( void* CodecMemHandle, struct AUDIOPLC_STRUCT* aplc, int CodecType, short* indices[], int FrameType, int frmsz,
+                   short* outbuf[], int* aSrcUsed, int* aOutDstLen, int nChan );
+
 
 #ifdef __cplusplus
-} /* extern "C" */
+}
 #endif
-
 #endif /* AUDIOPROCESSING_H */
-
-
-

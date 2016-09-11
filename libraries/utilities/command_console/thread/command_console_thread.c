@@ -213,10 +213,9 @@ int thread_kill( int argc, char* argv[] )
     int a = atoi(argv[1]);
     if (a >= 0 && a < MAX_SPAWNED_THREADS && spawned_threads[a] != NULL && spawned_threads[a]->thread_running == WICED_TRUE)
     {
-//        tx_thread_terminate(&spawned_threads[a]->thread_handle);
-//        spawned_threads[a]->thread_running = WICED_FALSE;
-//        printf("Thread %d has been terminated\r\n", a);
-        printf("Not supported\r\n");
+        wiced_rtos_delete_thread(&spawned_threads[a]->thread);
+        spawned_threads[a]->thread_running = WICED_FALSE;
+        printf("Thread %d has been terminated\r\n", a);
     }
     else
     {

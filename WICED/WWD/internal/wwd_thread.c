@@ -41,10 +41,6 @@
 #include "internal/wwd_internal.h"
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 
-#ifndef WWD_THREAD_POLL_TIMEOUT
-#define WWD_THREAD_POLL_TIMEOUT      (NEVER_TIMEOUT)
-#endif
-
 #ifdef RTOS_USE_STATIC_THREAD_STACK
 static uint8_t wwd_thread_stack[WWD_THREAD_STACK_SIZE];
 #define WWD_THREAD_STACK     wwd_thread_stack
@@ -62,7 +58,7 @@ static uint8_t wwd_thread_stack[WWD_THREAD_STACK_SIZE];
  ******************************************************/
 
 static volatile wiced_bool_t wwd_thread_quit_flag = WICED_FALSE;
-static wiced_bool_t          wwd_inited           = WICED_FALSE;
+static volatile wiced_bool_t wwd_inited           = WICED_FALSE;
 static host_thread_type_t    wwd_thread;
 static host_semaphore_type_t wwd_transceive_semaphore;
 static volatile wiced_bool_t wwd_bus_interrupt = WICED_FALSE;
@@ -120,7 +116,9 @@ wwd_result_t wwd_thread_init( void ) /*@globals undef wwd_thread, undef wwd_tran
         /*@+unreachable@*/
     }
 
+    /* Ready now. Indicate it here and in thread, whatever be executed first. */
     wwd_inited = WICED_TRUE;
+
     return WWD_SUCCESS;
 }
 
@@ -284,11 +282,13 @@ void wwd_thread_notify( void )
  */
 static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag, wwd_inited, wwd_thread@*/
 {
-    int8_t       rx_status;
-    int8_t       tx_status;
-    wwd_result_t result;
+    int8_t rx_status;
+    int8_t tx_status;
 
     UNUSED_PARAMETER(thread_input);
+
+    /* Interrupts may be enabled inside thread. To make sure none lost set flag now. */
+    wwd_inited = WICED_TRUE;
 
     while ( wwd_thread_quit_flag != WICED_TRUE )
     {
@@ -316,29 +316,8 @@ static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals kill
         }
         while (tx_status != 0);
 
-        /* Check if we have run out of bus credits */
-        if ( wWd_sdpcm_get_available_credits( ) == 0 )
-        {
-            /* Keep poking the WLAN until it gives us more credits */
-            result = wwd_bus_poke_wlan( );
-            wiced_assert( "Poking failed!", result == WWD_SUCCESS );
-            REFERENCE_DEBUG_ONLY_VARIABLE( result );
-
-            result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) 100, WICED_FALSE );
-        }
-        else
-        {
-            /* Put the bus to sleep and wait for something else to do */
-            if ( wwd_wlan_status.keep_wlan_awake == 0 )
-            {
-                result = wwd_bus_allow_wlan_bus_to_sleep( );
-                wiced_assert( "Error setting wlan sleep", result == WWD_SUCCESS );
-                REFERENCE_DEBUG_ONLY_VARIABLE( result );
-            }
-            result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) WWD_THREAD_POLL_TIMEOUT, WICED_FALSE );
-        }
-        REFERENCE_DEBUG_ONLY_VARIABLE(result);
-        wiced_assert("Could not get wwd sleep semaphore\n", (result == WWD_SUCCESS)||(result == WWD_TIMEOUT) );
+        /* Sleep till WLAN do something */
+        wwd_wait_for_wlan_event( &wwd_transceive_semaphore );
     }
 
     /* Reset the quit flag */

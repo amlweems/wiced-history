@@ -223,7 +223,7 @@ EXPORT_API extern void BTTRC_StackTrace6(tBTTRC_LAYER_ID layer_id,
 
 /* Enables or disables all trace messages. */
 #ifndef BT_USE_TRACES
-#define BT_USE_TRACES       TRUE
+#define BT_USE_TRACES       FALSE
 #endif
 
 /* Enables or disables protocol trace information. */

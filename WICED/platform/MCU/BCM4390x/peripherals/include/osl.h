@@ -1,7 +1,13 @@
 /*
- * OS Abstraction Layer
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * OS Abstraction Layer
  *
  * $Id: osl.h 459072 2014-02-28 20:11:12Z cabhinav $
  */

@@ -1,7 +1,13 @@
 /*
- * BCM common config options
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * BCM common config options
  *
  * $Id: bcm_cfg.h 351867 2012-08-21 18:46:16Z kadavath $
  */

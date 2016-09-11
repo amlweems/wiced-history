@@ -43,7 +43,7 @@ void __malloc_unlock(struct _reent *ptr);
  *             Variables
  ******************************************************/
 #ifdef __GNUC__
-static UINT malloc_mutex_inited = TX_FALSE;
+static UINT     malloc_mutex_inited = TX_FALSE;
 static TX_MUTEX malloc_mutex;
 #endif /* ifdef __GNUC__ */
 
@@ -355,7 +355,12 @@ void __malloc_lock(struct _reent *ptr)
     UNUSED_PARAMETER( ptr );
     if ( malloc_mutex_inited == TX_FALSE )
     {
-        tx_mutex_create( &malloc_mutex, (CHAR*) "malloc_mutex", TX_FALSE );
+        UINT status;
+        status = tx_mutex_create( &malloc_mutex, (CHAR*) "malloc_mutex", TX_FALSE );
+
+        wiced_assert( "Error creating mutex", status == TX_SUCCESS );
+        REFERENCE_DEBUG_ONLY_VARIABLE( status );
+
         malloc_mutex_inited = TX_TRUE;
     }
 

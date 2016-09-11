@@ -64,6 +64,10 @@ extern "C" {
 #define NET_TIMER_TICKS_PER_SEC         ((uint32_t) 160000000)
 #define NET_TIMER_NANOSECS_PER_TICK     ((float)ONE_BILLION/(float)NET_TIMER_TICKS_PER_SEC)
 
+#define ASCU_BITSEL_CONTROL_FSYNC_MASK  (0x3E000000)
+#define ASCU_BITSEL_CONTROL_FSYNC_SHIFT (25)
+#define ASCU_FSYNC_POWER_OF_TWO_FACTOR  (12)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -137,13 +141,16 @@ typedef struct ascu_register_s {
  *               Function Declarations
  ******************************************************/
 
-void platform_ascu_enable_interrupts(void);
+void platform_ascu_enable_interrupts(uint32_t int_mask);
 void platform_ascu_disable_interrupts(uint32_t int_mask);
 
 int platform_ascu_read_ntimer(uint32_t *secs, uint32_t *nanosecs);
 int platform_ascu_read_fw_ntimer(uint32_t *secs, uint32_t *nanosecs);
 wlc_avb_timestamp_t* platform_ascu_get_avb_ts(void);
 
-
-
+platform_result_t platform_ascu_get_audio_timer_resolution(uint32_t audio_sample_rate, uint32_t *ticks_per_sec);
+platform_result_t platform_ascu_set_frame_sync_period(uint32_t frame_count);
+platform_result_t platform_ascu_read_frame_sync_audio_timer(uint32_t *time_hi, uint32_t *time_lo);
+platform_result_t platform_ascu_read_fw_audio_timer(uint32_t *time_hi, uint32_t *time_lo);
+platform_result_t platform_ascu_read_fw_audio_talker_timer(uint32_t *time_hi, uint32_t *time_lo);
 

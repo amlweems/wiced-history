@@ -60,10 +60,13 @@ typedef struct wl_action_frame
 #define RWL_WIFI_OUI_BYTE2        0x4C
 #define RWL_WIFI_OUI_BYTE3        0x0F
 #define RWL_WIFI_ACTION_FRAME_SIZE    sizeof(struct dot11_action_wifi_vendor_specific)
+#ifndef RWL_WIFI_DEFAULT
 #define RWL_WIFI_DEFAULT                0x00
 #define RWL_WIFI_FIND_MY_PEER        0x09
 #define RWL_WIFI_FOUND_PEER        0x0A
 #define RWL_ACTION_WIFI_FRAG_TYPE    0x55
+#endif /* RWL_WIFI_DEFAULT */
+
 typedef struct ssid_info
 {
     uint8_t ssid_len;
@@ -618,14 +621,7 @@ typedef struct wlc_iov_trx_s
 } wlc_iov_trx_t;
 #endif
 
-#define IOVAR_STR_BSSCFG_WPA_AUTH        "bsscfg:wpa_auth"
-#define IOVAR_STR_BSSCFG_WSEC            "bsscfg:wsec"
-#define IOVAR_STR_BSSCFG_SSID            "bsscfg:ssid"
-#define IOVAR_STR_BSSCFG_EVENT_MSGS      "bsscfg:event_msgs"
-#define IOVAR_STR_BSSCFG_CUR_ETHERADDR   "bsscfg:cur_etheraddr"
-#define IOVAR_STR_BSSCFG_ACTFRAME        "bsscfg:actframe"
-#define IOVAR_STR_BSSCFG_ACTION_FRAME    "bsscfg:wifiaction"
-#define IOVAR_STR_BSSCFG_VENDOR_IE       "bsscfg:vndr_ie"
+#define IOVAR_STR_ACTFRAME               "actframe"
 #define IOVAR_STR_BSS                    "bss"
 #define IOVAR_STR_BSS_RATESET            "bss_rateset"
 #define IOVAR_STR_CSA                    "csa"
@@ -685,6 +681,11 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_MIMO_BW_CAP            "mimo_bw_cap"
 #define IOVAR_STR_RMC_ACKREQ             "rmc_ackreq"
 #define IOVAR_STR_HT40_INTOLERANCE       "intol40"
+#define IOVAR_STR_RAND                   "rand"
+#define IOVAR_STR_SSID                   "ssid"
+#define IOVAR_STR_WSEC                   "wsec"
+#define IOVAR_STR_WPA_AUTH               "wpa_auth"
+#define IOVAR_STR_INTERFACE_REMOVE       "interface_remove"
 
 #define WLC_IOCTL_MAGIC                    ( 0x14e46c77 )
 #define WLC_IOCTL_VERSION                  (          1 )
@@ -2727,13 +2728,15 @@ typedef  struct sta_prbreq_wps_ie_list
 #define EDCF_TXOP_MAX                65535       /* TXOP maximum value */
 #define EDCF_TXOP2USEC(txop)         ((txop) << 5)
 
+#ifndef EDCF_ACPARAM
+#define EDCF_ACPARAM
 struct edcf_acparam {
     uint8_t   ACI;
     uint8_t   ECW;
     uint16_t  TXOP;       /* stored in network order (ls octet first) */
 } ;
 typedef struct edcf_acparam edcf_acparam_t;
-
+#endif /* EDCF_ACPARAM */
 
 /* Stop packing structures */
 #pragma pack()

@@ -149,7 +149,8 @@ enum
  * This is used to define which channel the audiopcm should extract
  * from the multi channel payload PCM format.
  */
-enum {
+enum
+{
     APCM_CHANNEL_MAP_NONE  = 0,          /* None or undefined    */
     APCM_CHANNEL_MAP_FL    = (1 << 0),   /* Front Left           */
     APCM_CHANNEL_MAP_FR    = (1 << 1),   /* Front Right          */
@@ -405,42 +406,42 @@ int8_t audiopcm_set_alert_underflow_queue(int8_t *err,
 /** public set/get method: audiopcm_set_alert
  *  set the callback to raise for an internal system event (like underflow/overflow, missing component)
  */
-int8_t audiopcm_set_system_alert_CBACK(int8_t *err,
-                                       void *audiopcm,
-                                       void *player_app,
-                                       int8_t (*sys_alert_CBACK)(
-                                           int8_t *err,
+int8_t audiopcm_set_system_alert_callback( int8_t *err,
                                            void *audiopcm,
                                            void *player_app,
-                                           audiopcm_event_t *event,
-                                           void *event_data,
-                                           uint32_t event_data_size));
+                                           int8_t (*sys_alert_callback)(
+                                               int8_t *err,
+                                               void *audiopcm,
+                                               void *player_app,
+                                               audiopcm_event_t *event,
+                                               void *event_data,
+                                               uint32_t event_data_size));
 
 /** public set/get method: set_audio_event
  *  set the callback to raise an event for the AUDIO stream only (like format change, sample_cnt)
  */
-int8_t audiopcm_set_audio_alert_CBACK(int8_t *err,
-                                      void *audiopcm,
-                                      void *player_app,
-                                      int8_t (*audio_alert_CBACK)(
-                                          int8_t *err,
+int8_t audiopcm_set_audio_alert_callback( int8_t *err,
                                           void *audiopcm,
                                           void *player_app,
-                                          audiopcm_event_t *event,
-                                          void *event_data,
-                                          uint32_t event_data_size));
+                                          int8_t (*audio_alert_callback)(
+                                              int8_t *err,
+                                              void *audiopcm,
+                                              void *player_app,
+                                              audiopcm_event_t *event,
+                                              void *event_data,
+                                              uint32_t event_data_size ) );
 
-/** public set/get method: set_audiopcm_hearbeat_CBACK
+/** public set/get method: set_audiopcm_hearbeat_callback
  *  set the callback to request an heartbeat every (x) seconds
  */
-int8_t audiopcm_set_heartbeat_CBACK(int8_t *err,
-                                    void *audiopcm,
-                                    void *player_app,
-                                    uint32_t milliseconds,
-                                    int8_t (*heartbeat_CBACK)(
-                                        int8_t *err,
+int8_t audiopcm_set_heartbeat_callback( int8_t *err,
                                         void *audiopcm,
-                                        void *player_app));
+                                        void *player_app,
+                                        uint32_t milliseconds,
+                                        int8_t (*heartbeat_callback)(
+                                            int8_t *err,
+                                            void *audiopcm,
+                                            void *player_app ) );
 
 
 /* *********************************************** */
@@ -451,16 +452,16 @@ int8_t audiopcm_set_heartbeat_CBACK(int8_t *err,
  *  set the callback to let the audiopcm work in PULL(in) mode,
  *  the component interal input loop will ask the upper applifor a new buffer when needed
  */
-int8_t audiopcm_set_input_pull_CBACK(int8_t *err,
-                                     void *audiopcm,
-                                     int8_t (*audio_output_input_pull_CBACK)(
-                                         int8_t *err,
+int8_t audiopcm_set_input_pull_callback( int8_t *err,
                                          void *audiopcm,
-                                         void *player_app,
-                                         unsigned char **buf,
-                                         uint32_t *buf_size,
-                                         uint32_t *buf_id,
-                                         void **userdata));
+                                         int8_t (*audio_output_input_pull_callback)(
+                                             int8_t *err,
+                                             void *audiopcm,
+                                             void *player_app,
+                                             unsigned char **buf,
+                                             uint32_t *buf_size,
+                                             uint32_t *buf_id,
+                                             void **userdata ) );
 
 /* *********************************************** */
 /* DATA I/O: INPUT: PUSH(int) calls                */
@@ -473,16 +474,16 @@ int8_t audiopcm_set_input_pull_CBACK(int8_t *err,
  *  all the details on format and content will be derived by the Apollo audio header format
  *  of the RTP payload
  */
-uint32_t audiopcm_input_push_pkt(int8_t *err, void *audiopcm, uint64_t rtp_pkt_num,
-                                 char *buf, uint32_t buf_len, audiopcm_audio_info_t *audio_info);
+uint32_t audiopcm_input_push_pkt( int8_t *err, void *audiopcm, uint64_t rtp_pkt_num,
+                                  char *buf, uint32_t buf_len, audiopcm_audio_info_t *audio_info );
 
 /** audiopcm_input_push_pkt_zc: same as the above, but the application will reuest the packet
  *  from the internal audiopcm buffer queue directly, saving one memcpy stage.
  *
  *  Note: NOT implemented yet.
  */
-int8_t audiopcm_input_push_zc_begin(int8_t *err, void *audiopcm, audiopcm_rtp_t **audio_rtp_pkt);
-int8_t audiopcm_input_push_zc_end(int8_t *err, void *audiopcm, audiopcm_rtp_t *audio_rtp_pkt);
+int8_t audiopcm_input_push_zc_begin( int8_t *err, void *audiopcm, audiopcm_rtp_t **audio_rtp_pkt );
+int8_t audiopcm_input_push_zc_end  ( int8_t *err, void *audiopcm, audiopcm_rtp_t  *audio_rtp_pkt );
 
 
 
@@ -490,21 +491,21 @@ int8_t audiopcm_input_push_zc_end(int8_t *err, void *audiopcm, audiopcm_rtp_t *a
 /* DATA I/O: PUSH(out) callbacks                   */
 /* *********************************************** */
 
-/** audiopcm_set_output_push_CBACK
+/** audiopcm_set_output_push_callback
  *  callback for the output stage called once PCM samples are available from the output queue
  *  of the audiopcm component to be sent to the upper application
  */
-int8_t audiopcm_set_output_push_CBACK(int8_t *err,
-                                      void *audiopcm,
-                                      void *player_app,
-                                      int8_t (*audio_output_push_CBACK)(
-                                          int8_t *err,
+int8_t audiopcm_set_output_push_callback( int8_t *err,
                                           void *audiopcm,
                                           void *player_app,
-                                          unsigned char *buf,
-                                          uint32_t *buf_len,
-                                          uint32_t *buf_id,
-                                          audiopcm_audio_info_t *audio_info));
+                                          int8_t (*audio_output_push_callback)(
+                                              int8_t *err,
+                                              void *audiopcm,
+                                              void *player_app,
+                                              unsigned char *buf,
+                                              uint32_t *buf_len,
+                                              uint32_t *buf_id,
+                                              audiopcm_audio_info_t *audio_info));
 
 /** audiopcm_set_output_push_zc
  *  same as the above but the buffer is requested from the buffer pool of the application itself,
@@ -512,29 +513,29 @@ int8_t audiopcm_set_output_push_CBACK(int8_t *err,
  *
  *  Note: NOT implemented yet.
  */
-int8_t audiopcm_set_output_push_zc_begin_CBACK(int8_t *err,
-                                               void *audiopcm,
-                                               void *player_app,
-                                               int8_t (*audio_output_push_zc_init_CBACK)(
-                                                   int8_t *err,
+int8_t audiopcm_set_output_push_zc_begin_callback( int8_t *err,
                                                    void *audiopcm,
                                                    void *player_app,
-                                                   unsigned char **buf,
-                                                   uint32_t *buf_len,
-                                                   uint32_t *buf_id,
-                                                   audiopcm_audio_info_t *audio_info));
+                                                   int8_t (*audio_output_push_zc_init_callback)(
+                                                       int8_t *err,
+                                                       void *audiopcm,
+                                                       void *player_app,
+                                                       unsigned char **buf,
+                                                       uint32_t *buf_len,
+                                                       uint32_t *buf_id,
+                                                       audiopcm_audio_info_t *audio_info ) );
 
-int8_t audiopcm_set_output_push_zc_end_CBACK(int8_t *err,
-                                             void *audiopcm,
-                                             void *player_app,
-                                             int8_t (*audio_push_zc_complete_CBACK)(
-                                                 int8_t *err,
+int8_t audiopcm_set_output_push_zc_end_callback( int8_t *err,
                                                  void *audiopcm,
                                                  void *player_app,
-                                                 unsigned char *buf,
-                                                 uint32_t *buf_len,
-                                                 uint32_t *buf_id,
-                                                 audiopcm_audio_info_t *audio_info));
+                                                 int8_t (*audio_push_zc_complete_callback)(
+                                                     int8_t *err,
+                                                     void *audiopcm,
+                                                     void *player_app,
+                                                     unsigned char *buf,
+                                                     uint32_t *buf_len,
+                                                     uint32_t *buf_id,
+                                                     audiopcm_audio_info_t *audio_info ) );
 
 
 /* *********************************************** */
@@ -548,8 +549,8 @@ int8_t audiopcm_set_output_push_zc_end_CBACK(int8_t *err,
  *  Note: NOT implemented yet.
  */
 
-int8_t audiopcm_output_pull_pkt(int8_t *err, void *audiopcm,
-                                char *buf, uint32_t len, unsigned int flags);
+int8_t audiopcm_output_pull_pkt( int8_t *err, void *audiopcm,
+                                 char *buf, uint32_t len, unsigned int flags );
 
 
 

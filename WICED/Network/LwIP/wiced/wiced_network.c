@@ -138,7 +138,7 @@ extern void free_entry( int i );
 
 wiced_result_t wiced_network_init( void )
 {
-    xSemaphoreHandle lwip_done_sema;
+    SemaphoreHandle_t lwip_done_sema;
 
     /* Initialize the LwIP system.  */
     WPRINT_NETWORK_INFO(("Initialising LwIP " LwIP_VERSION "\n"));
@@ -201,7 +201,7 @@ wiced_result_t wiced_network_init( void )
 
 static void tcpip_init_done( void* arg )
 {
-    xSemaphoreHandle* LwIP_done_sema = (xSemaphoreHandle*) arg;
+    SemaphoreHandle_t* LwIP_done_sema = (SemaphoreHandle_t*) arg;
     xSemaphoreGive( *LwIP_done_sema );
 }
 

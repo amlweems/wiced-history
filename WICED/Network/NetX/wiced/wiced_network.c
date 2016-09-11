@@ -295,6 +295,11 @@ wiced_result_t wiced_network_init( void )
         WPRINT_NETWORK_ERROR(("Couldn't create RX packet pool\n"));
         return WICED_ERROR;
     }
+    if ( wwd_buffer_init( wiced_packet_pools ) != WWD_SUCCESS )
+    {
+        WPRINT_NETWORK_ERROR(("Could not initialize buffer interface\n"));
+        return WICED_ERROR;
+    }
 
     memset( &internal_dhcp_server, 0, sizeof( internal_dhcp_server ) );
     memset( wiced_ip_address_change_callbacks, 0, MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS * sizeof(wiced_ip_address_change_callback_t) );
@@ -894,34 +899,8 @@ static wiced_result_t dhcp_client_deinit( wiced_interface_t interface )
 
     nx_dhcp_stop( dhcp_handle );
 
-#ifdef NETX_DHCP_CLIENT_DOESNT_DELETE_PACKET_POOL
-    nx_dhcp_delete();
-#else
-    /* Check for AutoIP address.  */
-    if ( ( dhcp_handle->nx_dhcp_ip_address & NX_AUTO_IP_ADDRESS_MASK ) != NX_AUTO_IP_ADDRESS )
-    {
-        /* Clear the IP address and the subnet mask.   */
-        _nx_dhcp_ip_address_set( dhcp_handle, 0, 0 );
-
-        /* Clear the Gateway/Router IP address.  */
-        nx_ip_gateway_address_set( dhcp_handle->nx_dhcp_ip_ptr, 0 );
-    }
-
-    /* Terminate the DHCP processing thread.  */
-    tx_thread_terminate( &( dhcp_handle->nx_dhcp_thread ) );
-
-    /* Delete the DHCP processing thread.  */
-    tx_thread_delete( &( dhcp_handle->nx_dhcp_thread ) );
-
-    /* Delete the DHCP mutex.  */
-    tx_mutex_delete( &( dhcp_handle->nx_dhcp_mutex ) );
-
-    /* Delete the UDP socket.  */
-    nx_udp_socket_delete( &( dhcp_handle->nx_dhcp_socket ) );
-
-    /* Clear the dhcp structure ID. */
-    dhcp_handle->nx_dhcp_id = 0;
-#endif
+    /* The following function is called because NetX creates its own packet pool, unlike NetX Duo which makes use of an existing pool. */
+    nx_dhcp_delete( dhcp_handle );
 
     /* Clear the dhcp handle structure and name array */
     memset( dhcp_handle->nx_dhcp_name, 0x00, ( HOSTNAME_SIZE + 1 ) );

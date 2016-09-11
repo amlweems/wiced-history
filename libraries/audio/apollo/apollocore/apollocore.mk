@@ -20,6 +20,8 @@ else
 include $(CURDIR)apollocore_src.mk
 endif # ifneq ($(wildcard $(CURDIR)$(APOLLOCORE_LIBRARY_NAME)),)
 
+GLOBAL_DEFINES  += WWD_TEST_NVRAM_OVERRIDE
+
 GLOBAL_INCLUDES += .
 
 $(NAME)_CFLAGS :=

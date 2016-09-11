@@ -23,7 +23,7 @@
 #include "network/wwd_buffer_interface.h"
 #include "wiced_management.h"
 #include "dhcp_server.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "wiced.h"
 #include "wiced_security.h"
 #include "internal/wiced_internal_api.h"
@@ -32,6 +32,8 @@
 #include "certificate.h"
 #include "wiced_tls.h"
 #include "wiced_utilities.h"
+#include "wiced_supplicant.h"
+#include "wiced_tls.h"
 
 #ifdef COMMAND_CONSOLE_WPS_ENABLED
 #include "command_console_wps.h"
@@ -103,11 +105,11 @@ static wiced_tls_session_t tls_session = { 0 };
 
 int join( int argc, char* argv[] )
 {
-    char* ssid = argv[1];
+    char*            ssid = argv[1];
     wiced_security_t auth_type = str_to_authtype(argv[2]);
-    uint8_t* security_key;
-    uint8_t key_length;
-    uint8_t wep_key_buffer[64] = { 0 };
+    uint8_t*         security_key;
+    uint8_t          key_length;
+    uint8_t          wep_key_buffer[64] = { 0 };
 
     if (argc > 7)
     {
@@ -190,7 +192,8 @@ int join_ent( int argc, char* argv[] )
     supplicant_workspace_t supplicant_workspace;
     wiced_security_t auth_type;
     char eap_identity[] = "wifi-user@wifilabs.local";
-    wiced_tls_advanced_context_t context;
+    wiced_tls_context_t context;
+    wiced_tls_identity_t identity;
 
     if ( argc != 3 )
     {
@@ -204,8 +207,8 @@ int join_ent( int argc, char* argv[] )
         return ERR_CMD_OK;
     }
 
-
-    wiced_tls_init_advanced_context( &context, WIFI_USER_CERTIFICATE_STRING, WIFI_USER_PRIVATE_KEY_STRING );
+    wiced_tls_init_identity( &identity, WIFI_USER_PRIVATE_KEY_STRING, WIFI_USER_CERTIFICATE_STRING, (uint32_t)strlen( (char*)WIFI_USER_CERTIFICATE_STRING ) );
+    context.identity = &identity;
 
     if ( tls_session.length > 0 )
     {
@@ -235,8 +238,9 @@ int join_ent( int argc, char* argv[] )
         WPRINT_APP_INFO( ("Unable to initialize supplicant\n" ) );
     }
 
-    wiced_tls_deinit_context( (wiced_tls_simple_context_t*)&context );
+    wiced_tls_deinit_context( &context );
     wiced_tls_deinit_root_ca_certificates();
+    wiced_tls_deinit_identity( &identity );
 
     besl_supplicant_deinit( &supplicant_workspace );
 
@@ -328,10 +332,11 @@ int wifi_join(char* ssid, wiced_security_t auth_type, uint8_t* key, uint16_t key
 
 int join_specific( int argc, char* argv[] )
 {
-    char* ssid = argv[1];
+    char*            ssid = argv[1];
     wiced_security_t auth_type = str_to_authtype(argv[4]);
-    uint8_t* security_key;
-    uint8_t key_length;
+    uint8_t*         security_key;
+    uint8_t          key_length;
+    uint8_t          wep_key_buffer[64];
 
     if (argc > 9)
     {
@@ -352,7 +357,6 @@ int join_specific( int argc, char* argv[] )
     if ( auth_type == WICED_SECURITY_WEP_PSK )
     {
         int a;
-        uint8_t          wep_key_buffer[64];
         wiced_wep_key_t* temp_wep_key = (wiced_wep_key_t*)wep_key_buffer;
         char temp_string[3];
         temp_string[2] = 0;
@@ -527,7 +531,6 @@ int start_ap( int argc, char* argv[] )
     char* ssid = argv[1];
     wiced_security_t auth_type = str_to_authtype(argv[2]);
     char* security_key = argv[3];
-    char  temp_security_key[64];
     uint8_t channel = atoi(argv[4]);
     wiced_result_t result;
     uint8_t pmk[DOT11_PMK_LEN + 8]; /* PMK storage must be 40 octets in length for use in various functions */
@@ -588,21 +591,30 @@ int start_ap( int argc, char* argv[] )
     /* Modify config */
     if ( key_length < MAX_PASSPHRASE_LEN)
     {
+        char  temp_security_key[64];
+        memset( temp_security_key, 0, MAX_PASSPHRASE_LEN );
+
         if ( auth_type == WICED_SECURITY_WEP_PSK || auth_type == WICED_SECURITY_WEP_SHARED )
         {
 #ifdef WICED_WIFI_SOFT_AP_WEP_SUPPORT_ENABLED
             /* Format WEP security key */
             format_wep_keys( temp_security_key, security_key, &key_length, WEP_KEY_TYPE );
+#else
+            WPRINT_APP_INFO(( "Error: WEP is disabled\n" ));
+            return ERR_UNKNOWN;
 #endif
         }
         else
         {
             memset(pmk, 0, sizeof(pmk));
-            if ( besl_802_11_generate_pmk( security_key, (unsigned char *) ssid, strlen( ssid ), (unsigned char*) pmk ) == BESL_SUCCESS )
+            if ( besl_802_11_generate_pmk( security_key, (unsigned char *) ssid, strlen( ssid ), (unsigned char*) pmk ) != BESL_SUCCESS )
             {
-                key_length = MAX_PASSPHRASE_LEN;
-                besl_host_hex_bytes_to_chars( temp_security_key, pmk, DOT11_PMK_LEN );
+                WPRINT_APP_INFO(( "Error: Failed to generate pmk\n" ));
+                return ERR_UNKNOWN;
             }
+
+            key_length = MAX_PASSPHRASE_LEN;
+            besl_host_hex_bytes_to_chars( temp_security_key, pmk, DOT11_PMK_LEN );
         }
         dct_wifi_config->soft_ap_settings.security_key_length = key_length;
         memcpy( dct_wifi_config->soft_ap_settings.security_key, temp_security_key, MAX_PASSPHRASE_LEN );
@@ -845,7 +857,8 @@ int test_join( int argc, char* argv[] )
 {
     int i;
     int iterations;
-    uint32_t join_fails = 0, leave_fails = 0;
+    uint32_t join_fails = 0, leave_fails = 0, join_successes = 0;
+    wiced_time_t t1, t2, average_time = 0;
 
     if (  argc < 5 )
     {
@@ -856,9 +869,18 @@ int test_join( int argc, char* argv[] )
     for (i = 0; i < iterations; i++ )
     {
         WPRINT_APP_INFO(( "%d ", i));
+        wiced_time_get_time( &t1 );
         if ( join( argc-1, argv ) != ERR_CMD_OK)
         {
             ++join_fails;
+        }
+        else
+        {
+            wiced_time_get_time( &t2 );
+            t2 = t2 - t1;
+            WPRINT_APP_INFO( ( "Time for successful join = %u ms\n", (unsigned int)t2 ) );
+            average_time += t2;
+            join_successes++;
         }
         if ( leave( 0, NULL ) != ERR_CMD_OK )
         {
@@ -866,8 +888,9 @@ int test_join( int argc, char* argv[] )
         }
     }
 
-    WPRINT_APP_INFO(("Join failures: %u\n", (unsigned int)join_fails));
-    WPRINT_APP_INFO(("Leave failures: %u\n", (unsigned int)leave_fails));
+    WPRINT_APP_INFO(("Join failures:     %u\n", (unsigned int)join_fails));
+    WPRINT_APP_INFO(("Leave failures:    %u\n", (unsigned int)leave_fails));
+    WPRINT_APP_INFO(("Average join time: %u ms\n", (unsigned int)(average_time/join_successes)));
 
     return ERR_CMD_OK;
 }
@@ -1572,16 +1595,31 @@ int set_mcs_rate (int argc, char* argv[])
 int set_data_rate( int argc, char* argv[] )
 {
     wiced_buffer_t buffer;
-    uint32_t*          data;
+    uint32_t*      data;
+    wwd_result_t   result;
+    uint32_t       rate;
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bg_rate" );
     CHECK_IOCTL_BUFFER( data );
 
     /* Set data to 2 * <rate> as legacy rate unit is in 0.5Mbps */
-    *data = (uint32_t)(2 * atof( argv[1] ));
+    rate  = (uint32_t)(2 * atof( argv[1] ));
+    *data = rate;
 
-    if ( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    if ( ( result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != WWD_SUCCESS )
     {
+        if ( result == WWD_WLAN_UNSUPPORTED )
+        {
+            data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "2g_rate" );
+            CHECK_IOCTL_BUFFER( data );
+            *data = rate;
+            result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
+        }
+    }
+
+    if ( result != WWD_SUCCESS )
+    {
+        WPRINT_APP_INFO(("Unable to set rate %u\n", (unsigned int)result));
         return ERR_UNKNOWN;
     }
 
@@ -1592,17 +1630,32 @@ int get_data_rate( int argc, char* argv[] )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    uint32_t*          data;
+    uint32_t*      data;
+    wwd_result_t   result;
+
 
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bg_rate" );
     CHECK_IOCTL_BUFFER( data );
 
-    if ( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    if ( ( result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) ) != WWD_SUCCESS )
     {
+        if ( result == WWD_WLAN_UNSUPPORTED )
+        {
+            data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "2g_rate" );
+            CHECK_IOCTL_BUFFER( data );
+            result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
+        }
+    }
+
+    if ( result != WWD_SUCCESS )
+    {
+        printf("Unable to get data rate %u\n", (unsigned int)result);
         return ERR_UNKNOWN;
     }
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
+
+    *data &= 0x000000FF;
 
     /* 5.5 Mbps */
     if ( *data == 11 )
@@ -1621,14 +1674,14 @@ int get_data_rate( int argc, char* argv[] )
 
 /*!
  ******************************************************************************
- * Interface to the wwd_wifi_get_random() function. Prints result
+ * Interface to the wiced_crypto_get_random() function. Prints result
  *
  * @return  0 for success, otherwise error
  */
 int get_random( int argc, char* argv[] )
 {
     uint8_t random[64];
-    if ( wwd_wifi_get_random( random, 64 ) == WWD_SUCCESS )
+    if ( wiced_crypto_get_random( random, 64 ) == WICED_SUCCESS )
     {
         int a;
         WPRINT_APP_INFO(("Random data is 0x"));
@@ -1667,11 +1720,11 @@ int get_access_category_parameters_sta( int argc, char* argv[] )
 
 /*!
  ******************************************************************************
- * Read WLAN console buffer and dump wlan console log
+ * Read WLAN chip console buffer and output to host console
  *
  * @return  0 for success, otherwise error
  */
-int readconsole( int argc, char* argv[] )
+int read_wlan_chip_console_log( int argc, char* argv[] )
 {
     const unsigned buffer_size = 200;
     int result = ERR_UNKNOWN;
@@ -1690,6 +1743,73 @@ int readconsole( int argc, char* argv[] )
     free( buffer );
 
     return result;
+}
+
+/*!
+ ******************************************************************************
+ * Sets the preferred band for association. This is only useful for devices that support more than one band.
+ *
+ * @return  0 for success, otherwise error
+ */
+
+int set_preferred_association_band( int argc, char* argv[] )
+{
+    int32_t band = 0;
+
+    band = atoi( argv[1] );
+
+    if ( ( argc == 2 ) && ( band ) >= 0 && ( band <= WLC_BAND_2G ) )
+    {
+        if ( wwd_wifi_set_preferred_association_band( band ) != WWD_SUCCESS )
+        {
+            WPRINT_APP_INFO( ("Failed to set preferred band for association.\n") );
+        }
+    }
+    else
+    {
+        return ERR_UNKNOWN;
+    }
+
+    return ERR_CMD_OK;
+}
+
+/*!
+ ******************************************************************************
+ * Gets the preferred band for association.
+ *
+ * @return  0 for success, otherwise error
+ */
+
+int get_preferred_association_band( int argc, char* argv[] )
+{
+    int32_t                     band = 0;
+
+    if ( wwd_wifi_get_preferred_association_band( &band ) == WWD_SUCCESS )
+    {
+        switch ( band )
+        {
+            case WLC_BAND_AUTO:
+                WPRINT_APP_INFO( ("Preferred band for association is set to auto\n") );
+                break;
+
+            case WLC_BAND_5G:
+                WPRINT_APP_INFO( ("Preferred band for association is 5GHz\n") );
+                break;
+
+            case WLC_BAND_2G:
+                WPRINT_APP_INFO( ("Preferred band for association is 2.4GHz\n") );
+                break;
+
+            default:
+                WPRINT_APP_INFO( ("Preferred band for association is unknown\n") );
+        }
+    }
+    else
+    {
+        WPRINT_APP_INFO( ("Unable to read preferred band for association. It is not set by default so try setting it before reading it back.\n") );
+    }
+
+    return ERR_CMD_OK;
 }
 
 void dump_bytes(const uint8_t* bptr, uint32_t len)

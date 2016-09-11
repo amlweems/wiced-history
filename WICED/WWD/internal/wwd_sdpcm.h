@@ -67,16 +67,18 @@ wiced_bool_t swap = WICED_FALSE;
  *             Function declarations
  ******************************************************/
 
-extern /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_iovar_buffer      ( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length, const char* name )  /*@allocates *buffer@*/ /*@defines **buffer@*/;
-extern /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_ioctl_buffer      ( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length ) /*@allocates *buffer@*/  /*@defines **buffer@*/;
-extern wwd_result_t                   wwd_sdpcm_send_ioctl            ( sdpcm_command_type_t type, uint32_t command, wiced_buffer_t send_buffer_hnd, /*@null@*/ /*@out@*/ wiced_buffer_t* response_buffer_hnd, wwd_interface_t interface ) /*@releases send_buffer_hnd@*/ ;
-extern wwd_result_t                   wwd_sdpcm_send_iovar            ( sdpcm_command_type_t type, /*@only@*/ wiced_buffer_t send_buffer_hnd, /*@special@*/ /*@out@*/ /*@null@*/ wiced_buffer_t* response_buffer_hnd, wwd_interface_t interface )  /*@allocates *response_buffer_hnd@*/  /*@defines **response_buffer_hnd@*/;
-extern void                           wwd_sdpcm_process_rx_packet     ( /*@only@*/ wiced_buffer_t buffer );
-extern wwd_result_t                   wwd_sdpcm_init                  ( void );
-extern void                           wwd_sdpcm_quit                  ( void ) /*@modifies internalState@*/;
-extern wwd_result_t                   wwd_sdpcm_get_packet_to_send    ( /*@out@*/ wiced_buffer_t* buffer );
-extern void                           wwd_sdpcm_update_credit         ( uint8_t* data );
-extern uint8_t                        wWd_sdpcm_get_available_credits ( void );
+extern /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_iovar_buffer                    ( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length, const char* name )  /*@allocates *buffer@*/ /*@defines **buffer@*/;
+extern /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_ioctl_buffer                    ( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length ) /*@allocates *buffer@*/  /*@defines **buffer@*/;
+extern wwd_result_t                   wwd_sdpcm_send_ioctl                          ( sdpcm_command_type_t type, uint32_t command, wiced_buffer_t send_buffer_hnd, /*@null@*/ /*@out@*/ wiced_buffer_t* response_buffer_hnd, wwd_interface_t interface ) /*@releases send_buffer_hnd@*/ ;
+extern wwd_result_t                   wwd_sdpcm_send_iovar                          ( sdpcm_command_type_t type, /*@only@*/ wiced_buffer_t send_buffer_hnd, /*@special@*/ /*@out@*/ /*@null@*/ wiced_buffer_t* response_buffer_hnd, wwd_interface_t interface )  /*@allocates *response_buffer_hnd@*/  /*@defines **response_buffer_hnd@*/;
+extern void                           wwd_sdpcm_process_rx_packet                   ( /*@only@*/ wiced_buffer_t buffer );
+extern wwd_result_t                   wwd_sdpcm_init                                ( void );
+extern void                           wwd_sdpcm_quit                                ( void ) /*@modifies internalState@*/;
+extern wwd_result_t                   wwd_sdpcm_get_packet_to_send                  ( /*@out@*/ wiced_buffer_t* buffer );
+extern void                           wwd_sdpcm_update_credit                       ( uint8_t* data );
+extern uint8_t                        wwd_sdpcm_get_available_credits               ( void );
+extern void                           wwd_update_host_interface_to_bss_index_mapping( wwd_interface_t interface, uint32_t bssid_index );
+
 
 /******************************************************
  *             Global variables

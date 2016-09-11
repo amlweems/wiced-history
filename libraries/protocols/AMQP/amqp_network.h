@@ -54,7 +54,8 @@ typedef struct
         wiced_ip_address_t  server_ip_address;
         uint16_t            portnumber;
         void               *p_user;
-        wiced_tls_advanced_context_t tls_context;
+        wiced_tls_context_t tls_context;
+        wiced_tls_identity_t tls_identity;
 }wiced_amqp_socket_t;
 
 typedef struct wiced_amqp_buffer_s

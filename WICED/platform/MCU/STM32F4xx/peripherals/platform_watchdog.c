@@ -34,6 +34,7 @@
 #include "wwd_assert.h"
 #include "wwd_rtos.h"
 #include "wiced_defaults.h"
+#include "platform_config.h" /* For CPU_CLOCK_HZ */
 
 /******************************************************
  *                      Macros
@@ -45,7 +46,15 @@
 
 #define WATCHDOG_PRESCALER              (IWDG_Prescaler_256)
 #define WATCHDOG_TIMEOUT_MULTIPLIER     (184)
-#define DBG_WATCHDOG_TIMEOUT_MULTIPLIER (2250)
+
+#if (CPU_CLOCK_HZ == 120000000)
+    #define DBG_WATCHDOG_TIMEOUT_MULTIPLIER    (2250)
+#elif (CPU_CLOCK_HZ == 100000000)
+    #define DBG_WATCHDOG_TIMEOUT_MULTIPLIER    (1875)
+#elif !defined(DBG_WATCHDOG_TIMEOUT_MULTIPLIER)
+    #error DBG_WATCHDOG_TIMEOUT_MULTIPLIER must be manually defined for this platform
+#endif
+
 #define DBG_WATCHDOG_PRESCALER          (24000)
 
 #ifdef APPLICATION_WATCHDOG_TIMEOUT_SECONDS
@@ -58,6 +67,22 @@
 
 #if (defined(APPLICATION_WATCHDOG_TIMEOUT_SECONDS) && (APPLICATION_WATCHDOG_TIMEOUT_SECONDS > MAX_WATCHDOG_TIMEOUT_SECONDS))
 #error APPLICATION_WATCHDOG_TIMEOUT_SECONDS must NOT be larger than 22 seconds
+#endif
+
+/* It is possible to define the set of DBG_WATCHDOG_STM32_TIMER constants from outside this file
+ * By default we use TIM7 however on STM32F401 and STM32F411 platforms we use TIM4 */
+#ifndef DBG_WATCHDOG_STM32_TIMER
+#if !defined(STM32F401xx) && !defined(STM32F411xE)
+    #define DBG_WATCHDOG_STM32_TIMER               TIM7
+    #define DBG_WATCHDOG_STM32_TIMER_PERIPHERAL    RCC_APB1Periph_TIM7
+    #define DBG_WATCHDOG_STM32_TIMER_IRQN          TIM7_IRQn
+    #define DBG_WATCHDOG_STM32_TIMER_IRQ           TIM7_irq
+#else
+    #define DBG_WATCHDOG_STM32_TIMER               TIM4
+    #define DBG_WATCHDOG_STM32_TIMER_PERIPHERAL    RCC_APB1Periph_TIM4
+    #define DBG_WATCHDOG_STM32_TIMER_IRQN          TIM4_IRQn
+    #define DBG_WATCHDOG_STM32_TIMER_IRQ           TIM4_irq
+#endif
 #endif
 
 /******************************************************
@@ -165,8 +190,8 @@ static void init_dbg_watchdog( void )
 {
     TIM_TimeBaseInitTypeDef tim_time_base_init_struct;
 
-    RCC_APB1PeriphClockCmd( RCC_APB1Periph_TIM7, ENABLE  );
-    RCC_APB1PeriphResetCmd( RCC_APB1Periph_TIM7, DISABLE );
+    RCC_APB1PeriphClockCmd( DBG_WATCHDOG_STM32_TIMER_PERIPHERAL, ENABLE  );
+    RCC_APB1PeriphResetCmd( DBG_WATCHDOG_STM32_TIMER_PERIPHERAL, DISABLE );
 
     /* Set dbg_watchdog timeout to 90% of the actual watchdog timeout to ensure it break before the actual watchdog bites
      * Timeout calculation
@@ -175,38 +200,37 @@ static void init_dbg_watchdog( void )
      * - Timeout                    : ( 0.9 * 2.5ms * 1000 ) * timeout_in_seconds
      *                                DBG_WATCHDOG_TIMEOUT_MULTIPLIER =  ( 0.9 * 2.5ms * 1000 ) = 2250
      */
-
     tim_time_base_init_struct.TIM_Prescaler         = DBG_WATCHDOG_PRESCALER;
     tim_time_base_init_struct.TIM_CounterMode       = TIM_CounterMode_Up;
     tim_time_base_init_struct.TIM_Period            = DBG_WATCHDOG_TIMEOUT;
     tim_time_base_init_struct.TIM_ClockDivision     = TIM_CKD_DIV1;
     tim_time_base_init_struct.TIM_RepetitionCounter = 0;
-    TIM_TimeBaseInit( TIM7, &tim_time_base_init_struct );
+    TIM_TimeBaseInit( DBG_WATCHDOG_STM32_TIMER, &tim_time_base_init_struct );
 
-    TIM_ClearITPendingBit( TIM7, TIM_IT_Update );
-    TIM_ITConfig( TIM7, TIM_IT_Update, ENABLE );
+    TIM_ClearITPendingBit( DBG_WATCHDOG_STM32_TIMER, TIM_IT_Update );
+    TIM_ITConfig( DBG_WATCHDOG_STM32_TIMER, TIM_IT_Update, ENABLE );
 
-    TIM_UpdateRequestConfig( TIM7, TIM_UpdateSource_Regular );
+    TIM_UpdateRequestConfig( DBG_WATCHDOG_STM32_TIMER, TIM_UpdateSource_Regular );
 
-    NVIC_EnableIRQ( TIM7_IRQn );
+    NVIC_EnableIRQ( DBG_WATCHDOG_STM32_TIMER_IRQN );
 
-    TIM_Cmd( TIM7, ENABLE );
+    TIM_Cmd( DBG_WATCHDOG_STM32_TIMER, ENABLE );
 }
 
 static void reload_dbg_watchdog( void )
 {
     TIM_TimeBaseInitTypeDef tim_time_base_init_struct;
 
-    TIM_Cmd( TIM7, DISABLE );
+    TIM_Cmd( DBG_WATCHDOG_STM32_TIMER, DISABLE );
 
     tim_time_base_init_struct.TIM_Prescaler         = DBG_WATCHDOG_PRESCALER;
     tim_time_base_init_struct.TIM_CounterMode       = TIM_CounterMode_Up;
     tim_time_base_init_struct.TIM_Period            = DBG_WATCHDOG_TIMEOUT;
     tim_time_base_init_struct.TIM_ClockDivision     = TIM_CKD_DIV1;
     tim_time_base_init_struct.TIM_RepetitionCounter = 0;
-    TIM_TimeBaseInit( TIM7, &tim_time_base_init_struct );
+    TIM_TimeBaseInit( DBG_WATCHDOG_STM32_TIMER, &tim_time_base_init_struct );
 
-    TIM_Cmd( TIM7, ENABLE );
+    TIM_Cmd( DBG_WATCHDOG_STM32_TIMER, ENABLE );
 }
 #endif /* ifndef WICED_DISABLE_WATCHDOG */
 
@@ -221,7 +245,7 @@ PLATFORM_DEFINE_ISR( dbg_watchdog_irq )
      * the watchdog wasn't kicked.
      * Click "Resume" to continue and let the actual watchdog take effect.
      */
-    TIM7->SR = (uint16_t)~TIM_IT_Update;
+    DBG_WATCHDOG_STM32_TIMER->SR = (uint16_t)~TIM_IT_Update;
     WICED_TRIGGER_BREAKPOINT( );
 }
 
@@ -229,5 +253,5 @@ PLATFORM_DEFINE_ISR( dbg_watchdog_irq )
  *               IRQ Handlers Mapping
  ******************************************************/
 
-PLATFORM_MAP_ISR( dbg_watchdog_irq, TIM7_irq )
+PLATFORM_MAP_ISR( dbg_watchdog_irq, DBG_WATCHDOG_STM32_TIMER_IRQ )
 

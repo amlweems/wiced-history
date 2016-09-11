@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    misc.c
   * @author  MCD Application Team
-  * @version V1.0.2
-  * @date    05-March-2012
+  * @version V1.5.1
+  * @date    22-May-2015
   * @brief   This file provides all the miscellaneous firmware functions (add-on
   *          to CMSIS functions).
   *          
@@ -55,7 +55,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT 2012 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT 2015 STMicroelectronics</center></h2>
   *
   * Licensed under MCD-ST Liberty SW License Agreement V2, (the "License");
   * You may not use this file except in compliance with the License.
@@ -135,9 +135,8 @@ void NVIC_PriorityGroupConfig(uint32_t NVIC_PriorityGroup)
   */
 void NVIC_Init(NVIC_InitTypeDef* NVIC_InitStruct)
 {
-  /* WICED changes */
-  uint8_t tmppriority = 0x00;
-  //uint8_t tmppriority = 0x00, tmppre = 0x00, tmpsub = 0x0F;
+  uint8_t tmppriority = 0x00, tmppre = 0x00, tmpsub = 0x0F;
+  
   /* Check the parameters */
   assert_param(IS_FUNCTIONAL_STATE(NVIC_InitStruct->NVIC_IRQChannelCmd));
   assert_param(IS_NVIC_PREEMPTION_PRIORITY(NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority));  
@@ -145,20 +144,15 @@ void NVIC_Init(NVIC_InitTypeDef* NVIC_InitStruct)
     
   if (NVIC_InitStruct->NVIC_IRQChannelCmd != DISABLE)
   {
-    /* WICED changes */
-    uint8_t mask;
-    static const uint8_t mask_values[]= { 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F, 0xFF };
-
     /* Compute the Corresponding IRQ Priority --------------------------------*/    
-    /* WICED_CHANGES */
-    tmppriority = ( (SCB->AIRCR) & (uint32_t)0x700 ) >> 0x08;
-    mask = mask_values[tmppriority];
+    tmppriority = (0x700 - ((SCB->AIRCR) & (uint32_t)0x700))>> 0x08;
+    tmppre = (0x4 - tmppriority);
+    tmpsub = tmpsub >> tmppriority;
 
-    tmppriority = NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority << ( tmppriority + 1 );
-    /* clear all bits that are related to the sub-priority field */
-    tmppriority&= ~mask;
-    /* add sub-priority fields, clear everything that cant fit to the sub-priority field */
-    tmppriority |=  (uint8_t)(NVIC_InitStruct->NVIC_IRQChannelSubPriority & mask);
+    tmppriority = NVIC_InitStruct->NVIC_IRQChannelPreemptionPriority << tmppre;
+    tmppriority |=  (uint8_t)(NVIC_InitStruct->NVIC_IRQChannelSubPriority & tmpsub);
+        
+    tmppriority = tmppriority << 0x04;
         
     NVIC->IP[NVIC_InitStruct->NVIC_IRQChannel] = tmppriority;
     

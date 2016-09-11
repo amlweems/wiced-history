@@ -15,4 +15,8 @@ GLOBAL_INCLUDES += include
 # Include BTE stack as component
 $(NAME)_COMPONENTS := libraries/drivers/bluetooth/BTE
 
+ifeq ($(BT_CHIP_XTAL_FREQUENCY),)
 $(NAME)_SOURCES := firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/bt_firmware_image.c
+else
+$(NAME)_SOURCES := firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/$(BT_CHIP_XTAL_FREQUENCY)/bt_firmware_image.c
+endif

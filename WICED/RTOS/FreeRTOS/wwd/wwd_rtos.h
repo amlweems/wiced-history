@@ -62,9 +62,9 @@ extern void xPortSysTickHandler( void );
  *             Structures
  ******************************************************/
 
-typedef xSemaphoreHandle    /*@abstract@*/ /*@only@*/ host_semaphore_type_t;  /** FreeRTOS definition of a semaphore */
-typedef xTaskHandle         /*@abstract@*/ /*@only@*/ host_thread_type_t;     /** FreeRTOS definition of a thread handle */
-typedef xQueueHandle        /*@abstract@*/ /*@only@*/ host_queue_type_t;      /** FreeRTOS definition of a message queue */
+typedef SemaphoreHandle_t   /*@abstract@*/ /*@only@*/ host_semaphore_type_t;  /** FreeRTOS definition of a semaphore */
+typedef TaskHandle_t        /*@abstract@*/ /*@only@*/ host_thread_type_t;     /** FreeRTOS definition of a thread handle */
+typedef QueueHandle_t       /*@abstract@*/ /*@only@*/ host_queue_type_t;      /** FreeRTOS definition of a message queue */
 
 /*@external@*/ extern void vApplicationMallocFailedHook( void );
 /*@external@*/ extern void vApplicationIdleSleepHook( void );

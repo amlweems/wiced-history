@@ -43,7 +43,7 @@ extern "C" {
  *          TLS -> Host Function Declarations
  ******************************************************/
 
-extern tls_result_t tls_host_create_buffer   ( wiced_tls_context_t* ssl, uint8_t** buffer, uint16_t buffer_size );
+extern tls_result_t tls_host_create_buffer   ( wiced_tls_workspace_t* ssl, uint8_t** buffer, uint16_t buffer_size );
 extern tls_result_t tls_host_free_packet     ( tls_packet_t* packet );
 extern tls_result_t tls_host_send_tcp_packet ( void* context, tls_packet_t* packet );
 extern tls_result_t tls_host_get_packet_data ( ssl_context* ssl, tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length );

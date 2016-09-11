@@ -26,10 +26,29 @@ GLOBAL_INCLUDES := . \
                    WAF
 
 # Global defines
-GLOBAL_DEFINES  := USE_STDPERIPH_DRIVER
-GLOBAL_DEFINES  += _$(HOST_MCU_PART_NUMBER)_
-GLOBAL_DEFINES  += _STM3x_
-GLOBAL_DEFINES  += _STM32x_
+GLOBAL_DEFINES  := USE_STDPERIPH_DRIVER \
+                   _STM3x_ \
+                   _STM32x_
+
+# Convert the MCU variant into the required STM peripheral library constant
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F405 STM32F415 STM32F407 STM32F417))
+GLOBAL_DEFINES += STM32F40_41xxx
+endif
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F427 STM32F437))
+GLOBAL_DEFINES += STM32F427_437xx
+endif
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F429 STM32F439))
+GLOBAL_DEFINES += STM32F429_439xx
+endif
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F401))
+GLOBAL_DEFINES += STM32F401xx
+endif
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F411))
+GLOBAL_DEFINES += STM32F411xE
+endif
+ifneq (,$(filter $(HOST_MCU_VARIANT), STM32F446))
+GLOBAL_DEFINES += STM32F446xx
+endif
 
 # Global flags
 GLOBAL_CFLAGS   += $$(CPU_CFLAGS)    $$(ENDIAN_CFLAGS_LITTLE)
@@ -70,9 +89,16 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_init.c \
                    platform_unhandled_isr.c \
                    platform_filesystem.c \
-                   WWD/wwd_platform.c \
-                   WWD/wwd_$(BUS).c \
                    WAF/waf_platform.c \
+
+ifdef PLATFORM_SUPPORTS_BUTTONS
+$(NAME)_SOURCES += ../platform_button.c
+endif
+
+ifndef NO_WIFI
+$(NAME)_SOURCES += WWD/wwd_platform.c \
+                   WWD/wwd_$(BUS).c
+endif
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \

@@ -63,6 +63,19 @@ typedef enum
     RSA_SHA512      = 13,
 } rsa_hash_id_t;
 
+typedef enum
+{
+    TLS_RSA_KEY,
+    TLS_ECC_KEY,
+} wiced_tls_key_type_t;
+
+typedef enum
+{
+    RSA_PUBLIC      = 0,
+    RSA_PRIVATE     = 1,
+} rsa_mode_t;
+
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -127,8 +140,9 @@ typedef enum
 
 typedef struct
 {
-    int32_t ver;
-    int32_t len;
+    wiced_tls_key_type_t type;
+    uint32_t             version;
+    uint32_t             length;
 
     mpi N;
     mpi E;
@@ -148,13 +162,31 @@ typedef struct
     int32_t hash_id;
     int32_t (*f_rng)( void * );
     void *p_rng;
-} rsa_context;
+} wiced_tls_rsa_key_t;
 
-typedef enum
+/*
+ * We support up to 512-bit ECC keys
+ */
+typedef struct
 {
-    RSA_PUBLIC      = 0,
-    RSA_PRIVATE     = 1,
-} rsa_mode_t;
+    wiced_tls_key_type_t type;
+    uint32_t             version;
+    uint32_t             length;
+    uint8_t              key[64];
+} wiced_tls_ecc_key_t;
+
+typedef wiced_tls_rsa_key_t rsa_context;
+
+/*
+ * wiced_tls_key_t is a prototype for
+ */
+typedef struct
+{
+    wiced_tls_key_type_t type;
+    uint32_t             version;
+    uint32_t             length;
+    uint8_t              data[1];
+} wiced_tls_key_t;
 
 typedef struct _x509_buf
 {
@@ -167,7 +199,7 @@ typedef struct _x509_buf_allocated
 {
     int32_t tag;
     uint32_t len;
-    unsigned char *p;
+    const unsigned char *p;
 } x509_buf_allocated;
 
 typedef struct _x509_name
@@ -206,7 +238,7 @@ typedef struct _x509_cert
     x509_time valid_to;
 
     x509_buf pk_oid;
-    rsa_context rsa;
+    wiced_tls_key_t* public_key;
 
     x509_buf issuer_id;
     x509_buf subject_id;

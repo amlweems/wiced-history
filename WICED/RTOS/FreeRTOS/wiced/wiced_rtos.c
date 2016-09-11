@@ -17,6 +17,7 @@
 #include "wiced_rtos.h"
 #include "wiced_defaults.h"
 #include "RTOS/wwd_rtos_interface.h"
+#include "RTOS/wiced_rtos_common.h"
 #include "platform/wwd_platform_interface.h"
 #include "queue.h"
 #include "semphr.h"
@@ -24,7 +25,6 @@
 #include "FreeRTOSConfig.h"
 #include "timers.h"
 #include "wiced_time.h"
-#include "internal/wiced_internal_api.h"
 #include "wwd_assert.h"
 #include "platform_init.h"
 
@@ -55,8 +55,8 @@
  *                 Type Definitions
  ******************************************************/
 
-typedef tmrTIMER_CALLBACK native_timer_handler_t;
-typedef pdTASK_CODE       native_thread_t;
+typedef TimerCallbackFunction_t native_timer_handler_t;
+typedef TaskFunction_t          native_thread_t;
 
 /******************************************************
  *                    Structures
@@ -81,12 +81,6 @@ typedef struct
 static void application_thread_main( void *arg );
 extern void system_monitor_thread_main( void* arg );
 
-#ifdef __GNUC__
-static wiced_result_t wiced_freertos_init_malloc_mutex ( void );
-void __malloc_lock(struct _reent *ptr);
-void __malloc_unlock(struct _reent *ptr);
-#endif /* ifdef __GNUC__ */
-
 /******************************************************
  *               Variable Definitions
  ******************************************************/
@@ -95,9 +89,9 @@ extern const uint32_t ms_to_tick_ratio;
 wiced_worker_thread_t wiced_hardware_io_worker_thread;
 wiced_worker_thread_t wiced_networking_worker_thread;
 
-static xTaskHandle  app_thread_handle;
+static TaskHandle_t  app_thread_handle;
 #ifndef WICED_DISABLE_WATCHDOG
-static xTaskHandle  system_monitor_thread_handle;
+static TaskHandle_t  system_monitor_thread_handle;
 #endif /* WICED_DISABLE_WATCHDOG */
 static wiced_time_t wiced_time_offset = 0;
 
@@ -110,6 +104,7 @@ static wiced_time_t wiced_time_offset = 0;
  *  Called from the crt0 _start function
  *
  */
+#ifndef ALTERNATE_MAIN
 int main( void )
 {
 
@@ -124,19 +119,10 @@ int main( void )
 
 #ifndef WICED_DISABLE_WATCHDOG
     /* Start the watchdog kicking thread */
-    xTaskCreate( system_monitor_thread_main, (signed char*)"system monitor", SYSTEM_MONITOR_THREAD_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, RTOS_HIGHEST_PRIORITY, &system_monitor_thread_handle);
+    xTaskCreate( system_monitor_thread_main, "system monitor", SYSTEM_MONITOR_THREAD_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, RTOS_HIGHEST_PRIORITY, &system_monitor_thread_handle);
 #endif /* WICED_DISABLE_WATCHDOG */
     /* Create an initial thread */
-    xTaskCreate( application_thread_main, (signed char*)"app_thread", APPLICATION_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_APPLICATION_PRIORITY), &app_thread_handle);
-
-#ifdef __GNUC__
-    {
-        wiced_result_t result;
-        result = wiced_freertos_init_malloc_mutex();
-        wiced_assert( "Unable t create a freertos malloc mutex", result == WICED_SUCCESS );
-        (void) result;
-    }
-#endif /* ifdef __GNUC__ */
+    xTaskCreate( application_thread_main, "app_thread", APPLICATION_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_APPLICATION_PRIORITY), &app_thread_handle);
 
     /* Start the FreeRTOS scheduler - this call should never return */
     vTaskStartScheduler( );
@@ -144,6 +130,7 @@ int main( void )
     /* Should never get here, unless there is an error in vTaskStartScheduler */
     return 0;
 }
+#endif /* ifndef ALTERNATE_MAIN */
 
 static void application_thread_main( void *arg )
 {
@@ -318,7 +305,7 @@ wiced_result_t wiced_rtos_is_queue_full( wiced_queue_t* queue )
     return ( result != 0 ) ? WICED_SUCCESS : WICED_ERROR;
 }
 
-static void timer_callback( xTimerHandle handle )
+static void timer_callback( TimerHandle_t handle )
 {
     wiced_timer_t* timer = (wiced_timer_t*) pvTimerGetTimerID( handle );
 
@@ -335,7 +322,7 @@ wiced_result_t wiced_rtos_init_timer( wiced_timer_t* timer, uint32_t time_ms, ti
     timer->function = function;
     timer->arg      = arg;
 
-    timer->handle = xTimerCreate(  (const signed char *)"", (portTickType)( time_ms / ms_to_tick_ratio ), pdTRUE, timer, (native_timer_handler_t) timer_callback );
+    timer->handle = xTimerCreate(  (const char *)"", (TickType_t)( time_ms / ms_to_tick_ratio ), pdTRUE, timer, (native_timer_handler_t) timer_callback );
     if ( timer->handle == NULL )
     {
         return WICED_ERROR;
@@ -422,41 +409,3 @@ wiced_result_t wiced_rtos_deinit_event_flags( wiced_event_flags_t* event_flags )
     wiced_assert( "Unsupported\n", 0!=0 );
     return WICED_UNSUPPORTED;
 }
-
-#ifdef __GNUC__
-
-xSemaphoreHandle malloc_mutex = 0;
-
-static wiced_result_t wiced_freertos_init_malloc_mutex ( void )
-{
-    malloc_mutex = xSemaphoreCreateRecursiveMutex( );
-    if( malloc_mutex )
-    {
-        return WICED_SUCCESS;
-    }
-    else
-    {
-        /* we were unable to create a mutex */
-        return WICED_ERROR;
-    }
-}
-
-void __malloc_lock(struct _reent *ptr)
-{
-    UNUSED_PARAMETER( ptr );
-    if( malloc_mutex )
-    {
-        xSemaphoreTakeRecursive( malloc_mutex, WICED_WAIT_FOREVER );
-    }
-    return;
-}
-
-void __malloc_unlock(struct _reent *ptr)
-{
-    UNUSED_PARAMETER( ptr );
-    if( malloc_mutex )
-    {
-        xSemaphoreGiveRecursive( malloc_mutex );
-    }
-}
-#endif /* __GNUC__ */

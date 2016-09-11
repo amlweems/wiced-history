@@ -8,20 +8,17 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Lib_RESTful_Smart_server
+NAME := Lib_Bluetooth_RESTful_Smart_Server
 
-RESTFUL_SMART_SERVER_HOST := WICED
-
-$(NAME)_COMPONENTS += daemons/HTTP_server \
-                      daemons/bt_internet_gateway/smartbridge \
-                      drivers/bluetooth
+$(NAME)_COMPONENTS += daemons/bt_internet_gateway
 
 $(NAME)_SOURCES    := restful_smart_constants.c \
-                      host/$(RESTFUL_SMART_SERVER_HOST)/restful_smart_server.c \
-                      host/$(RESTFUL_SMART_SERVER_HOST)/restful_smart_response.c \
-                      host/$(RESTFUL_SMART_SERVER_HOST)/restful_smart_ble.c
+                      restful_smart_uri.c \
+                      restful_smart_response.c \
+                      restful_smart_ble.c
 
-$(NAME)_INCLUDES   := . \
-                      host/$(RESTFUL_SMART_SERVER_HOST)
+$(NAME)_INCLUDES   := .
 
 GLOBAL_INCLUDES    := .
+
+GLOBAL_DEFINES     += BIG_INCLUDES_RESTFUL_SMART_SERVER

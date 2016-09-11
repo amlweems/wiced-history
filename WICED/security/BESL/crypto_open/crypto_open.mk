@@ -22,6 +22,7 @@ $(NAME)_SOURCES += \
                    chacha_reference.c \
                    curve25519.c \
                    des.c \
+                   ecc.c \
                    ed25519/ed25519.c \
                    md5.c \
                    poly1305.c \

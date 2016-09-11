@@ -173,7 +173,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
 
 
     /* Set the SSID */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, IOVAR_STR_BSSCFG_SSID );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, "bsscfg:" IOVAR_STR_SSID );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
     data[0] = (uint32_t) CHIP_AP_INTERFACE; /* Set the bsscfg index */
     data[1] = ssid->length; /* Set the ssid length */
@@ -192,7 +192,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     *data = channel;
     CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_CHANNEL, buffer, 0, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
 
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WSEC );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
     data[0] = (uint32_t) CHIP_AP_INTERFACE;
     if ((auth_type & WPS_ENABLED) != 0)
@@ -210,7 +210,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
         wsec_pmk_t* psk;
 
         /* Set the wpa auth */
-        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WPA_AUTH );
+        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WPA_AUTH );
         CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
         data[0] = (uint32_t) CHIP_AP_INTERFACE;
         data[1] = (uint32_t) (auth_type == WICED_SECURITY_WPA_TKIP_PSK) ? ( WPA_AUTH_PSK ) : ( WPA2_AUTH_PSK | WPA_AUTH_PSK );

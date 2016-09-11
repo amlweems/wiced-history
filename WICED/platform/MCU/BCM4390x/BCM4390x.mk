@@ -10,23 +10,61 @@
 
 NAME = MCU_BCM4390x
 
+$(NAME)_SOURCES := vector_table_$(TOOLCHAIN_NAME).S \
+                   start_$(TOOLCHAIN_NAME).S \
+                   BCM4390x_platform.c \
+                   WAF/waf_platform.c \
+                   ../platform_resource.c \
+                   ../platform_stdio.c \
+                   ../wiced_platform_common.c \
+                   ../wiced_apps_common.c \
+                   ../wiced_waf_common.c \
+                   ../wiced_dct_external_common.c \
+                   ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
+                   ../../$(HOST_ARCH)/platform_cache.c \
+                   ../../$(HOST_ARCH)/platform_cache_asm.S \
+                   platform_unhandled_isr.c \
+                   platform_vector_table.c \
+                   platform_filesystem.c \
+                   platform_tick.c \
+                   platform_chipcommon.c \
+                   platform_deep_sleep.c \
+                   wwd_bus.c \
+                   wwd_platform.c \
+                   ../platform_nsclock.c \
+                   ../../$(HOST_ARCH)/exception_handlers.c
+
+ifdef PLATFORM_SUPPORTS_BUTTONS
+$(NAME)_SOURCES += ../platform_button.c
+endif
+
+include $(CURDIR)BCM94390x_common.mk
+
 HOST_ARCH  := ARM_CR4
 
 # Host MCU alias for OpenOCD
 HOST_OPENOCD := BCM4390x
 
-VALID_BUSES := SoC/43909
+VALID_BUSES := SoC.43909
 
-GLOBAL_INCLUDES :=  . \
+GLOBAL_INCLUDES +=  . \
                     .. \
                     ../../$(HOST_ARCH) \
                     WAF \
                     peripherals \
                     peripherals/include \
 
+ifneq ($(wildcard WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(APPS_CHIP_REVISION)/$(HOST_MCU_VARIANT)$(APPS_CHIP_REVISION).mk),)
+include WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(APPS_CHIP_REVISION)/$(HOST_MCU_VARIANT)$(APPS_CHIP_REVISION).mk
+endif # wildcard $(WICED ...)
+
 ifdef BUILD_ROM
 $(NAME)_COMPONENTS += WICED/platform/MCU/BCM4390x/ROM_build
-endif
+else
+ifeq ($(IMAGE_TYPE),rom)
+$(NAME)_COMPONENTS += WICED/platform/MCU/$(HOST_MCU_FAMILY)/ROM_offload
+endif # rom
+endif # BUILD_ROM
 
 # $(1) is the relative path to the platform directory
 define PLATFORM_LOCAL_DEFINES_INCLUDES_43909
@@ -78,41 +116,15 @@ GLOBAL_LDFLAGS  += -Wl,--defsym,START_STACK_SIZE=$($(RTOS)_START_STACK) \
 GLOBAL_ASMFLAGS += --defsym SYS_STACK_SIZE=$($(RTOS)_SYS_STACK) \
                    --defsym FIQ_STACK_SIZE=$($(RTOS)_FIQ_STACK) \
                    --defsym IRQ_STACK_SIZE=$($(RTOS)_IRQ_STACK)
+
+endif # GCC
+
+ifdef NO_WIFI
+$(NAME)_COMPONENTS += WICED/WWD
+ifndef NETWORK
+NETWORK := NoNS
+$(NAME)_COMPONENTS += WICED/network/NoNS
 endif
-
-
-$(NAME)_SOURCES := vector_table_$(TOOLCHAIN_NAME).S \
-                   start_$(TOOLCHAIN_NAME).S \
-                   BCM4390x_platform.c \
-                   wwd_platform.c \
-                   wwd_bus.c \
-                   WAF/waf_platform.c \
-                   ../platform_resource.c \
-                   ../platform_stdio.c \
-                   ../wiced_platform_common.c \
-                   ../wiced_apps_common.c \
-                   ../wiced_waf_common.c \
-                   ../wiced_dct_external_common.c \
-                   ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
-                   ../../$(HOST_ARCH)/platform_cache.c \
-                   ../../$(HOST_ARCH)/platform_cache_asm.S \
-                   platform_unhandled_isr.c \
-                   platform_vector_table.c \
-                   platform_filesystem.c \
-                   platform_tick.c \
-                   platform_chipcommon.c \
-                   platform_deep_sleep.c \
-                   ../platform_nsclock.c \
-                   ../../$(HOST_ARCH)/exception_handlers.c
-
-#                   HardFault_handler.c \
-#                   wwd_platform.c \
-#                   $(BUS)/wwd_bus.c \
-#                   gpio_irq.c \
-#                   watchdog.c \
-
-ifndef BUILD_ROM
-$(NAME)_SOURCES += rom_jump_functions.S
 endif
 
 # These need to be forced into the final ELF since they are not referenced otherwise
@@ -134,9 +146,6 @@ GLOBAL_DEFINES += PLATFORM_L1_CACHE_SHIFT=5
 
 # Tell that platform supports deep sleep
 GLOBAL_DEFINES += PLATFORM_DEEP_SLEEP
-
-# Need to be removed after WLAN firmware start to use SR
-GLOBAL_DEFINES += PLATFORM_WLAN_POWERSAVE=0
 
 # Tell that platform has special WLAN features
 GLOBAL_DEFINES += BCM43909
@@ -189,9 +198,11 @@ else
 ####################################################################################
 # Building a stand-alone application
 ####################################################################################
+ifneq ($(IMAGE_TYPE),rom)
 DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_without_rom$(LINK_SCRIPT_SUFFIX)
-#DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_with_rom$(LINK_SCRIPT_SUFFIX)
-
+else
+DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_with_rom$(LINK_SCRIPT_SUFFIX)
+endif
 
 endif # APP=ota_upgrade OR sflash_write
 endif # APP=bootloader

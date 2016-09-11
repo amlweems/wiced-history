@@ -10,7 +10,7 @@
 
 NAME := FreeRTOS
 
-VERSION := 7.5.2
+VERSION := 8.2.1
 
 $(NAME)_COMPONENTS := WICED/RTOS/FreeRTOS/WWD
 ifeq (,$(APP_WWD_ONLY)$(NS_WWD_ONLY)$(RTOS_WWD_ONLY))
@@ -27,6 +27,7 @@ GLOBAL_INCLUDES := ver$(VERSION)/Source/include
 
 
 $(NAME)_SOURCES :=  ver$(VERSION)/Source/croutine.c \
+                    ver$(VERSION)/Source/event_groups.c \
                     ver$(VERSION)/Source/list.c \
                     ver$(VERSION)/Source/queue.c \
                     ver$(VERSION)/Source/tasks.c \
@@ -36,6 +37,8 @@ $(NAME)_SOURCES :=  ver$(VERSION)/Source/croutine.c \
 # Win32_x86 specific sources and includes
 $(NAME)_Win32_x86_SOURCES  := ver$(VERSION)/Source/portable/MSVC-MingW/port.c
 $(NAME)_Win32_x86_INCLUDES := ver$(VERSION)/Source/portable/MSVC-MingW
+
+$(NAME)_DEFINES := FREERTOS_WICED
 
 # ARM Cortex M3/4 specific sources and includes
 ifeq ($(TOOLCHAIN_NAME),IAR)

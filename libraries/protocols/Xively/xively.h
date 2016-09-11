@@ -42,7 +42,7 @@ typedef struct
     const char*                id;
     const char*                api_key;
     wiced_tcp_socket_t         socket;
-    wiced_tls_simple_context_t tls_context;
+    wiced_tls_context_t        tls_context;
 } xively_feed_t;
 
 typedef struct

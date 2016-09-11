@@ -1,11 +1,17 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * 802.1x EAPOL definitions
  *
  * See
  * IEEE Std 802.1X-2001
  * IEEE 802.1X RADIUS Usage Guidelines
- *
- * $Copyright Open Broadcom Corporation$
  *
  * $Id: eapol.h 452704 2014-01-31 20:33:10Z hharte $
  */

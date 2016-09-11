@@ -33,7 +33,6 @@
 #define CHECK_RETURN( expr )                             { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); return check_res; } }
 #define CHECK_RETURN_WITH_SEMAPHORE( expr, sema )        { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return check_res; } }
 
-
 /******************************************************
  * @cond               Constants
  ******************************************************/
@@ -49,6 +48,11 @@
 #define AMPDU_RX_FACTOR_32K 2   /* max receive AMPDU length is 32kb */
 #define AMPDU_RX_FACTOR_64K 3   /* max receive AMPDU length is 64kb */
 
+#define WEP40_KEY_LENGTH                     5
+#define WEP104_KEY_LENGTH                    13
+#define FORMATTED_ASCII_WEP40_KEY_LENGTH     28 /* For 5  bytes key */
+#define FORMATTED_ASCII_WEP104_KEY_LENGTH    60 /* For 13 bytes key */
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -60,6 +64,12 @@ typedef enum
     BSS_UP   = 1,
     BSS_DOWN = 0
 } bss_arg_option_t;
+
+typedef enum
+{
+    WEP_OPEN_SYSTEM_AUTHENTICATION  = 0,
+    WEP_SHARED_KEY_AUTHENTICATION   = 1
+} wep_authentication_type_t;
 
 /******************************************************
  *                 Type Definitions
@@ -120,26 +130,39 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     wiced_buffer_t response;
     wiced_buffer_t buffer;
     uint32_t*      data;
+    uint32_t       bss_index = WWD_AP_INTERFACE;
 
-    if ( auth_type == WICED_SECURITY_WEP_PSK )
-    {
-        return WWD_WEP_NOT_ALLOWED;
-    }
+#ifdef WICED_WIFI_SOFT_AP_WEP_SUPPORT_ENABLED
+    uint32_t* auth;
+    uint16_t length;
+#endif
+
     if ( ( ( auth_type == WICED_SECURITY_WPA_TKIP_PSK ) || ( auth_type == WICED_SECURITY_WPA2_AES_PSK ) || ( auth_type == WICED_SECURITY_WPA2_MIXED_PSK ) ) &&
          ( ( key_length < (uint8_t) 8 ) || ( key_length > (uint8_t) 64 ) ) )
     {
+        WPRINT_APP_INFO(( "Error: WPA security key length must be between 8 and 64\n" ));
         return WWD_WPA_KEYLEN_BAD;
     }
 
-    if ( wwd_wifi_set_block_ack_window_size( WWD_AP_INTERFACE ) != WWD_SUCCESS )
+#ifdef WICED_WIFI_SOFT_AP_WEP_SUPPORT_ENABLED
+    else if( (( auth_type == WICED_SECURITY_WEP_PSK ) || ( auth_type == WICED_SECURITY_WEP_SHARED )) &&
+             (( key_length != FORMATTED_ASCII_WEP40_KEY_LENGTH ) && ( key_length != FORMATTED_ASCII_WEP104_KEY_LENGTH )) )
     {
-        return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
+        WPRINT_APP_INFO(( "Error: WEP security Key length must be either 5 / 13 bytes\n" ));
+        return WWD_WEP_KEYLEN_BAD;
+    }
+#endif
+
+    if ( ( wwd_wifi_p2p_go_is_up == WICED_TRUE ) || ( wwd_wifi_ap_is_up == WICED_TRUE ) )
+    {
+        WPRINT_APP_INFO(( "Error: Soft AP or Wi-Fi Direct group owner already up\n" ));
+        return WWD_AP_ALREADY_UP;
     }
 
     /* Query bss state (does it exist? if so is it UP?) */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) CHIP_AP_INTERFACE;
+    *data = (uint32_t) bss_index;
     if ( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) != WWD_SUCCESS )
     {
         /* Note: We don't need to release the response packet since the iovar failed */
@@ -166,19 +189,24 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     /* Register for interested events */
     CHECK_RETURN_WITH_SEMAPHORE( wwd_management_set_event_handler( apsta_events, wwd_handle_apsta_event, NULL, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
 
-    /* Set the SSID */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, IOVAR_STR_BSSCFG_SSID );
-    CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
-    data[0] = (uint32_t) CHIP_AP_INTERFACE; /* Set the bsscfg index */
-    data[1] = ssid->length; /* Set the ssid length */
-    memcpy( &data[2], (uint8_t*) ssid->value, ssid->length );
-    CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ), &wwd_wifi_sleep_flag );
-
     /* Check if we need to wait for interface to be created */
     if ( wait_for_interface == WICED_TRUE )
     {
         CHECK_RETURN_WITH_SEMAPHORE( host_rtos_get_semaphore( &wwd_wifi_sleep_flag, (uint32_t) 10000, WICED_FALSE ), &wwd_wifi_sleep_flag );
     }
+
+    if ( wwd_wifi_set_block_ack_window_size( WWD_AP_INTERFACE ) != WWD_SUCCESS )
+    {
+        return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
+    }
+
+    /* Set the SSID */
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 40, "bsscfg:" IOVAR_STR_SSID );
+    CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
+    data[0] = bss_index; /* Set the bsscfg index */
+    data[1] = ssid->length; /* Set the ssid length */
+    memcpy( &data[2], (uint8_t*) ssid->value, ssid->length );
+    CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ), &wwd_wifi_sleep_flag );
 
     /* Set the channel */
     data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
@@ -186,9 +214,60 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     *data = channel;
     CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_CHANNEL, buffer, 0, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
 
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+#ifdef WICED_WIFI_SOFT_AP_WEP_SUPPORT_ENABLED
+    if ( ( auth_type == WICED_SECURITY_WEP_PSK ) || ( auth_type == WICED_SECURITY_WEP_SHARED ) )
+    {
+        for ( length = 0; length < key_length; length = (uint16_t) ( length + 2 + security_key[ 1 ] ) )
+        {
+            const wiced_wep_key_t* in_key = (const wiced_wep_key_t*) &security_key[ length ];
+            wl_wsec_key_t* out_key = (wl_wsec_key_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wl_wsec_key_t) );
+            CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( out_key, &wwd_wifi_sleep_flag );
+            memset( out_key, 0, sizeof(wl_wsec_key_t) );
+            out_key->index = in_key->index;
+            out_key->len = in_key->length;
+            memcpy( out_key->data, in_key->data, in_key->length );
+            switch ( in_key->length )
+            {
+                case WEP40_KEY_LENGTH:
+                    out_key->algo = (uint32_t) CRYPTO_ALGO_WEP1;
+                    break;
+                case WEP104_KEY_LENGTH:
+                    out_key->algo = (uint32_t) CRYPTO_ALGO_WEP128;
+                    break;
+                default:
+                    host_buffer_release( buffer, WWD_NETWORK_TX );
+                    return WWD_INVALID_KEY;
+            }
+            /* Set the first entry as primary key by default */
+            if ( length == 0 )
+            {
+                out_key->flags |= WL_PRIMARY_KEY;
+            }
+            out_key->index = htod32(out_key->index);
+            out_key->len = htod32(out_key->len);
+            out_key->algo = htod32(out_key->algo);
+            out_key->flags = htod32(out_key->flags);
+            CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_KEY, buffer, NULL, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
+        }
+
+        /* Set authentication type */
+        auth = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+        CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( auth, &wwd_wifi_sleep_flag );
+        if ( auth_type == WICED_SECURITY_WEP_SHARED )
+        {
+            *auth = WEP_SHARED_KEY_AUTHENTICATION; /* 1 = Shared Key authentication */
+        }
+        else
+        {
+            *auth = WEP_OPEN_SYSTEM_AUTHENTICATION; /*  0 = Open System authentication */
+        }
+        CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_AUTH, buffer, 0, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
+    }
+#endif
+
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WSEC );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
-    data[0] = (uint32_t) CHIP_AP_INTERFACE;
+    data[0] = bss_index;
     if ((auth_type & WPS_ENABLED) != 0)
     {
         data[1] = (uint32_t) ( ( auth_type & ( ~WPS_ENABLED ) ) | SES_OW_ENABLED );
@@ -199,14 +278,14 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     }
     CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ), &wwd_wifi_sleep_flag );
 
-    if ( auth_type != WICED_SECURITY_OPEN )
+    if ( ( auth_type != WICED_SECURITY_OPEN ) && ( auth_type != WICED_SECURITY_WEP_PSK ) && ( auth_type != WICED_SECURITY_WEP_SHARED ) )
     {
         wsec_pmk_t* psk;
 
         /* Set the wpa auth */
-        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WPA_AUTH );
+        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_WPA_AUTH );
         CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
-        data[0] = (uint32_t) CHIP_AP_INTERFACE;
+        data[0] = bss_index;
         data[1] = (uint32_t) (auth_type == WICED_SECURITY_WPA_TKIP_PSK) ? ( WPA_AUTH_PSK ) : ( WPA2_AUTH_PSK | WPA_AUTH_PSK );
         CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ), &wwd_wifi_sleep_flag );
 
@@ -238,8 +317,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_2G_MULTICAST_RATE );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) RATE_SETTING_11_MBPS;
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_AP_INTERFACE );
-    wiced_assert("start_ap: Failed to set multicast transmission rate\r\n", result == WWD_SUCCESS );
+    CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
 
     /* Set DTIM period */
     data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
@@ -284,7 +362,7 @@ wwd_result_t wwd_wifi_ap_up( void )
 
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
-    data[0] = (uint32_t) CHIP_AP_INTERFACE;
+    data[0] = wwd_get_bss_index( WWD_AP_INTERFACE );
     data[1] = (uint32_t) BSS_UP;
     CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ), &wwd_wifi_sleep_flag );
 
@@ -330,7 +408,7 @@ wwd_result_t wwd_wifi_stop_ap( void )
     /* Query bss state (does it exist? if so is it UP?) */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) CHIP_AP_INTERFACE;
+    *data = wwd_get_bss_index( WWD_AP_INTERFACE );
     result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
     if ( result == WWD_WLAN_NOTFOUND )
     {
@@ -355,7 +433,7 @@ wwd_result_t wwd_wifi_stop_ap( void )
     /* set BSS down */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = (uint32_t) CHIP_AP_INTERFACE;
+    data[0] = wwd_get_bss_index( WWD_AP_INTERFACE );
     data[1] = (uint32_t) BSS_DOWN;
     CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
 
@@ -381,36 +459,30 @@ wwd_result_t wwd_wifi_stop_ap( void )
 /** Sets the chip specific AMPDU parameters for AP and STA
  *  For SDK 3.0, and beyond, each chip will need it's own function for setting AMPDU parameters.
  */
+
 wwd_result_t wwd_wifi_set_ampdu_parameters( void )
 {
     wiced_buffer_t buffer;
-    wwd_result_t retval;
 
     /* Set AMPDU Block ACK window size */
     uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_BA_WINDOW_SIZE );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) 8;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_ampdu_parameters: Failed to set block ack window size\r\n", retval == WWD_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
     /* Set number of MPDUs available for AMPDU */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_MPDU );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) 4;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_ampdu_parameters: Failed to set number of MPDUs\r\n", retval == WWD_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
     /* Set size of advertised receive AMPDU */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_RX_FACTOR );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) AMPDU_RX_FACTOR_8K;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
-    wiced_assert("set_ampdu_parameters: Failed to set advertised receive AMPDU size\r\n", retval == WWD_SUCCESS );
-
-    return retval;
+    return WWD_SUCCESS;
 }
 
 /** Sets the chip specific AMPDU parameters for AP and STA

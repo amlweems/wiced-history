@@ -1,9 +1,16 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Broadcom Gigabit Ethernet MAC (Unimac) core.
  *
  * This file implements the chip-specific routines for the GMAC core.
  *
- * $Copyright Open Broadcom Corporation$
  * $Id: etcgmac.c 477266 2014-05-13 03:49:08Z weitsan $
  */
 

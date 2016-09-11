@@ -11,6 +11,7 @@
 #include "spi_flash_internal.h"
 #include "spi_flash_platform_interface.h"
 #include <string.h> /* for NULL */
+#include "wwd_constants.h"
 
 /*@access sflash_handle_t@*/ /* Lint: permit access to abstract sflash handle implementation */
 
@@ -74,6 +75,12 @@ int sflash_chip_erase( const sflash_handle_t* const handle )
     {
         return status;
     }
+
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+    if ( handle->device_id == SFLASH_ID_N25Q512A )
+        return generic_sflash_command( handle, SFLASH_DIE_ERASE_MICRON, 0, NULL, 0, NULL, NULL );
+    else
+#endif
     return generic_sflash_command( handle, SFLASH_CHIP_ERASE1, 0, NULL, 0, NULL, NULL );
 }
 
@@ -88,21 +95,53 @@ int sflash_sector_erase ( const sflash_handle_t* const handle, unsigned long dev
 
     int retval;
     int status = sflash_write_enable( handle );
+
     if ( status != 0 )
     {
         return status;
     }
+
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+    if ( handle->device_id == SFLASH_ID_N25Q512A )
+        retval = generic_sflash_command( handle, SFLASH_SECTOR_ERASE_MICRON, (unsigned long) 3, device_address_array, 0, NULL, NULL );
+    else
+#endif
     retval = generic_sflash_command( handle, SFLASH_SECTOR_ERASE, (unsigned long) 3, device_address_array, 0, NULL, NULL );
+
+
     wiced_assert("error", retval == 0);
     return retval;
 }
+int sflash_block_erase ( const sflash_handle_t* const handle, unsigned long device_address )
+{
 
+    char device_address_array[3] =  { (char) ( ( device_address & 0x00FF0000 ) >> 16 ),
+                                      (char) ( ( device_address & 0x0000FF00 ) >>  8 ),
+                                      (char) ( ( device_address & 0x000000FF ) >>  0 ) };
+    int retval;
+    int status = sflash_write_enable( handle );
+    if ( status != 0 )
+    {
+        return status;
+    }
+    retval = generic_sflash_command( handle, SFLASH_BLOCK_ERASE_LARGE, (unsigned long) 3, device_address_array, 0, NULL, NULL );
+    wiced_assert("error", retval == 0);
+    return retval;
+}
 int sflash_read_status_register( const sflash_handle_t* const handle, /*@out@*/  /*@dependent@*/ unsigned char* const dest_addr )
 {
     return generic_sflash_command( handle, SFLASH_READ_STATUS_REGISTER, 0, NULL, (unsigned long) 1, NULL, dest_addr );
 }
 
-
+int sflash_read_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* const data_addr, unsigned int size )
+{
+    UNUSED_PARAMETER( handle );
+    UNUSED_PARAMETER( device_address );
+    UNUSED_PARAMETER( data_addr );
+    UNUSED_PARAMETER( size );
+    wiced_assert( "sflash_read_secure not supported", WICED_FALSE );
+    return 0;
+}
 
 int sflash_read( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* const data_addr, unsigned int size )
 {
@@ -110,7 +149,7 @@ int sflash_read( const sflash_handle_t* const handle, unsigned long device_addre
                                       (char) ( ( device_address & 0x0000FF00 ) >>  8 ),
                                       (char) ( ( device_address & 0x000000FF ) >>  0 ) };
 
-    return generic_sflash_command( handle, SFLASH_READ, (unsigned long) 3, device_address_array, (unsigned long) size, NULL, data_addr );
+    return generic_sflash_command( handle, SFLASH_READ, (unsigned long) 3, device_address_array, (unsigned long) size, NULL, (char *)data_addr );
 }
 
 
@@ -131,6 +170,10 @@ int sflash_get_size( const sflash_handle_t* const handle, /*@out@*/ unsigned lon
     {
         *size = (unsigned long) 0x2000000; /* 32MByte */
     }
+    else if ( handle->device_id == SFLASH_ID_MX25U1635F )
+    {
+        *size = (unsigned long) 0x200000; /* 2MByte */
+    }
 #endif /* ifdef SFLASH_SUPPORT_MACRONIX_PARTS */
 #ifdef SFLASH_SUPPORT_SST_PARTS
     if ( handle->device_id == SFLASH_ID_SST25VF080B )
@@ -144,7 +187,12 @@ int sflash_get_size( const sflash_handle_t* const handle, /*@out@*/ unsigned lon
         *size = (unsigned long) 0x200000; /* 2MByte */
     }
 #endif /* ifdef SFLASH_SUPPORT_EON_PARTS */
-
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+    if ( handle->device_id == SFLASH_ID_N25Q512A )
+    {
+        *size = (unsigned long) 0x4000000; /* 64MByte */
+    }
+#endif /* ifdef SFLASH_SUPPORT_MICRON_PARTS */
     return 0;
 }
 
@@ -156,6 +204,7 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
     int enable_before_every_write = 1;
     const unsigned char* data_addr_ptr = (const unsigned char*) data_addr;
     unsigned char curr_device_address[3];
+    uint8_t result;
 
     if ( handle->write_allowed != SFLASH_WRITE_ALLOWED )
     {
@@ -167,7 +216,7 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
 #ifdef SFLASH_SUPPORT_MACRONIX_PARTS
     if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MACRONIX )
     {
-        max_write_size = (unsigned int) 1;  /* TODO: this should be 256, but that causes write errors */
+        max_write_size = (unsigned int) 128;  /* TODO: this should be 256, but that causes write errors */
         enable_before_every_write = 1;
     }
 #endif /* ifdef SFLASH_SUPPORT_MACRONIX_PARTS */
@@ -185,7 +234,13 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
         enable_before_every_write = 1;
     }
 #endif /* ifdef SFLASH_SUPPORT_EON_PARTS */
-
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+    if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MICRON )
+    {
+        max_write_size = (unsigned int) 128;
+        enable_before_every_write = 1;
+    }
+#endif /* ifdef SFLASH_SUPPORT_MICRON_PARTS */
 
 
     if ( enable_before_every_write == 0 )
@@ -217,6 +272,13 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
         {
             return status;
         }
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+    if ( handle->device_id == SFLASH_ID_N25Q512A )
+    {
+         sflash_read_flag_register(handle, &result);
+         sflash_clear_flag_register(handle);
+    }
+#endif
 
         data_addr_ptr += write_size;
         device_address += write_size;
@@ -224,6 +286,26 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
 
     }
 
+    return 0;
+}
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+int sflash_clear_flag_register( const sflash_handle_t* const handle)
+{
+   return generic_sflash_command( handle, SFLASH_CLEAR_FLAG_STATUS_REGISTER, 0, NULL, 0, NULL, NULL );
+}
+int sflash_read_flag_register( const sflash_handle_t* const handle, unsigned char* const dest_addr )
+{
+    return generic_sflash_command( handle, SFLASH_READ_FLAG_STATUS_REGISTER, 0, NULL, (unsigned long) 1, NULL, dest_addr );
+}
+#endif
+
+int sflash_write_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@observer@*/ const void* const data_addr, unsigned int size )
+{
+    UNUSED_PARAMETER( handle );
+    UNUSED_PARAMETER( device_address );
+    UNUSED_PARAMETER( data_addr );
+    UNUSED_PARAMETER( size );
+    wiced_assert( "sflash_write_secure not supported", WICED_FALSE );
     return 0;
 }
 
@@ -302,7 +384,9 @@ static inline int is_write_command( sflash_command_t cmd )
              ( cmd == SFLASH_CHIP_ERASE2       ) ||
              ( cmd == SFLASH_SECTOR_ERASE      ) ||
              ( cmd == SFLASH_BLOCK_ERASE_MID   ) ||
-             ( cmd == SFLASH_BLOCK_ERASE_LARGE ) )? 1 : 0;
+             ( cmd == SFLASH_BLOCK_ERASE_LARGE ) ||
+             ( cmd == SFLASH_DIE_ERASE_MICRON  ) ||
+             ( cmd == SFLASH_SECTOR_ERASE_MICRON))? 1 : 0;
 }
 
 static int generic_sflash_command(                               const sflash_handle_t* const handle,

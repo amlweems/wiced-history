@@ -145,7 +145,7 @@ wiced_result_t amqp_connection_backend_put_start_ok( wiced_amqp_connection_t *co
     AMQP_LONG_STRING(  &client_properties[2].value.S, "WICED" );
     client_properties[3].type = 'S';
     AMQP_SHORT_STRING( &client_properties[3].name, "copyright" );
-    AMQP_LONG_STRING(  &client_properties[3].value.S, "Copyright (c) 2007-2015 Broadcom Inc." );
+    AMQP_LONG_STRING(  &client_properties[3].value.S, "Copyright (c) 2007-2015 Broadcom Inc." ); /* license_checker: this is not a license */
 
     client_properties[4].name.str = NULL;
 

@@ -25,6 +25,7 @@
 #include <bcmendian.h>
 #include <hndsoc.h>
 #include <sbchipc.h>
+#include <sbpcmcia.h>
 
 /*
  * The driver supports the following:
@@ -33,13 +34,12 @@
  * 3. 40nm wrapper type layout
  */
 
-#ifdef OTP_DEBUG
-platform_result_t platform_otp_dump(int arg);
-platform_result_t platform_otp_dumpstats(void);
-#endif /* OTP_DEBUG */
-
 #ifndef BCMIPXOTP
 #define BCMIPXOTP   1
+#endif
+
+#ifndef OTP_READ_DIRECT_ACCESS
+#define OTP_READ_DIRECT_ACCESS 1
 #endif
 
 /* What device ID should be passed to si_attach? */
@@ -98,11 +98,15 @@ uint32_t otp_msg_level = OTP_ERR_VAL;
 #define OTPGU_CI_SZ     2
 
 /* OTP BT shared region (pre-allocated) */
-#define OTP_BT_BASE_43909    (4496/OTPWSIZE)
-#define OTP_BT_END_43909     (5520/OTPWSIZE)
+#define OTP_BT_BASE_43909    (0)    /* 43909 does not need OTP BT region */
+#define OTP_BT_END_43909     (0)
 
 #define MAXNUMRDES          9    /* Maximum OTP redundancy entries */
 #endif /* BCMIPXOTP */
+
+#define OTP_HW_REGION_SDIO_HW_HEADER_SIZE    12
+
+#define PLATFORM_OTP_SECURE_BIT_OFFSET 387
 
 /* OTP common registers */
 typedef struct {
@@ -117,13 +121,14 @@ typedef struct {
 /* OTP common function type */
 typedef void*    (*otp_init_t)(si_t *sih);
 typedef uint32_t (*otp_status_t)(void *oh);
-typedef uint32_t (*otp_size_t)(void *oh);
+typedef int      (*otp_size_t)(void *oh);
 typedef uint16_t (*otp_read_bit_t)(void *oh, unsigned int off);
 typedef int      (*otp_read_word_t)(void *oh, unsigned int wn, uint16_t *data);
 typedef int      (*otp_read_region_t)(si_t *sih, platform_otp_region_t region, uint16_t *data, unsigned int *wlen);
+typedef int      (*otp_get_region_t)(void *oh, platform_otp_region_t region, unsigned int *wbase, unsigned int *wlen);
 typedef bool     (*otp_isunified_t)(void *oh);
 typedef uint16_t (*otp_avsbitslen_t)(void *oh);
-typedef void     (*otp_dump_t)(void *oh, int arg);
+typedef void     (*otp_dump_t)(void *oh);
 typedef int      (*otp_lock_t)(si_t *sih);
 typedef int      (*otp_nvread_t)(void *oh, char *data, unsigned int *len);
 typedef int      (*otp_nvwrite_t)(void *oh, uint16_t *data, unsigned int wlen);
@@ -140,6 +145,7 @@ typedef struct otp_fn_s {
     otp_status_t            status;
     otp_init_t              init;
     otp_read_region_t       read_region;
+    otp_get_region_t        get_region;
     otp_nvread_t            nvread;
     otp_write_region_t      write_region;
     otp_cis_append_region_t cis_append_region;
@@ -188,7 +194,17 @@ typedef struct {
 
     volatile uint16_t *otpbase;       /* Cache OTP Base address */
     uint16_t      avsbitslen;         /* Number of bits used for AVS in sw region */
+
+    uint16_t arr_cache_word;
+    uint16_t arr_cache_word_number;
+
 } otpinfo_t;
+
+typedef struct {
+    uint8_t tag;
+    void* data;
+    uint16_t byte_len;
+} otp_read_tag_context_t;
 
 static otpinfo_t otpinfo;
 
@@ -235,13 +251,6 @@ otp_initregs(si_t *sih, void *coreregs, otpregs_t *otpregs)
  *  ipxotp_isunified()
  *  ipxotp_avsbitslen()
  *
- *   IPX internal functions:
- *  ipxotp_otpr()
- *  _ipxotp_init()
- *  _ipxotp_read_bit()
- *  ipxotp_max_rgnsz()
- *  ipxotp_otprb16()
- *
  */
 
 #ifdef BCMIPXOTP
@@ -255,11 +264,11 @@ ipxotp_status(void *oh)
 }
 
 /** Returns size in bytes */
-static uint32_t
+static int
 ipxotp_size(void *oh)
 {
     otpinfo_t *oi = (otpinfo_t *)oh;
-    return (uint32_t)oi->wsize * 2;
+    return (int)oi->wsize * 2;
 }
 
 /** Returns if otp is unified */
@@ -278,13 +287,52 @@ ipxotp_avsbitslen(void *oh)
     return oi->avsbitslen;
 }
 
+#ifdef OTP_READ_DIRECT_ACCESS
 static uint16_t
-ipxotp_read_bit_common(void *oh, otpregs_t *otpregs, unsigned int off)
+ipxotp_read_word_direct(void *oh, otpregs_t *otpregs, unsigned int wn)
+{
+    otpinfo_t *oi;
+    uint16_t val;
+
+    (void) otpregs; // Unused
+
+    oi = (otpinfo_t *)oh;
+
+    ASSERT(wn < oi->wsize);
+
+    val = R_REG(oi->osh, &oi->otpbase[wn]);
+
+    return val;
+}
+
+static uint16_t
+ipxotp_read_bit_direct(void *oh, otpregs_t *otpregs, unsigned int off)
+{
+    unsigned int word_num, bit_off;
+    uint16_t val = 0;
+    uint16_t bit = 0;
+
+    word_num = off / OTPWSIZE;
+    bit_off = off % OTPWSIZE;
+
+    val = ipxotp_read_word_direct(oh, otpregs, word_num);
+
+    bit = (val >> bit_off) & 0x1;
+
+    return bit;
+}
+#else
+static uint16_t
+ipxotp_read_bit_indirect(void *oh, otpregs_t *otpregs, unsigned int off)
 {
     otpinfo_t *oi = (otpinfo_t *)oh;
     unsigned int k, row, col;
     uint32_t otpp, st;
     unsigned int otpwt;
+
+    W_REG(oi->osh, otpregs->otpcontrol, 0);
+
+    AND_REG(oi->osh, otpregs->otpcontrol1, (OTPC1_CLK_EN_MASK | OTPC1_CLK_DIV_MASK));
 
     otpwt = (R_REG(oi->osh, otpregs->otplayout) & OTPL_WRAP_TYPE_MASK) >> OTPL_WRAP_TYPE_SHIFT;
 
@@ -315,19 +363,47 @@ ipxotp_read_bit_common(void *oh, otpregs_t *otpregs, unsigned int off)
     st = (st & OTPP_VALUE_MASK) >> OTPP_VALUE_SHIFT;
 
     OTP_DBG((" => %lu\n", st));
-    return (int)st;
+
+    return (uint16_t)st;
 }
 
 static uint16_t
-_ipxotp_read_bit(void *oh, otpregs_t *otpregs, unsigned int off)
+ipxotp_read_word_indirect(void *oh, otpregs_t *otpregs, unsigned int wn)
 {
-    otpinfo_t *oi = (otpinfo_t *)oh;
+    unsigned int base, i;
+    uint16_t val;
+    uint16_t bit;
 
-    W_REG(oi->osh, otpregs->otpcontrol, 0);
+    base = wn * OTPWSIZE;
+    val = 0;
 
-    AND_REG(oi->osh, otpregs->otpcontrol1, (OTPC1_CLK_EN_MASK | OTPC1_CLK_DIV_MASK));
+    for (i = 0; i < OTPWSIZE; i++) {
+        if ((bit = ipxotp_read_bit_indirect(oh, otpregs, base + i)) == 0xffff) {
+            break;
+        }
+        val = val | (bit << i);
+    }
 
-    return ipxotp_read_bit_common(oh, otpregs, off);
+    if (i < OTPWSIZE) {
+        val = 0xffff;
+    }
+
+    return val;
+}
+#endif
+
+static uint16_t
+ipxotp_read_bit_common(void *oh, otpregs_t *otpregs, unsigned int off)
+{
+    uint16_t bit;
+
+#ifdef OTP_READ_DIRECT_ACCESS
+    bit = ipxotp_read_bit_direct(oh, otpregs, off);
+#else
+    bit = ipxotp_read_bit_indirect(oh, otpregs, off);
+#endif
+
+    return bit;
 }
 
 static uint16_t
@@ -349,27 +425,10 @@ ipxotp_read_bit(void *oh, unsigned int off)
     ASSERT(regs != NULL);
     otp_initregs(sih, regs, &otpregs);
 
-    val16 = _ipxotp_read_bit(oh, &otpregs, off);
+    val16 = ipxotp_read_bit_common(oh, &otpregs, off);
 
     si_setcoreidx(sih, idx);
     return (val16);
-}
-
-static uint16_t
-ipxotp_otpr(void *oh, otpregs_t *otpregs, unsigned int wn)
-{
-    otpinfo_t *oi;
-    uint16_t val;
-
-    (void) otpregs; // Unused
-
-    oi = (otpinfo_t *)oh;
-
-    ASSERT(wn < oi->wsize);
-
-    val = R_REG(oi->osh, &oi->otpbase[wn]);
-
-    return val;
 }
 
 /** OTP BT region size */
@@ -477,6 +536,20 @@ ipxotp_otpsize_set_40nm(otpinfo_t *oi, unsigned int otpsz)
     return 0;
 }
 
+static uint16_t
+ipxotp_read_word_common(void *oh, otpregs_t *otpregs, unsigned int wn)
+{
+    uint16_t word;
+
+#ifdef OTP_READ_DIRECT_ACCESS
+    word = ipxotp_read_word_direct(oh, otpregs, wn);
+#else
+    word = ipxotp_read_word_indirect(oh, otpregs, wn);
+#endif
+
+    return word;
+}
+
 static int
 ipxotp_read_word(void *oh, unsigned int wn, uint16_t *data)
 {
@@ -496,9 +569,72 @@ ipxotp_read_word(void *oh, unsigned int wn, uint16_t *data)
     otp_initregs(sih, regs, &otpregs);
 
     /* Read the data */
-    *data = ipxotp_otpr(oh, &otpregs, wn);
+    *data = ipxotp_read_word_common(oh, &otpregs, wn);
 
     si_setcoreidx(sih, idx);
+    return 0;
+}
+
+static int
+ipxotp_get_region(void *oh, platform_otp_region_t region, unsigned int *wbase, unsigned int *wlen)
+{
+    otpinfo_t *oi = (otpinfo_t *)oh;
+
+    /* Validate region selection */
+    switch (region) {
+    case PLATFORM_OTP_HW_RGN:
+        /* OTP unification: For unified OTP sz=flim-hwbase */
+        if (oi->buotp)
+            *wlen = (uint)oi->flim - oi->hwbase;
+        else
+            *wlen = (uint)oi->hwlim - oi->hwbase;
+        if (!(oi->status & OTPS_GUP_HW)) {
+            OTP_ERR(("%s: h/w region not programmed\n", __FUNCTION__));
+            return BCME_NOTFOUND;
+        }
+        *wbase = oi->hwbase;
+        break;
+    case PLATFORM_OTP_SW_RGN:
+        /* OTP unification: For unified OTP sz=flim-swbase */
+        if (oi->buotp)
+            *wlen = ((uint)oi->flim - oi->swbase);
+        else
+            *wlen = ((uint)oi->swlim - oi->swbase);
+        if (!(oi->status & OTPS_GUP_SW)) {
+            OTP_ERR(("%s: s/w region not programmed\n", __FUNCTION__));
+            return BCME_NOTFOUND;
+        }
+        *wbase = oi->swbase;
+        break;
+    case PLATFORM_OTP_CI_RGN:
+        *wlen = OTPGU_CI_SZ;
+        if (!(oi->status & OTPS_GUP_CI)) {
+            OTP_ERR(("%s: chipid region not programmed\n", __FUNCTION__));
+            return BCME_NOTFOUND;
+        }
+        *wbase = oi->otpgu_base + OTPGU_CI_OFF;
+        break;
+    case PLATFORM_OTP_FUSE_RGN:
+        *wlen = (uint)oi->flim - oi->fbase;
+        if (!(oi->status & OTPS_GUP_FUSE)) {
+            OTP_ERR(("%s: fuse region not programmed\n", __FUNCTION__));
+            return BCME_NOTFOUND;
+        }
+        *wbase = oi->fbase;
+        break;
+    case PLATFORM_OTP_ALL_RGN:
+        *wlen = ((uint)oi->flim - oi->hwbase);
+        if (!(oi->status & (OTPS_GUP_HW | OTPS_GUP_SW))) {
+            OTP_ERR(("%s: h/w & s/w region not programmed\n", __FUNCTION__));
+            return BCME_NOTFOUND;
+        }
+        *wbase = oi->hwbase;
+        break;
+    default:
+        OTP_ERR(("%s: reading region %d is not supported\n", __FUNCTION__, region));
+        return BCME_BADARG;
+    }
+
     return 0;
 }
 
@@ -507,100 +643,24 @@ ipxotp_read_region(void *oh, platform_otp_region_t region, uint16_t *data, unsig
 {
     otpinfo_t *oi = (otpinfo_t *)oh;
     unsigned int idx;
-    unsigned int base, i, sz;
+    unsigned int wbase = 0, i, sz = 0;
     si_t *sih = oi->sih;
     void *regs;
     otpregs_t otpregs;
+    int res;
 
-    /* Validate region selection */
-    switch (region) {
-    case PLATFORM_OTP_HW_RGN:
-        /* OTP unification: For unified OTP sz=flim-hwbase */
-        if (oi->buotp)
-            sz = (uint)oi->flim - oi->hwbase;
-        else
-            sz = (uint)oi->hwlim - oi->hwbase;
-        if (!(oi->status & OTPS_GUP_HW)) {
-            OTP_ERR(("%s: h/w region not programmed\n", __FUNCTION__));
-            *wlen = sz;
-            return BCME_NOTFOUND;
-        }
-        if (*wlen < sz) {
-            OTP_ERR(("%s: buffer too small, should be at least %u\n",
-                     __FUNCTION__, oi->hwlim - oi->hwbase));
-            *wlen = sz;
-            return BCME_BUFTOOSHORT;
-        }
-        base = oi->hwbase;
-        break;
-    case PLATFORM_OTP_SW_RGN:
-        /* OTP unification: For unified OTP sz=flim-swbase */
-        if (oi->buotp)
-            sz = ((uint)oi->flim - oi->swbase);
-        else
-            sz = ((uint)oi->swlim - oi->swbase);
-        if (!(oi->status & OTPS_GUP_SW)) {
-            OTP_ERR(("%s: s/w region not programmed\n", __FUNCTION__));
-            *wlen = sz;
-            return BCME_NOTFOUND;
-        }
-        if (*wlen < sz) {
-            OTP_ERR(("%s: buffer too small should be at least %u\n",
-                     __FUNCTION__, oi->swlim - oi->swbase));
-            *wlen = sz;
-            return BCME_BUFTOOSHORT;
-        }
-        base = oi->swbase;
-        break;
-    case PLATFORM_OTP_CI_RGN:
-        sz = OTPGU_CI_SZ;
-        if (!(oi->status & OTPS_GUP_CI)) {
-            OTP_ERR(("%s: chipid region not programmed\n", __FUNCTION__));
-            *wlen = sz;
-            return BCME_NOTFOUND;
-        }
-        if (*wlen < sz) {
-            OTP_ERR(("%s: buffer too small, should be at least %u\n",
-                     __FUNCTION__, OTPGU_CI_SZ));
-            *wlen = sz;
-            return BCME_BUFTOOSHORT;
-        }
-        base = oi->otpgu_base + OTPGU_CI_OFF;
-        break;
-    case PLATFORM_OTP_FUSE_RGN:
-        sz = (uint)oi->flim - oi->fbase;
-        if (!(oi->status & OTPS_GUP_FUSE)) {
-            OTP_ERR(("%s: fuse region not programmed\n", __FUNCTION__));
-            *wlen = sz;
-            return BCME_NOTFOUND;
-        }
-        if (*wlen < sz) {
-            OTP_ERR(("%s: buffer too small, should be at least %u\n",
-                     __FUNCTION__, oi->flim - oi->fbase));
-            *wlen = sz;
-            return BCME_BUFTOOSHORT;
-        }
-        base = oi->fbase;
-        break;
-    case PLATFORM_OTP_ALL_RGN:
-        sz = ((uint)oi->flim - oi->hwbase);
-        if (!(oi->status & (OTPS_GUP_HW | OTPS_GUP_SW))) {
-            OTP_ERR(("%s: h/w & s/w region not programmed\n", __FUNCTION__));
-            *wlen = sz;
-            return BCME_NOTFOUND;
-        }
-        if (*wlen < sz) {
-            OTP_ERR(("%s: buffer too small, should be at least %u\n",
-                __FUNCTION__, oi->hwlim - oi->hwbase));
-            *wlen = sz;
-            return BCME_BUFTOOSHORT;
-        }
-        base = oi->hwbase;
-        break;
-    default:
-        OTP_ERR(("%s: reading region %d is not supported\n", __FUNCTION__, region));
-        return BCME_BADARG;
+    res = ipxotp_get_region(oh, region, &wbase, &sz);
+    if (res != 0) {
+        *wlen = sz;
+        return res;
     }
+    if (*wlen < sz) {
+        OTP_ERR(("%s: buffer too small, should be at least %u\n",
+                 __FUNCTION__, sz));
+        *wlen = sz;
+        return BCME_BUFTOOSHORT;
+    }
+    *wlen = sz;
 
     idx = si_coreidx(sih);
     if (AOB_ENAB(sih)) {
@@ -613,7 +673,7 @@ ipxotp_read_region(void *oh, platform_otp_region_t region, uint16_t *data, unsig
 
     /* Read the data */
     for (i = 0; i < sz; i ++)
-        data[i] = ipxotp_otpr(oh, &otpregs, base + i);
+        data[i] = ipxotp_read_word_common(oh, &otpregs, wbase + i);
 
     si_setcoreidx(sih, idx);
     *wlen = sz;
@@ -641,7 +701,7 @@ _ipxotp_init(otpinfo_t *oi, otpregs_t *otpregs)
      */
     if ((CHIPID(oi->sih->chip) == BCM43909_CHIP_ID) || 0) {
         uint32_t p_bits;
-        p_bits = (ipxotp_otpr(oi, otpregs, oi->otpgu_base + OTPGU_P_OFF) & OTPGU_P_MSK)
+        p_bits = (ipxotp_read_word_common(oi, otpregs, oi->otpgu_base + OTPGU_P_OFF) & OTPGU_P_MSK)
             >> OTPGU_P_SHIFT;
         oi->status |= (p_bits << OTPS_GUP_SHIFT);
     }
@@ -652,9 +712,6 @@ _ipxotp_init(otpinfo_t *oi, otpregs_t *otpregs)
     if ((oi->status & (OTPS_GUP_HW | OTPS_GUP_SW)) == (OTPS_GUP_HW | OTPS_GUP_SW)) {
         switch (CHIPID(oi->sih->chip)) {
             /* Add cases for supporting chips */
-            case BCM43909_CHIP_ID:
-                oi->buotp = TRUE;
-                break;
             default:
                 OTP_ERR(("chip=0x%x does not support Unified OTP.\n",
                     CHIPID(oi->sih->chip)));
@@ -698,7 +755,7 @@ _ipxotp_init(otpinfo_t *oi, otpregs_t *otpregs)
     if (oi->status & OTPS_GUP_HW) {
         uint16_t swbase;
         OTP_DBG(("%s: hw region programmed\n", __FUNCTION__));
-        swbase = ipxotp_otpr(oi, otpregs, oi->otpgu_base + OTPGU_HSB_OFF) / 16;
+        swbase = ipxotp_read_word_common(oi, otpregs, oi->otpgu_base + OTPGU_HSB_OFF) / 16;
         if (swbase) {
             oi->hwlim =  swbase;
         }
@@ -713,7 +770,7 @@ _ipxotp_init(otpinfo_t *oi, otpregs_t *otpregs)
 
         if (oi->status & OTPS_GUP_SW) {
             OTP_DBG(("%s: sw region programmed\n", __FUNCTION__));
-            oi->swlim = ipxotp_otpr(oi, otpregs, oi->otpgu_base + OTPGU_SFB_OFF) / 16;
+            oi->swlim = ipxotp_read_word_common(oi, otpregs, oi->otpgu_base + OTPGU_SFB_OFF) / 16;
             oi->fbase = oi->swlim;
         }
         else
@@ -819,29 +876,8 @@ exit:
 }
 
 #ifdef OTP_DEBUG
-static uint16_t
-ipxotp_otprb16(void *oh, otpregs_t *otpregs, unsigned int wn)
-{
-    unsigned int base, i;
-    uint16_t val;
-    uint16_t bit;
-
-    base = wn * 16;
-
-    val = 0;
-    for (i = 0; i < 16; i++) {
-        if ((bit = _ipxotp_read_bit(oh, otpregs, base + i)) == 0xffff)
-            break;
-        val = val | (bit << i);
-    }
-    if (i < 16)
-        val = 0xffff;
-
-    return val;
-}
-
 static void
-ipxotp_dump(void *oh, int arg)
+ipxotp_dump(void *oh)
 {
     otpinfo_t *oi = (otpinfo_t *)oh;
     si_t *sih = oi->sih;
@@ -863,10 +899,7 @@ ipxotp_dump(void *oh, int arg)
     for (i = 0; i < count / 2; i++) {
         if (!(i % 4))
             OTP_ERR(("\n0x%04x:", 2 * i));
-        if (arg == 0)
-            val = ipxotp_otpr(oh, &otpregs, i);
-        else
-            val = ipxotp_otprb16(oi, &otpregs, i);
+        val = ipxotp_read_word_common(oi, &otpregs, i);
         OTP_ERR((" 0x%04x", val));
     }
     OTP_ERR(("\n"));
@@ -882,6 +915,7 @@ static otp_fn_t ipxotp_fn = {
     (otp_status_t)ipxotp_status,
     (otp_init_t)ipxotp_init,
     (otp_read_region_t)ipxotp_read_region,
+    (otp_get_region_t)ipxotp_get_region,
     (otp_nvread_t)NULL,
     (otp_write_region_t)NULL,
     (otp_cis_append_region_t)NULL,
@@ -901,24 +935,29 @@ get_ipxotp_fn(void)
 }
 #endif /* BCMIPXOTP */
 
-/*
- * Common Code:
- *  platform_otp_init()
- *  platform_otp_status()
- *  platform_otp_size()
- *  platform_otp_read_bit()
- *  platform_otp_read_word()
- *  platform_otp_read_region()
- *  platform_otp_newcis()
- *  platform_otp_isunified()
- *  platform_otp_avsbitslen()
- *
- *  platform_otp_dump()
- *  platform_otp_dumpstats()
- */
+static host_semaphore_type_t*
+platform_otp_init_sem( void )
+{
+    static wiced_bool_t done = WICED_FALSE;
+    static host_semaphore_type_t sem;
+    uint32_t flags;
 
-platform_result_t
-platform_otp_init(void)
+    WICED_SAVE_INTERRUPTS(flags);
+
+    if (done != WICED_TRUE)
+    {
+        host_rtos_init_semaphore(&sem);
+        host_rtos_set_semaphore(&sem, WICED_FALSE);
+        done = WICED_TRUE;
+    }
+
+    WICED_RESTORE_INTERRUPTS(flags);
+
+    return &sem;
+}
+
+static platform_result_t
+platform_otp_init_internal(void)
 {
     si_t * sih = NULL;
     otpinfo_t *oi = NULL;
@@ -926,17 +965,13 @@ platform_otp_init(void)
 
     oi = get_otpinfo();
 
-    if (oi->sih != NULL)
-    {
-        si_detach(oi->sih);
-    }
     bzero(oi, sizeof(otpinfo_t));
 
     /* Get SI handle */
-    sih = si_attach(OTP_DEV_ID, oi->osh, NULL, SI_BUS, NULL, NULL, NULL);
+    sih = si_kattach(oi->osh);
     if (sih == NULL)
     {
-        OTP_ERR(("platform_otp_init: Cannot get SI handle\n"));
+        OTP_ERR(("%s: Cannot get SI handle\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -954,10 +989,9 @@ platform_otp_init(void)
 
     if (oi->fn == NULL)
     {
-        si_detach(sih);
         bzero(oi, sizeof(otpinfo_t));
 
-        OTP_ERR(("platform_otp_init: unsupported OTP type\n"));
+        OTP_ERR(("%s: unsupported OTP type\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -967,10 +1001,9 @@ platform_otp_init(void)
     /* 43909 OTP is always powered up */
     if (!si_is_otp_powered(sih))
     {
-        si_detach(sih);
         bzero(oi, sizeof(otpinfo_t));
 
-        OTP_ERR(("platform_otp_init: OTP not powered on\n"));
+        OTP_ERR(("%s: OTP not powered on\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -978,30 +1011,29 @@ platform_otp_init(void)
 
     if (ret == NULL)
     {
-        si_detach(sih);
         bzero(oi, sizeof(otpinfo_t));
 
-        OTP_ERR(("platform_otp_init: OTP initialization error\n"));
+        OTP_ERR(("%s: OTP initialization error\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_status(uint32_t *status)
+static platform_result_t
+platform_otp_status_internal(uint32_t *status)
 {
     otpinfo_t *oi = get_otpinfo();
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_status: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->status == NULL)
     {
-        OTP_ERR(("platform_otp_status: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -1010,20 +1042,20 @@ platform_otp_status(uint32_t *status)
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_size(uint32_t *size)
+static platform_result_t
+platform_otp_size_internal(uint16_t *size)
 {
     otpinfo_t *oi = get_otpinfo();
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_size: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->size == NULL)
     {
-        OTP_ERR(("platform_otp_size: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -1032,24 +1064,24 @@ platform_otp_size(uint32_t *size)
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_read_bit(unsigned int offset, uint16_t *read_bit)
+static platform_result_t
+platform_otp_read_bit_internal(uint16_t bit_number, uint16_t *read_bit)
 {
     otpinfo_t *oi = get_otpinfo();
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_read_bit: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->read_bit == NULL)
     {
-        OTP_ERR(("platform_otp_read_bit: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
-    *read_bit = (uint16_t)oi->fn->read_bit((void *)oi, offset);
+    *read_bit = (uint16_t)oi->fn->read_bit((void *)oi, bit_number);
 
     if (*read_bit == 0xffff)
     {
@@ -1059,8 +1091,8 @@ platform_otp_read_bit(unsigned int offset, uint16_t *read_bit)
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_read_word(unsigned int wn, uint16_t *data)
+static platform_result_t
+platform_otp_read_word_internal(uint16_t word_number, uint16_t *read_word)
 {
     otpinfo_t *oi;
     int err = 0;
@@ -1069,17 +1101,17 @@ platform_otp_read_word(unsigned int wn, uint16_t *data)
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_read_word: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->read_word == NULL)
     {
-        OTP_ERR(("platform_otp_read_word: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
-    err = (oi->fn->read_word)((void *)oi, wn, data);
+    err = (oi->fn->read_word)((void *)oi, word_number, read_word);
 
     if (err != 0)
     {
@@ -1089,29 +1121,112 @@ platform_otp_read_word(unsigned int wn, uint16_t *data)
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_read_region(platform_otp_region_t region, uint16_t *data, unsigned int *wlen)
+static platform_result_t
+platform_otp_read_array_internal(uint16_t byte_number, void* data, uint16_t byte_len)
+{
+    otpinfo_t *oi = get_otpinfo();
+    uint8_t *p = data;
+    platform_result_t result = PLATFORM_SUCCESS;
+
+    while (byte_len)
+    {
+        uint16_t word_number = byte_number / 2;
+        uint16_t word = oi->arr_cache_word;
+
+        if (oi->arr_cache_word_number != word_number)
+        {
+            result = platform_otp_read_word_internal(word_number, &word);
+            if (result != PLATFORM_SUCCESS)
+            {
+                break;
+            }
+
+            oi->arr_cache_word = word;
+            oi->arr_cache_word_number = word_number;
+        }
+
+        if ((byte_number & 0x1) == 0)
+        {
+            *p++ = (uint8_t)(word & 0xFF);
+            byte_number += 1;
+            byte_len -= 1;
+        }
+
+        if (byte_len)
+        {
+            *p++ = (uint8_t)((word >> 8) & 0xFF);
+            byte_number += 1;
+            byte_len -= 1;
+        }
+    }
+
+    return result;
+}
+
+static platform_result_t
+platform_otp_get_region_internal(platform_otp_region_t region, uint16_t *word_number, uint16_t *word_len)
 {
     otpinfo_t *oi;
+    unsigned int wnumber = 0;
+    unsigned int wlen = 0;
     int err = 0;
 
     oi = get_otpinfo();
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_read_region: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
+        return PLATFORM_ERROR;
+    }
+
+    if (oi->fn->get_region == NULL)
+    {
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
+        return PLATFORM_ERROR;
+    }
+
+    err = (oi->fn->get_region)((void *)oi, region, &wnumber, &wlen);
+    if (err != 0)
+    {
+        return PLATFORM_ERROR;
+    }
+
+    *word_number = wnumber;
+    *word_len = wlen;
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t
+platform_otp_read_region_internal(platform_otp_region_t region, uint16_t *data, uint16_t *word_len)
+{
+    otpinfo_t *oi;
+    int err = 0;
+    unsigned int wlen = *word_len;
+
+    oi = get_otpinfo();
+
+    if ((oi->sih == NULL) || (oi->fn == NULL))
+    {
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->read_region == NULL)
     {
-        OTP_ERR(("platform_otp_read_region: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
-    err = (oi->fn->read_region)((void *)oi, region, data, wlen);
+    err = (oi->fn->read_region)((void *)oi, region, data, &wlen);
 
-    if (err != 0)
+    *word_len = wlen;
+
+    if (err == BCME_BUFTOOSHORT)
+    {
+        return PLATFORM_BADARG;
+    }
+    else if (err != 0)
     {
         return PLATFORM_ERROR;
     }
@@ -1119,8 +1234,8 @@ platform_otp_read_region(platform_otp_region_t region, uint16_t *data, unsigned 
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_newcis(uint16_t *newcis_bit)
+static platform_result_t
+platform_otp_newcis_internal(uint16_t *newcis_bit)
 {
     platform_result_t ret = PLATFORM_ERROR;
 
@@ -1129,13 +1244,13 @@ platform_otp_newcis(uint16_t *newcis_bit)
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_newcis: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->read_bit == NULL)
     {
-        OTP_ERR(("platform_otp_newcis: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -1149,21 +1264,21 @@ platform_otp_newcis(uint16_t *newcis_bit)
     return ret;
 }
 
-platform_result_t
-platform_otp_isunified(wiced_bool_t *is_unified)
+static platform_result_t
+platform_otp_isunified_internal(wiced_bool_t *is_unified)
 {
     otpinfo_t *oi = get_otpinfo();
     bool otp_is_unified = FALSE;
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_isunified: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->isunified == NULL)
     {
-        OTP_ERR(("platform_otp_isunified: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -1181,20 +1296,20 @@ platform_otp_isunified(wiced_bool_t *is_unified)
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t
-platform_otp_avsbitslen(uint16_t *avsbitslen)
+static platform_result_t
+platform_otp_avsbitslen_internal(uint16_t *avsbitslen)
 {
     otpinfo_t *oi = get_otpinfo();
 
     if ((oi->sih == NULL) || (oi->fn == NULL))
     {
-        OTP_ERR(("platform_otp_avsbitslen: OTP not initialized\n"));
+        OTP_ERR(("%s: OTP not initialized\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
     if (oi->fn->avsbitslen == NULL)
     {
-        OTP_ERR(("platform_otp_avsbitslen: Unsupported OTP operation\n"));
+        OTP_ERR(("%s: Unsupported OTP operation\n", __FUNCTION__));
         return PLATFORM_ERROR;
     }
 
@@ -1203,9 +1318,379 @@ platform_otp_avsbitslen(uint16_t *avsbitslen)
     return PLATFORM_SUCCESS;
 }
 
+/*
+ * Common Code:
+ *  platform_otp_init()
+ *  platform_otp_status()
+ *  platform_otp_size()
+ *  platform_otp_read_bit()
+ *  platform_otp_read_word()
+ *  platform_otp_read_region()
+ *  platform_otp_newcis()
+ *  platform_otp_isunified()
+ *  platform_otp_avsbitslen()
+ *
+ *  platform_otp_dump()
+ *  platform_otp_dumpstats()
+ */
+
+static platform_result_t
+platform_otp_init_unsafe(void)
+{
+    static wiced_bool_t done = WICED_FALSE;
+    platform_result_t ret = PLATFORM_SUCCESS;
+
+    if (done != WICED_TRUE)
+    {
+        ret = platform_otp_init_internal();
+        if (ret == PLATFORM_SUCCESS)
+        {
+            done = WICED_TRUE;
+        }
+    }
+
+    get_otpinfo()->arr_cache_word_number = 1; /* any odd number */
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_init(void)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret = PLATFORM_SUCCESS;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_init_unsafe();
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_status(uint32_t *status)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_status_internal(status);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_size(uint16_t *size)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_size_internal(size);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_read_bit(uint16_t bit_number, uint16_t *read_bit)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_read_bit_internal(bit_number, read_bit);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_read_word(uint16_t word_number, uint16_t *read_word)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_read_word_internal(word_number, read_word);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_read_array(uint16_t byte_number, void* data, uint16_t byte_len)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_read_array_internal(byte_number, data, byte_len);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_get_region(platform_otp_region_t region, uint16_t *word_number, uint16_t *word_len)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_get_region_internal(region, word_number, word_len);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_read_region(platform_otp_region_t region, uint16_t *data, uint16_t *word_len)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_read_region_internal(region, data, word_len);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_newcis(uint16_t *newcis_bit)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_newcis_internal(newcis_bit);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_isunified(wiced_bool_t *is_unified)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_isunified_internal(is_unified);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_avsbitslen(uint16_t *avsbitslen)
+{
+    host_semaphore_type_t* sem = platform_otp_init_sem();
+    platform_result_t ret;
+
+    host_rtos_get_semaphore(sem, NEVER_TIMEOUT, WICED_FALSE);
+
+    ret = platform_otp_avsbitslen_internal(avsbitslen);
+
+    host_rtos_set_semaphore(sem, WICED_FALSE);
+
+    return ret;
+}
+
+platform_result_t
+platform_otp_cis_parse(platform_otp_region_t region, platform_otp_cis_parse_callback_func callback, void *context)
+{
+    uint16_t word_number;
+    uint16_t word_len;
+    uint16_t byte_number;
+    uint16_t byte_len;
+    platform_result_t result;
+
+    result = platform_otp_get_region(region, &word_number, &word_len);
+    if (result != PLATFORM_SUCCESS)
+    {
+        return result;
+    }
+
+    byte_number = 2 * word_number;
+    byte_len = 2 * word_len;
+
+    if (region == PLATFORM_OTP_HW_RGN)
+    {
+        if (byte_len < OTP_HW_REGION_SDIO_HW_HEADER_SIZE)
+        {
+            return PLATFORM_ERROR;
+        }
+        byte_number += OTP_HW_REGION_SDIO_HW_HEADER_SIZE;
+        byte_len -= OTP_HW_REGION_SDIO_HW_HEADER_SIZE;
+    }
+
+    while (byte_len)
+    {
+        uint8_t tag;
+        uint8_t tag_len;
+        uint8_t brcm_tag;
+
+        result = platform_otp_read_array(byte_number, &tag, 1);
+        if (result != PLATFORM_SUCCESS)
+        {
+            return result;
+        }
+        byte_number++;
+        byte_len--;
+
+        if (tag == CISTPL_NULL)
+        {
+            continue;
+        }
+
+        if (tag == CISTPL_END)
+        {
+            break;
+        }
+
+        if (byte_len == 0)
+        {
+            return PLATFORM_ERROR;
+        }
+        result = platform_otp_read_array(byte_number, &tag_len, 1);
+        if (result != PLATFORM_SUCCESS)
+        {
+            return result;
+        }
+        byte_number++;
+        byte_len--;
+
+        if (tag == CISTPL_BRCM_HNBU)
+        {
+            if ((byte_len == 0) || (tag_len == 0))
+            {
+                return PLATFORM_ERROR;
+            }
+            result = platform_otp_read_array(byte_number, &brcm_tag, 1);
+            if (result != PLATFORM_SUCCESS)
+            {
+                return result;
+            }
+            byte_number++;
+            byte_len--;
+            tag_len--;
+        }
+
+        if (tag_len > byte_len)
+        {
+            return PLATFORM_ERROR;
+        }
+
+        result = (*callback)(context, tag, brcm_tag, byte_number, tag_len);
+        if (result != PLATFORM_PARTIAL_RESULTS)
+        {
+            return result;
+        }
+
+        byte_number += tag_len;
+        byte_len -= tag_len;
+    }
+
+    return PLATFORM_PARTIAL_RESULTS;
+}
+
+static platform_result_t
+platform_otp_read_tag_callback( void* context, uint8_t tag, uint8_t brcm_tag, uint16_t offset, uint8_t size )
+{
+    otp_read_tag_context_t *parse_context = context;
+    uint16_t byte_len = parse_context->byte_len;
+
+    if ( ( tag == CISTPL_BRCM_HNBU ) && ( brcm_tag == parse_context->tag ) )
+    {
+        parse_context->byte_len = size;
+
+        if ( size > byte_len )
+        {
+            return PLATFORM_BADARG;
+        }
+
+        if ( platform_otp_read_array( offset, parse_context->data, size ) != PLATFORM_SUCCESS )
+        {
+            return PLATFORM_ERROR;
+        }
+
+        return PLATFORM_SUCCESS;
+    }
+
+    return PLATFORM_PARTIAL_RESULTS;
+}
+
+platform_result_t
+platform_otp_read_tag(platform_otp_region_t region, uint8_t tag, void *data, uint16_t *byte_len)
+{
+    otp_read_tag_context_t context = { .tag = tag, .data = data, .byte_len = *byte_len };
+    platform_result_t result;
+
+    result = platform_otp_init();
+    if (result != PLATFORM_SUCCESS)
+    {
+        return result;
+    }
+
+    result = platform_otp_cis_parse(region, platform_otp_read_tag_callback, &context);
+    *byte_len = context.byte_len;
+    return result;
+}
+
+platform_result_t
+platform_otp_package_options( uint32_t *package_options )
+{
+    uint16_t secure_bit = 0;
+    platform_result_t result;
+
+    /* Initialize the OTP Block */
+    result = platform_otp_init_unsafe();
+    if (result != PLATFORM_SUCCESS)
+    {
+        return result;
+    }
+
+    /* Extract package options bit[3] (i.e. secure bit) from OTP bit 387 */
+    result = platform_otp_read_bit_internal(PLATFORM_OTP_SECURE_BIT_OFFSET, &secure_bit);
+    if (result != PLATFORM_SUCCESS)
+    {
+        return result;
+    }
+
+    /* Extract package options bits[2:0] from ChipCommon ChipID register */
+    *package_options = (uint32_t)(PLATFORM_CHIPCOMMON->core_ctrl_status.chip_id.bits.package_option) & 0x7;
+
+    *package_options |= (uint32_t)(secure_bit << 3);
+
+    return PLATFORM_SUCCESS;
+}
+
 #ifdef OTP_DEBUG
 platform_result_t
-platform_otp_dump(int arg)
+platform_otp_dump(void)
 {
     otpinfo_t *oi = get_otpinfo();
 
@@ -1221,7 +1706,7 @@ platform_otp_dump(int arg)
         return PLATFORM_ERROR;
     }
 
-    oi->fn->dump((void *)oi, arg);
+    oi->fn->dump((void *)oi);
 
     return PLATFORM_SUCCESS;
 }

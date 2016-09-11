@@ -270,6 +270,9 @@ platform_result_t platform_hwcrypto_aescbc_decrypt_sha256_hmac(uint8_t *crypt_ke
         uint32_t auth_size, uint8_t *hmac_key, uint32_t hmac_key_len, uint8_t *src, uint8_t *crypt_dest, uint8_t *hash_dest);
 platform_result_t platform_hwcrypto_sha256_hmac( uint8_t *hmac_key, uint32_t keysize, uint8_t *source, uint32_t size,
         uint8_t *output_payload_buffer, uint8_t *hash_output );
+platform_result_t platform_hwcrypto_sha256_hmac_aescbc_encrypt(uint8_t *crypt_key, uint8_t *crypt_iv, uint32_t crypt_size,
+        uint32_t auth_size, uint8_t *hmac_key, uint32_t hmac_key_len, uint8_t *src, uint8_t *crypt_dest, uint8_t *hash_dest);
+platform_result_t platform_hwcrypto_aes128cbc_encrypt( uint8_t *key, uint32_t keysize, uint8_t *iv, uint32_t size, uint8_t *src, uint8_t *dest );
 
 #endif  /*_CRYPTO_API_H */
 

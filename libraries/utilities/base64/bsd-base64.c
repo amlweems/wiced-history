@@ -419,7 +419,10 @@ int base64_decode( unsigned char const* src, int32_t src_length, unsigned char* 
     {
         return ( -1 );
     }
-    target[ tarindex ] = '\0'; /* Returned value doesn't count \0. */
+    if ( target != NULL )
+    {
+        target[ tarindex ] = '\0'; /* Returned value doesn't count \0. */
+    }
 
 
     return (tarindex);

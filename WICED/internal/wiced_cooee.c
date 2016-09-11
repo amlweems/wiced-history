@@ -19,6 +19,7 @@
 #include "tlv.h"
 #include "wiced_security.h"
 #include "wiced_internal_api.h"
+#include <string.h>
 
 /******************************************************
  *                      Macros

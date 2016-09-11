@@ -222,7 +222,35 @@ typedef struct
     wiced_mac_t   mac_list[1];   /**< Variable length array of MAC addresses */
 } wiced_maclist_t;
 
+typedef struct
+{
+    char     abbrev[3];
+    uint8_t  rev;
+    uint8_t  data[64];
+} wiced_country_info_t;
+
 #pragma pack()
+
+/* DSS Parameter Set */
+typedef struct
+{
+    uint8_t type;
+    uint8_t length;
+    uint8_t current_channel;
+} dsss_parameter_set_ie_t;
+
+/* In dongle firmware this is defined as ht_add_ie_t in 802.11.h. It has similar structure but different field names due to history.
+ * Wireshark reports this element as the HT information element. */
+typedef struct
+{
+    uint8_t       type;
+    uint8_t       length;
+    uint8_t       primary_channel;
+    uint8_t       ht_operation_subset_1;
+    uint16_t      ht_operation_subset_2;
+    uint16_t      ht_operation_subset_3;
+    uint8_t       rx_supported_mcs_set[16];
+} ht_operation_ie_t;
 
 
 /******************************************************

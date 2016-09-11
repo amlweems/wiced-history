@@ -220,8 +220,9 @@ typedef struct
 {
     uint8_t bluetooth_device_address[6];
     uint8_t bluetooth_device_name[249]; /* including null termination */
+    uint8_t bluetooth_device_class[3];
     wiced_bool_t ssp_debug_mode;
-    uint8_t padding[1];   /* to ensure 32-bit aligned size */
+    uint8_t padding[2];   /* to ensure 32-bit aligned size */
 } platform_dct_bt_config_t;
 #endif
 

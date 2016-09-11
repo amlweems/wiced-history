@@ -54,18 +54,7 @@
 #ifndef TROPICSSL_ARC4_H
 #define TROPICSSL_ARC4_H
 
-#include <stdint.h>
-
-/**
- * \brief          ARC4 context structure
- */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    int32_t x;            /*!< permutation index */
-    int32_t y;            /*!< permutation index */
-    unsigned char m[256];    /*!< permutation table */
-} arc4_context;
-#endif
+#include "crypto_structures.h"
 
 #ifdef __cplusplus
 extern "C" {

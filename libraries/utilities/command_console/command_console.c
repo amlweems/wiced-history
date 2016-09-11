@@ -344,26 +344,27 @@ static void send_charstr( const char* s )
 void console_thread_func( uint32_t arg )
 {
     wiced_result_t result;
-    uint8_t received_character;
-    UNUSED_PARAMETER(result);
+    uint8_t        received_character;
+    uint32_t       expected_transfer_size;
 
     /* turn off buffers, so IO occurs immediately */
     setvbuf( stdin, NULL, _IONBF, 0 );
     setvbuf( stdout, NULL, _IONBF, 0 );
     setvbuf( stderr, NULL, _IONBF, 0 );
 
-    for(;;)
+    while ( 1 )
     {
-        result = wiced_uart_receive_bytes( cons.uart, &received_character, 1, 1000 );
-        if( result == WICED_SUCCESS )
+        expected_transfer_size = 1;
+        result = wiced_uart_receive_bytes( cons.uart, &received_character, &expected_transfer_size, 1000 );
+        if ( result == WICED_SUCCESS )
         {
             console_process_char( received_character );
         }
         else
         {
-            if( cons.quit == WICED_TRUE )
+            if ( cons.quit == WICED_TRUE )
             {
-                wiced_rtos_set_semaphore(&cons.console_quit_semaphore);
+                wiced_rtos_set_semaphore( &cons.console_quit_semaphore );
                 break;
             }
         }

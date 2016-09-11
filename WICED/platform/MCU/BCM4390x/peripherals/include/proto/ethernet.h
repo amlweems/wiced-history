@@ -1,7 +1,13 @@
 /*
- * From FreeBSD 2.2.7: Fundamental constants relating to ethernet.
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * From FreeBSD 2.2.7: Fundamental constants relating to ethernet.
  *
  * $Id: ethernet.h 473241 2014-04-28 19:15:49Z peterwu $
  */

@@ -39,8 +39,6 @@
  * @cond       Constants
  ******************************************************/
 
-#define SSID_MAX_LEN (32)
-
 /* These are the flags in the BSS Capability Information field as defined in section 7.3.1.4 of IEEE Std 802.11-2007  */
 #define DOT11_CAP_ESS                     (0x0001)   /** Extended service set capability */
 #define DOT11_CAP_IBSS                    (0x0002)   /** Ad-hoc capability (Independent Basic Service Set) */
@@ -75,8 +73,8 @@
 
 #define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) {  wiced_assert("Allocation failed\n", 0 == 1); return WWD_BUFFER_ALLOC_FAIL; }
 #define CHECK_RETURN( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1); return check_res; } }
+#define CHECK_RETURN_UNSUPPORTED_OK( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", check_res == WWD_WLAN_UNSUPPORTED); return check_res; } }
 #define RETURN_WITH_ASSERT( expr )  { wwd_result_t check_res = (expr); wiced_assert("Command failed\n", check_res == WWD_SUCCESS ); return check_res; }
-
 
 #define PACKET_FILTER_LIST_BUFFER_MAX_LEN ( WICED_LINK_MTU - sizeof(IOVAR_STR_PKT_FILTER_LIST) - IOCTL_OFFSET )
 
@@ -188,6 +186,7 @@ static            wwd_result_t    wwd_wifi_prepare_join             ( wwd_interf
 static            wwd_result_t    wwd_wifi_get_packet_filters_inner ( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list, wiced_bool_t enabled_list, uint32_t* count_out );
 static            wwd_result_t    wwd_wifi_set_band_specific_rate   ( wwd_interface_t interface, uint32_t rate );
 static            wwd_result_t    wwd_wifi_check_join_status        ( wwd_interface_t interface );
+static            tlv8_header_t*  wwd_parse_dot11_tlvs              ( const tlv8_header_t* tlv_buf, uint32_t buflen, dot11_ie_id_t key );
 
 /******************************************************
  *             Function definitions
@@ -341,8 +340,9 @@ static void* wwd_scan_result_handler( const wwd_event_header_t* event_header, co
     rsn_ie_fixed_portion_t*  rsnie;
     wpa_ie_fixed_portion_t*  wpaie = NULL;
     uint8_t                  rate_num;
-    dsss_parameter_set_ie_t* dsie;
-    ht_capabilities_ie_t*    ht_capabilities_ie;
+    dsss_parameter_set_ie_t* dsie = NULL;
+    ht_capabilities_ie_t*    ht_capabilities_ie = NULL;
+    ht_operation_ie_t*       ht_operation_ie = NULL;
     uint32_t                 count_tmp = 0;
     uint16_t                 temp16;
 
@@ -381,13 +381,15 @@ static void* wwd_scan_result_handler( const wwd_event_header_t* event_header, co
     eresult = (wl_escan_result_t*) event_data;
     bss_info = &eresult->bss_info[0];
 
-    wiced_assert( "More than one result returned by firmware", eresult->bss_count == 1 );
+    wiced_verify( "More than one result returned by firmware", eresult->bss_count == 1 );
     if (eresult->bss_count != 1)
+    {
         return handler_user_data;
+    }
 
     /* Copy the SSID into the output record structure */
-    record->SSID.length = bss_info->SSID_len;
-    memset( record->SSID.value, 0, (size_t) SSID_MAX_LEN );
+    record->SSID.length = MIN(sizeof(record->SSID.value), bss_info->SSID_len);
+    memset( record->SSID.value, 0, sizeof(record->SSID.value) );
     memcpy( record->SSID.value, bss_info->SSID, record->SSID.length );
 
     /* Copy the BSSID into the output record structure */
@@ -432,12 +434,12 @@ static void* wwd_scan_result_handler( const wwd_event_header_t* event_header, co
     if ( ( ie_offset > bss_info_length ) ||
          ( len > bss_info_length - ie_offset ) )
     {
-        wiced_assert( "Invalid ie length", 1 == 0 );
+        wiced_verify( "Invalid ie length", 1 == 0 );
         return handler_user_data;
     }
 
     /* Find an RSN IE (Robust-Security-Network Information-Element) */
-    rsnie = (rsn_ie_fixed_portion_t*) wlu_parse_tlvs( cp, len, DOT11_IE_ID_RSN );
+    rsnie = (rsn_ie_fixed_portion_t*) wwd_parse_dot11_tlvs( cp, len, DOT11_IE_ID_RSN );
 
     /* Find a WPA IE */
     if ( rsnie == NULL )
@@ -583,15 +585,30 @@ static void* wwd_scan_result_handler( const wwd_event_header_t* event_header, co
     version         = WICED_READ_32( &bss_info->version );
     record->channel = ( (uint8_t) ( chanspec & WL_CHANSPEC_CHAN_MASK ) );
 
-    /* Old WLAN firmware reported off channel probe responses - parse the response to check the channel */
+    /* In 2.4 GHz the radio firmware may report off channel probe responses. Parse the response to check if it is on or off the AP operating channel. */
     dsie =  (dsss_parameter_set_ie_t*) wlu_parse_tlvs( cp, len, DOT11_IE_ID_DSSS_PARAMETER_SET );
     if ( ( dsie != NULL ) &&
-         ( dsie->tlv_header.length == DSSS_PARAMETER_SET_LENGTH ) &&
+         ( dsie->length == DSSS_PARAMETER_SET_LENGTH ) &&
          ( record->channel != dsie->current_channel ) )
     {
         /* Received an off channel report */
         record->channel    = dsie->current_channel;
         record->on_channel = WICED_FALSE;
+    }
+
+    /* In 5GHz the DS Parameter Set element may not be present. If it's not present then for an 802.11a AP we use the channel from the chanspec, since
+     * it will be a 20 MHz wide channel. If it's an 802.11n AP then we need to examine the HT operations element to find the primary 20 MHz channel
+     * since the chanspec may report the center frequency if it's an 802.11n 40MHz or wider channel, which is not the same as the 20 MHz channel that the
+     * beacons are on. */
+    if ( ( dsie == NULL ) && ( ht_capabilities_ie != NULL ) )
+    {
+        /* Find the primary channel */
+        ht_operation_ie = (ht_operation_ie_t*)wlu_parse_tlvs( cp, len, DOT11_IE_ID_HT_OPERATION );
+        if ( ( ht_operation_ie != NULL ) &&
+             ( ht_operation_ie->length == HT_OPERATION_IE_LENGTH ) )
+        {
+            record->channel = ht_operation_ie->primary_channel;
+        }
     }
 
     if ( ( version != (uint32_t) LEGACY_WL_BSS_INFO_VERSION ) && ( bss_info->n_cap != 0 ) )
@@ -622,7 +639,7 @@ wwd_result_t wwd_wifi_join( const wiced_ssid_t* ssid, wiced_security_t auth_type
     wwd_result_t          result;
     wlc_ssid_t*           ssid_params;
 
-    if ( ssid->length > (size_t) SSID_MAX_LEN )
+    if ( ssid->length > (size_t) SSID_NAME_SIZE )
     {
         WPRINT_WWD_DEBUG(("wiced_wifi_join: SSID too long\n"));
         return WWD_WLAN_BADSSIDLEN;
@@ -633,6 +650,7 @@ wwd_result_t wwd_wifi_join( const wiced_ssid_t* ssid, wiced_security_t auth_type
 
     if ( wwd_wifi_set_block_ack_window_size( WWD_STA_INTERFACE ) != WWD_SUCCESS )
     {
+        WWD_WLAN_LET_SLEEP( );
         return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
     }
 
@@ -695,6 +713,7 @@ wwd_result_t wwd_wifi_join_specific( const wiced_scan_result_t* ap, const uint8_
 
     if ( wwd_wifi_set_block_ack_window_size( interface ) != WWD_SUCCESS )
     {
+        WWD_WLAN_LET_SLEEP( );
         return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
     }
 
@@ -792,6 +811,7 @@ static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_secu
     uint32_t*      infra;
     uint32_t*      wpa_auth;
     uint32_t*      auth;
+    uint32_t       bss_index = 0;
 
     if ( ( ( ( key_length > (uint8_t) WSEC_MAX_PSK_LEN ) ||
              ( key_length < (uint8_t) WSEC_MIN_PSK_LEN ) ) &&
@@ -815,6 +835,9 @@ static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_secu
     /* Clear the current join status */
     wiced_join_status[ interface ] = 0;
 
+    /* Map the interface to a BSS index */
+    bss_index = wwd_get_bss_index(interface );
+
     /* Set Wireless Security Type */
     wsec_setting = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( wsec_setting );
@@ -822,19 +845,19 @@ static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_secu
     CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC, buffer, 0, interface ) );
 
     /* Set supplicant variable */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:"IOVAR_STR_SUP_WPA );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_SUP_WPA );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = interface;
+    data[0] = bss_index;
     data[1] = (uint32_t) ( ( ( ( auth_type & WPA_SECURITY )  != 0 ) ||
                            ( ( auth_type & WPA2_SECURITY ) != 0 ) ) ? 1 : 0 );
-    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
 
     /* Set the EAPOL version to whatever the AP is using (-1) */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:"IOVAR_STR_SUP_WPA2_EAPVER );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, "bsscfg:" IOVAR_STR_SUP_WPA2_EAPVER );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = interface;
+    data[0] = bss_index;
     data[1] = (uint32_t)-1;
-    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
 
     /* Send WPA Key */
     switch ( auth_type )
@@ -1034,7 +1057,7 @@ static /*@null@*/ void* wiced_join_events_handler( const wwd_event_header_t* eve
 
     UNUSED_PARAMETER(event_data);
 
-    if ( event_header->interface != (uint8_t) WWD_STA_INTERFACE && event_header->interface != (uint8_t) WWD_P2P_INTERFACE )
+    if ( ( (uint32_t)event_header->interface != WWD_STA_INTERFACE ) && ( (uint32_t)event_header->interface != WWD_P2P_INTERFACE ) )
     {
         return handler_user_data;
     }
@@ -1313,8 +1336,9 @@ wwd_result_t wwd_wifi_is_ready_to_transceive( wwd_interface_t interface )
             /* Disables Eclipse static analysis warning */
             /* No break needed due to returns in all case paths */
             /* no break */
-        case WWD_INTERFACE_MAX:
         case WWD_ETHERNET_INTERFACE:
+        case WWD_INTERFACE_MAX:
+        case WWD_INTERFACE_FORCE_32_BIT:
         default:
             wiced_assert( "Bad interface", 0 != 0 );
             return WWD_UNKNOWN_INTERFACE;
@@ -1864,13 +1888,13 @@ wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable )
 }
 
 
-wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame )
+wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame, wwd_interface_t interface )
 {
     wiced_buffer_t buffer;
     wiced_action_frame_t* frame;
-    uint32_t* a = (uint32_t*) wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_action_frame_t)+4, IOVAR_STR_BSSCFG_ACTION_FRAME );
+    uint32_t* a = (uint32_t*) wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_action_frame_t)+4, "bsscfg:" IOVAR_STR_ACTION_FRAME );
     CHECK_IOCTL_BUFFER( a );
-    *a = 1;
+    *a = wwd_get_bss_index( interface );
     frame = (wiced_action_frame_t*)(a+1);
     memcpy(frame, action_frame, sizeof(wiced_action_frame_t));
     RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
@@ -1960,6 +1984,36 @@ wwd_result_t wwd_wifi_get_bssid( wiced_mac_t* bssid )
     return WWD_SUCCESS;
 }
 
+wwd_result_t wwd_wifi_set_preferred_association_band( int32_t band )
+{
+    wiced_buffer_t buffer;
+    int32_t* data;
+
+    /* Set preferred band */
+    data = (int32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t)sizeof(int32_t) );
+    CHECK_IOCTL_BUFFER( data );
+    *data = band;
+
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_ASSOC_PREFER, buffer, NULL, WWD_STA_INTERFACE ) );
+}
+
+wwd_result_t wwd_wifi_get_preferred_association_band( int32_t* band )
+{
+    wiced_buffer_t buffer;
+    wiced_buffer_t response;
+    int32_t*       data;
+
+    wiced_assert("Bad args", band != NULL);
+
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t)sizeof(uint32_t) ) );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_SET_ASSOC_PREFER, buffer, &response, WWD_STA_INTERFACE ) );
+    data = (int32_t*)host_buffer_get_current_piece_data_pointer( response );
+    *band = *data;
+
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
+}
+
 
 /******************************************************
  *             Wiced-internal functions
@@ -2010,9 +2064,9 @@ wwd_result_t wwd_wifi_manage_custom_ie( wwd_interface_t interface, wiced_custom_
 
     wiced_assert("Bad Args", oui != NULL);
 
-    iovar_data = (uint32_t*)wwd_sdpcm_get_iovar_buffer(&buffer, (uint16_t)(sizeof(vndr_ie_setbuf_t) + length + 4), IOVAR_STR_BSSCFG_VENDOR_IE );
+    iovar_data = (uint32_t*)wwd_sdpcm_get_iovar_buffer(&buffer, (uint16_t)(sizeof(vndr_ie_setbuf_t) + length + 4), "bsscfg:" IOVAR_STR_VENDOR_IE );
     CHECK_IOCTL_BUFFER( iovar_data );
-    *iovar_data = interface;
+    *iovar_data = wwd_get_bss_index( interface );
     ie_setbuf = (vndr_ie_setbuf_t*)(iovar_data+1);
 
     /* Copy the vndr_ie SET command ("add"/"del") to the buffer */
@@ -2265,8 +2319,9 @@ wwd_result_t wwd_wifi_set_channel( wwd_interface_t interface, uint32_t channel )
             break;
 
         case WWD_P2P_INTERFACE:
-        case WWD_INTERFACE_MAX:
         case WWD_ETHERNET_INTERFACE:
+        case WWD_INTERFACE_MAX:
+        case WWD_INTERFACE_FORCE_32_BIT:
         default:
             wiced_assert( "Bad interface", 0 != 0 );
             return WWD_UNKNOWN_INTERFACE;
@@ -2967,7 +3022,7 @@ wwd_result_t wwd_wifi_get_iovar_value( const char* iovar, uint32_t* value, wwd_i
     wiced_buffer_t response;
 
     CHECK_IOCTL_BUFFER( wwd_sdpcm_get_iovar_buffer( &buffer, 4, iovar ) );
-    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, interface ) );
+    CHECK_RETURN_UNSUPPORTED_OK( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, interface ) );
 
     *value = *(uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     host_buffer_release( response, WWD_NETWORK_RX );
@@ -2991,13 +3046,52 @@ wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, wwd_inte
     wiced_buffer_t response;
 
     CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) sizeof(*value) ) );
-    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, ioctl, buffer, &response, interface ) );
+    CHECK_RETURN_UNSUPPORTED_OK( wwd_sdpcm_send_ioctl( SDPCM_GET, ioctl, buffer, &response, interface ) );
 
     *value = * (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     host_buffer_release( response, WWD_NETWORK_RX );
     return WWD_SUCCESS;
 }
 
+/*!
+ ******************************************************************************
+ * Prints partial details of a scan result on a single line
+ *
+ * @param[in] record  A pointer to the wiced_scan_result_t record
+ *
+ */
+void print_scan_result( wiced_scan_result_t* record )
+{
+    WPRINT_APP_INFO( ( "%5s ", ( record->bss_type == WICED_BSS_TYPE_ADHOC ) ? "Adhoc" : "Infra" ) );
+    WPRINT_APP_INFO( ( "%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1], record->BSSID.octet[2], record->BSSID.octet[3], record->BSSID.octet[4], record->BSSID.octet[5] ) );
+    WPRINT_APP_INFO( ( " %d ", record->signal_strength ) );
+    if ( record->max_data_rate < 100000 )
+    {
+        WPRINT_APP_INFO( ( " %.1f ", (double) (record->max_data_rate / 1000.0) ) );
+    }
+    else
+    {
+        WPRINT_APP_INFO( ( "%.1f ", (double) (record->max_data_rate / 1000.0) ) );
+    }
+    WPRINT_APP_INFO( ( " %3d  ", record->channel ) );
+    WPRINT_APP_INFO( ( "%-15s ", ( record->security == WICED_SECURITY_OPEN             ) ? "Open                 " :
+                                 ( record->security == WICED_SECURITY_WEP_PSK          ) ? "WEP                  " :
+                                 ( record->security == WICED_SECURITY_WPA_TKIP_PSK     ) ? "WPA  TKIP  PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_AES_PSK      ) ? "WPA  AES   PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_MIXED_PSK    ) ? "WPA  Mixed PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_AES_PSK     ) ? "WPA2 AES   PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_TKIP_PSK    ) ? "WPA2 TKIP  PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_MIXED_PSK   ) ? "WPA2 Mixed PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_TKIP_ENT     ) ? "WPA  TKIP  Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA_AES_ENT      ) ? "WPA  AES   Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA_MIXED_ENT    ) ? "WPA  Mixed Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_TKIP_ENT    ) ? "WPA2 TKIP  Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_AES_ENT     ) ? "WPA2 AES   Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_MIXED_ENT   ) ? "WPA2 Mixed Enterprise" :
+                                                                                         "Unknown              " ) );
+    WPRINT_APP_INFO( ( " %-32s ", record->SSID.value ) );
+    WPRINT_APP_INFO( ( "\n" ) );
+}
 
 /******************************************************
  *             Static Functions
@@ -3009,7 +3103,7 @@ wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, wwd_inte
  * triples, returning a pointer to the substring whose first element
  * matches tag
  *
- * @note : This funciton has been copied directly from the standard broadcom host driver file wl/exe/wlu.c
+ * @note : This function has been copied directly from the standard Broadcom host driver file wl/exe/wlu.c
  *
  *
  * @param tlv_buf : The byte array containing the Information Elements (IEs)
@@ -3031,7 +3125,7 @@ static inline /*@null@*/ tlv8_header_t* wlu_parse_tlvs( const tlv8_header_t* tlv
  * Is this body of this tlvs entry a WPA entry? If
  * not update the tlvs buffer pointer/length
  *
- * @note : This funciton has been copied directly from the standard broadcom host driver file wl/exe/wlu.c
+ * @note : This function has been copied directly from the standard Broadcom host driver file wl/exe/wlu.c
  *
  * @param wpaie    : The byte array containing the Information Element (IE)
  * @param tlvs     : The larger IE array to be updated if not a WPA IE
@@ -3061,6 +3155,27 @@ static wiced_bool_t wlu_is_wpa_ie( vendor_specific_ie_header_t* wpaie, tlv8_head
     return WICED_FALSE;
 }
 
+/** Searches for a specific WiFi Information Element in a byte array
+ *
+ * Traverse a string of 1-byte tag/1-byte length/variable-length value
+ * triples, returning a pointer to the substring whose first element
+ * matches tag
+ *
+ * @note : This function has been copied directly from the standard Broadcom host driver file wl/exe/wlu.c
+ *
+ *
+ * @param tlv_buf : The byte array containing the Information Elements (IEs)
+ * @param buflen  : The length of the tlv_buf byte array
+ * @param key     : The Information Element tag to search for
+ *
+ * @return    NULL : if no matching Information Element was found
+ *            Non-Null : Pointer to the start of the matching Information Element
+ */
+static tlv8_header_t* wwd_parse_dot11_tlvs( const tlv8_header_t* tlv_buf, uint32_t buflen, dot11_ie_id_t key )
+{
+
+    return (tlv8_header_t*) tlv_find_tlv8( (const uint8_t*) tlv_buf, buflen, key );
+}
 
 wwd_result_t wwd_wifi_get_wifi_version( char* version, uint8_t length )
 {

@@ -24,9 +24,9 @@ extern "C" {
 #define SYS_MBOX_NULL ((xQueueHandle)0)
 #define SYS_SEM_NULL  ((xSemaphoreHandle)0)
 
-typedef xSemaphoreHandle  /*@only@*/ sys_sem_t;
-typedef xQueueHandle      /*@only@*/ sys_mbox_t;
-typedef xTaskHandle       /*@only@*/ sys_thread_t;
+typedef SemaphoreHandle_t /*@only@*/ sys_sem_t;
+typedef QueueHandle_t     /*@only@*/ sys_mbox_t;
+typedef TaskHandle_t      /*@only@*/ sys_thread_t;
 
 uint16_t sys_rand16( void );
 

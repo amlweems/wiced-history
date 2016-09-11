@@ -1,7 +1,13 @@
 /*
- * HND SiliconBackplane PMU support.
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * HND SiliconBackplane PMU support.
  *
  * $Id: hndpmu.h 456199 2014-02-18 03:06:41Z sudhirbs $
  */

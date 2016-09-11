@@ -100,6 +100,14 @@ typedef struct
     } type;
 } platform_copy_src_t;
 
+
+/** Structure to hold information about a system monitor item */
+typedef struct
+{
+    uint32_t last_update;              /**< Time of the last system monitor update */
+    uint32_t longest_permitted_delay;  /**< Longest permitted delay between checkins with the system monitor */
+} wiced_system_monitor_t;
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -319,6 +327,37 @@ static inline wiced_result_t  wiced_framework_app_get_size( wiced_app_t* app, ui
  *  @return Wiced reuslt code
  */
 static inline wiced_result_t  wiced_framework_app_set_size( wiced_app_t* app, uint32_t size );
+
+/** @} */
+
+
+/*****************************************************************************/
+/** @addtogroup sysmon       System Monitor
+ *  @ingroup mgmt
+ *
+ * Functions to communicate with the system monitor
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/** Registers a system monitor with the system monitor thread
+ *
+ * @param[out] system_monitor          : A pointer to a system monitor object that will be watched
+ * @param[in]  initial_permitted_delay : The maximum time in milliseconds allowed between monitor updates
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_register_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t initial_permitted_delay);
+
+/** Updates a system monitor and resets the last update time
+ *
+ * @param[out] system_monitor  : A pointer to a system monitor object to be updated
+ * @param[in]  permitted_delay : The maximum time in milliseconds allowed between monitor updates
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_update_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t permitted_delay);
 
 /** @} */
 

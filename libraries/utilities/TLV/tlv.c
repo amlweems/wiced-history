@@ -48,16 +48,28 @@ static uint16_t tlv_hton16_ptr(uint8_t* in, uint8_t* out);
 
 tlv8_data_t* tlv_find_tlv8( const uint8_t* message, uint32_t message_length, uint8_t type )
 {
-    tlv8_data_t* tlv = (tlv8_data_t*) message;
-    while ( ( (uint8_t*) tlv - message ) < message_length - sizeof(tlv8_header_t) )
+    while ( message_length != 0 )
     {
-        if ( tlv->type == type )
+        uint8_t  current_tlv_type   = message[ 0 ];
+        uint16_t current_tlv_length = message[ 1 ] + 2;
+
+        /* Check if we've overrun the buffer */
+        if ( current_tlv_length > message_length )
         {
-            return tlv;
+            return NULL;
         }
-        tlv = (tlv8_data_t*)((uint8_t*)tlv + sizeof(tlv8_header_t) + tlv->length);
+
+        /* Check if we've found the type we are looking for */
+        if ( current_tlv_type == type )
+        {
+            return (tlv8_data_t*) message;
+        }
+
+        /* Skip current TLV */
+        message        += current_tlv_length;
+        message_length -= current_tlv_length;
     }
-    return NULL;
+    return 0;
 }
 
 tlv16_data_t* tlv_find_tlv16( const uint8_t* message, uint32_t message_length, uint16_t type )

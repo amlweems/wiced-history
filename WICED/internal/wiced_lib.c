@@ -16,9 +16,7 @@
 #include <string.h>
 #include "wiced_resource.h"
 #include "wwd_debug.h"
-#include "wiced_tcpip.h"
 #include "platform_resource.h"
-#include "wiced_wifi.h"
 
 /******************************************************
  *                      Macros
@@ -106,7 +104,6 @@ static uint8_t string_to_generic( const char* string, uint8_t str_length,  uint3
  *
  * @return    The value represented by the string.
  */
-
 uint32_t generic_string_to_unsigned( const char* str )
 {
     uint32_t val = 0;
@@ -168,7 +165,6 @@ uint8_t string_to_signed( const char* string, uint8_t str_length, int32_t* value
     return (uint8_t) ( characters_processed + retval );
 }
 
-
 /**
  * Converts a decimal/hexidecimal string to an unsigned long int
  * Better than strtol or atol or atoi because the return value indicates if an error occurred
@@ -221,7 +217,6 @@ uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_le
     return (uint8_t) ( max_length - digits_left );
 }
 
-
 /**
  * Converts a signed long int to a decimal string
  *
@@ -249,9 +244,6 @@ uint8_t signed_to_decimal_string( int32_t value, char* output, uint8_t min_lengt
     retval = (uint8_t) ( retval + unsigned_to_decimal_string( (uint32_t)value, output, min_length, max_length ) );
     return retval;
 }
-
-
-
 
 /**
  * Converts a unsigned long int to a hexidecimal string
@@ -289,33 +281,6 @@ uint8_t unsigned_to_hex_string( uint32_t value, char* output, uint8_t min_length
     return (uint8_t) ( max_length - digits_left );
 }
 
-wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, const resource_hnd_t* res_id )
-{
-    const void*   data;
-    uint32_t   res_size;
-    wiced_result_t    result;
-    uint32_t pos = 0;
-
-    do
-    {
-        resource_result_t resource_result = resource_get_readonly_buffer ( res_id, pos, 0x7fffffff, &res_size, &data );
-        if ( resource_result != RESOURCE_SUCCESS )
-        {
-            return result;
-        }
-
-        result = wiced_tcp_stream_write( tcp_stream, data, (uint16_t) res_size );
-        resource_free_readonly_buffer( res_id, data );
-        if ( result != WICED_SUCCESS )
-        {
-            return result;
-        }
-        pos += res_size;
-    } while ( res_size > 0 );
-
-    return result;
-}
-
 int is_digit_str( const char* str )
 {
     int res = 0;
@@ -340,132 +305,97 @@ int is_digit_str( const char* str )
     return res;
 }
 
-
-/*!
- ******************************************************************************
- * Prints partial details of a scan result on a single line
- *
- * @param[in] record  A pointer to the wiced_scan_result_t record
- *
- */
-void print_scan_result( wiced_scan_result_t* record )
+uint8_t match_string_with_wildcard_pattern( const char* string, uint32_t length, const char* pattern )
 {
-    WPRINT_APP_INFO( ( "%5s ", ( record->bss_type == WICED_BSS_TYPE_ADHOC ) ? "Adhoc" : "Infra" ) );
-    WPRINT_APP_INFO( ( "%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1], record->BSSID.octet[2], record->BSSID.octet[3], record->BSSID.octet[4], record->BSSID.octet[5] ) );
-    WPRINT_APP_INFO( ( " %d ", record->signal_strength ) );
-    if ( record->max_data_rate < 100000 )
+    uint32_t current_string_length = length;
+    uint32_t temp_string_length    = 0;
+    char*    current_string        = (char*)string;
+    char*    current_pattern       = (char*)pattern;
+    char*    temp_string           = NULL;
+    char*    temp_pattern          = NULL;
+
+    /* Iterate through string and pattern until '*' is found */
+    while ( ( current_string_length != 0 ) && ( *current_pattern != '*' ) )
     {
-        WPRINT_APP_INFO( ( " %.1f ", (double) (record->max_data_rate / 1000.0) ) );
+        /* Current pattern is not equal current string and current pattern isn't a wildcard character */
+        if ( ( *current_pattern != *current_string ) && ( *current_pattern != '?' ) )
+        {
+            return 0;
+        }
+        current_pattern++;
+        current_string++;
+        current_string_length--;
     }
-    else
+
+    /* '*' is detected in pattern. Consume string until matching pattern is found */
+    while ( current_string_length != 0 )
     {
-        WPRINT_APP_INFO( ( "%.1f ", (double) (record->max_data_rate / 1000.0) ) );
+        switch ( *current_pattern )
+        {
+            case '*':
+                if ( *(++current_pattern) == '\0' )
+                {
+                    /* Last character in the pattern is '*'. Return successful */
+                    return 1;
+                }
+
+                /* Store temp variables for starting another matching iteration when non-matching character is found. */
+                temp_pattern       = current_pattern;
+                temp_string_length = current_string_length - 1;
+                temp_string        = current_string + 1;
+                break;
+
+            case '?':
+                current_pattern++;
+                current_string++;
+                current_string_length--;
+                break;
+
+            default:
+                if ( *current_pattern == *current_string )
+                {
+                    current_pattern++;
+                    current_string++;
+                    current_string_length--;
+                }
+                else
+                {
+                    current_pattern       = temp_pattern;
+                    current_string        = temp_string++;
+                    current_string_length = temp_string_length--;
+                }
+                break;
+        }
     }
-    WPRINT_APP_INFO( ( " %3d  ", record->channel ) );
-    WPRINT_APP_INFO( ( "%-15s ", ( record->security == WICED_SECURITY_OPEN             ) ? "Open                 " :
-                                 ( record->security == WICED_SECURITY_WEP_PSK          ) ? "WEP                  " :
-                                 ( record->security == WICED_SECURITY_WPA_TKIP_PSK     ) ? "WPA  TKIP  PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA_AES_PSK      ) ? "WPA  AES   PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA_MIXED_PSK    ) ? "WPA  Mixed PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA2_AES_PSK     ) ? "WPA2 AES   PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA2_TKIP_PSK    ) ? "WPA2 TKIP  PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA2_MIXED_PSK   ) ? "WPA2 Mixed PSK       " :
-                                 ( record->security == WICED_SECURITY_WPA_TKIP_ENT     ) ? "WPA  TKIP  Enterprise" :
-                                 ( record->security == WICED_SECURITY_WPA_AES_ENT      ) ? "WPA  AES   Enterprise" :
-                                 ( record->security == WICED_SECURITY_WPA_MIXED_ENT    ) ? "WPA  Mixed Enterprise" :
-                                 ( record->security == WICED_SECURITY_WPA2_TKIP_ENT    ) ? "WPA2 TKIP  Enterprise" :
-                                 ( record->security == WICED_SECURITY_WPA2_AES_ENT     ) ? "WPA2 AES   Enterprise" :
-                                 ( record->security == WICED_SECURITY_WPA2_MIXED_ENT   ) ? "WPA2 Mixed Enterprise" :
-                                                                                         "Unknown              " ) );
-    WPRINT_APP_INFO( ( " %-32s ", record->SSID.value ) );
-    WPRINT_APP_INFO( ( "\n" ) );
+
+    while ( *current_pattern == '*' )
+    {
+        current_pattern++;
+    }
+
+    return ( *current_pattern == '\0' );
 }
 
 /*
  ******************************************************************************
- * Convert an ipv4 string to a uint32_t.
+ * Length limited version of strstr. Ported from bcmutils.c
  *
- * @param     arg  The string containing the value.
- * @param     arg  The structure which will receive the IP address
+ * @param     arg  The string to be searched.
+ * @param     arg  The length of the string to be searched.
+ * @param     arg  The string to be found.
+ * @param     arg  The length of the string to be found.
  *
- * @return    0 if read successfully
+* @return    pointer to the found string if search successful, otherwise NULL
  */
-int str_to_ip( const char* arg, wiced_ip_address_t* address )
+char* strnstr(const char *s, uint16_t s_len, const char *substr, uint16_t substr_len)
 {
-    uint32_t* addr = &address->ip.v4;
-    uint8_t num = 0;
-
-    arg--;
-
-    *addr = 0;
-
-    do
+    for (; s_len >= substr_len; s++, s_len--)
     {
-        uint32_t tmp_val = 0;
-        *addr = *addr << 8;
-        string_to_unsigned( ++arg, 3, &tmp_val, 0 );
-        *addr += (uint32_t) tmp_val;
-        while ( ( *arg != '\x00' ) && ( *arg != '.' ) )
+        if (strncmp(s, substr, substr_len) == 0)
         {
-            arg++;
-        }
-        num++;
-    } while ( ( num < 4 ) && ( *arg != '\x00' ) );
-    if ( num == 4 )
-    {
-
-        address->version = WICED_IPV4;
-        return 0;
-    }
-    return -1;
-}
-
-
-void format_wep_keys( char* wep_key_ouput, const char* wep_key_data, uint8_t* wep_key_length, wep_key_format_t wep_key_format )
-{
-    int              a;
-    uint8_t          wep_key_entry_size;
-    wiced_wep_key_t* wep_key = (wiced_wep_key_t*)wep_key_ouput;
-
-    /* Setup WEP key 0 */
-    wep_key[0].index  = 0;
-
-    if ( wep_key_format == WEP_KEY_HEX_FORMAT )
-    {
-        wep_key[0].length = *wep_key_length >> 1;
-        for ( a = 0; a < wep_key[0].length; ++a )
-        {
-            uint8_t nibble1 = 0;
-            uint8_t nibble2 = 0;
-            if ( hexchar_to_nibble( wep_key_data[a*2],     &nibble1 ) == -1 ||
-                 hexchar_to_nibble( wep_key_data[a*2 + 1], &nibble2 ) == -1    )
-            {
-                WPRINT_APP_INFO( ( "Error - invalid hex character function: %s line: %u ", __FUNCTION__, __LINE__ ) );
-            }
-            wep_key[0].data[a] = (uint8_t)(( nibble1 << 4 ) | nibble2);
+            return (char*)s;
         }
     }
-    else
-    {
-        wep_key[0].length = *wep_key_length;
-        memcpy( wep_key[0].data, wep_key_data, *wep_key_length );
-    }
 
-    /* Calculate the size of each WEP key entry */
-    wep_key_entry_size = (uint8_t) ( 2 + *wep_key_length );
-
-    /* Duplicate WEP key 0 for keys 1 to 3 */
-    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
-    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
-    wep_key->index = 1;
-
-    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
-    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
-    wep_key->index = 2;
-
-    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
-    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
-    wep_key->index = 3;
-
-    *wep_key_length = (uint8_t) ( 4 * wep_key_entry_size );
+    return NULL;
 }

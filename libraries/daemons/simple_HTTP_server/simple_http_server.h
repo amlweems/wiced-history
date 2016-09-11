@@ -106,7 +106,8 @@ typedef struct
     volatile wiced_bool_t      quit;
     wiced_thread_t             thread;
     const wiced_http_page_t*   page_database;
-    wiced_tls_advanced_context_t tls_context;
+    wiced_tls_context_t        tls_context;
+    wiced_tls_identity_t       tls_identity;
 } wiced_simple_https_server_t;
 
 /******************************************************
@@ -120,7 +121,7 @@ typedef struct
 wiced_result_t wiced_simple_http_server_start       ( wiced_simple_http_server_t* server, uint16_t port, const wiced_http_page_t* page_database, wiced_interface_t interface );
 wiced_result_t wiced_simple_http_server_stop        ( wiced_simple_http_server_t* server );
 
-wiced_result_t wiced_simple_https_server_start      ( wiced_simple_https_server_t* server, uint16_t port, const wiced_http_page_t* page_database, const char* server_cert, const char* server_key, wiced_interface_t interface );
+wiced_result_t wiced_simple_https_server_start      ( wiced_simple_https_server_t* server, uint16_t port, const wiced_http_page_t* page_database, const uint8_t* server_cert, const char* server_key, wiced_interface_t interface );
 wiced_result_t wiced_simple_https_server_stop       ( wiced_simple_https_server_t* server );
 
 wiced_result_t wiced_simple_http_write_reply_header ( wiced_tcp_stream_t* stream, const char* mime_type, wiced_bool_t nocache );

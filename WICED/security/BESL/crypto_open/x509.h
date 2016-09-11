@@ -143,92 +143,24 @@
 #define OID_PKCS9               "\x2A\x86\x48\x86\xF7\x0D\x01\x09"
 #define OID_PKCS9_EMAIL         "\x2A\x86\x48\x86\xF7\x0D\x01\x09\x01"
 
-/*
- * Structures for parsing X.509 certificates
- */
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-typedef struct _x509_buf {
-    int32_t tag;
-    int32_t len;
-    const unsigned char *p;
-} x509_buf;
-
-typedef struct _x509_name {
-    x509_buf oid;
-    x509_buf val;
-    struct _x509_name *next;
-} x509_name;
-
-typedef struct _x509_time {
-        uint16_t year;
-        uint8_t  mon;
-        uint8_t  day;
-        uint8_t  hour;
-        uint8_t  min;
-        uint8_t  sec;
-} x509_time;
-
-typedef struct _x509_cert {
-    x509_buf raw;
-    x509_buf tbs;
-
-    int32_t version;
-    x509_buf serial;
-    x509_buf sig_oid1;
-
-    x509_buf issuer_raw;
-    x509_buf subject_raw;
-
-    x509_name issuer;
-    x509_name subject;
-
-    x509_time valid_from;
-    x509_time valid_to;
-
-    x509_buf pk_oid;
-    rsa_context rsa;
-
-    x509_buf issuer_id;
-    x509_buf subject_id;
-    x509_buf v3_ext;
-
-    int32_t ca_istrue;
-    int32_t max_pathlen;
-
-    x509_buf sig_oid2;
-    x509_buf sig;
-
-    struct _x509_cert *next;
-} x509_cert;
-
-/*
- * Structures for writing X.509 certificates
- */
-typedef struct _x509_node {
-    unsigned char *data;
-    unsigned char *p;
-    unsigned char *end;
-
-    uint32_t len;
-} x509_node;
-
-typedef struct _x509_raw {
-    x509_node raw;
-    x509_node tbs;
-
-    x509_node version;
-    x509_node serial;
-    x509_node tbs_signalg;
-    x509_node issuer;
-    x509_node validity;
-    x509_node subject;
-    x509_node subpubkey;
-
-    x509_node signalg;
-    x509_node sign;
-} x509_raw;
-#endif
+#define OID_x962                         "\x2A\x86\x48\xCE\x3D" /* ansi-x962: 1.2.840.10045 */
+#define OID_x962_KEY_TYPES               "\x2A\x86\x48\xCE\x3D\x02"         /* ansi-x962 key types: 1.2.840.10045.2      */
+#define OID_x962_EC_PUBLIC_KEY           "\x2A\x86\x48\xCE\x3D\x02\x01"     /* ec public key 1.2.840.10045.2.1           */
+#define OID_x962_SIGNATURES              "\x2A\x86\x48\xCE\x3D\x04"         /* ansi-x962 signatures: 1.2.840.10045.4     */
+#define OID_x962_ECDSA_WITH_SHA1         "\x2A\x86\x48\xCE\x3D\x04\x01"     /* ecdsa-with-SHA1: 1.2.840.10045.4.1        */
+#define OID_x962_ECDSA_WITH_RECOMMENDED  "\x2A\x86\x48\xCE\x3D\x04\x02"     /* ecdsa-with-Recommended: 1.2.840.10045.4.2 */
+#define OID_x962_ECDSA_WITH_SHA2         "\x2A\x86\x48\xCE\x3D\x04\x03"     /* ecdsa-with-SHA2: 1.2.840.10045.4.3        */
+#define OID_x962_ECDSA_WITH_SHA224       "\x2A\x86\x48\xCE\x3D\x04\x03\x01" /* ecdsa-with-SHA224: 1.2.840.10045.4.3.1    */
+#define OID_x962_ECDSA_WITH_SHA256       "\x2A\x86\x48\xCE\x3D\x04\x03\x02" /* ecdsa-with-SHA256: 1.2.840.10045.4.3.2    */
+#define OID_x962_ECDSA_WITH_SHA384       "\x2A\x86\x48\xCE\x3D\x04\x03\x03" /* ecdsa-with-SHA384: 1.2.840.10045.4.3.3    */
+#define OID_x962_ECDSA_WITH_SHA512       "\x2A\x86\x48\xCE\x3D\x04\x03\x04" /* ecdsa-with-SHA512: 1.2.840.10045.4.3.4    */
+#define OID_x962_CURVE_SECP192R1         "\x2A\x86\x48\xCE\x3D\x03\x01\x01" /* secp192r1: 1.2.840.10045.3.1.1            */
+#define OID_x962_CURVE_PRIME192V2        "\x2A\x86\x48\xCE\x3D\x03\x01\x02" /* prime192v2: 1.2.840.10045.3.1.2           */
+#define OID_x962_CURVE_PRIME192V3        "\x2A\x86\x48\xCE\x3D\x03\x01\x03" /* prime192v3: 1.2.840.10045.3.1.3           */
+#define OID_x962_CURVE_PRIME239V1        "\x2A\x86\x48\xCE\x3D\x03\x01\x04" /* prime239v1: 1.2.840.10045.3.1.4           */
+#define OID_x962_CURVE_PRIME239V2        "\x2A\x86\x48\xCE\x3D\x03\x01\x05" /* prime239v2: 1.2.840.10045.3.1.5           */
+#define OID_x962_CURVE_PRIME239V3        "\x2A\x86\x48\xCE\x3D\x03\x01\x06" /* prime239v3: 1.2.840.10045.3.1.6           */
+#define OID_x962_CURVE_SECP256R1         "\x2A\x86\x48\xCE\x3D\x03\x01\x07" /* secp256r1: 1.2.840.10045.3.1.7            */
 
 #ifdef __cplusplus
 extern "C" {
@@ -351,6 +283,14 @@ extern "C" {
      */
     int32_t x509_self_test(int32_t verbose);
 
+
+    int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uint32_t len );
+
+    int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t buflen );
+
+    int32_t x509_convert_pem_to_der( const unsigned char* pem_certificate, uint32_t pem_certificate_length, const uint8_t** der_certificate, uint32_t* total_der_bytes );
+    int32_t asn1_read_length( const uint8_t* p, uint32_t* length, uint8_t* bytes_used );
+    uint32_t x509_read_cert_length( const uint8_t* der_certificate_data );
 #ifdef __cplusplus
 }
 #endif

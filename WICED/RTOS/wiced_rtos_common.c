@@ -14,6 +14,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include "wiced_utilities.h"
 #include "rtos.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "platform/wwd_platform_interface.h"
@@ -22,7 +23,7 @@
 #include "wiced_rtos.h"
 #include "wiced_defaults.h"
 #include "wiced_result.h"
-#include "internal/wiced_internal_api.h"
+#include "wiced_rtos_common.h"
 #include "platform_config.h"
 
 /******************************************************

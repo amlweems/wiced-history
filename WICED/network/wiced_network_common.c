@@ -9,6 +9,7 @@
  */
 
 
+#include <ctype.h>
 #include "wiced_management.h"
 #include "wiced_framework.h"
 #include "wiced_rtos.h"
@@ -107,6 +108,10 @@ wiced_result_t wiced_get_default_ready_interface( wiced_interface_t* interface )
     else if ( wiced_network_is_up( WICED_AP_INTERFACE ) == WICED_TRUE )
     {
         *interface = WICED_AP_INTERFACE;
+    }
+    else if ( wiced_network_is_up( WICED_P2P_INTERFACE ) == WICED_TRUE )
+    {
+        *interface = WICED_P2P_INTERFACE;
     }
 #ifdef WICED_USE_ETHERNET_INTERFACE
     else if ( wiced_network_is_up( WICED_ETHERNET_INTERFACE ) == WICED_TRUE )
@@ -217,7 +222,7 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
         {
             wiced_leave_ap( interface );
         }
-        else
+        else if ( interface != WICED_ETHERNET_INTERFACE )
         {
             wiced_stop_ap( );
         }
@@ -335,4 +340,97 @@ wiced_result_t wiced_network_deregister_link_callback( wiced_network_link_callba
     wiced_rtos_unlock_mutex( &link_subscribe_mutex );
 
     return WICED_SUCCESS;
+}
+
+/*
+ ******************************************************************************
+ * Convert an ipv4 string to a uint32_t.
+ *
+ * @param     arg  The string containing the value.
+ * @param     arg  The structure which will receive the IP address
+ *
+ * @return    0 if read successfully
+ */
+int str_to_ip( const char* arg, wiced_ip_address_t* address )
+{
+    uint32_t* addr = &address->ip.v4;
+    uint8_t num = 0;
+
+    arg--;
+
+    *addr = 0;
+
+    do
+    {
+        uint32_t tmp_val = 0;
+        *addr = *addr << 8;
+        string_to_unsigned( ++arg, 3, &tmp_val, 0 );
+        *addr += (uint32_t) tmp_val;
+        while ( ( *arg != '\x00' ) && ( *arg != '.' ) )
+        {
+            if ( isdigit( (int) *arg ) == WICED_FALSE )
+            {
+                return -1;
+            }
+            arg++;
+        }
+        num++;
+    } while ( ( num < 4 ) && ( *arg != '\x00' ) );
+    if ( num == 4 )
+    {
+
+        address->version = WICED_IPV4;
+        return 0;
+    }
+    return -1;
+}
+
+
+void format_wep_keys( char* wep_key_output, const char* wep_key_data, uint8_t* wep_key_length, wep_key_format_t wep_key_format )
+{
+    int              a;
+    uint8_t          wep_key_entry_size;
+    wiced_wep_key_t* wep_key = (wiced_wep_key_t*)wep_key_output;
+
+    /* Setup WEP key 0 */
+    wep_key[0].index  = 0;
+
+    if ( wep_key_format == WEP_KEY_HEX_FORMAT )
+    {
+        wep_key[0].length = *wep_key_length >> 1;
+        for ( a = 0; a < wep_key[0].length; ++a )
+        {
+            uint8_t nibble1 = 0;
+            uint8_t nibble2 = 0;
+            if ( hexchar_to_nibble( wep_key_data[a*2],     &nibble1 ) == -1 ||
+                 hexchar_to_nibble( wep_key_data[a*2 + 1], &nibble2 ) == -1    )
+            {
+                WPRINT_APP_INFO( ( "Error - invalid hex character function: %s line: %u ", __FUNCTION__, __LINE__ ) );
+            }
+            wep_key[0].data[a] = (uint8_t)(( nibble1 << 4 ) | nibble2);
+        }
+    }
+    else
+    {
+        wep_key[0].length = *wep_key_length;
+        memcpy( wep_key[0].data, wep_key_data, *wep_key_length );
+    }
+
+    /* Calculate the size of each WEP key entry */
+    wep_key_entry_size = (uint8_t) ( 2 + *wep_key_length );
+
+    /* Duplicate WEP key 0 for keys 1 to 3 */
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_output, wep_key_entry_size );
+    wep_key->index = 1;
+
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_output, wep_key_entry_size );
+    wep_key->index = 2;
+
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_output, wep_key_entry_size );
+    wep_key->index = 3;
+
+    *wep_key_length = (uint8_t) ( 4 * wep_key_entry_size );
 }

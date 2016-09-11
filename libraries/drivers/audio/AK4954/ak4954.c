@@ -389,6 +389,7 @@ typedef struct ak4954_mcki_fs_map           ak4954_mcki_fs_map_t;
 typedef struct ak4954_fs_map                ak4954_fs_map_t;
 typedef struct ak4954_mcki_freq_map         ak4954_mcki_freq_map_t;
 typedef struct ak4954_dbl_range             ak4954_dbl_range_t;
+typedef struct i2c_ak4954_payload           i2c_ak4954_payload_t;
 
 typedef enum ak4954_device_type             ak4954_device_type_t;
 
@@ -472,6 +473,12 @@ struct ak4954_dbl_range
     wiced_bool_t inv;
 };
 
+struct i2c_ak4954_payload
+{
+    uint8_t addr;
+    uint8_t data;
+};
+
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -502,10 +509,12 @@ static const ak4954_fs_map_t fs_map[] =
     { 96000, AK4954_FS_96KHZ     },
 };
 
-static const uint32_t mcki_8[8] = {
+static const uint32_t mcki_8[8] =
+{
     8000, 12000, 16000, 24000, 32000, 48000, 64000, 96000
 };
-static const uint32_t mcki_12[12] = {
+static const uint32_t mcki_12[12] =
+{
     8000, 12000, 16000, 24000, 32000, 48000, 64000, 96000, 11025, 22050, 44100, 88200
 };
 
@@ -545,56 +554,33 @@ const static ak4954_dbl_range_t ak4954_dbl_range_dvl =
  */
 static wiced_result_t ak4954_i2c_reg_write(wiced_i2c_device_t *device, uint8_t reg, uint8_t value)
 {
-    wiced_result_t result;
     static wiced_i2c_message_t msg[1];
-    struct i2c_ak4954_payload
-    {
-        uint8_t addr;
-        uint8_t data;
-    };
-    struct i2c_ak4954_payload payload;
+    i2c_ak4954_payload_t payload;
 
     payload.addr = reg;
     payload.data = value;
 
-    result = wiced_i2c_init_tx_message(msg, &payload, 2, I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA);
-    if (result == WICED_SUCCESS)
-    {
-        result = wiced_i2c_transfer(device, msg, 1);
-    }
-    return result;
+    WICED_VERIFY( wiced_i2c_init_tx_message( msg, &payload, 2, I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA ) );
+
+    return wiced_i2c_transfer( device, msg, 1 );
 }
 
 
 /* AK4954 Random Address Read. */
-static wiced_result_t ak4954_i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint8_t *value)
+static wiced_result_t ak4954_i2c_reg_read( wiced_i2c_device_t *device, uint8_t reg, uint8_t *value )
 {
-    wiced_result_t result;
     static wiced_i2c_message_t msg[2];
-
-    result = WICED_SUCCESS;
 
     /* Some I2C masters might not support combined messages. */
 
     /* Reset device's register counter by issuing a TX. */
-    if (result == WICED_SUCCESS)
-    {
-        result = wiced_i2c_init_tx_message(&msg[0], &reg, sizeof(reg), I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA);
-    }
+    WICED_VERIFY( wiced_i2c_init_tx_message( &msg[0], &reg, sizeof(reg), I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA ) );
 
     /* Initialize RX message. */
-    if (result == WICED_SUCCESS)
-    {
-        result = wiced_i2c_init_rx_message(&msg[1], value, sizeof(*value), I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA);
-    }
+    WICED_VERIFY( wiced_i2c_init_rx_message( &msg[1], value, sizeof(*value), I2C_XFER_RETRY_COUNT, I2C_DISABLE_DMA ) );
 
     /* Transfer. */
-    if (result == WICED_SUCCESS)
-    {
-        result = wiced_i2c_transfer(device, msg, ARRAYSIZE(msg));
-    }
-
-    return result;
+    return wiced_i2c_transfer( device, msg, ARRAYSIZE( msg ) );
 }
 
 
@@ -612,18 +598,17 @@ static wiced_result_t ak4954_reg_read(ak4954_device_cmn_data_t* ak4954, uint8_t 
 
 static wiced_result_t ak4954_upd_bits(ak4954_device_cmn_data_t *ak4954, uint8_t reg, uint8_t mask, uint8_t val)
 {
-    wiced_result_t result;
     uint8_t old, new;
 
-    result = ak4954_reg_read(ak4954, reg, &old);
-    if (result == WICED_SUCCESS)
+    WICED_VERIFY( ak4954_reg_read( ak4954, reg, &old ) );
+
+    new = ( old & ~mask ) | val;
+    if ( new != old )
     {
-        new = (old & ~mask) | val;
-        if (new != old)
-            result = ak4954_reg_write(ak4954, reg, new);
+        return ak4954_reg_write( ak4954, reg, new );
     }
 
-    return result;
+    return WICED_SUCCESS;
 }
 
 
@@ -634,19 +619,27 @@ static inline ak4954_device_type_t ak4954_type(ak4954_device_data_t *dd)
 
 
 /* Convert an ascending or descending range to a 0-indexed integer range. */
-static uint8_t ak4954_double_range_to_index(ak4954_device_cmn_data_t *ak4954, double val, const ak4954_dbl_range_t *r)
+static uint8_t ak4954_double_range_to_index( ak4954_device_cmn_data_t *ak4954, double val, const ak4954_dbl_range_t *r )
 {
     uint8_t idx;
 
-    if (val > r->max)
+    if ( val > r->max )
+    {
         val = r->max;
-    else if (val < r->min)
+    }
+    else if ( val < r->min )
+    {
         val = r->min;
+    }
 
-    if (r->inv == WICED_TRUE)
-        idx = (r->max-val) / r->step;
+    if ( r->inv == WICED_TRUE )
+    {
+        idx = ( r->max - val ) / r->step;
+    }
     else
-        idx = (val-r->min) / r->step;
+    {
+        idx = ( val - r->min ) / r->step;
+    }
 
     return idx;
 }
@@ -655,26 +648,16 @@ static uint8_t ak4954_double_range_to_index(ak4954_device_cmn_data_t *ak4954, do
 /* System reset from datasheet. */
 static wiced_result_t ak4954_reset(ak4954_device_cmn_data_t *ak4954)
 {
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
-
     if (ak4954->pdn != WICED_GPIO_MAX)
     {
         /* Pulse PDN line. */
-        if (result == WICED_SUCCESS)
-            result = wiced_gpio_output_low(ak4954->pdn);
-        if (result == WICED_SUCCESS)
-            result = wiced_rtos_delay_milliseconds(AK4954_RESET_HOLD_TIME_IN_MILLIS);
-        if (result == WICED_SUCCESS)
-            result = wiced_gpio_output_high(ak4954->pdn);
+        WICED_VERIFY( wiced_gpio_output_low( ak4954->pdn ) );
+        WICED_VERIFY( wiced_rtos_delay_milliseconds( AK4954_RESET_HOLD_TIME_IN_MILLIS ) );
+        WICED_VERIFY( wiced_gpio_output_high( ak4954->pdn ) );
     }
 
     /* Issue dummy command. */
-    if (result == WICED_SUCCESS)
-        result = ak4954_reg_write(ak4954, AK4954_REG_PM1, 0 );
-
-    return result;
+    return ak4954_reg_write( ak4954, AK4954_REG_PM1, 0 );
 }
 
 
@@ -690,61 +673,54 @@ static wiced_result_t ak4954_init(void *driver_data)
     LOCK_RTD(rtd);
 
     /* Initialization is only required once. */
-    if (rtd->init & 1<<ak4954_type(dd))
+    if ( ( rtd->init & ( 1 << ak4954_type( dd ) ) ) != 0 )
     {
         /* This device type is already initialized! */
         wiced_assert("already initialized", !(rtd->init & 1<<ak4954_type(dd)));
         result = WICED_ERROR;
     }
-    else if (rtd->init)
+    else if ( rtd->init != 0 )
     {
         WPRINT_LIB_INFO(("ak4954 reusing first initialization"));
         goto already_initialized;
     }
 
     /* Initialize GPIOs. */
-    if (result == WICED_SUCCESS)
+    if (ak4954->pdn != WICED_GPIO_MAX)
     {
-        if (ak4954->pdn != WICED_GPIO_MAX)
-        {
-            result = wiced_gpio_init(ak4954->pdn, OUTPUT_PUSH_PULL);
-        }
+        WICED_VERIFY_GOTO( wiced_gpio_init( ak4954->pdn, OUTPUT_PUSH_PULL ), result, ak4954_init_unlock );
     }
 
     /* Enable I2C clocks, init I2C peripheral. */
-    if (result == WICED_SUCCESS)
-        result = wiced_i2c_init(ak4954->i2c_data);
+    WICED_VERIFY_GOTO( wiced_i2c_init( ak4954->i2c_data ), result, ak4954_init_unlock );
 
     /* Reset to defaults. */
-    if (result == WICED_SUCCESS)
-        result = ak4954_reset(ak4954);
+    WICED_VERIFY_GOTO( ak4954_reset(ak4954), result, ak4954_init_unlock );
 
     /* Power-up. */
-    if (result == WICED_SUCCESS)
-        result = ak4954_reg_write(ak4954, AK4954_REG_PM1, AK4954_PMVCM);
+    WICED_VERIFY_GOTO( ak4954_reg_write( ak4954, AK4954_REG_PM1, AK4954_PMVCM ), result, ak4954_init_unlock );
 
     /* Enable PLL and M/S mode. */
-    if (result == WICED_SUCCESS)
+    uint8_t pm2 = 0;
+
+    wiced_rtos_delay_milliseconds( AK4954_PMVCM_RISE_UP_TIME_IN_MILLIS );
+
+    if ( ak4954->ck.pll_enab )
     {
-        uint8_t pm2 = 0;
-
-        wiced_rtos_delay_milliseconds(AK4954_PMVCM_RISE_UP_TIME_IN_MILLIS);
-
-        if (ak4954->ck.pll_enab)
-            pm2 |= AK4954_PMPLL;
-        if (ak4954->ck.is_frame_master)
-            pm2 |= AK4954_MS;
-
-        result = ak4954_reg_write(ak4954, AK4954_REG_PM2, pm2);
+        pm2 |= AK4954_PMPLL;
     }
+    if ( ak4954->ck.is_frame_master )
+    {
+        pm2 |= AK4954_MS;
+    }
+
+    WICED_VERIFY_GOTO( ak4954_reg_write( ak4954, AK4954_REG_PM2, pm2 ), result, ak4954_init_unlock );
 
 already_initialized:
     /* Mark device as initialized. */
-    if (result == WICED_SUCCESS)
-    {
-        rtd->init |= 1<<ak4954_type(dd);
-    }
+    rtd->init |= 1<<ak4954_type(dd);
 
+ak4954_init_unlock:
     UNLOCK_RTD(rtd);
 
     return result;
@@ -756,55 +732,38 @@ static wiced_result_t ak4954_deinit(void *driver_data)
     ak4954_device_data_t *dd = ( ak4954_device_data_t* )driver_data;
     ak4954_device_cmn_data_t *ak4954 = dd->cmn;
     ak4954_device_runtime_data_t *rtd = &device_runtime_table[ak4954->id];
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
+    wiced_result_t result = WICED_SUCCESS;
 
     LOCK_RTD(rtd);
 
-    /* Power-down audio route. */
-    if (result == WICED_SUCCESS)
-    {
-        if (dd->route->fn)
-            result = (*dd->route->fn)(ak4954, WICED_FALSE);
-    }
-
     /* This audio route is no longer configured. */
-    if (result == WICED_SUCCESS)
+    /* Remove in-use flags. */
+    rtd->cfg  &= ~( 1 << ak4954_type( dd ) );
+    rtd->init &= ~( 1 << ak4954_type( dd ) );
+
+    /* No other initializations; clean-up. */
+    if ( ( rtd->init & ~( 1 << ak4954_type( dd ) ) ) == 0 )
     {
-        /* Remove in-use flags. */
-        rtd->cfg &= ~(1<<ak4954_type(dd));
-        rtd->init &= ~(1<<ak4954_type(dd));
-
-        /* No other initializations; clean-up. */
-        if (!(rtd->init & ~(1<<ak4954_type(dd))))
+        /* Disable PLL. */
+        if (ak4954->ck.pll_enab)
         {
-            /* Disable PLL. */
-            if (result == WICED_SUCCESS)
-            {
-                if (ak4954->ck.pll_enab)
-                    result = ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMPLL_MASK, 0);
-            }
+            WICED_VERIFY_GOTO( ak4954_upd_bits( ak4954, AK4954_REG_PM2, AK4954_PMPLL_MASK, 0 ), result, ak4954_deinit_unlock );
+        }
 
-            /* Disable VCM. */
-            if (result == WICED_SUCCESS)
-                result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMVCM_MASK, 0);
+        /* Disable VCM. */
+        WICED_VERIFY_GOTO( ak4954_upd_bits( ak4954, AK4954_REG_PM1, AK4954_PMVCM_MASK, 0 ), result, ak4954_deinit_unlock );
 
-            /* Power-down chip. */
-            if (result == WICED_SUCCESS)
-            {
-                if (ak4954->pdn != WICED_GPIO_MAX)
-                {
-                    result = wiced_gpio_output_low(ak4954->pdn);
-                }
-            }
+        /* Power-down chip. */
+        if (ak4954->pdn != WICED_GPIO_MAX)
+        {
+            WICED_VERIFY_GOTO( wiced_gpio_output_low( ak4954->pdn ), result, ak4954_deinit_unlock );
         }
     }
 
     /* Don't deinitialize I2C since it might be used by other modules.
      * Diddo for IOE.
      */
-
+ak4954_deinit_unlock:
     UNLOCK_RTD(rtd);
 
     return result;
@@ -814,21 +773,13 @@ static wiced_result_t ak4954_deinit(void *driver_data)
 /* PLL Slave Mode. */
 wiced_result_t ak4954_spll(ak4954_device_data_t *dd, wiced_audio_config_t *config, uint32_t mclk)
 {
-    wiced_result_t result;
     ak4954_device_cmn_data_t *ak4954 = dd->cmn;
 
     UNUSED_PARAMETER(config);
     UNUSED_PARAMETER(mclk);
 
-    result = WICED_SUCCESS;
-
-    if (result == WICED_SUCCESS)
-    {
-        /* FIXME Hard-coded to Broadcom I2S.ClockDivider BCLK. */
-        result = ak4954_upd_bits(ak4954, AK4954_REG_MODE_CTRL_1, AK4954_PLL_MASK, AK4954_PLL_64FS);
-    }
-
-    return result;
+    /* FIXME Hard-coded to Broadcom I2S.ClockDivider BCLK. */
+    return ak4954_upd_bits( ak4954, AK4954_REG_MODE_CTRL_1, AK4954_PLL_MASK, AK4954_PLL_64FS );
 }
 
 
@@ -914,65 +865,59 @@ wiced_result_t ak4954_ext(ak4954_device_data_t *dd, wiced_audio_config_t *config
 
 static wiced_result_t ak4954_clock(ak4954_device_data_t *dd, wiced_audio_config_t *config, uint32_t mclk)
 {
-    wiced_result_t result;
     ak4954_device_cmn_data_t *ak4954 = dd->cmn;
     size_t i;
-
-    result = WICED_SUCCESS;
+    uint8_t mc1 = 0;
 
     /* Sample frequency. */
-    if (result == WICED_SUCCESS)
+    for ( i = 0; i < ARRAYSIZE( fs_map ); i++ )
     {
-        for (i=0; i<ARRAYSIZE(fs_map); i++)
+        if ( config->sample_rate == fs_map[i].fs )
         {
-            if (config->sample_rate == fs_map[i].fs)
-            {
-                result = ak4954_upd_bits(ak4954, AK4954_REG_MODE_CTRL_2, AK4954_FS_MASK, fs_map[i].mc2fs);
-                break;
-            }
+            WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_MODE_CTRL_2, AK4954_FS_MASK, fs_map[i].mc2fs) );
+            break;
         }
-        if (i == ARRAYSIZE(fs_map))
-            result = WICED_UNSUPPORTED;
+    }
+
+    if ( i == ARRAYSIZE( fs_map ) )
+    {
+        /* Requested sample rate cannot be supported */
+        return WICED_UNSUPPORTED;
     }
 
     /* Clock configuration. */
-    if (result == WICED_SUCCESS)
+    if ( ak4954->ck.fn != NULL)
     {
-        if (ak4954->ck.fn)
-            result = (*ak4954->ck.fn)(dd, config, mclk);
+        WICED_VERIFY( (*ak4954->ck.fn)(dd, config, mclk) );
     }
 
     /* Bit clock, xfer format. */
-    if (result == WICED_SUCCESS)
+
+    switch ( config->bits_per_sample )
     {
-        uint8_t mc1 = 0;
-        switch (config->bits_per_sample)
-        {
-            case 16:
-                mc1 |= AK4954_BCKO_32FS | AK4954_DIF_MODE_3;
-                break;
-            case 24:
-                mc1 |= AK4954_BCKO_64FS | AK4954_DIF_MODE_3;
-                break;
-            case 32:
-                mc1 |= AK4954_BCKO_64FS | AK4954_DIF_MODE_5;
-                break;
-            default:
-                result = WICED_UNSUPPORTED;
-        }
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_MODE_CTRL_1, AK4954_BCKO_MASK | AK4954_DIF_MASK, mc1);
+        case 16:
+            mc1 |= AK4954_BCKO_32FS | AK4954_DIF_MODE_3;
+            break;
+        case 24:
+            mc1 |= AK4954_BCKO_64FS | AK4954_DIF_MODE_3;
+            break;
+        case 32:
+            mc1 |= AK4954_BCKO_64FS | AK4954_DIF_MODE_5;
+            break;
+        default:
+            /* Invalid number of bits-per-sample */
+            return WICED_UNSUPPORTED;
     }
 
-    return result;
+    return ak4954_upd_bits(ak4954, AK4954_REG_MODE_CTRL_1, AK4954_BCKO_MASK | AK4954_DIF_MASK, mc1);
 }
 
 
 static inline wiced_bool_t ak4954_clock_config_eq(ak4954_device_runtime_data_t *rtd, const wiced_audio_config_t *config)
 {
-    if (config->bits_per_sample == rtd->bits_per_sample &&
-        config->channels == rtd->channels &&
-        config->sample_rate == rtd->sample_rate)
+    if ( config->bits_per_sample == rtd->bits_per_sample &&
+         config->channels        == rtd->channels        &&
+         config->sample_rate     == rtd->sample_rate )
     {
         return WICED_TRUE;
     }
@@ -992,145 +937,106 @@ static inline wiced_result_t ak4954_set_clock_config(ak4954_device_runtime_data_
 
 wiced_result_t ak4954_mic(ak4954_device_cmn_data_t *ak4954, wiced_bool_t is_pwr_up)
 {
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
-
     if (is_pwr_up == WICED_TRUE)
     {
         /* Set-up mic gain and power-up mic pwr supply.
         */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_PMMP_MASK | AK4954_MGAIN_MASK, AK4954_PMMP | AK4954_MGAIN_DEFAULT);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_PMMP_MASK | AK4954_MGAIN_MASK, AK4954_PMMP | AK4954_MGAIN_DEFAULT) );
 
         /* Set-up input signal. */
         /* Set-up timer. */
-            ;
+//
 
         /* Set-up ALC. */
-        if (result == WICED_SUCCESS)
-            ; //result = ak4954_upd_bits(ak4954, AK4954_REG_ALC_MODE_CTRL_1, AK4954_ALC_MASK, AK4954_ALC);
+//        if (result == WICED_SUCCESS)
+//            ; result = ak4954_upd_bits(ak4954, AK4954_REG_ALC_MODE_CTRL_1, AK4954_ALC_MASK, AK4954_ALC);
 
         /* Set-up REF value of ALC. */
         /* Set-up IVOL value of ALC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_IVL_CTRL, AK4954_IVL_MASK, AK4954_IVL_DEFAULT);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_IVL_CTRL, AK4954_IVL_MASK, AK4954_IVL_DEFAULT) );
 
         /* Set-up programmable filter on/off. */
         /* Set-up programmable filter path. */
         /* Set-up coefficient of the programmable filter. */
-            ;
+//
 
         /* Power-up mic. */
-        if (result == WICED_SUCCESS)
-        {
-            result = ak4954_upd_bits(ak4954,
-                AK4954_REG_PM1,
-                AK4954_PMADL_MASK | AK4954_PMADR_MASK | AK4954_PMPFIL_MASK,
-                AK4954_PMADL | AK4954_PMADR | AK4954_PMPFIL);
-        }
+        return ak4954_upd_bits(ak4954,
+                                      AK4954_REG_PM1,
+                                      AK4954_PMADL_MASK | AK4954_PMADR_MASK | AK4954_PMPFIL_MASK,
+                                      AK4954_PMADL | AK4954_PMADR | AK4954_PMPFIL);
     }
     else
     {
         /* Power-down mic, ADC, programmable filter. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMADL_MASK | AK4954_PMADR_MASK | AK4954_PMPFIL_MASK, 0);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMADL_MASK | AK4954_PMADR_MASK | AK4954_PMPFIL_MASK, 0) );
         /* Disable ALC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_ALC_MODE_CTRL_1, AK4954_ALC_MASK, 0);
+        return ak4954_upd_bits(ak4954, AK4954_REG_ALC_MODE_CTRL_1, AK4954_ALC_MASK, 0);
     }
-
-    return result;
 }
 
 
 wiced_result_t ak4954_hp(ak4954_device_cmn_data_t *ak4954, wiced_bool_t is_pwr_up)
 {
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
-
     if (is_pwr_up == WICED_TRUE)
     {
         /* Reset l/r volume to default. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_DEFAULT);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_DEFAULT) );
 
         /* Power-up DAC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC) );
+
         /* Power-up hp amp. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, AK4954_PMHPR | AK4954_PMHPL);
+        return ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, AK4954_PMHPR | AK4954_PMHPL);
     }
     else
     {
         /* Power-down HP amp. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, 0);
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, 0) );
         /* Power-down DAC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, 0);
+        return ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, 0);
     }
-
-    return result;
 }
 
 
 wiced_result_t ak4954_spkr(ak4954_device_cmn_data_t *ak4954, wiced_bool_t is_pwr_up)
 {
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
-
     if (is_pwr_up == WICED_TRUE)
     {
         /* Set-up path: DAC->SPK amp. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_DACSL_MASK, AK4954_DACSL);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_SIG_SEL_1, AK4954_DACSL_MASK, AK4954_DACSL ) );
 
         /* Set-up SPK amp gain. */
         /* Set-up digital output volume control. */
         /* Set-up DRC control. */
-            ;
+//
 
         /* Power-up DRC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_DIG_FILTER_MODE, AK4954_PMDRC_MASK, AK4954_PMDRC);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_DIG_FILTER_MODE, AK4954_PMDRC_MASK, AK4954_PMDRC ) );
 
         /* Power-up DAC and SPK amp. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC);
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMSL_MASK, AK4954_PMSL);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC ) );
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_PM2, AK4954_PMSL_MASK,  AK4954_PMSL  ) );
 
         /* Exit SPK amp power save mode. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_SLPSN_MASK, AK4954_SLPSN);
+        return ak4954_upd_bits( ak4954, AK4954_REG_SIG_SEL_1, AK4954_SLPSN_MASK, AK4954_SLPSN );
     }
     else
     {
         /* Enter SPKR amp power save mode. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_SLPSN_MASK, 0);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_SIG_SEL_1, AK4954_SLPSN_MASK, 0 ) );
 
         /* Disable DAC to output amp. */
         /* Set separately from SLPSN because datasheet shows it that way. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_SIG_SEL_1, AK4954_DACSL_MASK, 0);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_SIG_SEL_1, AK4954_DACSL_MASK, 0 ) );
 
         /* Power-down DAC and SPK amp. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMSL_MASK, 0);
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, 0);
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_PM2, AK4954_PMSL_MASK,  0 ) );
+        WICED_VERIFY( ak4954_upd_bits( ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, 0 ) );
 
         /* Power-down DRC. */
-        if (result == WICED_SUCCESS)
-            result = ak4954_upd_bits(ak4954, AK4954_REG_DIG_FILTER_MODE, AK4954_PMDRC_MASK, 0);
+        return ak4954_upd_bits( ak4954, AK4954_REG_DIG_FILTER_MODE, AK4954_PMDRC_MASK, 0 );
     }
-
-    return result;
 }
 
 
@@ -1146,55 +1052,50 @@ static wiced_result_t ak4954_configure( void *driver_data, wiced_audio_config_t 
     LOCK_RTD(rtd);
 
     /* Must be initialized first! */
-    if (!(rtd->init & (1<<ak4954_type(dd))))
+    if ( ( rtd->init & ( 1 << ak4954_type( dd ) ) ) == 0 )
+    {
         result = WICED_ERROR;
+        goto ak4954_configure_unlock;
+    }
 
     /*
      * Configure clocking.
      * Shared between playback/capture, so configs need to match.
      */
-
-    if (result == WICED_SUCCESS)
+    if ( ( rtd->cfg & ~( 1 << ak4954_type(dd) ) ) != 0 )
     {
-        if (rtd->cfg & ~(1<<ak4954_type(dd)))
+        /* Device configured in opposite direction.
+         * Clocking arguments need to match to satisfy duplex requirements.
+         */
+        if ( ak4954_clock_config_eq(rtd, config) == WICED_FALSE )
         {
-            /* Device configured in opposite direction.
-             * Clocking arguments need to match to satisfy duplex requirements.
-             */
-            if (ak4954_clock_config_eq(rtd, config) == WICED_FALSE)
-            {
-                result = WICED_UNSUPPORTED;
-            }
-        }
-        else if (rtd->cfg & (1<<ak4954_type(dd)))
-        {
-            /* Re-configuring is not permitted. */
-            result = WICED_ERROR;
-        }
-        else
-        {
-            /* First time. */
-            result = ak4954_clock(dd, config, *mclk);
-
-            /* Lock clock configuration. */
-            if (result == WICED_SUCCESS)
-                result = ak4954_set_clock_config(rtd, config);
+            result = WICED_UNSUPPORTED;
+            goto ak4954_configure_unlock;
         }
     }
+    else if ( ( rtd->cfg & ( 1 << ak4954_type( dd ) ) ) != 0 )
+    {
+        /* Re-configuring is not permitted. */
+        result = WICED_ERROR;
+        goto ak4954_configure_unlock;
+    }
+
+    /* First time. */
+    /* Lock clock configuration. */
+    WICED_VERIFY_GOTO( ak4954_clock( dd, config, *mclk ), result, ak4954_configure_unlock );
 
     /* Configure audio route. */
-    if (result == WICED_SUCCESS)
+    WICED_VERIFY_GOTO( ak4954_set_clock_config( rtd, config ), result, ak4954_configure_unlock );
+
+    if ( dd->route->fn != NULL )
     {
-        if (dd->route->fn)
-            result = (*dd->route->fn)(ak4954, WICED_TRUE);
+        WICED_VERIFY_GOTO( (*dd->route->fn)( ak4954, WICED_TRUE ), result, ak4954_configure_unlock );
     }
 
     /* The direction is now configured. */
-    if (result == WICED_SUCCESS)
-    {
-        rtd->cfg |= (1<<ak4954_type(dd));
-    }
+    rtd->cfg |= ( 1 << ak4954_type( dd ) );
 
+ak4954_configure_unlock:
     UNLOCK_RTD(rtd);
 
     return result;
@@ -1207,19 +1108,23 @@ wiced_result_t ak4954_start_play ( void* driver_data )
 }
 
 
-wiced_result_t ak4954_pause ( void* driver_data )
+wiced_result_t ak4954_stop_play ( void* driver_data )
 {
-    ak4954_device_data_t* ak4954 = ( ak4954_device_data_t* )driver_data;
-    UNUSED_PARAMETER(ak4954);
-    return WICED_SUCCESS;
-}
+    ak4954_device_data_t *dd = ( ak4954_device_data_t* )driver_data;
+    ak4954_device_cmn_data_t *ak4954 = dd->cmn;
+    ak4954_device_runtime_data_t *rtd = &device_runtime_table[ak4954->id];
+    wiced_result_t result = WICED_SUCCESS;
 
+    LOCK_RTD(rtd);
+    /* Power-down audio route. */
+    if (result == WICED_SUCCESS)
+    {
+        if (dd->route->fn)
+            result = (*dd->route->fn)(ak4954, WICED_FALSE);
+    }
+    UNLOCK_RTD(rtd);
 
-wiced_result_t ak4954_resume ( void* driver_data )
-{
-    ak4954_device_data_t* ak4954 = ( ak4954_device_data_t* )driver_data;
-    UNUSED_PARAMETER(ak4954);
-    return WICED_SUCCESS;
+    return result;
 }
 
 
@@ -1270,59 +1175,41 @@ static wiced_result_t ak4954_get_capture_volume_range(void *driver_data, double 
     return WICED_SUCCESS;
 }
 
-static wiced_result_t ak4954_init_device_runtime_data(ak4954_device_runtime_data_t *rtd)
+static wiced_result_t ak4954_init_device_runtime_data( ak4954_device_runtime_data_t *rtd )
 {
-    wiced_result_t result = WICED_SUCCESS;
-
-    if (rtd->rdy)
-        goto already_initialized;
-
-    if ( result == WICED_SUCCESS )
+    if ( rtd->rdy == 1 )
     {
-        result = wiced_rtos_init_mutex(&rtd->lock);
-    }
-    if ( result == WICED_SUCCESS )
-    {
-        rtd->init = 0;
-        rtd->cfg = 0;
-        rtd->rdy = 1;
+        /* Already initialized */
+        return WICED_SUCCESS;
     }
 
-already_initialized:
-    return result;
+    WICED_VERIFY( wiced_rtos_init_mutex( &rtd->lock ) );
+
+    rtd->init = 0;
+    rtd->cfg  = 0;
+    rtd->rdy  = 1;
+
+    return WICED_SUCCESS;
 }
 
 
 /* This function can only be called from the platform initialization routine */
-wiced_result_t ak4954_device_register(ak4954_device_data_t *device_data, const char *name)
+wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const char *name )
 {
-    wiced_result_t result;
-
-    result = WICED_SUCCESS;
-
-    if (device_data == 0)
-        result = WICED_BADARG;
-
-    if (result == WICED_SUCCESS)
+    if ( device_data == NULL )
     {
-        /* Initialize private portion of device interface. */
-        device_data->route->intf->adi.audio_device_driver_specific = device_data;
-        device_data->route->intf->adi.name = name;
-
-        /* Initialize runtime data. */
-        result = ak4954_init_device_runtime_data(&device_runtime_table[device_data->cmn->id]);
-        if (result != WICED_SUCCESS)
-            result = WICED_ERROR;
+        return WICED_BADARG;
     }
+
+    /* Initialize private portion of device interface. */
+    device_data->route->intf->adi.audio_device_driver_specific = device_data;
+    device_data->route->intf->adi.name = name;
+
+    /* Initialize runtime data. */
+    WICED_VERIFY( ak4954_init_device_runtime_data( &device_runtime_table[ device_data->cmn->id ] ) );
 
     /* Register a device to the audio device list and keep device data internally from this point */
-    result = wiced_register_audio_device(name, &device_data->route->intf->adi);
-    if( result != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
+    return wiced_register_audio_device( name, &device_data->route->intf->adi );
 }
 
 
@@ -1334,8 +1221,7 @@ ak4954_audio_device_interface_t ak4954_playback =
         .audio_device_deinit            = ak4954_deinit,
         .audio_device_configure         = ak4954_configure,
         .audio_device_start_streaming   = ak4954_start_play,
-        .audio_device_pause             = ak4954_pause,
-        .audio_device_resume            = ak4954_resume,
+        .audio_device_stop_streaming    = ak4954_stop_play,
         .audio_device_set_volume        = ak4954_set_playback_volume,
         .audio_device_get_volume_range  = ak4954_get_playback_volume_range,
     },
@@ -1350,8 +1236,7 @@ ak4954_audio_device_interface_t ak4954_capture =
         .audio_device_deinit            = ak4954_deinit,
         .audio_device_configure         = ak4954_configure,
         .audio_device_start_streaming   = ak4954_start_play,
-        .audio_device_pause             = ak4954_pause,
-        .audio_device_resume            = ak4954_resume,
+        .audio_device_stop_streaming    = ak4954_stop_play,
         .audio_device_set_volume        = ak4954_set_capture_volume,
         .audio_device_get_volume_range  = ak4954_get_capture_volume_range,
     },

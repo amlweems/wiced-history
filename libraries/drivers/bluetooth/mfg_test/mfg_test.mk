@@ -47,6 +47,12 @@ GLOBAL_INCLUDES  := . \
                     internal/transport/HCI \
                     internal/transport/thread
 
+ifeq ($(BT_CHIP_XTAL_FREQUENCY),)
+BT_FIRMWARE_SOURCE = ../firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/bt_firmware_image.c
+else
+BT_FIRMWARE_SOURCE = ../firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/$(BT_CHIP_XTAL_FREQUENCY)/bt_firmware_image.c
+endif
+
 $(NAME)_SOURCES  += bt_mfg_test.c \
                     internal/bus/$(BT_TRANSPORT_BUS)/bt_bus.c \
                     internal/transport/driver/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c \
@@ -54,6 +60,7 @@ $(NAME)_SOURCES  += bt_mfg_test.c \
                     internal/transport/thread/bt_transport_thread.c \
                     internal/packet/bt_packet.c \
                     internal/firmware/bt_firmware.c \
-                    ../firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/bt_firmware_image.c
+                    $(BT_FIRMWARE_SOURCE)
+
 
 $(NAME)_COMPONENTS += utilities/linked_list

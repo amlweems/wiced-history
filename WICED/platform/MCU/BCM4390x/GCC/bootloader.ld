@@ -121,6 +121,15 @@ SECTIONS
         *(.data*)
     } > BOOTLOADER_SRAM
 
+    .dma (NOLOAD) : /* Zero initialised memory used DMA descriptors */
+    {
+        . = ALIGN(32);
+
+        link_dma_location = .;
+        *(.dma.*)
+        link_dma_end = ALIGN(4);
+    } > BOOTLOADER_SRAM
+
     .bss : /* Zero initialised memory used for zero initialised variables */
     {
         . = ALIGN(4);

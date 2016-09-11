@@ -1,5 +1,11 @@
 /*
- * $Copyright Open Broadcom Corporation$
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
  *
  * Fundamental types and constants relating to 802.11
  *
@@ -654,12 +660,15 @@ BWL_PRE_PACKED_STRUCT struct wme_ie {
 typedef struct wme_ie wme_ie_t;
 #define WME_IE_LEN 7	/* WME IE length */
 
+#ifndef EDCF_ACPARAM    /* Duplicated in wwd_wlioctl.h */
+#define EDCF_ACPARAM
 BWL_PRE_PACKED_STRUCT struct edcf_acparam {
 	uint8	ACI;
 	uint8	ECW;
 	uint16  TXOP;		/* stored in network order (ls octet first) */
 } BWL_POST_PACKED_STRUCT;
 typedef struct edcf_acparam edcf_acparam_t;
+#endif
 
 /** WME Parameter Element (PE) */
 BWL_PRE_PACKED_STRUCT struct wme_param_ie {
@@ -2903,10 +2912,12 @@ typedef struct d11cnt {
  */
 
 /* Action frame type for RWL */
+#ifndef RWL_WIFI_DEFAULT     /* duplicated in wwd_ioctl.h */
 #define RWL_WIFI_DEFAULT		0
 #define RWL_WIFI_FIND_MY_PEER		9 /* Used while finding server */
 #define RWL_WIFI_FOUND_PEER		10 /* Server response to the client  */
 #define RWL_ACTION_WIFI_FRAG_TYPE	85 /* Fragment indicator for receiver */
+#endif /* RWL_WIFI_DEFAULT */
 
 #define PROXD_AF_TYPE			11 /* Wifi proximity action frame type */
 #define BRCM_RELMACST_AF_TYPE	        12 /* RMC action frame type */

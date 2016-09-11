@@ -1,7 +1,13 @@
 /*
- * SD-SPI Protocol Standard
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $ Copyright Open Broadcom Corporation $
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * SD-SPI Protocol Standard
  *
  * $Id: sdspi.h 382882 2013-02-04 23:24:31Z xwei $
  */

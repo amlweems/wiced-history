@@ -2,6 +2,102 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.4.0
+* Applications
+  * snip.mqtt_publisher and snip.mqtt_subscriber replaced with new snip.mqtt app
+  * Improved snip.tftp
+  * Removed Xively support from demo.temp_control as it no longer offers a free service
+  * New applications
+    * demo.apollo_sender
+    * demo.audio_loopback
+    * demo.bt_smartbridge
+    * demo.bt_internet_gateway.hps_client_keypad
+    * demo.bt_internet_gateway.hps_server
+    * demo.bt_internet_gateway.blemesh_network
+    * snip.custom_ie
+    * snip.flac
+    * snip.bluetooth.ble_hello_sensor
+    * snip.graphics.graphicstest
+    * snip.graphics.hello
+    * snip.http_server_sent_events
+    * snip.https_server
+    * snip.secure_mqtt
+    * snip.ssdp
+* Platforms
+  * Replaced BCM943909WCD1 with BCM943909WCD1_3
+  * Added new platforms
+    * BCM94343WWCD1
+    * BCM943438WCD1
+    * BCM943907WAE_1
+* Libraries, Protocols, Drivers
+  * Added FLAC codec library
+  * Updated and improved HTTP server
+    * Replaced use of strstr with strnstr
+    * Added support for Server-Sent Event (SSE)
+    * Added wildcard pattern support for matching URL path
+  * Replaced keypad and gpio_keypad libraries with new button_manager and gpio_button libraries
+  * New MQTT library
+  * Added SSDP library
+  * Improved websocket library
+  * Added u8g graphics library
+  * Added support for AK4961 codec
+  * Updated Apollo audio libraries and demonstration apps
+  * Replaced internal keys storage management of Bluetooth BTEWICED stack with user callbacks
+  * Added a new, resource optimized Bluetooth LE stack (BTEWICED_LE)
+  * Added legacy Bluetooth SmartBridge API. SmartBridge now uses BTEWICED_LE stack
+  * Bluetooth Internet Gateway (BIG)
+    * Added support for running multiple GATT clients simultanously
+    * Improved RESTful Smart server and added support for client notifications via SSE
+    * Added HTTP Proxy Service (HPS) library
+    * Added BLE Mesh library
+* WICED API
+  * TLS improvements
+     * wiced_tcp_server_add_tls() has been replaced with wiced_tcp_server_enable_tls()
+     * Replaced wiced_tls_simple_context_t and wiced_tls_advanced_context_t with wiced_tls_context_t and wiced_tls_identity_t.
+     * Moved wiced_tls_xxxx API from wiced_tcpip.h to a new file: /include/wiced_tls.h
+  * Added wiced_tcp_get_socket_state()
+  * Added /include/wiced_crypto.h
+     * Added wiced_crypto_get_random() to replace use of wwd_wifi_get_random()
+     * Added wiced_crypto_add_entropy() to enable non-Wi-Fi sources of entropy
+  * wiced_audio_device_interface_t replaced audio_device_pause and audio_device_resume members with audio_device_stop_streaming
+  * Added wiced_audio_set_pll_fractional_divider() API
+  * Added /include/wiced_bluetooth.h file to define Bluetooth related wiced_result_t values
+  * Added WICED_TCPIP_SOCKET_CLOSED wiced_result_t type
+  * Default values of WICED_DEFAULT_TCP_TX_DEPTH_QUEUE and WICED_DEFAULT_TCP_RX_DEPTH_QUEUE changed from 3 to 5 to reduce packet loss on high throughput TCP sockets
+  * System monitor API moved from wiced_management.h to wiced_framework.h
+  * Changed size argument in wiced_uart_receive_bytes() to uint32_t* so it can recieve actual bytes received after a timeout
+  * Added new I2C API; wiced_i2c_read() and wiced_i2c_write()
+  * Added support for repeated start bits to I2C API
+  * Added new wiced_audio_timer_xxxx API to control high resolution timing for audio applications
+  * Added new malloc debug API; malloc_print_mallocs()
+  * Added strnstr() and match_string_with_wildcard_pattern() to wiced_utilities.h
+  * CUSTOM_DEFAULT_DCT has been renamed to WIFI_CONFIG_APPLICATION_DEFINED
+  * New Bluetooth default DCT option; WICED_BLUETOOTH_DEVICE_CLASS
+  * Fixed memory leak in wiced_scan_result_handler() when processing off channel scan results
+  * LwIP network_tcp_send_packet() no longer sets NETCONN_DONTBLOCK when calling netconn_write()
+  * LwIP wiced_tcp_socket_t sockets now keeps track of the socket state
+  * Fixed TCP restransmission for NetX and NetX_Duo
+  * Fixed use of WICED_DISABLE_TLS in NetX_Duo
+  * Moved str_to_ip() and format_wep_keys() into wiced_network_common.c
+  * Moved wiced_tcp_stream_write_resource() into wiced_tcpip_common.c
+  * Improved support for ARM Cortex R4
+  * Improved support for STM32F4xx peripherals
+  * Added support for secure BCM43909 
+  * Updated FreeRTOS from version 7.5.2 to 8.2.1
+  * Fixed clearing of interrupts for STM32F4xx UART
+  * Fixed scanning of 5GHz channels for APs configured for wider than 20MHz operation
+  * Added support to read DER format certificates
+  * New WLAN firmware
+    * 43362
+    * 43364
+    * 43438
+    * 43909
+    * 4390
+  * Added support for BCM4343W WLAN device
+* WICED Application Framework (WAF)
+  * Building waf.bootloader and waf.sflash_write no longer requires a network stack or Wi-Fi bus to be defined
+
+
 Changes for WICED-SDK 3.3.0
 * Add support for BCM43909
 

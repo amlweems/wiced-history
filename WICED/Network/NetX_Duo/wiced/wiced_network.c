@@ -302,6 +302,11 @@ wiced_result_t wiced_network_init( void )
         WPRINT_NETWORK_ERROR(("Couldn't create RX packet pool\n"));
         return WICED_ERROR;
     }
+    if ( wwd_buffer_init( wiced_packet_pools ) != WWD_SUCCESS )
+    {
+        WPRINT_NETWORK_ERROR(("Could not initialize buffer interface\n"));
+        return WICED_ERROR;
+    }
 
     memset(&internal_dhcp_server, 0, sizeof(internal_dhcp_server));
     memset(wiced_ip_address_change_callbacks, 0, MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS * sizeof(wiced_ip_address_change_callback_t));

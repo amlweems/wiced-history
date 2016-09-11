@@ -35,6 +35,10 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
+#define WICED_I2C_START_FLAG                    (1U << 0)
+#define WICED_I2C_REPEATED_START_FLAG           (1U << 1)
+#define WICED_I2C_STOP_FLAG                     (1U << 2)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -176,13 +180,13 @@ wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, u
  *
  * @param  uart     : the UART interface
  * @param  data     : pointer to the buffer which will store incoming data
- * @param  size     : number of bytes to receive
- * @param  timeout  : timeout in milisecond
+ * @param  size     : number of bytes to receive, function return in same parameter number of actually received bytes
+ * @param  timeout  : timeout in millisecond
  *
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout );
+wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t * size, uint32_t timeout );
 
 /** @} */
 /*****************************************************************************/
@@ -390,6 +394,32 @@ wiced_result_t wiced_i2c_init_combined_message( wiced_i2c_message_t* message, co
  * @return    WICED_ERROR   : if an error occurred during message transfer
  */
 wiced_result_t wiced_i2c_transfer(  const wiced_i2c_device_t* device, wiced_i2c_message_t* message, uint16_t number_of_messages );
+
+
+/** Read data over an I2C interface
+ *
+ * @param device             : the i2c device to communicate with
+ * @param flags              : bitwise flags to control i2c data transfers (WICED_I2C_XXX_FLAG)
+ * @param buffer             : pointer to a buffer to hold received data
+ * @param buffer_length      : length in bytes of the buffer
+ *
+ * @return    WICED_SUCCESS : on success
+ * @return    WICED_ERROR   : if an error occurred during message transfer
+ */
+wiced_result_t wiced_i2c_read( const wiced_i2c_device_t* device, uint16_t flags, void* buffer, uint16_t buffer_length );
+
+
+/** Write data over an I2C interface
+ *
+ * @param device             : the i2c device to communicate with
+ * @param flags              : bitwise flags to control i2c data transfers (WICED_I2C_XXX_FLAG)
+ * @param buffer             : pointer to a buffer to hold received data
+ * @param buffer_length      : length in bytes of the buffer
+ *
+ * @return    WICED_SUCCESS : on success
+ * @return    WICED_ERROR   : if an error occurred during message transfer
+ */
+wiced_result_t wiced_i2c_write( const wiced_i2c_device_t* device, uint16_t flags, const void* buffer, uint16_t buffer_length );
 
 
 /** Deinitialises an I2C device
@@ -647,7 +677,6 @@ wiced_result_t wiced_pwm_stop( wiced_pwm_t pwm );
  */
 wiced_result_t wiced_watchdog_kick( void );
 
-
 /** @} */
 /*****************************************************************************/
 /** @addtogroup mcupowersave       Powersave
@@ -704,7 +733,6 @@ wiced_result_t wiced_platform_get_rtc_time( wiced_rtc_time_t* time );
 wiced_result_t wiced_platform_set_rtc_time( const wiced_rtc_time_t* time );
 
 
-
 /**
  * Enable the 802.1AS time functionality.
  *
@@ -735,6 +763,60 @@ wiced_result_t wiced_time_disable_8021as(void);
 wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
                                       uint32_t *local_secs, uint32_t *local_nanosecs);
 
+
+/**
+ * Enable audio timer
+ *
+ * @param     audio_frame_count : audio timer interrupts period expressed in number of audio samples/frames
+ *
+ * @return    WICED_SUCCESS     : on success.
+ * @return    WICED_ERROR       : if an error occurred with any step
+ */
+wiced_result_t wiced_audio_timer_enable        ( uint32_t audio_frame_count );
+
+
+/**
+ * Disable audio timer
+ *
+ * @return    WICED_SUCCESS     : on success.
+ * @return    WICED_ERROR       : if an error occurred with any step
+ */
+wiced_result_t wiced_audio_timer_disable       ( void );
+
+
+/**
+ * Wait for audio timer frame sync event
+ *
+ * @param     timeout_msecs     : timeout value in msecs; WICED_NO_WAIT or WICED_WAIT_FOREVER otherwise.
+ *
+ * @return    WICED_SUCCESS     : on success.
+ * @return    WICED_ERROR       : if an error occurred with any step
+ */
+wiced_result_t wiced_audio_timer_get_frame_sync( uint32_t timeout_msecs );
+
+
+/**
+ * Read audio timer value (tick count)
+ *
+ * @param     time_hi           : upper 32-bit of 64-bit audio timer ticks
+ * @param     time_lo           : lower 32-bit of 64-bit audio timer ticks
+ *
+ * @return    WICED_SUCCESS     : on success.
+ * @return    WICED_ERROR       : if an error occurred with any step
+ */
+wiced_result_t wiced_audio_timer_get_time      ( uint32_t *time_hi, uint32_t *time_lo );
+
+
+/**
+ * Get audio timer resolution (ticks per second)
+ *
+ * @param     audio_sample_rate : audio sample rate
+ * @param     ticks_per_sec     : returned audio timer resolution
+ *
+ * @return    WICED_SUCCESS     : on success.
+ * @return    WICED_ERROR       : if an error occurred with any step
+ */
+wiced_result_t wiced_audio_timer_get_resolution( uint32_t audio_sample_rate, uint32_t *ticks_per_sec );
 
 #ifdef __cplusplus
 } /*extern "C" */

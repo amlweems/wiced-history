@@ -34,6 +34,7 @@
 #include "wiced_utilities.h"
 #include "wiced_resource.h"
 #include "platform_m2m.h"
+#include "platform_peripheral.h"
 #include "platform/wwd_bus_interface.h"
 
 /******************************************************
@@ -101,6 +102,7 @@ wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 wwd_result_t wwd_bus_init( void )
 {
     boot_wlan();
+    platform_watchdog_kick();
 
     M2M_INIT_DMA_SYNC();
 
@@ -167,7 +169,6 @@ uint32_t wwd_bus_packet_available_to_read(void)
     p0 = m2m_read_dma_packet( &hwtag );
     if ( p0 == NULL )
     {
-        host_platform_bus_enable_interrupt();
         WPRINT_WWD_INFO(("intstatus: 0x%x, NO PACKT\n", (uint)intstatus));
         return WWD_NO_PACKET_TO_RECEIVE;
     }
@@ -192,7 +193,7 @@ wwd_result_t wwd_bus_ensure_is_up( void )
 {
     if ( bus_is_up == WICED_FALSE )
     {
-        M2M_POWERSAVE_COMM_BEGIN( );
+        M2M_POWERSAVE_COMM_TX_BEGIN( );
         bus_is_up = WICED_TRUE;
     }
 
@@ -201,13 +202,25 @@ wwd_result_t wwd_bus_ensure_is_up( void )
 
 wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
 {
+    wwd_result_t result = WWD_SUCCESS;
+
     if ( bus_is_up == WICED_TRUE )
     {
-        bus_is_up = WICED_FALSE;
-        M2M_POWERSAVE_COMM_END( );
+        if ( M2M_POWERSAVE_COMM_TX_END( ) )
+        {
+            bus_is_up = WICED_FALSE;
+        }
+        else
+        {
+            /*
+             * Not able to finish communications now, let's try later.
+             * Returning this error code tells that WWD thread must not sleep and return to calling us as soon as possible.
+             */
+            result = WWD_PENDING;
+        }
     }
 
-    return WWD_SUCCESS;
+    return result;
 }
 
 wwd_result_t wwd_bus_set_flow_control( uint8_t value )
@@ -228,9 +241,35 @@ wiced_bool_t wwd_bus_is_flow_controlled( void )
     return wwd_bus_flow_controlled;
 }
 
-wwd_result_t wwd_bus_poke_wlan( void )
+void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
 {
-    return WWD_SUCCESS;
+    uint32_t timeout_ms = 1;
+    wwd_result_t result;
+
+    REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
+    result = wwd_bus_allow_wlan_bus_to_sleep( );
+    wiced_assert( "Error setting wlan sleep", ( result == WWD_SUCCESS ) || ( result == WWD_PENDING ) );
+
+    if ( result == WWD_SUCCESS )
+    {
+        timeout_ms = NEVER_TIMEOUT;
+    }
+
+#ifdef M2M_RX_POLL_MODE
+
+    UNUSED_PARAMETER( transceive_semaphore );
+    UNUSED_PARAMETER( timeout_ms );
+    host_rtos_delay_milliseconds( 10 );
+
+#else
+
+    host_platform_bus_enable_interrupt( );
+
+    result = host_rtos_get_semaphore( transceive_semaphore, timeout_ms, WICED_FALSE );
+    wiced_assert("Could not get wwd sleep semaphore\n", ( result == WWD_SUCCESS ) || ( result == WWD_TIMEOUT ) );
+
+#endif /* M2M_RX_POLL_MODE */
 }
 
 /******************************************************

@@ -73,6 +73,7 @@ typedef enum
     WICED_SOCKET_CONNECTING,
     WICED_SOCKET_CONNECTED,
     WICED_SOCKET_DATA_PENDING,
+    WICED_SOCKET_LISTEN,
     WICED_SOCKET_ERROR
 } wiced_socket_state_t;
 
@@ -102,19 +103,20 @@ typedef struct
     ip_addr_t                   local_ip_addr;
     wiced_bool_t                is_bound;
     int                         interface;
-    wiced_tls_simple_context_t* tls_context;
+    wiced_tls_context_t*        tls_context;
     wiced_bool_t                context_malloced;
     uint32_t                    callbacks[3];
     void*                       arg;
+    wiced_socket_state_t        socket_state; /* internal LwIP socket states do not seem to work correctly */
 } wiced_tcp_socket_t;
 
 typedef struct
 {
     wiced_tcp_socket_t   listen_socket;
     wiced_tcp_socket_t   accept_socket       [WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS];
-    wiced_socket_state_t accept_socket_state [WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS];
     int                  data_pending_on_socket;
     uint16_t             port;
+    wiced_tls_identity_t* tls_identity;
 } wiced_tcp_server_t;
 
 typedef struct
@@ -147,7 +149,7 @@ typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socke
  ******************************************************/
 
 /* Note: These objects are for internal use only! */
-extern xTaskHandle     wiced_thread_handle;
+extern TaskHandle_t    wiced_thread_handle;
 extern struct netif*   wiced_ip_handle[3];
 extern struct dhcp     wiced_dhcp_handle;
 

@@ -53,35 +53,7 @@
 #ifndef TROPICSSL_DES_H
 #define TROPICSSL_DES_H
 
-#include <stdint.h>
-
-#ifndef CRYPTO_STRUCTURE
-typedef enum
-{
-    DES_ENCRYPT     = 1,
-    DES_DECRYPT     = 0,
-} des_mode_t;
-#endif
-
-/**
- * \brief          DES context structure
- */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    int32_t mode;        /*!<  encrypt/decrypt   */
-    uint32_t sk[32];    /*!<  DES subkeys       */
-} des_context;
-#endif
-
-/**
- * \brief          Triple-DES context structure
- */
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    int32_t mode;        /*!<  encrypt/decrypt   */
-    uint32_t sk[96];    /*!<  3DES subkeys      */
-} des3_context;
-#endif
+#include "crypto_structures.h"
 
 #ifdef __cplusplus
 extern "C" {

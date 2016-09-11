@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    stm32f2xx_tim.c
   * @author  MCD Application Team
-  * @version V1.0.0
-  * @date    18-April-2011
+  * @version V1.1.2
+  * @date    05-March-2012 
   * @brief   This file provides firmware functions to manage the following 
   *          functionalities of the TIM peripheral:
   *            - TimeBase management
@@ -99,14 +99,20 @@
   ******************************************************************************
   * @attention
   *
-  * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
-  * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
-  * TIME. AS A RESULT, STMICROELECTRONICS SHALL NOT BE HELD LIABLE FOR ANY
-  * DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
-  * FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE
-  * CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
+  * <h2><center>&copy; COPYRIGHT 2012 STMicroelectronics</center></h2>
   *
-  * <h2><center>&copy; COPYRIGHT 2011 STMicroelectronics</center></h2>
+  * Licensed under MCD-ST Liberty SW License Agreement V2, (the "License");
+  * You may not use this file except in compliance with the License.
+  * You may obtain a copy of the License at:
+  *
+  *        http://www.st.com/software_license_agreement_liberty_v2
+  *
+  * Unless required by applicable law or agreed to in writing, software 
+  * distributed under the License is distributed on an "AS IS" BASIS, 
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
   ******************************************************************************
   */
 
@@ -482,10 +488,10 @@ void TIM_UpdateDisableConfig(TIM_TypeDef* TIMx, FunctionalState NewState)
   * @param  TIMx: where x can be 1 to 14 to select the TIM peripheral.
   * @param  TIM_UpdateSource: specifies the Update source.
   *          This parameter can be one of the following values:
-  *            @arg TIM_UpdateSource_Regular: Source of update is the counter
+  *            @arg TIM_UpdateSource_Global: Source of update is the counter
   *                 overflow/underflow or the setting of UG bit, or an update
   *                 generation through the slave mode controller.
-  *            @arg TIM_UpdateSource_Global: Source of update is counter overflow/underflow.
+  *            @arg TIM_UpdateSource_Regular: Source of update is counter overflow/underflow.
   * @retval None
   */
 void TIM_UpdateRequestConfig(TIM_TypeDef* TIMx, uint16_t TIM_UpdateSource)
@@ -1889,8 +1895,8 @@ void TIM_CCxNCmd(TIM_TypeDef* TIMx, uint16_t TIM_Channel, uint16_t TIM_CCxN)
   */
 void TIM_ICInit(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct)
 {
-  /* Check the parameters */
-  assert_param(IS_TIM_LIST1_PERIPH(TIMx));
+  /* Check the parameters */     
+  assert_param(IS_TIM_LIST1_PERIPH(TIMx));   
   assert_param(IS_TIM_IC_POLARITY(TIM_ICInitStruct->TIM_ICPolarity));
   assert_param(IS_TIM_IC_SELECTION(TIM_ICInitStruct->TIM_ICSelection));
   assert_param(IS_TIM_IC_PRESCALER(TIM_ICInitStruct->TIM_ICPrescaler));
@@ -1908,6 +1914,7 @@ void TIM_ICInit(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct)
   else if (TIM_ICInitStruct->TIM_Channel == TIM_Channel_2)
   {
     /* TI2 Configuration */
+    assert_param(IS_TIM_LIST2_PERIPH(TIMx));
     TI2_Config(TIMx, TIM_ICInitStruct->TIM_ICPolarity,
                TIM_ICInitStruct->TIM_ICSelection,
                TIM_ICInitStruct->TIM_ICFilter);
@@ -1917,6 +1924,7 @@ void TIM_ICInit(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct)
   else if (TIM_ICInitStruct->TIM_Channel == TIM_Channel_3)
   {
     /* TI3 Configuration */
+    assert_param(IS_TIM_LIST3_PERIPH(TIMx));
     TI3_Config(TIMx,  TIM_ICInitStruct->TIM_ICPolarity,
                TIM_ICInitStruct->TIM_ICSelection,
                TIM_ICInitStruct->TIM_ICFilter);
@@ -1925,7 +1933,8 @@ void TIM_ICInit(TIM_TypeDef* TIMx, TIM_ICInitTypeDef* TIM_ICInitStruct)
   }
   else
   {
-    /* TI4 Configuration */
+    /* TI4 Configuration */ 
+    assert_param(IS_TIM_LIST3_PERIPH(TIMx));
     TI4_Config(TIMx, TIM_ICInitStruct->TIM_ICPolarity,
                TIM_ICInitStruct->TIM_ICSelection,
                TIM_ICInitStruct->TIM_ICFilter);
@@ -3346,4 +3355,4 @@ static void TI4_Config(TIM_TypeDef* TIMx, uint16_t TIM_ICPolarity, uint16_t TIM_
   * @}
   */
 
-/******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -24,15 +24,13 @@
 #include "wiced_deep_sleep.h"
 #include "wiced_osl.h"
 
+#include "sbpcmcia.h"
+
 #include "generated_mac_address.txt"
 
 /******************************************************
  *                      Macros
  ******************************************************/
-
-#ifndef PLATFORM_CPU_CLOCK_FREQUENCY
-#define PLATFORM_CPU_CLOCK_FREQUENCY PLATFORM_CPU_CLOCK_FREQUENCY_160_MHZ
-#endif
 
 /******************************************************
  *                    Constants
@@ -130,15 +128,20 @@ static uint32_t platform_capabilities_table[] =
 static void platform_capabilities_init( void )
 {
     uint32_t package_options = 0;
+    platform_result_t result;
 
-    /* Extract package options from ChipCommon ChipID register */
-    package_options = PLATFORM_CHIPCOMMON->core_ctrl_status.chip_id.bits.package_option;
+    /* Extract the platform package options */
+    result = platform_otp_package_options( &package_options );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        wiced_assert( "Platform Capabilities Initialization Error", 0 );
+    }
 
     /* Initialize the platform capabilities */
     platform_capabilities_word = platform_capabilities_table[package_options];
 }
 
-static void platform_init_early_misc( void )
+static void platform_early_misc_init( void )
 {
     /* Fixup max resource mask register. */
     platform_common_chipcontrol( &PLATFORM_PMU->max_res_mask,
@@ -167,7 +170,7 @@ static void platform_init_early_misc( void )
 static void platform_slow_clock_init( void )
 {
     pmu_slowclkperiod_t period     = { .raw = 0 };
-    uint32_t            clock      = osl_alp_clock( );
+    uint32_t            clock      = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
     unsigned long       alp_period = ( ( 16UL * 1000000UL ) / ( clock / 1024UL ) ); /* 1 usec period of ALP clock measured in 1/16384 usec of ALP clock */
 
     period.bits.one_mhz_toggle_en = 1;
@@ -181,15 +184,15 @@ static void platform_slow_clock_init( void )
  */
 WEAK void platform_init_system_clocks( void )
 {
+    platform_watchdog_init( );
+
     platform_mcu_powersave_warmboot_init( );
 
-    platform_init_early_misc( );
+    platform_early_misc_init( );
 
     platform_backplane_init( );
 
     platform_hibernation_init( &hibernation_config );
-
-    platform_lpo_clock_init( );
 
     platform_cpu_clock_init( PLATFORM_CPU_CLOCK_FREQUENCY );
 
@@ -213,18 +216,14 @@ void platform_init_mcu_infrastructure( void )
     /* Initialize platform capabilities */
     platform_capabilities_init( );
 
-    /* Start watchdog */
-    platform_watchdog_init( );
-
     /* Initialize MCU powersave */
     platform_mcu_powersave_init( );
 
+    /* Initialize cores powersave */
+    platform_cores_powersave_init( );
+
     /* Initialize interrupts */
     platform_irq_init( );
-
-    /* Ensure 802.11 device is in reset. */
-    host_platform_init( );
-
 
     /* Initialise external serial flash */
     platform_sflash_init( );
@@ -246,8 +245,8 @@ wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac )
 {
 #if 0 //ifndef WICED_DISABLE_BOOTLOADER
     wiced_mac_t* temp_mac;
-    wiced_dct_read_lock( (void**)&temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, mac_address), sizeof(wiced_mac_t) );
-    memcpy(mac->octet, temp_mac, sizeof(wiced_mac_t));
+    wiced_dct_read_lock( (void**)&temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, mac_address), sizeof(mac->octet) );
+    memcpy( mac->octet, temp_mac, sizeof(mac->octet) );
     wiced_dct_read_unlock( temp_mac, WICED_FALSE );
 #else
     UNUSED_PARAMETER( mac );
@@ -258,17 +257,35 @@ wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac )
 #ifdef WICED_USE_ETHERNET_INTERFACE
 wwd_result_t host_platform_get_ethernet_mac_address( wiced_mac_t* mac )
 {
-#ifdef WICED_DISABLE_BOOTLOADER
-    memcpy( mac->octet, DCT_GENERATED_ETHERNET_MAC_ADDRESS, sizeof( wiced_mac_t ) );
-#else
+    uint16_t mac_size;
     wiced_mac_t* temp_mac;
-    wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_ETHERNET_CONFIG_SECTION, OFFSETOF( platform_dct_ethernet_config_t, mac_address ), sizeof(wiced_mac_t) );
-    memcpy( mac->octet, temp_mac, sizeof(wiced_mac_t) );
+    platform_result_t result;
+
+    mac_size = sizeof(mac->octet);
+    result = platform_otp_read_tag( PLATFORM_OTP_HW_RGN, HNBU_MACADDR, mac->octet, &mac_size );
+    if ( result == PLATFORM_SUCCESS )
+    {
+        if ( mac_size == sizeof(mac->octet) )
+        {
+            mac->octet[mac_size - 1]++;
+            return WWD_SUCCESS;
+        }
+        wiced_assert( "OTP has bad MAC address", 0 );
+    }
+    wiced_assert( "OTP parsing failed", result != PLATFORM_PARTIAL_RESULTS );
+
+#ifdef WICED_DISABLE_BOOTLOADER
+    UNUSED_VARIABLE( temp_mac );
+    memcpy( mac->octet, DCT_GENERATED_ETHERNET_MAC_ADDRESS, sizeof(mac->octet) );
+#else
+    wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_ETHERNET_CONFIG_SECTION, OFFSETOF( platform_dct_ethernet_config_t, mac_address ), sizeof(mac->octet) );
+    memcpy( mac->octet, temp_mac, sizeof(mac->octet) );
     wiced_dct_read_unlock( temp_mac, WICED_FALSE );
 #endif
+
     return WWD_SUCCESS;
 }
-#endif
+#endif /* WICED_USE_ETHERNET_INTERFACE */
 
 /******************************************************
  *            Interrupt Service Routines

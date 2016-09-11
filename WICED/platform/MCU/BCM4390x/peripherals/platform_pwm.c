@@ -241,10 +241,10 @@ pwm_get_clock_freq( void )
     switch ( pwm_get_clock_src() )
     {
         case BCM43909_PWM_CLOCK_ALP:
-            return osl_alp_clock();
+            return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
 
         case BCM43909_PWM_CLOCK_BACKPLANE:
-            return osl_backplane_clock( PLATFORM_CC_BASE );
+            return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_BACKPLANE );
 
         default:
             wiced_assert("wrong clock src", 0);

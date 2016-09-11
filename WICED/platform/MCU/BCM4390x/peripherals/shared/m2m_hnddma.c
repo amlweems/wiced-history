@@ -6,12 +6,9 @@
  * the contents of this file may not be disclosed to third parties, copied
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
- */
-/*
+ *
  * Generic Broadcom Home Networking Division (HND) DMA module.
  * This supports the following chips: BCM42xx, 44xx, 47xx .
- *
- * $Copyright Open Broadcom Corporation$
  *
  * $Id: hnddma.c 340821 2012-06-25 12:10:33Z deepakd $
  */
@@ -1102,6 +1099,11 @@ TRACE_PRINT();
         }
     }
 
+    int m2m_dma_txactive(m2m_hnddma_t *di_in)
+    {
+        dma_info_t *di = (dma_info_t *) di_in;
+        return NTXDACTIVE(di->txin, di->txout);
+    }
 
     static bool
     m2m_dma64_alloc(dma_info_t *di, uint direction)

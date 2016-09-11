@@ -172,9 +172,7 @@ extern void osl_pktfree(void *osh, void *p, bool send);
 /* Backplane Clocks */
 
 extern uint32 osl_alp_clock(void);
-extern uint32 osl_ht_clock(void);
 extern uint32 osl_ilp_clock(void);
-extern uint32 osl_backplane_clock(uint32 core_base);
 extern void   osl_set_int_lpoclk(uint32 cpu_freq);
 extern void   osl_set_ext_lpoclk(uint32 cpu_freq);
 

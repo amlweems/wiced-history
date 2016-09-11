@@ -14,20 +14,22 @@ GLOBAL_INCLUDES := . \
                    include \
                    include/network \
                    include/RTOS \
-                   internal/bus_protocols/$(BUS) \
+                   internal/bus_protocols/$(subst .,/,$(BUS)) \
                    internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)
 
 
 $(NAME)_SOURCES := internal/wwd_thread.c \
+                   internal/wwd_thread_internal.c \
                    internal/wwd_sdpcm.c \
                    internal/wwd_internal.c \
                    internal/wwd_management.c \
                    internal/wwd_wifi.c \
-                   internal/wwd_crypto.c \
                    internal/wwd_logging.c \
                    internal/wwd_eapol.c \
                    internal/bus_protocols/wwd_bus_common.c \
-                   internal/bus_protocols/$(BUS)/wwd_bus_protocol.c
+                   internal/bus_protocols/$(subst .,/,$(BUS))/wwd_bus_protocol.c \
+                   ../internal/wiced_crypto.c # Pull in wiced_crypto_get_random() implementation from WICED/internal
+
 
 $(NAME)_CHECK_HEADERS := \
                          internal/wwd_ap.h \
@@ -36,12 +38,12 @@ $(NAME)_CHECK_HEADERS := \
                          internal/wwd_logging.h \
                          internal/wwd_sdpcm.h \
                          internal/wwd_thread.h \
+                         internal/wwd_thread_internal.h \
                          internal/bus_protocols/wwd_bus_protocol_interface.h \
-                         internal/bus_protocols/$(BUS)/wwd_bus_protocol.h \
+                         internal/bus_protocols/$(subst .,/,$(BUS))/wwd_bus_protocol.h \
                          internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)/chip_constants.h \
                          include/wwd_assert.h \
                          include/wwd_constants.h \
-                         include/wwd_crypto.h \
                          include/wwd_debug.h \
                          include/wwd_events.h \
                          include/wwd_management.h \

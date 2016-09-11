@@ -1,9 +1,16 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Minimal debug/trace/assert driver definitions for
  * Broadcom Home Networking Division 10/100 Mbit/s Ethernet
  * Device Driver.
  *
- * $Copyright Open Broadcom Corporation$
  * $Id: et_dbg.h 404499 2013-05-28 01:06:37Z sudhirbs $
  */
 

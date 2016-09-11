@@ -60,7 +60,9 @@
 
 wwd_result_t host_platform_init( void )
 {
-
+#ifdef USES_RESOURCE_FILESYSTEM
+    platform_filesystem_init();
+#endif
     return WWD_SUCCESS;
 }
 

@@ -13,6 +13,7 @@
 #include "crypto_structures.h"
 #include <time.h>
 #include "cipher_suites.h"
+#include "wwd_constants.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,9 +34,7 @@ extern "C" {
 #define  TLS_WAIT_FOREVER                (0xFFFFFFFF)
 #define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS (20000)
 
-
-/* Supported ciphersuites */
-
+#define WICED_TLS_CONTEXT_ID             (0xd309c08b)
 
 /******************************************************
  *                   Enumerations
@@ -93,21 +92,55 @@ typedef enum
     TLS_UDP_TRANSPORT = 2,
 } tls_transport_protocol_t;
 
-/******************************************************
- *                 Type Definitions
- ******************************************************/
-
-typedef struct _ssl_context  wiced_tls_context_t;
-typedef struct _ssl_session  wiced_tls_session_t;
-typedef x509_cert            wiced_tls_certificate_t;
-typedef rsa_context          wiced_tls_key_t;
-typedef uint32_t             tls_packet_t;
-
 typedef enum
 {
     TLS_RECEIVE_PACKET_IF_NEEDED,
     TLS_AVOID_NEW_RECORD_PACKET_RECEIVE,
 } tls_packet_receive_option_t;
+
+typedef enum
+{
+    TLS_CERTIFICATE_IN_PEM_FORMAT,
+    TLS_CERTIFICATE_IN_DER_FORMAT,
+} wiced_tls_certificate_format_t;
+
+typedef enum
+{
+    TLS_DIGITALLY_SIGNED_SIGNATURE_ALGORITHM_ANONYMOUS = 0,
+    TLS_DIGITALLY_SIGNED_SIGNATURE_ALGORITHM_RSA       = 1,
+    TLS_DIGITALLY_SIGNED_SIGNATURE_ALGORITHM_DSA       = 2,
+    TLS_DIGITALLY_SIGNED_SIGNATURE_ALGORITHM_ECDSA     = 3,
+} tls_digitally_signed_signature_algorithm_t;
+
+/******************************************************
+ *                 Type Definitions
+ ******************************************************/
+
+typedef struct _ssl_context  wiced_tls_workspace_t;
+typedef struct _ssl_session  wiced_tls_session_t;
+typedef uint32_t             tls_packet_t;
+
+
+typedef struct
+{
+    const uint8_t*   certificate_data;
+    uint32_t         certificate_data_length;
+    wiced_bool_t     certificate_data_malloced;
+    wiced_tls_key_t* public_key;
+    const char*      common_name;
+    x509_cert*       processed_certificate_data;
+} wiced_tls_certificate_t;
+
+typedef struct
+{
+    union
+    {
+        wiced_tls_key_t     common;
+        wiced_tls_rsa_key_t rsa;
+        wiced_tls_ecc_key_t ecc;
+    } private_key;
+    wiced_tls_certificate_t certificate;
+} wiced_tls_identity_t;
 
 #pragma pack(1)
 
@@ -280,11 +313,11 @@ struct _ssl_context
     /*
      * PKI layer
      */
-    rsa_context *rsa_key;               /*!<  own RSA private key     */
-    x509_cert *own_cert;                /*!<  own X.509 certificate   */
+    wiced_tls_identity_t* identity;
     x509_cert *ca_chain;                /*!<  own trusted CA chain    */
     x509_cert *peer_cert;               /*!<  peer X.509 cert chain   */
     const char *peer_cn;                /*!<  expected peer CN        */
+    wiced_tls_key_t* peer_public_key;
 
     int32_t endpoint;                   /*!<  0: client, 1: server    */
     int32_t authmode;                   /*!<  verification mode       */
@@ -330,20 +363,11 @@ struct _ssl_context
 
 typedef struct
 {
-    wiced_tls_context_type_t context_type;
-    wiced_tls_context_t      context;
+    uint32_t                 context_id;
+    wiced_tls_workspace_t    context;
     wiced_tls_session_t      session;
-} wiced_tls_simple_context_t;
-
-/* The advanced context contains a simple context but with additional certificate and key information */
-typedef struct
-{
-    wiced_tls_context_type_t context_type;
-    wiced_tls_context_t      context;
-    wiced_tls_session_t      session;
-    wiced_tls_certificate_t  certificate;
-    wiced_tls_key_t          key;
-} wiced_tls_advanced_context_t;
+    wiced_tls_identity_t*    identity;
+} wiced_tls_context_t;
 
 typedef enum
 {
@@ -375,7 +399,7 @@ tls_result_t ssl_handshake_client_async( ssl_context *ssl );
 tls_result_t ssl_set_dh_param          ( ssl_context *ssl, const unsigned char *dhm_P, int P_len, const unsigned char *dhm_G, int G_len );
 tls_result_t ssl_close_notify          ( ssl_context *ssl );
 tls_result_t tls_encrypt_record        ( ssl_context *ssl, tls_record_t* record, uint32_t message_length );
-tls_result_t tls_decrypt_record        ( wiced_tls_context_t *ssl, tls_record_t* record );
+tls_result_t tls_decrypt_record        ( ssl_context *ssl, tls_record_t* record );
 void         microrng_init             ( microrng_state *state );
 int32_t      microrng_rand             ( void *p_state );
 

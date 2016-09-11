@@ -45,6 +45,7 @@ extern "C" {
 /* STDIO UART function */
 void platform_stdio_write( const char* str, uint32_t len );
 void platform_stdio_read ( char* str, uint32_t len );
+void platform_stdio_exception_write( const char* str, uint32_t len );
 
 #ifdef __cplusplus
 } /* extern "C" */

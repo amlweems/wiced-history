@@ -112,8 +112,8 @@ extern "C"
  * WICED TCP Options */
 #define WICED_TCP_WINDOW_SIZE                 (7 * 1024)
 #define WICED_DEFAULT_TCP_LISTEN_QUEUE_SIZE   (5)
-#define WICED_DEFAULT_TCP_TX_DEPTH_QUEUE      (3)
-#define WICED_DEFAULT_TCP_RX_DEPTH_QUEUE      (3)
+#define WICED_DEFAULT_TCP_TX_DEPTH_QUEUE      (5)
+#define WICED_DEFAULT_TCP_RX_DEPTH_QUEUE      (5)
 #define WICED_DEFAULT_TCP_TX_RETRIES          (10)
 
 /************************************************************************

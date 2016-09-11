@@ -9,7 +9,6 @@
  */
 #pragma once
 
-#include "restful_smart_host.h"
 #include "wiced_bt_types.h"
 #include "http_server.h"
 

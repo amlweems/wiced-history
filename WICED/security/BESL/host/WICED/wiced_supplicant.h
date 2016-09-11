@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "wiced_result.h"
 #include "supplicant_structures.h"
 #include "wwd_constants.h"
 #include "besl_host.h"
@@ -63,6 +64,10 @@ besl_result_t supplicant_host_get_tls_data           ( besl_packet_t eapol_packe
 besl_result_t supplicant_tls_agent_finish_connect    ( supplicant_workspace_t* workspace );
 besl_result_t supplicant_process_event               ( supplicant_workspace_t* workspace, besl_event_message_t* message);
 besl_result_t supplicant_tls_agent_start             ( supplicant_workspace_t* workspace );
+
+wiced_result_t wiced_supplicant_enable_tls            ( supplicant_workspace_t* supplicant, void* context );
+wiced_result_t wiced_supplicant_start_tls             ( supplicant_workspace_t* supplicant, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification );
+wiced_result_t wiced_supplicant_start_tls_with_ciphers( supplicant_workspace_t* supplicant, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[] );
 
 #ifdef __cplusplus
 } /*extern "C" */

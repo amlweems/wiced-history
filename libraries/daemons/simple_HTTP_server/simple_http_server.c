@@ -12,11 +12,12 @@
  *  Implements both HTTP and HTTPS servers
  *
  */
-#include <string.h>
 #include "simple_http_server.h"
 #include "wwd_assert.h"
 #include "wiced.h"
 #include "wiced_resource.h"
+#include "wiced_utilities.h"
+#include "wiced_tls.h"
 
 /******************************************************
  *                      Macros
@@ -163,7 +164,7 @@ wiced_result_t wiced_simple_https_server_stop (wiced_simple_https_server_t* serv
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_simple_https_server_start(wiced_simple_https_server_t* server, uint16_t port, const wiced_http_page_t* page_database, const char* server_cert, const char* server_key, wiced_interface_t interface )
+wiced_result_t wiced_simple_https_server_start(wiced_simple_https_server_t* server, uint16_t port, const wiced_http_page_t* page_database, const uint8_t* server_cert, const char* server_key, wiced_interface_t interface )
 {
     /* Create the TLS socket */
     if (wiced_tcp_create_socket( &server->socket, interface ) != WICED_SUCCESS)
@@ -178,18 +179,10 @@ wiced_result_t wiced_simple_https_server_start(wiced_simple_https_server_t* serv
     }
 
     /* Load our security data */
-//#ifdef USE_SELF_SIGNED_TLS_CERT
-//    if (server_cert == NULL || server_key == NULL )
-//    {
-//        wiced_tls_init_advanced_context(&server->tls_context, brcm_server_certificate, brcm_server_rsa_key );
-//    }
-//    else
-//#endif
-    {
-        wiced_tls_init_advanced_context(&server->tls_context, server_cert, server_key );
-    }
+    wiced_tls_init_identity( &server->tls_identity, server_key, server_cert, strlen( (const char*) server_cert ) );
+    wiced_tls_init_context( &server->tls_context, &server->tls_identity, NULL );
 
-    wiced_tcp_enable_tls(&server->socket, &server->tls_context);
+    wiced_tcp_enable_tls( &server->socket, &server->tls_context );
     server->page_database = page_database;
     return wiced_rtos_create_thread(&server->thread, HTTP_SERVER_THREAD_PRIORITY, "HTTPserver", http_server_thread_main, HTTP_SERVER_STACK_SIZE, server);
 }
@@ -220,12 +213,12 @@ static wiced_result_t http_server_process_packet(const wiced_http_page_t* page_d
     }
 
     /* Check that this is a GET request */
-    if ( strstr( request_string, "GET " ) != 0 )
+    if ( strnstr( request_string, request_length, "GET ", sizeof( "GET " ) - 1 ) != 0 )
     {
         request_string[3] = '\x00';
         start_of_url = &request_string[4];
     }
-    else if ( strstr( request_string, "POST " ) != 0 )
+    else if ( strnstr( request_string, request_length, "POST ", sizeof( "POST " ) - 1 ) != 0 )
     {
         request_string[4] = '\x00';
         start_of_url = &request_string[5];

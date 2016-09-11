@@ -103,14 +103,6 @@ typedef struct
     configuration_data_type_t data_type;   /**< Type of the entry              */
 } configuration_entry_t;
 
-
-/** Structure to hold information about a system monitor item */
-typedef struct
-{
-    uint32_t last_update;              /**< Time of the last system monitor update */
-    uint32_t longest_permitted_delay;  /**< Longest permitted delay between checkins with the system monitor */
-} wiced_system_monitor_t;
-
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -164,6 +156,19 @@ extern wiced_result_t wiced_init( void );
  */
 extern wiced_result_t wiced_deinit( void );
 
+
+/** Initialises network sub-system only
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_init  ( void );
+
+
+/** De-initialises network sub-system only
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_deinit( void );
 
 /** Enables all powersave features
  *
@@ -362,36 +367,6 @@ extern wiced_result_t wiced_network_register_link_callback( wiced_network_link_c
  */
 extern wiced_result_t wiced_network_deregister_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback, wiced_interface_t interface );
 
-
-/** @} */
-
-/*****************************************************************************/
-/** @addtogroup sysmon       System Monitor
- *  @ingroup mgmt
- *
- * Functions to communicate with the system monitor
- *
- *  @{
- */
-/*****************************************************************************/
-
-/** Registers a system monitor with the system monitor thread
- *
- * @param[out] system_monitor          : A pointer to a system monitor object that will be watched
- * @param[in]  initial_permitted_delay : The maximum time in milliseconds allowed between monitor updates
- *
- * @return @ref wiced_result_t
- */
-extern wiced_result_t wiced_register_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t initial_permitted_delay);
-
-/** Updates a system monitor and resets the last update time
- *
- * @param[out] system_monitor  : A pointer to a system monitor object to be updated
- * @param[in]  permitted_delay : The maximum time in milliseconds allowed between monitor updates
- *
- * @return @ref wiced_result_t
- */
-extern wiced_result_t wiced_update_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t permitted_delay);
 
 /** @} */
 

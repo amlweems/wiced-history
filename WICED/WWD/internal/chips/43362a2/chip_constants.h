@@ -383,6 +383,10 @@ typedef struct wl_extjoin_params
 
 typedef wl_cnt_ver_six_t  wiced_counters_t;
 
+
+/* Chip specific IOCTLs */
+#define WLC_SET_CUSTOM_COUNTRY             ( (uint32_t) 320 )
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -525,6 +525,7 @@ static wiced_result_t tftp_request_parse_packet(uint8_t* buffer, uint16_t size, 
             str += strlen( str ) + 1;
             continue;
         }
+        str += strlen(str) + 1;
     }
 
 
@@ -1027,6 +1028,7 @@ void tftp_client_thread( uint32_t arg )
                 {
                     tftp_complete = WICED_TRUE;
                 }
+                break;
             case TFTP_STATE_OACK:
                 if ( tftp_oack( client, &state ) != WICED_SUCCESS )
                 {

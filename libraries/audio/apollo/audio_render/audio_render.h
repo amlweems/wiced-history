@@ -24,6 +24,9 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
+#define AUDIO_RENDER_VOLUME_MIN     (0)
+#define AUDIO_RENDER_VOLUME_MAX     (100)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -41,7 +44,6 @@ typedef struct wiced_audio_render_params_s {
     uint32_t buffer_ms;                     /* Buffering (pre-roll) time that audio render should use   */
     uint32_t threshold_ms;                  /* Threshold in ms for adding silence/dropping audio frames */
     int      clock_enable;                  /* 0 = disable (blind push), 1 = enable */
-    wiced_audio_config_t audio_config;
 } wiced_audio_render_params_t;
 
 /**
@@ -95,6 +97,16 @@ wiced_audio_render_ref wiced_audio_render_init(wiced_audio_render_params_t*     
  * @return    Status of the operation.
  */
 wiced_result_t wiced_audio_render_deinit(wiced_audio_render_ref audio);
+
+/** Configure the audio render audio format.
+ *
+ * @param[in] dev  : Pointer to the audio device name (e.g. "ak4961_dac" or "wm8533_dac")
+ * @param[in] audio  : Pointer to the audio render instance.
+ * @param[in] config : Pointer to the audio configuration.
+ *
+ * @return    Status of the operation.
+ */
+wiced_result_t wiced_audio_render_configure(const char* dev, wiced_audio_render_ref audio, wiced_audio_config_t* config);
 
 /** Put the audio render in play state.
  * @note this functionality still needs to be implemented.

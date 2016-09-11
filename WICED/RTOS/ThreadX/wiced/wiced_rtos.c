@@ -15,12 +15,13 @@
 #include "wiced_rtos.h"
 #include "wiced_time.h"
 #include "wiced_defaults.h"
+#include "wiced_deep_sleep.h"
 #include "tx_api.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "wiced_utilities.h"
 #include "wwd_debug.h"
 #include "wwd_assert.h"
-#include "internal/wiced_internal_api.h"
+#include "RTOS/wiced_rtos_common.h"
 #include "tx_thread.h"
 
 #ifdef TX_ENABLE_EVENT_TRACE
@@ -85,6 +86,7 @@ wiced_worker_thread_t wiced_networking_worker_thread;
 #ifndef WICED_DISABLE_WATCHDOG
 static wiced_thread_t system_monitor_thread_handle;
 #endif /* WICED_DISABLE_WATCHDOG */
+static ULONG          WICED_DEEP_SLEEP_SAVED_VAR( before_deep_sleep_time );
 
 #ifdef TX_ENABLE_EVENT_TRACE
 #ifndef WICED_TRACEX_BUFFER_SIZE
@@ -126,7 +128,7 @@ int main( void )
     tx_kernel_enter( );
     return 0;
 }
-#endif /* ifdef ALTERNATE_MAIN */
+#endif /* ifndef ALTERNATE_MAIN */
 
 
 /**
@@ -152,6 +154,12 @@ void tx_application_define( void *first_unused_memory )
         REFERENCE_DEBUG_ONLY_VARIABLE( tx_result );
     }
 #endif /* TX_ENABLE_EVENT_TRACE */
+
+    /* Restore system clock taking into account time spent in deep-sleep */
+    if ( WICED_DEEP_SLEEP_IS_WARMBOOT_HANDLE( ) )
+    {
+        tx_time_set( before_deep_sleep_time + wiced_deep_sleep_ticks_since_enter( ) );
+    }
 
     /* Create the application thread.  */
     app_thread_handle = (TX_THREAD*)MALLOC_OBJECT("app thread", TX_THREAD);
@@ -498,4 +506,13 @@ wiced_result_t wiced_rtos_deinit_event_flags( wiced_event_flags_t* event_flags )
     }
 
     return WICED_SUCCESS;
+}
+
+WICED_DEEP_SLEEP_EVENT_HANDLER( deep_sleep_rtos_event_handler )
+{
+    if ( event == WICED_DEEP_SLEEP_EVENT_ENTER )
+    {
+        /* Save current time before entering deep-sleep */
+        before_deep_sleep_time = tx_time_get( );
+    }
 }

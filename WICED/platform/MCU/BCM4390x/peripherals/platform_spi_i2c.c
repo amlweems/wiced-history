@@ -20,6 +20,7 @@
 #include "wwd_rtos.h"
 #include "wwd_assert.h"
 #include "wiced_osl.h"
+#include "wiced_platform.h"
 
 #include "platform_mcu_peripheral.h"
 #include "platform_map.h"
@@ -54,11 +55,17 @@
         0                               \
     )
 
+#define GSIO_VERIFY(x)  {platform_result_t res = (x); if (res != PLATFORM_SUCCESS){return res;}}
+
+
 /******************************************************
  *                    Constants
  ******************************************************/
 
 #define I2C_TRANSACTION_TIMEOUT_MS  ( 5 )
+
+#define I2C_START_FLAG              (1U << 0)
+#define I2C_STOP_FLAG               (1U << 1)
 
 #define GSIO_0_IF                   (PLATFORM_CHIPCOMMON_REGBASE(OFFSETOF(chipcregs_t, gsioctrl)))
 #define GSIO_0_CLKDIV               (PLATFORM_CHIPCOMMON_REGBASE(OFFSETOF(chipcregs_t, clkdiv2)))
@@ -68,6 +75,10 @@
 #define GSIO_2_CLKDIV               (PLATFORM_CHIPCOMMON_REGBASE(OFFSETOF(chipcregs_t, gsio2clkdiv)))
 #define GSIO_3_IF                   (PLATFORM_CHIPCOMMON_REGBASE(OFFSETOF(chipcregs_t, gsio3ctrl)))
 #define GSIO_3_CLKDIV               (PLATFORM_CHIPCOMMON_REGBASE(OFFSETOF(chipcregs_t, gsio3clkdiv)))
+
+#ifndef GSIO_I2C_REPEATED_START_NEEDS_GPIO
+#define GSIO_I2C_REPEATED_START_NEEDS_GPIO 0
+#endif
 
 /******************************************************
  *                   Enumerations
@@ -79,6 +90,10 @@
 
 typedef struct gsio_43909_interface_regs gsio_43909_interface_regs_t;
 typedef struct gsio_43909_regs gsio_43909_regs_t;
+
+typedef uint32_t (gsio_divider_function_t)(uint32_t clk_rate, uint32_t target_speed_hz);
+
+typedef platform_result_t (i2c_io_fn_t)( const platform_i2c_t*, const platform_i2c_config_t*, uint8_t flags, uint8_t* buffer, uint16_t buffer_length);
 
 /******************************************************
  *                    Structures
@@ -137,26 +152,39 @@ static const gsio_43909_regs_t gsio_regs[BCM4390X_GSIO_MAX] =
  *               Function Declarations
  ******************************************************/
 
-static void                 gsio_set_clock      ( int port, uint32_t target_speed_hz );
+static void                 gsio_set_clock      ( int port, uint32_t target_speed_hz, gsio_divider_function_t * );
 static platform_result_t    gsio_wait_for_xfer_to_complete( int port );
 static platform_result_t    i2c_xfer            ( const platform_i2c_t *i2c, uint32_t regval );
 static void                 i2c_stop            ( const platform_i2c_t *i2c );
-static platform_result_t    i2c_read            ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t *data_in, uint16_t length );
-static platform_result_t    i2c_write           ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, const uint8_t *data_out, uint16_t length );
+static platform_result_t    i2c_read            ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
+static platform_result_t    i2c_write           ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-static void gsio_set_clock( int port, uint32_t target_speed_hz )
+
+static void gsio_set_clock( int port, uint32_t target_speed_hz, gsio_divider_function_t *divider_func )
 {
     uint32_t clk_rate, divider;
 
     /* FIXME This code assumes that the HT clock is always employed and remains unchanged
      * throughout the lifetime an initialized I2C/SPI port.
      */
-    clk_rate = osl_ht_clock();
+    clk_rate = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_BACKPLANE );
     wiced_assert("Backplane clock value can not be identified properly", clk_rate != 0);
+
+    divider = (*divider_func)(clk_rate, target_speed_hz);
+    divider <<= GSIO_GD_SHIFT;
+    divider &= GSIO_GD_MASK;
+
+    REG32(gsio_regs[port].clkdiv) &= ~GSIO_GD_MASK;
+    REG32(gsio_regs[port].clkdiv) |= divider;
+}
+
+static uint32_t gsio_i2c_divider( uint32_t clk_rate, uint32_t target_speed_hz )
+{
+    uint32_t divider;
 
     divider = clk_rate / target_speed_hz;
     if (clk_rate % target_speed_hz) {
@@ -165,11 +193,7 @@ static void gsio_set_clock( int port, uint32_t target_speed_hz )
     divider /= 4;
     divider -= 1;
 
-    divider <<= GSIO_GD_SHIFT;
-    divider &= GSIO_GD_MASK;
-
-    REG32(gsio_regs[port].clkdiv) &= ~GSIO_GD_MASK;
-    REG32(gsio_regs[port].clkdiv) |= divider;
+    return divider;
 }
 
 platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
@@ -178,7 +202,7 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
 
     wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) && ( config->flags & I2C_DEVICE_USE_DMA ) == 0);
 
-    if ( ( config->flags & I2C_DEVICE_USE_DMA ) || config->address_width != I2C_ADDRESS_WIDTH_7BIT)
+    if ( ( config->flags & I2C_DEVICE_USE_DMA ) || (config->address_width != I2C_ADDRESS_WIDTH_7BIT && config->address_width != I2C_ADDRESS_WIDTH_10BIT) )
     {
         return PLATFORM_UNSUPPORTED;
     }
@@ -200,7 +224,7 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
         return PLATFORM_BADOPTION;
     }
 
-    gsio_set_clock(i2c->port, target_speed_hz);
+    gsio_set_clock(i2c->port, target_speed_hz, gsio_i2c_divider);
 
     /* XXX Is it appropriate to set the address here? */
     gsio_regs[i2c->port].interface->address = config->address;
@@ -268,15 +292,25 @@ static void i2c_stop( const platform_i2c_t *i2c )
     return;
 }
 
+static uint32_t i2c_get_gsio_noa_i2c_start( platform_i2c_bus_address_width_t address_width )
+{
+    const uint32_t gsio_noa_i2c_start = address_width == I2C_ADDRESS_WIDTH_7BIT  ? GSIO_NOA_I2C_START_7BITS  :
+                                        address_width == I2C_ADDRESS_WIDTH_10BIT ? GSIO_NOA_I2C_START_10BITS :
+                                                                                   GSIO_NOA_I2C_START_NONE   ;
+    wiced_assert( "bad address width", gsio_noa_i2c_start != GSIO_NOA_I2C_START_NONE );
+
+    return gsio_noa_i2c_start;
+}
+
 static platform_result_t i2c_read( const platform_i2c_t *i2c, const platform_i2c_config_t *config,
-        uint8_t *data_in, uint16_t length )
+        uint8_t flags, uint8_t *data_in, uint16_t length )
 {
     platform_result_t   result;
     unsigned            i;
 
     result = PLATFORM_SUCCESS;
 
-    if ( data_in == NULL || length == 0 || config->address_width != I2C_ADDRESS_WIDTH_7BIT)
+    if ( data_in == NULL || length == 0 )
     {
         return PLATFORM_BADARG;
     }
@@ -292,16 +326,31 @@ static platform_result_t i2c_read( const platform_i2c_t *i2c, const platform_i2c
 
         if ( i == 0 )
         {
-            tmpreg |= GSIO_NOA_I2C_START_7BITS;
+            /* First byte. */
+            if ( (flags & I2C_START_FLAG) != 0 )
+            {
+                /* Start condition. */
+                tmpreg |= i2c_get_gsio_noa_i2c_start( config->address_width );
+            }
         }
         if ( i < length-1 )
         {
+            /* Not the last byte. */
             tmpreg |= GSIO_NOACK_I2C_SEND_ACK;
         }
         else
         {
-            tmpreg |= GSIO_GG_I2C_GENERATE_STOP;
-            tmpreg |= GSIO_NOACK_I2C_NO_ACK;
+            /* Last byte. */
+            if ( (flags & I2C_STOP_FLAG) != 0 )
+            {
+                /* Stop condition. */
+                tmpreg |= GSIO_GG_I2C_GENERATE_STOP;
+                tmpreg |= GSIO_NOACK_I2C_NO_ACK;
+            }
+            else
+            {
+                tmpreg |= GSIO_NOACK_I2C_SEND_ACK;
+            }
         }
 
         /* Execute GSIO command. */
@@ -336,14 +385,14 @@ static platform_result_t i2c_read( const platform_i2c_t *i2c, const platform_i2c
 }
 
 static platform_result_t i2c_write( const platform_i2c_t *i2c, const platform_i2c_config_t *config,
-        const uint8_t *data_out, uint16_t length )
+        uint8_t flags, uint8_t *data_out, uint16_t length )
 {
     platform_result_t   result;
     unsigned            i;
 
     result = PLATFORM_SUCCESS;
 
-    if ( data_out == NULL || length == 0 || config->address_width != I2C_ADDRESS_WIDTH_7BIT)
+    if ( data_out == NULL || length == 0 )
     {
         return PLATFORM_BADARG;
     }
@@ -353,19 +402,28 @@ static platform_result_t i2c_write( const platform_i2c_t *i2c, const platform_i2
 
     for ( i = 0; i < length; i++ )
     {
-        uint32_t tmpreg = 0;
+        uint32_t tmpreg = GSIO_NOACK_I2C_CHECK_ACK;
 
         /* Prepare one byte on GSIOData register. */
         gsio_regs[i2c->port].interface->data = (data_out[i] << 24);
 
-        /* Add start/stop conditions. */
         if ( i == 0 )
         {
-            tmpreg |= GSIO_NOA_I2C_START_7BITS;
+            /* First byte. */
+            if ( (flags & I2C_START_FLAG) != 0 )
+            {
+                /* Start-condition. */
+                tmpreg |= i2c_get_gsio_noa_i2c_start( config->address_width );;
+            }
         }
         if ( i == length-1 )
         {
-            tmpreg |= GSIO_GG_I2C_GENERATE_STOP;
+            /* Last byte. */
+            if ( (flags & I2C_STOP_FLAG) != 0 )
+            {
+                /* Stop condition. */
+                tmpreg |= GSIO_GG_I2C_GENERATE_STOP;
+            }
         }
 
         /* Execute GSIO command. */
@@ -377,7 +435,7 @@ static platform_result_t i2c_write( const platform_i2c_t *i2c, const platform_i2
             /* Check if stop-condition already generated. */
             if ( ( tmpreg & GSIO_GG_MASK ) != GSIO_GG_I2C_GENERATE_STOP )
             {
-                /* Generate a stop-conditon. */
+                /* Generate a stop-condition. */
                 i2c_stop(i2c);
             }
             /* A NACK is an error. */
@@ -410,7 +468,7 @@ wiced_bool_t platform_i2c_probe_device( const platform_i2c_t *i2c, const platfor
      */
     for ( i = 0; i < retries; i++ )
     {
-        if ( i2c_read( i2c, config, dummy, sizeof dummy ) == PLATFORM_SUCCESS )
+        if ( i2c_read( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, dummy, sizeof dummy ) == PLATFORM_SUCCESS )
         {
             return WICED_TRUE;
         }
@@ -453,7 +511,7 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
         {
             if ( messages[message_count].tx_length != 0 )
             {
-                result = i2c_write( i2c, config, (const uint8_t*) messages[message_count].tx_buffer, messages[message_count].tx_length );
+                result = i2c_write( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].tx_buffer, messages[message_count].tx_length );
                 if ( result == PLATFORM_SUCCESS )
                 {
                     /* Transaction successful. Break from the inner loop and continue with the next message */
@@ -462,7 +520,7 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
             }
             else if ( messages[message_count].rx_length != 0 )
             {
-                result = i2c_read( i2c, config, (uint8_t*) messages[message_count].rx_buffer, messages[message_count].rx_length );
+                result = i2c_read( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].rx_buffer, messages[message_count].rx_length );
                 if ( result == PLATFORM_SUCCESS )
                 {
                     /* Transaction successful. Break from the inner loop and continue with the next message */
@@ -520,6 +578,85 @@ platform_result_t platform_i2c_init_rx_message( platform_i2c_message_t* message,
     return PLATFORM_SUCCESS;
 }
 
+/* This repeat-start can only be generated over I2C_0 because I2C_1 does not have GPIO functionality
+ *
+ * This function transfers control of SCL/SDA temporarily to the GPIO core to block I2C writing on these lines.
+ * A dummy message is written over I2C to "pull" both lines high (but since GPIO has control the lines are not effected).
+ * Control is returned to I2C which pulls SDA and SCL HIGH (in that order - without generating a stop) and then a start is written.
+ */
+static platform_result_t i2c_setup_repeated_start( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+{
+    /* Initializing the GPIOs pulls control away from the I2C core.
+     *
+     * SDA should be initialized before SCL in case the GPIO core pulls the lines high on initialization.
+     * GPIOs assume previous state.
+     */
+    GSIO_VERIFY( platform_gpio_init( i2c->pin_sda, OUTPUT_PUSH_PULL ) );
+    GSIO_VERIFY( platform_gpio_init( i2c->pin_scl, OUTPUT_PUSH_PULL ) );
+
+    /* GSIO to configure SCL/SDA active high - no output is seen on SCL/SDA because the GPIOs currently have control.
+     *
+     * The I2C core has a precondition that both SCL and SDA be HIGH before a start.
+     * The I2C core leaves both SCL and SDA HIGH after a stop.
+     * Configure GSIO to generate a STOP.  A real STOP isn't generated because GSIO isn't controlling the lines.
+     */
+    i2c_stop( i2c );
+
+    /* Control is returned to the I2C core.
+     *
+     * SDA must be returned first because the I2C core will pull the lines high (if they are not high already) immediately upon regaining control.
+     */
+    GSIO_VERIFY( platform_gpio_deinit( i2c->pin_sda ) );
+    GSIO_VERIFY( platform_gpio_deinit( i2c->pin_scl ) );
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t i2c_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn )
+{
+    uint8_t i2c_flags = 0;
+
+    if ( (flags & WICED_I2C_REPEATED_START_FLAG) != 0 )
+    {
+        /* Combined message is being requested. */
+        if ( GSIO_I2C_REPEATED_START_NEEDS_GPIO != 0 )
+        {
+            /* The I2C peripheral pins need to be GPIO muxable. */
+            if ( i2c->pin_scl == NULL || i2c->pin_sda == NULL )
+            {
+                wiced_assert( "repeated-start unsupported on this I2C port", 0==1 );
+                return PLATFORM_UNSUPPORTED;
+            }
+
+            /* Setup the repeated-start precondition. */
+            GSIO_VERIFY( i2c_setup_repeated_start( i2c, config ) );
+        }
+    }
+
+    if ( ( flags & ( WICED_I2C_START_FLAG | WICED_I2C_REPEATED_START_FLAG) ) != 0 )
+    {
+        i2c_flags |= I2C_START_FLAG;
+    }
+    if ( ( flags & WICED_I2C_STOP_FLAG ) != 0 )
+    {
+        i2c_flags |= I2C_STOP_FLAG;
+    }
+
+    return (*fn)( i2c, config, i2c_flags, buffer, buffer_length );
+}
+
+
+platform_result_t platform_i2c_write( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, const void* buffer, uint16_t buffer_length )
+{
+    return i2c_transfer( i2c, config, flags, (void *) buffer, buffer_length, i2c_write );
+}
+
+
+platform_result_t platform_i2c_read( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, void* buffer, uint16_t buffer_length )
+{
+    return i2c_transfer( i2c, config, flags, (void *) buffer, buffer_length, i2c_read );
+}
+
 #if 0
 platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
 {
@@ -549,17 +686,40 @@ platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* me
 
 
 
+static uint32_t gsio_spi_divider( uint32_t clk_rate, uint32_t target_speed_hz )
+{
+    uint32_t divider;
+
+    divider = clk_rate / target_speed_hz;
+    divider -= 2;
+
+    return divider;
+}
 
 platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_spi_config_t* config )
 {
+    platform_result_t result = PLATFORM_SUCCESS;
+
     wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) && (( config->mode & SPI_USE_DMA ) == 0 ));
 
-    gsio_set_clock(spi->port, config->speed);
+    gsio_set_clock(spi->port, config->speed, gsio_spi_divider);
 
     gsio_regs[spi->port].interface->ctrl = ( 0 & GSIO_GO_MASK) | GSIO_GC_SPI_NOD_DATA_IO | GSIO_NOD_1 | GSIO_GM_SPI;
+
+    if ( config->chip_select != NULL )
+    {
+        /* GPIO used as chip select. */
+        result = platform_gpio_init( config->chip_select, OUTPUT_PUSH_PULL );
+    }
+    else
+    {
+        /* Use h/w peripheral pin for chip select. */
+        ;
+    }
+
     /* XXX Might need to wait here. */
 
-    return PLATFORM_SUCCESS;
+    return result;
 }
 
 platform_result_t platform_spi_deinit( const platform_spi_t* spi )
@@ -586,9 +746,14 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
     }
 
     /* Activate chip select */
-    gsio_regs[spi->port].interface->ctrl |= GSIO_GG_SPI_CHIP_SELECT;
-
-//    platform_gpio_output_low( config->chip_select );
+    if ( config->chip_select != NULL )
+    {
+        platform_gpio_output_low( config->chip_select );
+    }
+    else
+    {
+        gsio_regs[spi->port].interface->ctrl |= GSIO_GG_SPI_CHIP_SELECT;
+    }
 
     for ( i = 0; i < number_of_segments; i++ )
     {
@@ -619,8 +784,14 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
     }
 
     /* Deassert chip select */
-    gsio_regs[spi->port].interface->ctrl &= (~GSIO_GG_SPI_CHIP_SELECT);
-//    platform_gpio_output_high( config->chip_select );
+    if ( config->chip_select != NULL )
+    {
+        platform_gpio_output_high( config->chip_select );
+    }
+    else
+    {
+        gsio_regs[spi->port].interface->ctrl &= (~GSIO_GG_SPI_CHIP_SELECT);
+    }
 
     platform_mcu_powersave_enable( );
 

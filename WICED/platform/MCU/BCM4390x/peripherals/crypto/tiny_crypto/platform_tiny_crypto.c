@@ -169,6 +169,9 @@ void platform_hwcrypto_init( void )
 
 platform_result_t platform_hwcrypto_execute( crypto_cmd_t cmd )
 {
+    static volatile dma64dd_t PLATFORM_DMA_DESCRIPTORS_SECTION( input_descriptors  )[MAX_DMADESCS_PER_SPUMPKT    ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT);
+    static volatile dma64dd_t PLATFORM_DMA_DESCRIPTORS_SECTION( output_descriptors )[MAX_DMADESCS_PER_SPUMPKT + 1] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT);
+    static volatile dma64dd_t PLATFORM_DMA_DESCRIPTORS_SECTION( hash_descriptor    )                               ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT);
 
     uint8_t     *spum_header_ptr;
     uint32_t    sctx_size;
@@ -182,16 +185,8 @@ platform_result_t platform_hwcrypto_execute( crypto_cmd_t cmd )
     uint32_t    num_output_descriptors;
     bd_header_t *bd;
     bdesc_header_t *bdesc;
-    volatile dma64dd_t input_descriptors[ MAX_DMADESCS_PER_SPUMPKT ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT) =
-    { { 0 } };
-    volatile dma64dd_t output_descriptors[ MAX_DMADESCS_PER_SPUMPKT + 1 ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT) =
-    { { 0 } };
-    volatile dma64dd_t hash_descriptor ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT)=
-    { 0 };
-    uint8_t status[ PLATFORM_L1_CACHE_BYTES ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT) =
-    { 0 };
-    uint32_t spum_header[ SPUM_HDR_SIZE * WORDSIZE ] =
-    { 0 };
+    uint8_t status[ PLATFORM_L1_CACHE_BYTES ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT) = { 0 };
+    uint32_t spum_header[ SPUM_HDR_SIZE * WORDSIZE ] = { 0 };
     uint8 output_header[ OUTPUT_HDR_CACHE_ALIGNED_SIZE ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT);
 
 
@@ -363,6 +358,34 @@ platform_result_t platform_hwcrypto_aes128cbc_decrypt( uint8_t *key, uint32_t ke
 
     platform_hwcrypto_execute( cmd );
     memcpy( iv, (uint8_t*) ( src + size - AES128_IV_LEN ), AES_BLOCK_SZ );
+
+    return PLATFORM_SUCCESS;
+}
+
+/*
+ * AES128 CBC encryption
+ *
+ * @Assumption : dest is aligned to CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT
+ */
+platform_result_t platform_hwcrypto_aes128cbc_encrypt( uint8_t *key, uint32_t keysize, uint8_t *iv, uint32_t size, uint8_t *src, uint8_t *dest )
+{
+    crypto_cmd_t cmd =
+    { 0 };
+
+    cmd.crypt_key       = key;
+    cmd.crypt_key_len   = keysize;
+    cmd.crypt_iv        = iv;
+    cmd.crypt_iv_len    = AES128_IV_LEN;
+    cmd.source          = src;
+    cmd.output          = dest;
+    cmd.crypt_size      = size;
+    cmd.inbound         = OUTBOUND;
+    cmd.order           = ENCR_AUTH;
+    cmd.crypt_algo      = AES;
+    cmd.crypt_mode      = CBC;
+
+    platform_hwcrypto_execute( cmd );
+    memcpy( iv, (uint8_t*) ( src + size - AES128_IV_LEN ), AES128_IV_LEN );
 
     return PLATFORM_SUCCESS;
 }
@@ -594,6 +617,45 @@ platform_result_t platform_hwcrypto_aescbc_decrypt_sha256_hmac(uint8_t *crypt_ke
     cmd.crypt_size      = crypt_size;
     cmd.hash_size       = auth_size;
     cmd.inbound         = INBOUND;
+    cmd.order           = AUTH_ENCR;
+    cmd.crypt_algo      = AES;
+    cmd.crypt_mode      = CBC;
+    cmd.hash_algo       = SHA256;
+    cmd.hash_mode       = HMAC;
+    cmd.icv_size        = SHA256_HASH_SIZE/WORDSIZE;
+
+    result = platform_hwcrypto_execute(cmd);
+
+    return result;
+}
+
+/* Combo  + SHA256HMAC Authentication + AES128 CBC encryption
+ * For data size < 64K (HWCRYPTO_MAX_PAYLOAD_SIZE)
+ */
+platform_result_t platform_hwcrypto_sha256_hmac_aescbc_encrypt(uint8_t *crypt_key, uint8_t *crypt_iv, uint32_t crypt_size,
+        uint32_t auth_size, uint8_t *hmac_key, uint32_t hmac_key_len, uint8_t *src, uint8_t *crypt_dest, uint8_t *hash_dest)
+{
+    uint32_t        hmac_key_copy_size;
+    uint8           hmac_key_32[HMAC256_KEY_LEN] = {'\0'};
+    crypto_cmd_t  cmd = {0};
+    platform_result_t result;
+
+    /* Append / Truncate key to make it 256 bits */
+    hmac_key_copy_size = MIN(hmac_key_len, HMAC256_KEY_LEN);
+    memcpy(hmac_key_32, hmac_key, hmac_key_copy_size);
+
+    cmd.crypt_key       = crypt_key;
+    cmd.crypt_key_len   = AES128_KEY_LEN;
+    cmd.crypt_iv        = crypt_iv;
+    cmd.crypt_iv_len    = AES128_IV_LEN;
+    cmd.hash_key        = hmac_key_32;
+    cmd.hash_key_len    = HMAC256_KEY_LEN;
+    cmd.source          = src;
+    cmd.output          = crypt_dest;
+    cmd.hash_output     = hash_dest;
+    cmd.crypt_size      = crypt_size;
+    cmd.hash_size       = auth_size;
+    cmd.inbound         = OUTBOUND;
     cmd.order           = AUTH_ENCR;
     cmd.crypt_algo      = AES;
     cmd.crypt_mode      = CBC;

@@ -58,6 +58,7 @@ extern void Serror_ISR          ( void ); // bus error
 extern void M2M_ISR             ( void ); // Memory to Memory DMA
 extern void I2S0_ISR            ( void ); // I2S0
 extern void I2S1_ISR            ( void ); // I2S1
+extern void USB_HOST_ISR        ( void ); // USB HOST
 
 extern void Unhandled_ISR       ( void ); // Stub called when no handler defined
 

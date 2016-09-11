@@ -7,7 +7,8 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-
+#include <stdint.h>
+#include <stdlib.h>
 static void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen )
 {
     unsigned char* needle_char = (unsigned char*) needle;

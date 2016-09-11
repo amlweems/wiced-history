@@ -36,7 +36,8 @@ extern "C" {
         RESULT_ENUM( prefix, WAIT_ABORTED,            7010 ),   /**< Wait aborted */          \
         RESULT_ENUM( prefix, PORT_UNAVAILABLE,        7011 ),   /**< Port unavailable */      \
         RESULT_ENUM( prefix, IN_PROGRESS,             7012 ),   /**< Action in progress */    \
-        RESULT_ENUM( prefix, IP_ADDRESS_IS_NOT_READY, 7013 ),   /**< IP_ADDRESS_IS_NOT_READY */
+        RESULT_ENUM( prefix, IP_ADDRESS_IS_NOT_READY, 7013 ),   /**< IP_ADDRESS_IS_NOT_READY */ \
+        RESULT_ENUM( prefix, SOCKET_CLOSED,           7014 ),   /**< Socket closed */
 
 /******************************************************
  *                   Enumerations

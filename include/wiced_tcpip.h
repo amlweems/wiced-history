@@ -141,75 +141,6 @@ extern const wiced_ip_address_t wiced_ip_broadcast;
  */
 /*****************************************************************************/
 
-/*****************************************************************************/
-/** @addtogroup tls       TLS Security
- *  @ingroup ipcoms
- *
- * Security initialisation functions for TLS enabled connections (Transport Layer Security - successor to SSL Secure Sockets Layer )
- *
- *
- *  @{
- */
-/*****************************************************************************/
-
-/** Initialises a simple TLS context handle
- *
- * @param[out] context : A pointer to a wiced_tls_simple_context_t context object that will be initialised
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_init_simple_context( wiced_tls_simple_context_t* context, const char* peer_cn );
-
-
-/** Initialises an advanced TLS context handle using a supplied certificate and private key
- *
- * @param[out] context    : A pointer to a wiced_tls_advanced_context_t context object that will be initialised
- * @param[in] certificate : The server x509 certificate in base64 encoded string format
- * @param[in] key         : The server private key in base64 encoded string format
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_init_advanced_context( wiced_tls_advanced_context_t* context, const char* certificate, const char* key);
-
-
-/** Initialise the trusted root CA certificates
- *
- *  Initialises the collection of trusted root CA certificates used to verify received certificates
- *
- * @param[in] trusted_ca_certificates : A chain of x509 certificates in base64 encoded string format
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certificates );
-
-
-/** De-initialise the trusted root CA certificates
- *
- *  De-initialises the collection of trusted root CA certificates used to verify received certificates
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_deinit_root_ca_certificates( void );
-
-
-/** De-initialise a previously inited simple or advanced context
- *
- * @param[in,out] context : a pointer to either a wiced_tls_simple_context_t or wiced_tls_advanced_context_t object
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_deinit_context( wiced_tls_simple_context_t* context );
-
-
-/** Reset a previously inited simple or advanced context
- *
- * @param[in,out] tls_context : a pointer to either a wiced_tls_simple_context_t or wiced_tls_advanced_context_t object
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_tls_reset_context( wiced_tls_simple_context_t* tls_context );
-
-/** @} */
 
 /*****************************************************************************/
 /** @addtogroup tcp       TCP
@@ -368,9 +299,7 @@ wiced_result_t wiced_tcp_delete_socket( wiced_tcp_socket_t* socket );
  *        to call @ref wiced_tcp_start_tls to begin TLS communication.
  *
  * @param[in,out] socket  : The TCP socket to use for TLS
- * @param[in]     context : The TLS context to use for security. This must
- *                          have been initialised with @ref wiced_tls_init_simple_context
- *                          or @ref wiced_tls_init_advanced_context
+ * @param[in]     context : The TLS context to use for security.
  *
  * @return @ref wiced_result_t
  */
@@ -410,7 +339,7 @@ wiced_result_t wiced_tcp_start_tls( wiced_tcp_socket_t* socket, wiced_tls_endpoi
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_simple_context_t* tls_context, void* referee, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], tls_transport_protocol_t transport_protocol );
+wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_context_t* tls_context, void* referee, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], tls_transport_protocol_t transport_protocol );
 
 
 /*****************************************************************************/
@@ -630,13 +559,11 @@ wiced_result_t wiced_tcp_server_accept( wiced_tcp_server_t* tcp_server, wiced_tc
 /** Add TLS security to a TCP server ( all server sockets )
  *
  * @param[in] tcp_server   : pointer to TCP server structure
- * @param[in] context      : A pointer to a wiced_tls_advanced_context_t context object that will be initialized
- * @param[in] certificate  : The server x509 certificate in base64 encoded string format
- * @param[in] key          : The server private key in base64 encoded string format
+ * @param[in] tls_identity : A pointer to a wiced_tls_identity_t object
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_tcp_server_add_tls( wiced_tcp_server_t* tcp_server, wiced_tls_advanced_context_t* context, const char* server_cert, const char* server_key );
+wiced_result_t wiced_tcp_server_enable_tls( wiced_tcp_server_t* tcp_server, wiced_tls_identity_t* tls_identity );
 
 /** Stop and tear down TCP server
  *
@@ -654,6 +581,17 @@ wiced_result_t wiced_tcp_server_stop( wiced_tcp_server_t* server );
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_tcp_server_disconnect_socket( wiced_tcp_server_t* tcp_server, wiced_tcp_socket_t* socket);
+
+/** Get socket state
+ *
+ * @param[in] socket      : pointer to tcp socket to retrieve socket state from
+ * @param[in] state       : socket state is returned here
+
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_get_socket_state( wiced_tcp_socket_t* socket, wiced_socket_state_t* socket_state );
+
 
 /** @} */
 

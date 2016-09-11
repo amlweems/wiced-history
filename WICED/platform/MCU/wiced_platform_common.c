@@ -20,6 +20,7 @@
 #include "platform_config.h"
 #include "wiced_time.h"
 #include "platform_mcu_peripheral.h"
+#include "platform_audio.h"
 
 /******************************************************
  *                      Macros
@@ -45,7 +46,7 @@
  *               Static Function Declarations
  ******************************************************/
 
-extern wiced_result_t wiced_platform_init      ( void );
+extern wiced_result_t wiced_platform_init( void );
 
 /******************************************************
  *               Variable Definitions
@@ -61,7 +62,7 @@ extern const platform_uart_t       platform_uart_peripherals[];
 extern platform_uart_driver_t      platform_uart_drivers[];
 extern platform_spi_slave_driver_t platform_spi_slave_drivers[];
 
-wiced_bool_t i2c_initialized[WICED_I2C_MAX];
+static wiced_bool_t i2c_initialized[WICED_I2C_MAX];
 
 /******************************************************
  *               Function Definitions
@@ -130,7 +131,7 @@ wiced_bool_t wiced_gpio_input_get( wiced_gpio_t gpio )
 
 wiced_result_t wiced_gpio_input_irq_enable( wiced_gpio_t gpio, wiced_gpio_irq_trigger_t trigger, wiced_gpio_irq_handler_t handler, void* arg )
 {
-    return (wiced_result_t) platform_gpio_irq_enable( &platform_gpio_pins[gpio], trigger, handler, arg );
+    return (wiced_result_t) platform_gpio_irq_enable( &platform_gpio_pins[gpio], trigger, handler, (void*)arg );
 }
 
 wiced_result_t wiced_gpio_input_irq_disable( wiced_gpio_t gpio )
@@ -143,11 +144,15 @@ wiced_result_t wiced_i2c_init( const wiced_i2c_device_t* device )
     platform_i2c_config_t config;
     wiced_result_t result;
 
+    if ( device->port >= WICED_I2C_MAX )
+    {
+        return WICED_ERROR;
+    }
+
     if (i2c_initialized[device->port] == WICED_TRUE)
     {
         return WICED_SUCCESS;
     }
-
 
     config.address       = device->address;
     config.address_width = device->address_width;
@@ -159,12 +164,18 @@ wiced_result_t wiced_i2c_init( const wiced_i2c_device_t* device )
     {
         i2c_initialized[device->port] = WICED_TRUE;
     }
+
     return result;
 }
 
 wiced_result_t wiced_i2c_deinit( const wiced_i2c_device_t* device )
 {
     platform_i2c_config_t config;
+
+    if ( device->port >= WICED_I2C_MAX )
+    {
+        return WICED_ERROR;
+    }
 
     config.address       = device->address;
     config.address_width = device->address_width;
@@ -215,6 +226,30 @@ wiced_result_t wiced_i2c_transfer( const wiced_i2c_device_t* device, wiced_i2c_m
     return (wiced_result_t) platform_i2c_transfer( &platform_i2c_peripherals[device->port], &config, messages, number_of_messages );
 }
 
+wiced_result_t wiced_i2c_read( const wiced_i2c_device_t* device, uint16_t flags, void* buffer, uint16_t buffer_length )
+{
+    platform_i2c_config_t config;
+
+    config.address       = device->address;
+    config.address_width = device->address_width;
+    config.flags         = device->flags;
+    config.speed_mode    = device->speed_mode;
+
+    return platform_i2c_read( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
+}
+
+wiced_result_t wiced_i2c_write( const wiced_i2c_device_t* device, uint16_t flags, const void* buffer, uint16_t buffer_length )
+{
+    platform_i2c_config_t config;
+
+    config.address       = device->address;
+    config.address_width = device->address_width;
+    config.flags         = device->flags;
+    config.speed_mode    = device->speed_mode;
+
+    return platform_i2c_write( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
+}
+
 void wiced_platform_mcu_enable_powersave( void )
 {
 #ifndef WICED_DISABLE_MCU_POWERSAVE
@@ -258,7 +293,8 @@ wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi )
 {
     platform_spi_config_t config;
 
-    config.chip_select = &platform_gpio_pins[spi->chip_select];
+    /* Chip select is not a GPIO when NULL. */
+    config.chip_select = ( spi->chip_select != WICED_GPIO_MAX ) ? &platform_gpio_pins[spi->chip_select] : NULL;
     config.speed       = spi->speed;
     config.mode        = spi->mode;
     config.bits        = spi->bits;
@@ -275,7 +311,8 @@ wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_sp
 {
     platform_spi_config_t config;
 
-    config.chip_select = &platform_gpio_pins[spi->chip_select];
+    /* Chip select is not a GPIO when NULL. */
+    config.chip_select = ( spi->chip_select != WICED_GPIO_MAX ) ? &platform_gpio_pins[spi->chip_select] : NULL;
     config.speed       = spi->speed;
     config.mode        = spi->mode;
     config.bits        = spi->bits;
@@ -336,7 +373,7 @@ wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, u
     return (wiced_result_t) platform_uart_transmit_bytes( &platform_uart_drivers[uart], (const uint8_t*) data, size );
 }
 
-wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
+wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t* size, uint32_t timeout )
 {
     return (wiced_result_t) platform_uart_receive_bytes( &platform_uart_drivers[uart], (uint8_t*)data, size, timeout );
 }
@@ -380,4 +417,29 @@ wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_na
                                       uint32_t *local_secs, uint32_t *local_nanosecs)
 {
     return platform_time_read_8021as(master_secs, master_nanosecs, local_secs, local_nanosecs);
+}
+
+wiced_result_t wiced_audio_timer_enable( uint32_t audio_frame_count )
+{
+    return platform_audio_timer_enable( audio_frame_count );
+}
+
+wiced_result_t wiced_audio_timer_disable( void )
+{
+    return platform_audio_timer_disable( );
+}
+
+wiced_result_t wiced_audio_timer_get_frame_sync( uint32_t timeout_msecs )
+{
+    return platform_audio_timer_get_frame_sync( timeout_msecs );
+}
+
+wiced_result_t wiced_audio_timer_get_time( uint32_t *time_hi, uint32_t *time_lo )
+{
+    return platform_audio_timer_get_time( time_hi, time_lo );
+}
+
+wiced_result_t wiced_audio_timer_get_resolution( uint32_t audio_sample_rate, uint32_t *ticks_per_sec )
+{
+    return platform_audio_timer_get_resolution( audio_sample_rate, ticks_per_sec );
 }

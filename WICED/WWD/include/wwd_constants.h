@@ -72,17 +72,24 @@ extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that
 #define IBSS_ENABLED       0x20000000
 /** @endcond */
 
+#define DSSS_PARAMETER_SET_LENGTH (1)
+
+#define HT_CAPABILITIES_IE_LENGTH (26)
+#define HT_OPERATION_IE_LENGTH    (22)
+
+
 /** Enumeration of WICED interfaces. \n
  * @note The config interface is a virtual interface that shares the softAP interface
  */
 typedef enum
 {
-    WWD_STA_INTERFACE      = 0, /**< STA or Client Interface  */
-    WWD_AP_INTERFACE       = 1, /**< softAP Interface         */
-    WWD_P2P_INTERFACE      = 2, /**< P2P Interface         */
-    WWD_ETHERNET_INTERFACE = 3, /**< Ethernet Interface         */
+    WWD_STA_INTERFACE          = 0,         /**< STA or Client Interface                                                 */
+    WWD_AP_INTERFACE           = 1,         /**< softAP Interface                                                        */
+    WWD_P2P_INTERFACE          = 2,         /**< P2P Interface                                                           */
+    WWD_ETHERNET_INTERFACE     = 3,         /**< Ethernet Interface                                                      */
 
-    WWD_INTERFACE_MAX,       /** DO NOT USE - MUST BE LAST - used for counting interfaces */
+    WWD_INTERFACE_MAX,                      /** DO NOT USE - MUST BE LAST INTERFACE VALUE - used for counting interfaces */
+    WWD_INTERFACE_FORCE_32_BIT = 0x7fffffff /**< Exists only to force wwd_interface_t type to 32 bits                    */
 } wwd_interface_t;
 
 /**
@@ -254,6 +261,141 @@ typedef enum
     WICED_11N_SUPPORT_ENABLED  = 1,
 } wiced_11n_support_t;
 
+
+/* 802.11 Information Element Identification Numbers (as per section 8.4.2.1 of 802.11-2012) */
+typedef enum
+{
+    DOT11_IE_ID_SSID                                 = 0,
+    DOT11_IE_ID_SUPPORTED_RATES                      = 1,
+    DOT11_IE_ID_FH_PARAMETER_SET                     = 2,
+    DOT11_IE_ID_DSSS_PARAMETER_SET                   = 3,
+    DOT11_IE_ID_CF_PARAMETER_SET                     = 4,
+    DOT11_IE_ID_TIM                                  = 5,
+    DOT11_IE_ID_IBSS_PARAMETER_SET                   = 6,
+    DOT11_IE_ID_COUNTRY                              = 7,
+    DOT11_IE_ID_HOPPING_PATTERN_PARAMETERS           = 8,
+    DOT11_IE_ID_HOPPING_PATTERN_TABLE                = 9,
+    DOT11_IE_ID_REQUEST                              = 10,
+    DOT11_IE_ID_BSS_LOAD                             = 11,
+    DOT11_IE_ID_EDCA_PARAMETER_SET                   = 12,
+    DOT11_IE_ID_TSPEC                                = 13,
+    DOT11_IE_ID_TCLAS                                = 14,
+    DOT11_IE_ID_SCHEDULE                             = 15,
+    DOT11_IE_ID_CHALLENGE_TEXT                       = 16,
+    /* 17-31 Reserved */
+    DOT11_IE_ID_POWER_CONSTRAINT                     = 32,
+    DOT11_IE_ID_POWER_CAPABILITY                     = 33,
+    DOT11_IE_ID_TPC_REQUEST                          = 34,
+    DOT11_IE_ID_TPC_REPORT                           = 35,
+    DOT11_IE_ID_SUPPORTED_CHANNELS                   = 36,
+    DOT11_IE_ID_CHANNEL_SWITCH_ANNOUNCEMENT          = 37,
+    DOT11_IE_ID_MEASUREMENT_REQUEST                  = 38,
+    DOT11_IE_ID_MEASUREMENT_REPORT                   = 39,
+    DOT11_IE_ID_QUIET                                = 40,
+    DOT11_IE_ID_IBSS_DFS                             = 41,
+    DOT11_IE_ID_ERP                                  = 42,
+    DOT11_IE_ID_TS_DELAY                             = 43,
+    DOT11_IE_ID_TCLAS_PROCESSING                     = 44,
+    DOT11_IE_ID_HT_CAPABILITIES                      = 45,
+    DOT11_IE_ID_QOS_CAPABILITY                       = 46,
+    /* 47 Reserved */
+    DOT11_IE_ID_RSN                                  = 48,
+    /* 49 Reserved */
+    DOT11_IE_ID_EXTENDED_SUPPORTED_RATES             = 50,
+    DOT11_IE_ID_AP_CHANNEL_REPORT                    = 51,
+    DOT11_IE_ID_NEIGHBOR_REPORT                      = 52,
+    DOT11_IE_ID_RCPI                                 = 53,
+    DOT11_IE_ID_MOBILITY_DOMAIN                      = 54,
+    DOT11_IE_ID_FAST_BSS_TRANSITION                  = 55,
+    DOT11_IE_ID_TIMEOUT_INTERVAL                     = 56,
+    DOT11_IE_ID_RIC_DATA                             = 57,
+    DOT11_IE_ID_DSE_REGISTERED_LOCATION              = 58,
+    DOT11_IE_ID_SUPPORTED_OPERATING_CLASSES          = 59,
+    DOT11_IE_ID_EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT = 60,
+    DOT11_IE_ID_HT_OPERATION                         = 61,
+    DOT11_IE_ID_SECONDARY_CHANNEL_OFFSET             = 62,
+    DOT11_IE_ID_BSS_AVERAGE_ACCESS_DELAY             = 63,
+    DOT11_IE_ID_ANTENNA                              = 64,
+    DOT11_IE_ID_RSNI                                 = 65,
+    DOT11_IE_ID_MEASUREMENT_PILOT_TRANSMISSION       = 66,
+    DOT11_IE_ID_BSS_AVAILABLE_ADMISSION_CAPACITY     = 67,
+    DOT11_IE_ID_BSS_AC_ACCESS_DELAY                  = 68,
+    DOT11_IE_ID_TIME_ADVERTISEMENT                   = 69,
+    DOT11_IE_ID_RM_ENABLED_CAPABILITIES              = 70,
+    DOT11_IE_ID_MULTIPLE_BSSID                       = 71,
+    DOT11_IE_ID_20_40_BSS_COEXISTENCE                = 72,
+    DOT11_IE_ID_20_40_BSS_INTOLERANT_CHANNEL_REPORT  = 73,
+    DOT11_IE_ID_OVERLAPPING_BSS_SCAN_PARAMETERS      = 74,
+    DOT11_IE_ID_RIC_DESCRIPTOR                       = 75,
+    DOT11_IE_ID_MANAGEMENT_MIC                       = 76,
+    DOT11_IE_ID_EVENT_REQUEST                        = 78,
+    DOT11_IE_ID_EVENT_REPORT                         = 79,
+    DOT11_IE_ID_DIAGNOSTIC_REQUEST                   = 80,
+    DOT11_IE_ID_DIAGNOSTIC_REPORT                    = 81,
+    DOT11_IE_ID_LOCATION_PARAMETERS                  = 82,
+    DOT11_IE_ID_NONTRANSMITTED_BSSID_CAPABILITY      = 83,
+    DOT11_IE_ID_SSID_LIST                            = 84,
+    DOT11_IE_ID_MULTIPLE_BSSID_INDEX                 = 85,
+    DOT11_IE_ID_FMS_DESCRIPTOR                       = 86,
+    DOT11_IE_ID_FMS_REQUEST                          = 87,
+    DOT11_IE_ID_FMS_RESPONSE                         = 88,
+    DOT11_IE_ID_QOS_TRAFFIC_CAPABILITY               = 89,
+    DOT11_IE_ID_BSS_MAX_IDLE_PERIOD                  = 90,
+    DOT11_IE_ID_TFS_REQUEST                          = 91,
+    DOT11_IE_ID_TFS_RESPONSE                         = 92,
+    DOT11_IE_ID_WNM_SLEEP_MODE                       = 93,
+    DOT11_IE_ID_TIM_BROADCAST_REQUEST                = 94,
+    DOT11_IE_ID_TIM_BROADCAST_RESPONSE               = 95,
+    DOT11_IE_ID_COLLOCATED_INTERFERENCE_REPORT       = 96,
+    DOT11_IE_ID_CHANNEL_USAGE                        = 97,
+    DOT11_IE_ID_TIME_ZONE                            = 98,
+    DOT11_IE_ID_DMS_REQUEST                          = 99,
+    DOT11_IE_ID_DMS_RESPONSE                         = 100,
+    DOT11_IE_ID_LINK_IDENTIFIER                      = 101,
+    DOT11_IE_ID_WAKEUP_SCHEDULE                      = 102,
+    /* 103 Reserved */
+    DOT11_IE_ID_CHANNEL_SWITCH_TIMING                = 104,
+    DOT11_IE_ID_PTI_CONTROL                          = 105,
+    DOT11_IE_ID_TPU_BUFFER_STATUS                    = 106,
+    DOT11_IE_ID_INTERWORKING                         = 107,
+    DOT11_IE_ID_ADVERTISMENT_PROTOCOL                = 108,
+    DOT11_IE_ID_EXPEDITED_BANDWIDTH_REQUEST          = 109,
+    DOT11_IE_ID_QOS_MAP_SET                          = 110,
+    DOT11_IE_ID_ROAMING_CONSORTIUM                   = 111,
+    DOT11_IE_ID_EMERGENCY_ALERT_IDENTIFIER           = 112,
+    DOT11_IE_ID_MESH_CONFIGURATION                   = 113,
+    DOT11_IE_ID_MESH_ID                              = 114,
+    DOT11_IE_ID_MESH_LINK_METRIC_REPORT              = 115,
+    DOT11_IE_ID_CONGESTION_NOTIFICATION              = 116,
+    DOT11_IE_ID_MESH_PEERING_MANAGEMENT              = 117,
+    DOT11_IE_ID_MESH_CHANNEL_SWITCH_PARAMETERS       = 118,
+    DOT11_IE_ID_MESH_AWAKE_WINDOW                    = 119,
+    DOT11_IE_ID_BEACON_TIMING                        = 120,
+    DOT11_IE_ID_MCCAOP_SETUP_REQUEST                 = 121,
+    DOT11_IE_ID_MCCAOP_SETUP_REPLY                   = 122,
+    DOT11_IE_ID_MCCAOP_ADVERTISMENT                  = 123,
+    DOT11_IE_ID_MCCAOP_TEARDOWN                      = 124,
+    DOT11_IE_ID_GANN                                 = 125,
+    DOT11_IE_ID_RANN                                 = 126,
+    DOT11_IE_ID_EXTENDED_CAPABILITIES                = 127,
+    /* 128-129 Reserved */
+    DOT11_IE_ID_PREQ                                 = 130,
+    DOT11_IE_ID_PREP                                 = 131,
+    DOT11_IE_ID_PERR                                 = 132,
+    /* 133-136 Reserved */
+    DOT11_IE_ID_PXU                                  = 137,
+    DOT11_IE_ID_PXUC                                 = 138,
+    DOT11_IE_ID_AUTHENTICATED_MESH_PEERING_EXCHANGE  = 139,
+    DOT11_IE_ID_MIC                                  = 140,
+    DOT11_IE_ID_DESTINATION_URI                      = 141,
+    DOT11_IE_ID_U_APSD_COEXISTENCE                   = 142,
+    /* 143-173 Reserved */
+    DOT11_IE_ID_MCCAOP_ADVERTISMENT_OVERVIEW         = 174,
+    /* 175-220 Reserved */
+    DOT11_IE_ID_VENDOR_SPECIFIC                      = 221,
+    /* 222-255 Reserved */
+} dot11_ie_id_t;
+
 #ifndef RESULT_ENUM
 #define RESULT_ENUM( prefix, name, value )  prefix ## name = (value)
 #endif /* ifndef RESULT_ENUM */
@@ -323,7 +465,8 @@ typedef enum
     RESULT_ENUM( prefix, DELAY_TOO_SHORT,              1056 ),   /**< Requested delay is too short */ \
     RESULT_ENUM( prefix, INVALID_INTERFACE,            1057 ),   /**< Invalid interface provided */ \
     RESULT_ENUM( prefix, WEP_KEYLEN_BAD,               1058 ),   /**< WEP / WEP_SHARED key length must be 5 & 13 bytes */ \
-    RESULT_ENUM( prefix, HANDLER_ALREADY_REGISTERED,   1059 ),   /**< EAPOL handler already registered*/
+    RESULT_ENUM( prefix, HANDLER_ALREADY_REGISTERED,   1059 ),   /**< EAPOL handler already registered */ \
+    RESULT_ENUM( prefix, AP_ALREADY_UP,                1060 ),   /**< Soft AP or P2P group owner already up */
 
 
 /* These Enum result values are returned directly from the WLAN during an ioctl or iovar call.
@@ -572,13 +715,13 @@ typedef enum
     WICED_COUNTRY_ISRAEL                                          = MK_CNTRY( 'I', 'L', 0 ),             /* IL Israel */
     WICED_COUNTRY_ITALY                                           = MK_CNTRY( 'I', 'T', 0 ),             /* IT Italy */
     WICED_COUNTRY_JAMAICA                                         = MK_CNTRY( 'J', 'M', 0 ),             /* JM Jamaica */
-    WICED_COUNTRY_JAPAN                                           = MK_CNTRY( 'J', 'P', 2 ),             /* JP Japan */
+    WICED_COUNTRY_JAPAN                                           = MK_CNTRY( 'J', 'P', 0 ),             /* JP Japan */
     WICED_COUNTRY_JERSEY                                          = MK_CNTRY( 'J', 'E', 0 ),             /* JE Jersey */
     WICED_COUNTRY_JORDAN                                          = MK_CNTRY( 'J', 'O', 0 ),             /* JO Jordan */
     WICED_COUNTRY_KAZAKHSTAN                                      = MK_CNTRY( 'K', 'Z', 0 ),             /* KZ Kazakhstan */
     WICED_COUNTRY_KENYA                                           = MK_CNTRY( 'K', 'E', 0 ),             /* KE Kenya */
     WICED_COUNTRY_KIRIBATI                                        = MK_CNTRY( 'K', 'I', 0 ),             /* KI Kiribati */
-    WICED_COUNTRY_KOREA_REPUBLIC_OF                               = MK_CNTRY( 'K', 'R', 0 ),             /* KR Korea,_Republic_Of */
+    WICED_COUNTRY_KOREA_REPUBLIC_OF                               = MK_CNTRY( 'K', 'R', 1 ),             /* KR Korea,_Republic_Of */
     WICED_COUNTRY_KOSOVO                                          = MK_CNTRY( '0', 'A', 0 ),             /* 0A Kosovo */
     WICED_COUNTRY_KUWAIT                                          = MK_CNTRY( 'K', 'W', 0 ),             /* KW Kuwait */
     WICED_COUNTRY_KYRGYZSTAN                                      = MK_CNTRY( 'K', 'G', 0 ),             /* KG Kyrgyzstan */

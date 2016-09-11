@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "wiced_management.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,6 +24,8 @@ extern "C" {
 /******************************************************
  *                    Constants
  ******************************************************/
+
+#define APOLLO_MULTICAST_IPV4_ADDRESS_DEFAULT MAKE_IPV4_ADDRESS(224, 0, 0, 55)
 
 /******************************************************
  *                   Enumerations
@@ -76,10 +80,20 @@ typedef enum {
  * This routine should be used in place of wiced_network_init
  * for Apollo audio applications.
  *
- * @return    Status of the operation.
+ * @param interface          : used if functions winds up calling wiced_network_up_default(); will be set to WICED_STA_INTERFACE otherwise
+ * @param config             : network IP configuration
+ * @param static_ip_settings : used by the sender in the RMC group
+ *
+ * @return @ref wiced_result_t Status of the operation.
  */
-wiced_result_t apollo_network_up_default(void);
+wiced_result_t apollo_network_up_default( wiced_interface_t* interface, wiced_network_config_t config, const wiced_ip_setting_t* static_ip_settings );
 
+
+/** Overwrite MAC address in Wi-Fi NVRAM data
+ *
+ * @return @ref wiced_result_t Status of the operation.
+ */
+wiced_result_t apollo_set_nvram_mac( void );
 
 #ifdef __cplusplus
 } /* extern "C" */

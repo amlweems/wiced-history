@@ -117,9 +117,10 @@ wiced_result_t bt_mfgtest_start( const wiced_uart_config_t* config )
     {
         hci_command_header_t header;
         bt_packet_t*         packet;
+        uint32_t             expected_bytes = sizeof( header );
 
         /* Read HCI header */
-        wiced_uart_receive_bytes( STDIO_UART, (void*)&header, sizeof( header ), WICED_NEVER_TIMEOUT );
+        wiced_uart_receive_bytes( STDIO_UART, (void*)&header, &expected_bytes, WICED_NEVER_TIMEOUT );
 
 
         /* Allocate dynamic packet */
@@ -131,7 +132,8 @@ wiced_result_t bt_mfgtest_start( const wiced_uart_config_t* config )
         /* Read the remaining packet */
         if ( header.content_length > 0 )
         {
-            wiced_uart_receive_bytes( STDIO_UART, packet->data_start, header.content_length, WICED_NEVER_TIMEOUT );
+            expected_bytes = header.content_length;
+            wiced_uart_receive_bytes( STDIO_UART, packet->data_start, &expected_bytes, WICED_NEVER_TIMEOUT );
 
             /* Set the end of the packet */
             packet->data_end += header.content_length;

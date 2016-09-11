@@ -165,7 +165,7 @@ static const platform_dct_data_t initial_dct =
     .security_credentials.certificate = CERTIFICATE_STRING,
     .security_credentials.private_key = PRIVATE_KEY_STRING,
     .security_credentials.cooee_key   = COOEE_KEY_STRING,
-#ifdef CUSTOM_DEFAULT_DCT
+#ifdef WIFI_CONFIG_APPLICATION_DEFINED
     .wifi_config.device_configured   = WICED_TRUE,
 #else
     .wifi_config.device_configured   = WICED_FALSE,
@@ -189,10 +189,11 @@ static const platform_dct_data_t initial_dct =
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
      .bt_config.bluetooth_device_address            = WICED_BLUETOOTH_DEVICE_ADDRESS,
      .bt_config.bluetooth_device_name               = WICED_BLUETOOTH_DEVICE_NAME,
+     .bt_config.bluetooth_device_class              = WICED_BLUETOOTH_DEVICE_CLASS,
 #ifdef WICED_BLUETOOTH_SSP_DEBUG_MODE
-     .bt_config.ssp_debug_mode                      = WICED_BLUETOOTH_SSP_DEBUG_MODE
+     .bt_config.ssp_debug_mode                      = WICED_BLUETOOTH_SSP_DEBUG_MODE,
 #else
-     .bt_config.ssp_debug_mode                      = WICED_FALSE
+     .bt_config.ssp_debug_mode                      = WICED_FALSE,
 #endif
 #endif
 };

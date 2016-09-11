@@ -16,6 +16,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "platform_config.h"
 #include "platform_map.h"
 #include "platform_mcu_peripheral.h"
 
@@ -41,7 +42,7 @@ extern "C"
 #define WICED_DEEP_SLEEP_IS_WARMBOOT( ) \
     platform_mcu_powersave_is_warmboot( )
 
-#ifndef WICED_DISABLE_MCU_POWERSAVE
+#if PLATFORM_APPS_POWERSAVE
 
 #define WICED_DEEP_SLEEP_SAVED_VAR( var ) \
     SECTION( WICED_DEEP_SLEEP_SECTION_NAME_SAVED_VAR( var ) ) var
@@ -56,7 +57,7 @@ extern "C"
 
 #define WICED_DEEP_SLEEP_IS_ENABLED( )                           1
 
-#endif /* !WICED_DISABLE_MCU_POWERSAVE */
+#endif /* PLATFORM_APPS_POWERSAVE */
 
 #define WICED_DEEP_SLEEP_IS_AON_SEGMENT( segment_addr, segment_size ) \
     ( ( (segment_addr) >= PLATFORM_SOCSRAM_CH0_AON_RAM_BASE(0x0)) && ( (segment_addr) + (segment_size) <= PLATFORM_SOCSRAM_CH0_AON_RAM_BASE(PLATFORM_SOCSRAM_AON_RAM_SIZE) ) )
@@ -81,7 +82,7 @@ typedef struct
 typedef struct
 {
     uint32_t entry_point;
-    uint32_t app_elf_fs_address;
+    uint32_t app_address;
 } wiced_deep_sleep_tiny_bootloader_config_t;
 
 /******************************************************

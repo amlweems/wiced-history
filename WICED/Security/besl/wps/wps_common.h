@@ -38,7 +38,6 @@ extern "C" {
  ******************************************************/
 
 #define WPS_TEMPLATE_UUID        "\x77\x5b\x66\x80\xbf\xde\x11\xd3\x8d\x2f"
-#define DOT11_MNG_VS_ID          221 /* d11 management Vendor Specific IE */
 
 /******************************************************
  *                   Enumerations

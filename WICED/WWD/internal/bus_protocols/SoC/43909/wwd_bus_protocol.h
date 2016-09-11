@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 /******************************************************
- *             Constants
+ *             Macros
  ******************************************************/
 
 #define WWD_BUS_HAS_HEADER
@@ -31,6 +31,10 @@ extern "C" {
 #else
 #define WWD_BUS_USE_STATUS_REPORT_SCHEME             (1==0)
 #endif
+
+#define WWD_WLAN_KEEP_AWAKE()
+#define WWD_WLAN_LET_SLEEP()
+#define WWD_WLAN_MAY_SLEEP()                         (1==1)
 
 /******************************************************
  *             Structures

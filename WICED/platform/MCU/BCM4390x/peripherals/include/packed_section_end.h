@@ -1,4 +1,12 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * Declare directives for structure packing. No padding will be provided
  * between the members of packed structures, and therefore, there is no
  * guarantee that structure members will be aligned.
@@ -14,8 +22,6 @@
  *
  * #include <packed_section_end.h>
  *
- *
- * $Copyright Open Broadcom Corporation$
  * $Id: packed_section_end.h 436799 2013-11-15 07:42:54Z ishen $
  */
 

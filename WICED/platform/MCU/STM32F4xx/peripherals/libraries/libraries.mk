@@ -24,7 +24,6 @@ $(NAME)_SOURCES := \
                    src/stm32f4xx_dma.c \
                    src/stm32f4xx_exti.c \
                    src/stm32f4xx_flash.c \
-                   src/stm32f4xx_fsmc.c \
                    src/stm32f4xx_gpio.c \
                    src/stm32f4xx_rng.c \
                    src/stm32f4xx_i2c.c \
@@ -38,3 +37,8 @@ $(NAME)_SOURCES := \
                    src/stm32f4xx_tim.c \
                    src/stm32f4xx_usart.c \
                    src/stm32f4xx_wwdg.c
+
+# Add FSMC to non-F411/401 MCUs
+ifeq ($(filter $(HOST_MCU_VARIANT), STM32F411 STM32F401),)                
+$(NAME)_SOURCES += src/stm32f4xx_fsmc.c
+endif 

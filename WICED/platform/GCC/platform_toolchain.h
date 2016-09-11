@@ -20,16 +20,33 @@ extern "C"
  *                      Macros
  ******************************************************/
 
-#ifndef WEAK /* Some non-WICED sources already define WEAK */
-#define WEAK          __attribute__((weak))
+#ifndef WEAK
+#define WEAK             __attribute__((weak))
 #endif
-#ifndef UNUSED /* Some non-WICED sources already define UNUSED */
-#define UNUSED        __attribute__((unused))
+
+#ifndef MAY_BE_UNUSED
+#define MAY_BE_UNUSED    __attribute__((unused))
 #endif
-#define NORETURN      __attribute__((noreturn))
-#define ALIGNED(size) __attribute__((aligned(size)))
-#define SECTION(name) __attribute__((section(name)))
-#define NOINLINE      __attribute__((noinline))
+
+#ifndef NORETURN
+#define NORETURN         __attribute__((noreturn))
+#endif
+
+#ifndef ALIGNED
+#define ALIGNED(size)    __attribute__((aligned(size)))
+#endif
+
+#ifndef SECTION
+#define SECTION(name)    __attribute__((section(name)))
+#endif
+
+#ifndef NEVER_INLINE
+#define NEVER_INLINE     __attribute__((noinline))
+#endif
+
+#ifndef ALWAYS_INLINE
+#define ALWAYS_INLINE    __attribute__((always_inline))
+#endif
 
 /******************************************************
  *                    Constants

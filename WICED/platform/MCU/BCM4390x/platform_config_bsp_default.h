@@ -27,6 +27,31 @@ extern "C" {
 #define PLATFORM_CPU_CLOCK_FREQUENCY      PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ
 #endif
 
+/* Define WLAN powersave feature en/dis */
+#ifndef PLATFORM_WLAN_POWERSAVE
+#define PLATFORM_WLAN_POWERSAVE           0
+#endif
+
+/* Define cores powersave feature en/dis */
+#ifndef PLATFORM_CORES_POWERSAVE
+#define PLATFORM_CORES_POWERSAVE          0
+#endif
+
+/* Define APPS domain powersave feature en/dis */
+#ifndef PLATFORM_APPS_POWERSAVE
+#define PLATFORM_APPS_POWERSAVE           0
+#endif
+
+/* Define ticks powersave feature en/dis */
+#ifndef PLATFORM_TICK_POWERSAVE
+#define PLATFORM_TICK_POWERSAVE           PLATFORM_APPS_POWERSAVE
+#endif
+
+/* Define initial state of tick power-save */
+#ifndef PLATFORM_TICK_POWERSAVE_DISABLE
+#define PLATFORM_TICK_POWERSAVE_DISABLE   1
+#endif
+
 /* Define RTOS timers default configuration */
 //
 #ifndef PLATFORM_TICK_TINY
@@ -38,20 +63,25 @@ extern "C" {
 #endif /* PLATFORM_TICK_TINY */
 //
 #ifndef PLATFORM_TICK_CPU
-#define PLATFORM_TICK_CPU             !PLATFORM_TICK_TINY
+#define PLATFORM_TICK_CPU                 !PLATFORM_TICK_TINY
 #endif
 //
 #ifndef PLATFORM_TICK_PMU
-#ifdef WICED_DISABLE_MCU_POWERSAVE
-#define PLATFORM_TICK_PMU                 0
-#else
+#if PLATFORM_APPS_POWERSAVE
 #define PLATFORM_TICK_PMU                 !PLATFORM_TICK_TINY
-#endif /* WICED_DISABLE_MCU_POWERSAVE */
+#else
+#define PLATFORM_TICK_PMU                 0
+#endif /* PLATFORM_APPS_POWERSAVE */
 #endif /* PLATFORM_TICK_PMU */
 
 /* By default enable ticks statistic */
 #ifndef PLATFORM_TICK_STATS
 #define PLATFORM_TICK_STATS               !PLATFORM_TICK_TINY
+#endif
+
+/* By default switch off WLAN powersave statistic */
+#ifndef PLATFORM_WLAN_POWERSAVE_STATS
+#define PLATFORM_WLAN_POWERSAVE_STATS     0
 #endif
 
 /* By default use external LPO */
@@ -97,15 +127,6 @@ extern "C" {
 #define PLATFORM_HIB_ENABLE               1
 #endif /* BOOTLOADER || TINY_BOOTLOADER */
 #endif /* PLATFORM_HIB_ENABLE */
-
-/* No WLAN power-save feature when no WLAN itself */
-#ifndef PLATFORM_WLAN_POWERSAVE
-#ifdef WICED_NO_WIFI
-#define PLATFORM_WLAN_POWERSAVE           0
-#else
-#define PLATFORM_WLAN_POWERSAVE           1
-#endif /* WICED_NO_WIFI */
-#endif /* PLATFORM_WLAN_POWERSAVE */
 
 /* Define DDR default configuration */
 #ifndef PLATFORM_NO_DDR
@@ -162,6 +183,20 @@ extern "C" {
 #endif
 #define WICED_TRACEX_BUFFER_ADDRESS       ((uint8_t *)PLATFORM_DDR_BASE(WICED_TRACEX_BUFFER_DDR_OFFSET))
 #endif
+
+/* Define that platform require some fixup to use ALP clock. No need for chips starting from B1. */
+#ifndef PLATFORM_ALP_CLOCK_RES_FIXUP
+#define PLATFORM_ALP_CLOCK_RES_FIXUP      1
+#endif
+
+/* Define that platform need WLAN assistance to wake-up */
+#ifndef PLATFORM_WLAN_ASSISTED_WAKEUP
+#ifdef WICED_NO_WIFI
+#define PLATFORM_WLAN_ASSISTED_WAKEUP     0
+#else
+#define PLATFORM_WLAN_ASSISTED_WAKEUP     1
+#endif
+#endif /* PLATFORM_WLAN_ASSISTED_WAKEUP */
 
 #ifdef __cplusplus
 } /* extern "C" */

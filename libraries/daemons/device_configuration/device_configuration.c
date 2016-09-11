@@ -140,7 +140,7 @@ wiced_result_t wiced_configure_device(const configuration_entry_t* config)
                 return result;
             }
 
-            wiced_simple_https_server_start( http_server, HTTPS_PORT, config_http_page_database, dct_security->certificate, dct_security->private_key, WICED_CONFIG_INTERFACE );
+            wiced_simple_https_server_start( http_server, HTTPS_PORT, config_http_page_database, (const uint8_t *)dct_security->certificate, dct_security->private_key, WICED_CONFIG_INTERFACE );
 
             /* Finished accessing the certificates */
             wiced_dct_read_unlock( dct_security, WICED_FALSE );

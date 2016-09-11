@@ -42,6 +42,8 @@ extern "C" {
  * See http://www.freertos.org/a00110.html.
  *----------------------------------------------------------*/
 
+#define configNO_MALLOC                             ( 0 )
+#define configUSE_NEWLIB_MALLOC_LOCK                ( 1 )
 #define configUSE_TIMERS                            ( 1 )
 #define configTIMER_TASK_PRIORITY                   ( 2 )
 #define configTIMER_QUEUE_LENGTH                    ( 5 )
@@ -50,8 +52,8 @@ extern "C" {
 #define configUSE_IDLE_HOOK                         ( 0 )
 #define configUSE_TICK_HOOK                         ( 0 )
 #define configCPU_CLOCK_HZ                          ( ( unsigned long ) CPU_CLOCK_HZ )
-#define configTICK_RATE_HZ                          ( ( portTickType ) SYSTICK_FREQUENCY )
-#define configMAX_PRIORITIES                        ( ( unsigned portBASE_TYPE ) 10 )
+#define configTICK_RATE_HZ                          ( ( TickType_t ) SYSTICK_FREQUENCY )
+#define configMAX_PRIORITIES                        ( 10 )
 #define configMINIMAL_STACK_SIZE                    ( ( unsigned short ) (250 / sizeof( portSTACK_TYPE )) ) /* size of idle thread stack */
 #define configMAX_TASK_NAME_LEN                     ( 16 )
 #ifndef configUSE_TRACE_FACILITY

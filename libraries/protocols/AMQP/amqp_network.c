@@ -16,6 +16,7 @@
  */
 #include "amqp_frame.h"
 #include "amqp_network.h"
+#include "wiced_tls.h"
 
 /******************************************************
  *                      Macros
@@ -24,6 +25,7 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+
 #define TCP_SERVER_THREAD_PRIORITY          (WICED_DEFAULT_LIBRARY_PRIORITY)
 #define TCP_SERVER_STACK_SIZE               (6200)
 #define TCP_CLIENT_PORT                     (50007)
@@ -38,10 +40,11 @@
 /******************************************************
  *                 Type Definitions
  ******************************************************/
-typedef struct wiced_amqp_network_message_s
+
+typedef struct
 {
-    wiced_packet_t                   *packet;
-    void                             *data;
+    wiced_packet_t* packet;
+    void*           data;
 } wiced_amqp_network_message_t;
 
 /******************************************************
@@ -51,6 +54,7 @@ typedef struct wiced_amqp_network_message_s
 /******************************************************
  *               Static Function Declarations
  ******************************************************/
+
 static void amqp_network_recv_thread ( uint32_t arg );
 static void amqp_network_queue_thread( uint32_t arg );
 
@@ -62,27 +66,31 @@ static void amqp_network_queue_thread( uint32_t arg );
  *               Function Definitions
  ******************************************************/
 
-wiced_result_t amqp_network_init( const wiced_ip_address_t *server_ip_address, uint16_t portnumber, wiced_interface_t interface, void *p_user, wiced_amqp_socket_t *socket, const wiced_amqp_socket_security_t *security )
+wiced_result_t amqp_network_init( const wiced_ip_address_t* server_ip_address, uint16_t portnumber, wiced_interface_t interface, void* p_user, wiced_amqp_socket_t* socket, const wiced_amqp_socket_security_t* security )
 {
     wiced_result_t result;
 
     /* Create a TCP socket */
-    if (( result = wiced_tcp_create_socket( &socket->socket, interface) ) != WICED_SUCCESS)
+    result = wiced_tcp_create_socket( &socket->socket, interface);
+    if ( result != WICED_SUCCESS)
     {
         goto ERROR_CREATE_SOCKET;
     }
 
     if ( security != NULL )
     {
-        if ( ( result = wiced_tls_init_root_ca_certificates( security->ca_cert ) ) != WICED_SUCCESS )
+        result = wiced_tls_init_root_ca_certificates( security->ca_cert );
+        if ( result != WICED_SUCCESS )
         {
             goto ERROR_CA_CERT_INIT;
         }
 
-        if ( ( result = wiced_tls_init_advanced_context( &socket->tls_context, security->cert, security->key ) ) != WICED_SUCCESS )
+        result = wiced_tls_init_identity( &socket->tls_identity, security->key, (const uint8_t*)security->cert, strlen( security->cert ) );
+        if ( result != WICED_SUCCESS )
         {
             goto ERROR_TLS_INIT;
         }
+        wiced_tls_init_context( &socket->tls_context, &socket->tls_identity, NULL );
         wiced_tcp_enable_tls( &socket->socket, &socket->tls_context );
     }
 
@@ -92,21 +100,24 @@ wiced_result_t amqp_network_init( const wiced_ip_address_t *server_ip_address, u
 
     socket->quit   = WICED_FALSE;
     socket->p_user = p_user;
-    if ( ( result = wiced_rtos_init_queue( &socket->queue, "amqp", sizeof(wiced_amqp_network_message_t), 3 ) ) != WICED_SUCCESS )
+    result = wiced_rtos_init_queue( &socket->queue, "amqp", sizeof(wiced_amqp_network_message_t), 3 );
+    if ( result != WICED_SUCCESS )
     {
         goto ERROR_QUE_INIT;
     }
-    if ( ( result = wiced_rtos_create_thread( &socket->net_thread, TCP_SERVER_THREAD_PRIORITY, "aqmp network thread", amqp_network_recv_thread, TCP_SERVER_STACK_SIZE, socket ) ) != WICED_SUCCESS )
+    result = wiced_rtos_create_thread( &socket->net_thread, TCP_SERVER_THREAD_PRIORITY, "aqmp network thread", amqp_network_recv_thread, TCP_SERVER_STACK_SIZE, socket );
+    if ( result != WICED_SUCCESS )
     {
         goto ERROR_QUE_THREAD;
     }
-    if ( ( result = wiced_rtos_create_thread( &socket->queue_thread, WICED_DEFAULT_LIBRARY_PRIORITY, "amqp", amqp_network_queue_thread, TCP_SERVER_STACK_SIZE, socket ) ) != WICED_SUCCESS )
+    result = wiced_rtos_create_thread( &socket->queue_thread, WICED_DEFAULT_LIBRARY_PRIORITY, "amqp", amqp_network_queue_thread, TCP_SERVER_STACK_SIZE, socket );
+    if ( result != WICED_SUCCESS )
     {
         goto ERROR_RCV_THREAD;
     }
 
-    socket->server_ip_address   = *server_ip_address;
-    socket->portnumber          = portnumber;
+    socket->server_ip_address = *server_ip_address;
+    socket->portnumber        = portnumber;
 
     return WICED_SUCCESS;
 
@@ -114,20 +125,28 @@ ERROR_RCV_THREAD:
     wiced_rtos_thread_force_awake( &socket->queue_thread );
     wiced_rtos_thread_join( &socket->queue_thread );
     wiced_rtos_delete_thread( &socket->queue_thread );
+
 ERROR_QUE_THREAD:
     wiced_rtos_deinit_queue( &socket->queue );
+
 ERROR_QUE_INIT:
-    if ( security == NULL ) goto ERROR_CA_CERT_INIT;
+    if ( security == NULL )
+    {
+        goto ERROR_CA_CERT_INIT;
+    }
     wiced_tls_reset_context( socket->socket.tls_context );
+
 ERROR_TLS_INIT:
     wiced_tls_deinit_root_ca_certificates( );
+
 ERROR_CA_CERT_INIT:
     wiced_tcp_delete_socket( &socket->socket );
+
 ERROR_CREATE_SOCKET:
     return result;
 }
 
-wiced_result_t amqp_network_connect( wiced_amqp_socket_t *socket )
+wiced_result_t amqp_network_connect( wiced_amqp_socket_t* socket )
 {
     wiced_result_t  result;
     int             connection_retries;
@@ -141,7 +160,7 @@ wiced_result_t amqp_network_connect( wiced_amqp_socket_t *socket )
     }
     while( ( result != WICED_SUCCESS ) && ( connection_retries < TCP_CONNECTION_NUMBER_OF_RETRIES ) );
 
-    if( result != WICED_SUCCESS)
+    if ( result != WICED_SUCCESS )
     {
         return result;
     }
@@ -150,25 +169,25 @@ wiced_result_t amqp_network_connect( wiced_amqp_socket_t *socket )
     return WICED_SUCCESS;
 }
 
-wiced_result_t amqp_network_disconnect( wiced_amqp_socket_t *socket )
+wiced_result_t amqp_network_disconnect( wiced_amqp_socket_t* socket )
 {
     return wiced_tcp_disconnect( &socket->socket );
 }
 
-wiced_result_t amqp_network_deinit( wiced_amqp_socket_t *socket )
+wiced_result_t amqp_network_deinit( wiced_amqp_socket_t* socket )
 {
 
     socket->quit = WICED_TRUE;
     if ( wiced_rtos_is_current_thread( &socket->net_thread ) != WICED_SUCCESS )
     {
         wiced_rtos_thread_force_awake( &socket->net_thread );
-        wiced_rtos_thread_join( &socket->net_thread );
-        wiced_rtos_delete_thread( &socket->net_thread );
+        wiced_rtos_thread_join       ( &socket->net_thread );
+        wiced_rtos_delete_thread     ( &socket->net_thread );
     }
 
     wiced_rtos_thread_force_awake( &socket->queue_thread );
-    wiced_rtos_thread_join( &socket->queue_thread );
-    wiced_rtos_delete_thread( &socket->queue_thread );
+    wiced_rtos_thread_join       ( &socket->queue_thread );
+    wiced_rtos_delete_thread     ( &socket->queue_thread );
 
     if ( socket->socket.tls_context != NULL )
     {
@@ -178,7 +197,7 @@ wiced_result_t amqp_network_deinit( wiced_amqp_socket_t *socket )
     return WICED_SUCCESS;
 }
 
-wiced_result_t amqp_network_create_buffer( wiced_amqp_buffer_t *buffer, uint16_t size, wiced_amqp_socket_t *socket)
+wiced_result_t amqp_network_create_buffer( wiced_amqp_buffer_t* buffer, uint16_t size, wiced_amqp_socket_t* socket)
 {
     uint16_t available_data_length;
 
@@ -186,14 +205,13 @@ wiced_result_t amqp_network_create_buffer( wiced_amqp_buffer_t *buffer, uint16_t
     return wiced_packet_create_tcp( &socket->socket, size, &buffer->packet, &buffer->data, &available_data_length);
 }
 
-wiced_result_t amqp_network_delete_buffer( wiced_amqp_buffer_t *buffer)
+wiced_result_t amqp_network_delete_buffer( wiced_amqp_buffer_t* buffer)
 {
-
     /* Create the TCP packet. Memory for the tx_data is automatically allocated */
     return wiced_packet_delete( buffer->packet );
 }
 
-wiced_result_t amqp_network_send_buffer( const wiced_amqp_buffer_t *buffer, wiced_amqp_socket_t *socket)
+wiced_result_t amqp_network_send_buffer( const wiced_amqp_buffer_t* buffer, wiced_amqp_socket_t* socket)
 {
     wiced_amqp_network_message_t message;
 
@@ -204,7 +222,7 @@ wiced_result_t amqp_network_send_buffer( const wiced_amqp_buffer_t *buffer, wice
 
 static void amqp_network_recv_thread(uint32_t arg)
 {
-    wiced_result_t result;
+    wiced_result_t       result;
     wiced_amqp_socket_t* socket = (wiced_amqp_socket_t*) arg;
 
     while ( socket->quit != WICED_TRUE )
@@ -213,17 +231,16 @@ static void amqp_network_recv_thread(uint32_t arg)
         wiced_rtos_get_semaphore( &socket->net_semaphore, NEVER_TIMEOUT );
         while( 1 )
         {
-            uint8_t           *data;
-            wiced_packet_t    *packet;
+            uint8_t*        data;
+            wiced_packet_t* packet;
 
             /* Receive the query from the TCP client */
             result = wiced_tcp_receive( &socket->socket, &packet, WICED_WAIT_FOREVER );
             if ( result == WICED_SUCCESS)
             {
-                uint16_t                     rx_data_length;
-                uint16_t                     available_data_length;
-                uint16_t                     current_size = 0;
-
+                uint16_t            rx_data_length;
+                uint16_t            available_data_length;
+                uint16_t            current_size = 0;
                 wiced_amqp_buffer_t buffer;
 
                 /* Process the client request */
@@ -244,8 +261,7 @@ static void amqp_network_recv_thread(uint32_t arg)
             }
             else
             {
-                /* Send failed or connection has been lost, close the existing connection and */
-                /* get ready to accept the next one */
+                /* Send failed or connection has been lost, close the existing connection and get ready to accept the next one */
                 if ( socket->socket.tls_context != NULL )
                 {
                     wiced_tls_reset_context( socket->socket.tls_context );
@@ -268,8 +284,8 @@ static void amqp_network_recv_thread(uint32_t arg)
 static void amqp_network_queue_thread( uint32_t arg )
 {
     wiced_amqp_network_message_t message;
-    wiced_amqp_socket_t         *socket = (wiced_amqp_socket_t*)arg;
-    wiced_queue_t               *queue  = &socket->queue;
+    wiced_amqp_socket_t*         socket = (wiced_amqp_socket_t*)arg;
+    wiced_queue_t*               queue  = &socket->queue;
 
     while ( socket->quit != WICED_TRUE )
     {

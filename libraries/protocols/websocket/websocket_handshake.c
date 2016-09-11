@@ -13,7 +13,7 @@
  */
 
 #include "websocket_handshake.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include <base64.h>
 #include "wiced_security.h"
 #include <ctype.h>
@@ -76,7 +76,7 @@ static wiced_result_t wiced_generate_client_websocket_key( uint8_t* websocket_ke
     wiced_result_t result;
     uint8_t        client_websocket_key[ WEBSOCKET_KEY_LENGTH ];
 
-    result = wwd_wifi_get_random( client_websocket_key, WEBSOCKET_KEY_LENGTH );
+    result = wiced_crypto_get_random( client_websocket_key, WEBSOCKET_KEY_LENGTH );
     if ( result != WICED_SUCCESS )
     {
         return result;
@@ -259,6 +259,8 @@ wiced_result_t wiced_establish_websocket_handshake( wiced_websocket_t* websocket
     wiced_packet_get_data( tcp_reply_packet, 0, (uint8_t**) &received_handshake, &total_received_bytes, &tcp_data_available );
 
     WICED_VERIFY( wiced_verify_server_handshake( (char* )received_handshake ) );
+
+    wiced_packet_delete( tcp_reply_packet );
 
     return WICED_SUCCESS;
 }

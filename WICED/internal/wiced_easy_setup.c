@@ -13,6 +13,7 @@
  */
 #include "wiced_easy_setup.h"
 #include "wiced_internal_api.h"
+#include <string.h>
 
 /******************************************************
  *                      Macros

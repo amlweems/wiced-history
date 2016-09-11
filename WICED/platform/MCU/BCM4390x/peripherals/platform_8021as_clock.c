@@ -56,7 +56,7 @@
  */
 wiced_result_t platform_time_enable_8021as(void)
 {
-    platform_ascu_enable_interrupts();
+    platform_ascu_enable_interrupts( ASCU_TX_START_AVB_INT_MASK | ASCU_RX_START_AVB_INT_MASK );
 
     /*
      * Enable the ascu_avb_clk.
@@ -76,7 +76,7 @@ wiced_result_t platform_time_enable_8021as(void)
  */
 wiced_result_t platform_time_disable_8021as(void)
 {
-    platform_ascu_disable_interrupts(ASCU_ALL_INTS);
+    platform_ascu_disable_interrupts( ASCU_TX_START_AVB_INT_MASK | ASCU_RX_START_AVB_INT_MASK );
 
     return WICED_SUCCESS;
 }

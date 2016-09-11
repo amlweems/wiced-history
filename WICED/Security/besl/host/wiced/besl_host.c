@@ -19,7 +19,7 @@
 #include "wwd_structures.h"
 #include "wiced_utilities.h"
 #include "wwd_wifi.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "wwd_network_constants.h"
 #include "internal/wwd_sdpcm.h"
 #include "besl_host_rtos_structures.h"
@@ -95,9 +95,9 @@ besl_result_t besl_host_get_mac_address(besl_mac_t* address, uint32_t interface 
     wwd_result_t result;
     uint32_t*      data;
 
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), IOVAR_STR_BSSCFG_CUR_ETHERADDR );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
     CHECK_IOCTL_BUFFER( data );
-    *data = interface;
+    *data = wwd_get_bss_index( interface );
 
     result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
     if ( result != WWD_SUCCESS )
@@ -118,7 +118,7 @@ besl_result_t besl_host_set_mac_address(besl_mac_t* address, uint32_t interface 
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = interface;
+    data[0] = wwd_get_bss_index( interface );
     memcpy(&data[1], address, sizeof(wiced_mac_t));
 
     return (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
@@ -126,7 +126,7 @@ besl_result_t besl_host_set_mac_address(besl_mac_t* address, uint32_t interface 
 
 void besl_host_random_bytes( uint8_t* buffer, uint16_t buffer_length )
 {
-    wwd_wifi_get_random( buffer, buffer_length );
+    wiced_crypto_get_random( buffer, buffer_length );
 }
 
 void besl_host_get_time(besl_time_t* time)

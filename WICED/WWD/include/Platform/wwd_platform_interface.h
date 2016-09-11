@@ -16,9 +16,7 @@
  *  the hardware platform.
  */
 
-#include "wwd_constants.h" /* for wwd_result_t */
-#include "network/wwd_buffer_interface.h" /* for wiced_buffer_t */
-#include "wwd_wifi.h" /* For wiced_mac_t */
+#include "wwd_structures.h"
 
 #ifdef __cplusplus
 extern "C"

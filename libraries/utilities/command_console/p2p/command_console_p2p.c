@@ -186,7 +186,8 @@ int p2p_connect( int argc, char* argv[] )
                 }
                 WPRINT_APP_INFO(("Starting group formation in PIN mode\n"));
                 p2p_workspace.p2p_wps_device_password_id = WPS_USER_SPEC_DEVICEPWDID;
-                strncpy( p2p_workspace.p2p_wps_pin, argv[2], 9 );
+                strncpy( p2p_workspace.p2p_wps_pin, argv[2], 8 );
+                p2p_workspace.p2p_wps_pin[8] = 0;
             }
             else
             {
@@ -229,7 +230,7 @@ int p2p_connect( int argc, char* argv[] )
     }
 
     WPRINT_APP_INFO(( "Discovering peers... please wait\n" ));
-    host_rtos_delay_milliseconds( 2000 ); // Delay so that the peer list has a chance to fill
+    host_rtos_delay_milliseconds( 3000 ); // Delay so that the peer list has a chance to fill
 
     /* Display the list of discovered devices */
     p2p_peer_list( 0, NULL );
@@ -269,7 +270,7 @@ int p2p_connect( int argc, char* argv[] )
     if ( p2p_workspace.discovered_devices[selected_device].group_owner_capability & 0x01 )
     {
         p2p_workspace.group_candidate.ssid_length = strlen( p2p_workspace.discovered_devices[selected_device].ssid );
-        strncpy( p2p_workspace.group_candidate.ssid, (char *)&p2p_workspace.discovered_devices[selected_device].ssid, 32 );
+        memcpy( p2p_workspace.group_candidate.ssid, p2p_workspace.discovered_devices[selected_device].ssid, MIN( 32, p2p_workspace.group_candidate.ssid_length ) );
 
         // This will need to be adjusted to accommodate NFC
         if ( p2p_workspace.p2p_wps_device_password_id == WPS_PUSH_BTN_DEVICEPWDID )
@@ -386,8 +387,8 @@ int p2p_client_test( int argc, char* argv[] )
         if ( go_found )
         {
             WPRINT_APP_INFO(("Found GO index %u\n", (unsigned int)a));
-            p2p_workspace.group_candidate.ssid_length = ssid_len;
-            strncpy( p2p_workspace.group_candidate.ssid, devices[a].ssid, 32 );
+            p2p_workspace.group_candidate.ssid_length = MIN( ssid_len, 32 );
+            memcpy( p2p_workspace.group_candidate.ssid, devices[a].ssid, p2p_workspace.group_candidate.ssid_length );
             memcpy( &p2p_workspace.group_candidate.p2p_device_address, &p2p_workspace.discovered_devices[a].p2p_device_address, sizeof( wiced_mac_t ) );
             besl_p2p_find_group_owner( &p2p_workspace );
 
@@ -538,7 +539,8 @@ int p2p_negotiation_test( int argc, char* argv[] )
         p2p_workspace.p2p_wps_mode = WPS_PIN_MODE;
         p2p_workspace.p2p_wps_device_password_id = WPS_DEVICEPWDID_REG_SPEC;
         p2p_workspace.provisioning_config_method = KEYPAD;
-        strncpy( p2p_workspace.p2p_wps_pin, argv[2], 9 );
+        strncpy( p2p_workspace.p2p_wps_pin, argv[2], 8 );
+        p2p_workspace.p2p_wps_pin[8] = 0;
         p2p_workspace.initiate_negotiation = 1;
         p2p_workspace.ok_to_accept_negotiation = 1;
 
@@ -656,6 +658,8 @@ int p2p_go_client_test_mode( int argc, char* argv[] )
 
 int p2p_discovery_enable( int argc, char* argv[] )
 {
+    besl_result_t result;
+
     if ( p2p_workspace.p2p_initialised == 1 )
     {
         if ( wwd_wifi_is_ready_to_transceive(WICED_P2P_INTERFACE) == WWD_SUCCESS )
@@ -678,9 +682,9 @@ int p2p_discovery_enable( int argc, char* argv[] )
     {
         if ( create_p2p_worker_thread() == WICED_SUCCESS )
         {
-            if ( besl_p2p_init( &p2p_workspace, &device_details ) != BESL_SUCCESS )
+            if ( ( result = besl_p2p_init( &p2p_workspace, &device_details ) ) != BESL_SUCCESS )
             {
-                WPRINT_APP_INFO(( "besl_p2p_init failed\n" ));
+                WPRINT_APP_INFO(( "besl_p2p_init failed %u\n", (unsigned int)result ));
             }
             besl_p2p_register_p2p_device_connection_callback( &p2p_workspace, p2p_connection_request_callback);
             besl_p2p_register_legacy_device_connection_callback( &p2p_workspace, p2p_legacy_device_connection_request_callback );
@@ -763,9 +767,10 @@ int p2p_discovery_test( int argc, char* argv[] )
  */
 int p2p_go_start( int argc, char* argv[] )
 {
-    int ssid_suffix_length = 0;
-    int offset = 0;
+    int                         ssid_suffix_length = 0;
+    int                         offset = 0;
     platform_dct_wifi_config_t* dct_wifi_config;
+    besl_result_t               result;
 
     if ( wwd_wifi_is_ready_to_transceive( WICED_P2P_INTERFACE ) == WWD_SUCCESS )
     {
@@ -846,9 +851,14 @@ int p2p_go_start( int argc, char* argv[] )
     create_p2p_worker_thread();
     besl_p2p_register_wps_result_callback( &p2p_workspace, p2p_wps_result_callback );
 
-    if ( besl_p2p_group_owner_start(&p2p_workspace) != 0 )
+    if ( ( result = besl_p2p_group_owner_start(&p2p_workspace) ) != BESL_SUCCESS )
     {
-        WPRINT_APP_INFO(("Error starting group owner\n"));
+        WPRINT_APP_INFO( ("Error starting group owner: %u\n", (unsigned int )result ) );
+        if ( p2p_worker_thread_running == 1 )
+        {
+            wiced_rtos_delete_worker_thread( &p2p_worker_thread );
+            p2p_worker_thread_running = 0;
+        }
     }
     else
     {

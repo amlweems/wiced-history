@@ -8,22 +8,16 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Lib_MQTT
+NAME := Lib_MQTT_Client
 
-$(NAME)_SOURCES := MQTTClient/src/MQTTClient.c \
-				   MQTTClient/src/MQTTWiced.c \
-                   MQTTPacket/src/MQTTConnectClient.c \
-                   MQTTPacket/src/MQTTConnectServer.c \
-                   MQTTPacket/src/MQTTDeserializePublish.c \
-                   MQTTPacket/src/MQTTFormat.c \
-                   MQTTPacket/src/MQTTPacket.c \
-                   MQTTPacket/src/MQTTSerializePublish.c \
-                   MQTTPacket/src/MQTTSubscribeClient.c \
-                   MQTTPacket/src/MQTTSubscribeServer.c \
-                   MQTTPacket/src/MQTTUnsubscribeClient.c \
-                   MQTTPacket/src/MQTTUnsubscribeServer.c
+$(NAME)_SOURCES :=  mqtt_network.c  \
+                    mqtt_frame.c    \
+                    mqtt_connection.c \
+                    mqtt_manager.c  \
+                    mqtt_session.c \
+                    mqtt_api.c
+#make it visible for the applications which take advantage of this lib
+GLOBAL_INCLUDES := .
 
-GLOBAL_INCLUDES := MQTTClient/src \
-                   MQTTPacket/src
 
-#$(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+$(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)

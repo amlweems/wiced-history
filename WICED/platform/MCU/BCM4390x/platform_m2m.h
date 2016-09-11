@@ -28,14 +28,12 @@ extern "C"
  ******************************************************/
 
 #if PLATFORM_WLAN_POWERSAVE
-#define M2M_POWERSAVE_COMM_BEGIN()             m2m_powersave_comm_begin( )
-#define M2M_POWERSAVE_COMM_END()               m2m_powersave_comm_end( WICED_FALSE )
-#define M2M_POWERSAVE_COMM_DONE()              m2m_powersave_comm_end( WICED_TRUE )
+#define M2M_POWERSAVE_COMM_TX_BEGIN()          m2m_powersave_comm_begin( )
+#define M2M_POWERSAVE_COMM_TX_END()            m2m_powersave_comm_end( WICED_TRUE,  WICED_FALSE )
 #define PLATFORM_M2M_DMA_SYNC_INIT             0
 #else
-#define M2M_POWERSAVE_COMM_BEGIN()
-#define M2M_POWERSAVE_COMM_END()
-#define M2M_POWERSAVE_COMM_DONE()
+#define M2M_POWERSAVE_COMM_TX_BEGIN()
+#define M2M_POWERSAVE_COMM_TX_END()            1
 #define PLATFORM_M2M_DMA_SYNC_INIT             1
 #endif
 
@@ -67,18 +65,24 @@ extern "C"
  *             Function declarations
  ******************************************************/
 
-uint32_t m2m_read_intstatus      ( void );
-void     m2m_init_dma            ( void );
-void     m2m_deinit_dma          ( void );
-int      m2m_is_dma_inited       ( void );
-void     m2m_dma_tx_reclaim      ( void );
-void*    m2m_read_dma_packet     ( uint16_t** hwtag );
-void     m2m_refill_dma          ( void );
-int      m2m_rxactive_dma        ( void );
-void     m2m_dma_tx_data         ( void* data, uint32_t data_size );
-void     m2m_powersave_comm_begin( void );
-void     m2m_powersave_comm_end  ( wiced_bool_t force );
-void     m2m_wlan_dma_deinit     ( void );
+uint32_t     m2m_read_intstatus                ( void );
+void         m2m_init_dma                      ( void );
+void         m2m_deinit_dma                    ( void );
+int          m2m_is_dma_inited                 ( void );
+void         m2m_dma_tx_reclaim                ( void );
+void*        m2m_read_dma_packet               ( uint16_t** hwtag );
+void         m2m_refill_dma                    ( void );
+int          m2m_rxactive_dma                  ( void );
+void         m2m_dma_tx_data                   ( void* data, uint32_t data_size );
+void         m2m_wlan_dma_deinit               ( void );
+void         m2m_switch_off_dma_post_completion( void );
+void         m2m_post_dma_completion_operations( void* destination, uint32_t byte_count );
+int          m2m_unprotected_dma_memcpy        ( void* destination, const void* source, uint32_t byte_count, wiced_bool_t blocking );
+
+#if PLATFORM_WLAN_POWERSAVE
+void         m2m_powersave_comm_begin          ( void );
+wiced_bool_t m2m_powersave_comm_end            ( wiced_bool_t tx, wiced_bool_t force );
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

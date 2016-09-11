@@ -14,6 +14,7 @@
 
 #include "xively.h"
 #include "wiced.h"
+#include "wiced_tls.h"
 
 /******************************************************
  *                      Macros
@@ -73,7 +74,7 @@ wiced_result_t xively_open_feed( xively_feed_t* feed )
         is_ip_address_resolved = WICED_TRUE;
     }
 
-    wiced_tls_init_simple_context( &feed->tls_context, NULL );
+    wiced_tls_init_context( &feed->tls_context, NULL, NULL );
 
     WICED_VERIFY( wiced_tcp_create_socket( &feed->socket, WICED_STA_INTERFACE ) );
 

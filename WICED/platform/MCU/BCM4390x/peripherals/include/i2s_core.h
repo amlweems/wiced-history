@@ -1,7 +1,13 @@
 /*
- * I2S Register definitions for the Broadcom BCM947XX family of SOCs
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * I2S Register definitions for the Broadcom BCM947XX family of SOCs
  *
  * $Id: i2s_core.h 440416 2013-12-02 19:15:46Z tcarter $
  */
@@ -219,7 +225,7 @@ static const struct _i2s_clkdiv_coeffs i2s_clkdiv_coeffs[] = {
 	{12288000,	96000,	128,	0x0},
 	/* 24.567MHz */
 	{24567000,	96000,	256,	0x1},
-	{24567000,	192000,	128,	0x1},
+	{24567000,	192000,	128,	0x0},
 };
 
 /*               I2S TxPlayTH Register (Offset-0x040)               */

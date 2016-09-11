@@ -11,7 +11,7 @@
 
 #include "wiced_tcpip.h"
 #include "wiced_network.h"
-#include "wiced_tls.h"
+#include "wiced_tcpip_tls_api.h"
 #include "internal/wiced_internal_api.h"
 #include "wwd_assert.h"
 #include "dns.h"
@@ -171,6 +171,33 @@ wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const voi
     return WICED_TCPIP_SUCCESS;
 }
 
+wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, const resource_hnd_t* res_id )
+{
+    const void*   data;
+    uint32_t   res_size;
+    wiced_result_t    result;
+    uint32_t pos = 0;
+
+    do
+    {
+        resource_result_t resource_result = resource_get_readonly_buffer ( res_id, pos, 0x7fffffff, &res_size, &data );
+        if ( resource_result != RESOURCE_SUCCESS )
+        {
+            return resource_result;
+        }
+
+        result = wiced_tcp_stream_write( tcp_stream, data, (uint16_t) res_size );
+        resource_free_readonly_buffer( res_id, data );
+        if ( result != WICED_SUCCESS )
+        {
+            return result;
+        }
+        pos += res_size;
+    } while ( res_size > 0 );
+
+    return result;
+}
+
 wiced_result_t wiced_tcp_stream_read( wiced_tcp_stream_t* tcp_stream, void* buffer, uint16_t buffer_length, uint32_t timeout )
 {
     return wiced_tcp_stream_read_with_count( tcp_stream, buffer, buffer_length, timeout, NULL );
@@ -240,7 +267,7 @@ wiced_result_t wiced_tcp_stream_flush( wiced_tcp_stream_t* tcp_stream )
 {
     wiced_result_t result = WICED_TCPIP_SUCCESS;
 
-    wiced_assert("Bad args", tcp_stream != NULL);
+    wiced_assert("Bad args", tcp_stream != NULL && tcp_stream->socket != NULL );
 
     WICED_LINK_CHECK_TCP_SOCKET( tcp_stream->socket );
 

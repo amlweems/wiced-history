@@ -23,6 +23,10 @@ extern void * link_bss_location;
 extern void * link_bss_end;
 #define link_bss_size   ((unsigned long)&link_bss_end  -  (unsigned long)&link_bss_location )
 
+extern void * link_dma_location;
+extern void * link_dma_end;
+#define link_dma_size   ((unsigned long)&link_dma_end  -  (unsigned long)&link_dma_location )
+
 typedef void  (*constructor_ptr_t)( void );
 extern constructor_ptr_t link_constructors_location[];
 extern constructor_ptr_t link_constructors_end;
@@ -33,7 +37,7 @@ WEAK void _exit( int status ) NORETURN;
 #define link_constructors_size   ((unsigned long)&link_constructors_end  -  (unsigned long)&link_constructors_location )
 
 
-#ifdef ROM_OFFLOAD
+#ifdef WICED_ROM_OFFLOAD
 extern void *link_rom_global_data_initial_values;
 extern void *link_rom_global_data_start;
 extern void *link_rom_global_data_end;
@@ -42,7 +46,7 @@ extern void *link_rom_global_data_end;
 extern void *link_rom_global_bss_start;
 extern void *link_rom_global_bss_end;
 #define ROM_GLOBAL_BSS_SIZE      ((unsigned long)&link_rom_global_bss_end - (unsigned long)&link_rom_global_bss_start)
-#endif /* ifdef ROM_OFFLOAD */
+#endif /* ifdef WICED_ROM_OFFLOAD */
 
 WEAK void _start( void )
 {
@@ -50,23 +54,28 @@ WEAK void _start( void )
 
     cr4_init_cycle_counter( );
 
-#ifdef ROM_OFFLOAD
+#ifdef WICED_ROM_OFFLOAD
 
     /*  Copy ROM global data & zero ROM global bss */
     memcpy(&link_rom_global_data_start, &link_rom_global_data_initial_values, ROM_GLOBAL_DATA_SIZE);
 
-#endif /* ifdef ROM_OFFLOAD */
+#endif /* ifdef WICED_ROM_OFFLOAD */
 
 #ifndef PLATFORM_BSS_REQUIRE_HW_INIT
     /* BSS segment is for zero initialised elements, so memset it to zero */
     memset( &link_bss_location, 0, (size_t) link_bss_size );
     WICED_BOOT_CHECKPOINT_WRITE_C( 100 );
 
-#ifdef ROM_OFFLOAD
+#ifdef WICED_ROM_OFFLOAD
+    /*  Copy ROM global data & zero ROM global bss */
+    memcpy(&link_rom_global_data_start, &link_rom_global_data_initial_values, ROM_GLOBAL_DATA_SIZE);
     memset(&link_rom_global_bss_start, 0, ROM_GLOBAL_BSS_SIZE);
-#endif /* ifdef ROM_OFFLOAD */
+#endif /* WICED_ROM_OFFLOAD */
+
 #endif /* !PLATFORM_BSS_REQUIRE_HW_INIT */
 
+    /* Initialize DMA descriptors */
+    memset( &link_dma_location, 0, (size_t) link_dma_size );
 
     /* Initialise clocks and memory. */
     platform_init_system_clocks();
@@ -81,6 +90,13 @@ WEAK void _start( void )
      */
     memset( &link_bss_location, 0, (size_t) link_bss_size );
     WICED_BOOT_CHECKPOINT_WRITE_C( 102 );
+
+#ifdef WICED_ROM_OFFLOAD
+    /*  Copy ROM global data & zero ROM global bss */
+    memcpy(&link_rom_global_data_start, &link_rom_global_data_initial_values, ROM_GLOBAL_DATA_SIZE);
+    memset(&link_rom_global_bss_start, 0, ROM_GLOBAL_BSS_SIZE);
+#endif /* WICED_ROM_OFFLOAD */
+
 #endif /* PLATFORM_BSS_REQUIRE_HW_INIT  */
 
     /* Complete platform initialization */

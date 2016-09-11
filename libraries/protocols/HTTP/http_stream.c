@@ -60,10 +60,17 @@
 
 static const char* http_methods[] =
 {
-    [HTTP_GET]   = "GET ",
-    [HTTP_POST]  = "POST ",
-    [HTTP_HEAD]  = "HEAD ",
-    [HTTP_PUT]   = "PUT ",
+    [HTTP_OPTIONS]  = "OPTIONS ",
+    [HTTP_GET]      = "GET ",
+    [HTTP_HEAD]     = "HEAD ",
+    [HTTP_POST]     = "POST ",
+    [HTTP_PUT]      = "PUT ",
+    [HTTP_DELETE]   = "DELETE ",
+    [HTTP_TRACE]    = "TRACE ",
+    [HTTP_CONNECT]  = "CONNECT ",
+    [HTTP_NOTIFY]   = "NOTIFY ",
+    [HTTP_M_SEARCH] = "M-SEARCH ",
+    [HTTP_END]      = "END ",
 };
 
 /******************************************************
@@ -426,4 +433,131 @@ wiced_result_t http_process_response( wiced_packet_t* packet, http_status_code_t
     *response_code = atoi( response_status );
 
     return WICED_SUCCESS;
+}
+
+/* Process the header values in place in the HTTP packet */
+wiced_result_t http_process_headers_in_place( wiced_packet_t* packet, http_header_t* headers, uint16_t* number_of_headers )
+{
+    uint8_t*        data;
+    uint16_t        data_length;
+    uint16_t        available_data_length;
+
+    uint16_t        headers_parsed;     /* count the * headers parsed */
+
+    char*           data_location;      /* walk through the data */
+    char*           line_end;
+    char*           name_start;
+    char*           name_end;
+    char*           value_start;
+    char*           value_end;
+
+    if ((packet == NULL) || (headers == NULL) || (number_of_headers == NULL))
+    {
+        return WICED_BADARG;
+    }
+    if (*number_of_headers == 0)
+    {
+        /* no headers in the header struct? */
+        return WICED_BADARG;
+    }
+
+    wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length );
+
+    headers_parsed = 0;
+    /* first line is the query, we skip that here  */
+    data_location = strchr( (const char*)data, '\n');
+    if (data_location == NULL)
+    {
+        return WICED_ERROR;
+    }
+
+    data_location += 1; /* skip thje '\n' */
+    while ( (((uint8_t*)data_location - data) < data_length) && (headers_parsed < *number_of_headers) )
+    {
+        line_end =  strchr( (const char*)data_location, '\n');
+        if ( line_end == NULL )
+        {
+            break;
+        }
+
+        /* We may have a header here - Is there a ':' before a '\n' ? */
+        name_start = data_location;
+        name_end =  strchr( (const char*)data_location, ':');
+        if ((name_end == NULL) || (name_end > line_end))
+        {
+            break;
+        }
+
+        /* we have a header here - find the value */
+        value_start = name_end + 1;    /* skip the ':' */
+        /* skip any spaces after the ':' */
+        while( *value_start == ' ')
+        {
+            value_start++;
+        }
+        value_end = strchr( (const char*)value_start, '\r');
+        if (value_end == NULL)
+        {
+            value_end = strchr( (const char*)value_start, '\n');
+        }
+        if ((value_end == NULL) || (value_end > line_end))
+        {
+            break;
+        }
+        /* replace the ':' with a '\0' to mark the end of the name string */
+        *name_end = '\0';
+        /* replace the '\r' (or '\n') with a '\0' to mark the end of the value string */
+        *value_end = '\0';
+
+        /* point to the header & value, increment to next header info struct */
+        headers[headers_parsed].name  = name_start;
+        headers[headers_parsed].value = value_start;
+        headers_parsed++;
+
+        /* Check if we have reached the end of the headers */
+        data_location = line_end + 1;    /* skip the '\n' */
+        if ( (data_location[0] == '\r') && (data_location[1] == '\n') )
+        {
+            break;
+        }
+
+    }
+
+    /* return headers that we parsed */
+    *number_of_headers = headers_parsed;
+    return WICED_SUCCESS;
+}
+
+http_request_t  http_determine_method(wiced_packet_t* packet)
+{
+    uint8_t*        data;
+    uint16_t        data_length;
+    uint16_t        available_data_length;
+    uint16_t        i;
+    http_request_t  request_type;
+
+    /* assume some error */
+    request_type = HTTP_UNKNOWN;
+
+    if (packet == NULL)
+    {
+        return request_type;
+    }
+
+    if( wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length ) != WICED_SUCCESS)
+    {
+        return request_type;
+    }
+
+    for( i=0; i < HTTP_METHODS_MAX; i++ )
+    {
+        uint16_t method_name_len = sizeof(http_methods[i]);
+        if ( strncmp((char *)data, http_methods[i], method_name_len) == 0)
+        {
+            request_type = (http_request_t)i;
+            break;
+        }
+    }
+
+    return request_type;
 }

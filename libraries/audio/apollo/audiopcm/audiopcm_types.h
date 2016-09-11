@@ -91,7 +91,7 @@ extern "C" {
  */
 #define AUDIO_PKT_LOSS_BURST_MAX (16*2)
 
-
+#define MAX_DEMUX_AUDIO_CHANNEL_NUM (2)
 
 /*
  * RTP protocol data and payload sizes
@@ -102,6 +102,7 @@ extern "C" {
 #define RTP_PKT_HEADER_SIZE  ((uint32_t)(12))
 /* Header extension for Audio LPCM specification*/
 #define RTP_PKT_HEADER_EXT_AUDIO_SIZE_1_0  ((uint32_t)(20))
+#define RTP_PKT_HEADER_EXT_AUDIO_SIZE_1_1  ((uint32_t)(28))
 /* Header extension for FEC payload specification */
 #define RTP_PKT_HEADER_EXT_FEC_SIZE  ((uint32_t)(8))
 
@@ -130,6 +131,7 @@ typedef struct audiopcm_audio_info_
     uint64_t rtp_pkt_num;
     uint64_t PTS;
     uint64_t sys_clk;
+    uint64_t media_clk;
     /* audio spec versioning */
     uint16_t extension_id;
     uint16_t extension_length;
@@ -138,8 +140,10 @@ typedef struct audiopcm_audio_info_
     /* priority info */
     uint32_t audio_format;
     uint32_t audio_samplerate;
-    uint32_t audio_channel_map; /* 7.1=8ch */
-    uint8_t  audio_channel_num; /* num of channels in the channel map */
+    uint32_t audio_channel_map;      /* 7.1=8ch */
+    uint8_t  audio_channel_num;      /* num of channels in the channel map */
+    uint8_t  audio_dmx_channel_cnt;  /* channel count to demux into the payload */
+
     uint8_t  audio_interleave_f;
     uint8_t  rtp_fec_order_f;
     uint8_t  burst_len_sync;
@@ -147,6 +151,7 @@ typedef struct audiopcm_audio_info_
 
     /* aux info */
     uint16_t audio_frames_num;
+
 }audiopcm_audio_info_t;
 
 

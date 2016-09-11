@@ -45,46 +45,6 @@
  ******************************************************/
 
 /**
- * Initialises WWD System
- *
- * - Initialises the required parts of the hardware platform
- *   i.e. pins for SDIO/SPI, interrupt, reset, power etc.
- *
- * - Initialises the WWD thread which arbitrates access
- *   to the SDIO/SPI bus
- * - Sets the country code to set which radio channels are
- *   allowed
- * - Clear the events mask
- * - Bring the Wireless interface "Up"
- *
- * @param country : enumerated country identifier, which sets the allowed
- *                  radio channels according to country regulations
- * @param buffer_interface_arg : abstract parameter which is passed
- *                        to the buffer interface during init.
- *                        Look in @host_buffer_init for details
- *                        of the argument required for your particular buffering system
- *
- * @return WWD_SUCCESS if initialization is successful, error code otherwise
- */
-
-wwd_result_t wwd_management_init( wiced_country_code_t country, /*@null@*/ void* buffer_interface_arg )
-{
-    wwd_result_t retval;
-
-    retval = host_buffer_init( buffer_interface_arg );
-    if ( retval != WWD_SUCCESS )
-    {
-        WPRINT_WWD_ERROR(("Could not initialize buffer interface\n"));
-        return retval;
-    }
-
-    /* Remember the country code */
-    wwd_wlan_status.country_code = country;
-
-    return wwd_management_wifi_on( );
-}
-
-/**
  * Turn on the Wi-Fi device
  *
  * - Initialises the required parts of the hardware platform
@@ -96,7 +56,7 @@ wwd_result_t wwd_management_init( wiced_country_code_t country, /*@null@*/ void*
  *
  * @return WWD_SUCCESS if initialization is successful, error code otherwise
  */
-wwd_result_t wwd_management_wifi_on( void )
+wwd_result_t wwd_management_wifi_on( wiced_country_code_t country )
 {
     wl_country_t*  country_struct;
     uint32_t*      ptr;
@@ -116,6 +76,8 @@ wwd_result_t wwd_management_wifi_on( void )
     {
         return WWD_SUCCESS;
     }
+
+    wwd_wlan_status.country_code = country;
 
     retval = host_platform_init( );
     if ( retval != WWD_SUCCESS )

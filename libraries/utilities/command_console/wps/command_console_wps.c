@@ -17,7 +17,7 @@
 #include "wps_host.h"
 #include "wiced_wps.h"
 #include "wiced_management.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "wiced_framework.h"
 #include "wps_host_interface.h"
 #include "wiced_time.h"
@@ -100,13 +100,13 @@ static uint16_t     ap_array_size;
 
 int join_wps( int argc, char* argv[] )
 {
-    int a;
-    char* ip = NULL;
-    char* netmask = NULL;
-    char* gateway = NULL;
-    wiced_result_t result = WICED_ERROR;
+    int                    a;
+    char*                  ip = NULL;
+    char*                  netmask = NULL;
+    char*                  gateway = NULL;
+    wiced_result_t         result = WICED_ERROR;
     wiced_wps_credential_t credential[MAX_CREDENTIAL_COUNT];
-    char pin_string[9];
+    char                   pin_string[9];
 
     memset( credential, 0, MAX_CREDENTIAL_COUNT*sizeof( wiced_wps_credential_t ) );
 

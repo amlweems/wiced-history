@@ -19,7 +19,7 @@
 
 void memp_free_notify( unsigned int type );
 
-wwd_result_t host_buffer_init( /*@null@*/ /*@unused@*/ void * native_arg )
+wwd_result_t wwd_buffer_init( /*@null@*/ /*@unused@*/ void * native_arg )
 {
     UNUSED_PARAMETER( native_arg );
 
@@ -57,7 +57,7 @@ wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, ww
         *buffer = pbuf_alloc( PBUF_RAW, size, ( direction == WWD_NETWORK_RX ) ? PBUF_POOL_RX : PBUF_POOL_TX );
     } while ( ( *buffer == NULL ) &&
               ( wait == WICED_TRUE ) &&
-              ( vTaskDelay( (portTickType) 1 ), 1 == 1 ) );
+              ( vTaskDelay( (TickType_t) 1 ), 1 == 1 ) );
     if ( *buffer == NULL )
     {
 #if 0

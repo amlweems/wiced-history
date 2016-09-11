@@ -84,13 +84,7 @@ extern wiced_network_link_callback_t link_down_callbacks_ethernet[WICED_MAXIMUM_
 /* WICED <-> Platform API */
 extern wiced_result_t wiced_platform_init( void );
 
-/* WICED <-> RTOS API */
-extern wiced_result_t wiced_rtos_init  ( void );
-extern wiced_result_t wiced_rtos_deinit( void );
-
 /* WICED <-> Network API */
-extern wiced_result_t wiced_network_init  ( void );
-extern wiced_result_t wiced_network_deinit( void );
 extern wiced_result_t wiced_join_ap       ( void );
 extern wiced_result_t wiced_leave_ap      ( wiced_interface_t interface );
 extern wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t security_key_length, const char security_key[ 64 ] );
@@ -115,9 +109,6 @@ extern wiced_result_t wiced_ethernet_link_up_handler   ( void );
 
 /* Wiced Cooee API*/
 extern wiced_result_t wiced_wifi_cooee( wiced_cooee_workspace_t* workspace );
-
-/* Entry point for user Application */
-extern void application_start          ( void );
 
 /* TLS helper function to do TCP without involving TLS context */
 wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t*  packet );

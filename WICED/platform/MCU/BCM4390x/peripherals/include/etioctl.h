@@ -1,7 +1,14 @@
 /*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
  * BCM44XX Ethernet Windows device driver custom OID definitions.
  *
- * $Copyright Open Broadcom Corporation$
  * $Id: etioctl.h 474100 2014-04-30 06:37:09Z kenlo $
  */
 

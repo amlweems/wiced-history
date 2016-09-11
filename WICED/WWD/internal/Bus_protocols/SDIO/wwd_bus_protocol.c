@@ -394,7 +394,7 @@ wwd_result_t wwd_bus_init( void )
         /*@+unreachable@*/
     }
 
-    bus_is_up = WICED_TRUE;
+    wwd_bus_ensure_is_up();
 
     return result;
 }
@@ -788,7 +788,7 @@ wwd_result_t wwd_bus_ensure_is_up( void )
         return WWD_SUCCESS;
     }
 
-    if ( WWD_SUCCESS != ( result = wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t) SBSDIO_HT_AVAIL_REQ | SBSDIO_FORCE_HT ) ) )
+    if ( WWD_SUCCESS != ( result = wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t) SBSDIO_HT_AVAIL_REQ ) ) )
     {
         return result;
     }

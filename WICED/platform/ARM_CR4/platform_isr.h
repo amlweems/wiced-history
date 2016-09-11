@@ -124,9 +124,24 @@ extern "C" {
 
 typedef enum
 {
+    PLATFORM_CPU_CLOCK_FREQUENCY_24_MHZ,
+    PLATFORM_CPU_CLOCK_FREQUENCY_48_MHZ,
+    PLATFORM_CPU_CLOCK_FREQUENCY_60_MHZ,
+    PLATFORM_CPU_CLOCK_FREQUENCY_80_MHZ,
+    PLATFORM_CPU_CLOCK_FREQUENCY_120_MHZ,
     PLATFORM_CPU_CLOCK_FREQUENCY_160_MHZ,
     PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ
 } platform_cpu_clock_frequency_t;
+
+typedef enum
+{
+    PLATFORM_TICK_GET_SLOW_TIME_STAMP,
+    PLATFORM_TICK_GET_FAST_TIME_STAMP,
+    PLATFORM_TICK_GET_AND_RESET_SLOW_TIME_STAMP,
+    PLATFORM_TICK_GET_AND_RESET_FAST_TIME_STAMP,
+    PLATFORM_TICK_GET_TICKS_SINCE_LAST_SLEEP,
+    PLATFORM_TICK_GET_TICKS_SINCE_LAST_DEEP_SLEEP
+} platform_tick_times_t;
 
 /******************************************************
  *                 Type Definitions
@@ -147,13 +162,13 @@ extern uint32_t platform_cpu_clock_hz;
  *               Function Declarations
  ******************************************************/
 
-extern void         platform_tick_start                  ( void );
-extern void         platform_tick_stop                   ( void );
-extern void         platform_tick_irq_init               ( void );
-extern wiced_bool_t platform_tick_irq_handler            ( void );
-extern void         platform_tick_number_since_last_sleep( uint32_t* since_last_sleep, uint32_t* since_last_deep_sleep );
+extern void         platform_tick_start      ( void );
+extern void         platform_tick_stop       ( void );
+extern void         platform_tick_irq_init   ( void );
+extern wiced_bool_t platform_tick_irq_handler( void );
+extern uint32_t     platform_tick_get_time   ( platform_tick_times_t which_time );
 
-extern void platform_cpu_clock_init( platform_cpu_clock_frequency_t freq );
+extern void         platform_cpu_clock_init  ( platform_cpu_clock_frequency_t freq );
 
 #ifdef __cplusplus
 } /*extern "C" */

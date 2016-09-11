@@ -218,7 +218,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     wiced_result_t              result = WICED_SUCCESS;
     wiced_packet_t*             packet = NULL;
     email_content_table_field_t content_table[CONTENT_TABLE_SIZE];
-    wiced_tls_simple_context_t* tls_context;
+    wiced_tls_context_t*        tls_context;
     struct tm*                  timeinfo;
     wiced_utc_time_t            utc_time;
     char*                       reply;
@@ -288,13 +288,13 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
         wiced_packet_delete( packet );
 
         /* Establish TLS handshake here. Every packet from here onwards is encrypted */
-        tls_context = MALLOC_OBJECT("email tls ctx", wiced_tls_simple_context_t);
+        tls_context = MALLOC_OBJECT("email tls ctx", wiced_tls_context_t);
         memset( tls_context, 0, sizeof( *tls_context ) );
         account->internal->smtp_socket.context_malloced = WICED_TRUE;
 
-        if ( wiced_tcp_enable_tls( &account->internal->smtp_socket, tls_context ) != WICED_SUCCESS )
+        result = wiced_tcp_enable_tls( &account->internal->smtp_socket, tls_context );
+        if ( result != WICED_SUCCESS )
         {
-            result = WICED_ERROR;
             WPRINT_LIB_ERROR(( "Failed to enable TLS\n" ));
             goto exit_without_sending_quit_command;
         }

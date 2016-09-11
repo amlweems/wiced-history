@@ -341,11 +341,15 @@ static platform_result_t calculate_prescaler( uint32_t speed, uint16_t* prescale
 {
     uint8_t i;
 
+    RCC_ClocksTypeDef rcc_clock_frequencies;
+
     wiced_assert("Bad args", prescaler != NULL);
+
+    RCC_GetClocksFreq( &rcc_clock_frequencies );
 
     for( i = 0 ; i < MAX_NUM_SPI_PRESCALERS ; i++ )
     {
-        if( ( 60000000 / spi_baudrate_prescalers[i].factor ) <= speed )
+        if( ( rcc_clock_frequencies.PCLK2_Frequency / spi_baudrate_prescalers[i].factor ) <= speed )
         {
             *prescaler = spi_baudrate_prescalers[i].prescaler_value;
             return PLATFORM_SUCCESS;

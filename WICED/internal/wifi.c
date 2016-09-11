@@ -28,6 +28,7 @@
 #include "wiced_management.h"
 #include "wiced_platform.h"
 #include "wiced_framework.h"
+#include "wiced_crypto.h"
 #include "internal/wwd_internal.h"
 
 /******************************************************
@@ -85,7 +86,6 @@ static void* softap_event_handler( const wwd_event_header_t* event_header, const
 
 /* Link management variables */
 static const wwd_event_num_t        link_events[]           = { WLC_E_LINK, WLC_E_DEAUTH_IND, WLC_E_ROAM, WLC_E_NONE };
-static wiced_bool_t                 wiced_core_initialised  =   WICED_FALSE;
 static const wwd_event_num_t        ap_client_events[]      = { WLC_E_DEAUTH_IND, WLC_E_DISASSOC_IND, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_NONE };
 static wiced_bool_t                 wiced_wlan_initialised  =   WICED_FALSE;
 static wiced_bool_t                 wiced_sta_link_up       =   WICED_FALSE;
@@ -116,29 +116,12 @@ wiced_result_t wiced_init( void )
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_core_init( void )
-{
-    if ( wiced_core_initialised == WICED_TRUE )
-    {
-        return WICED_SUCCESS;
-    }
-
-    CHECK_RETURN( wiced_platform_init( ) );
-
-    CHECK_RETURN( wiced_rtos_init( ) );
-
-    wiced_core_initialised = WICED_TRUE;
-
-    return WICED_SUCCESS;
-}
-
-
-
 wiced_result_t wiced_wlan_connectivity_init( void )
 {
     wiced_result_t              result;
     wiced_country_code_t        country;
     platform_dct_wifi_config_t* wifi_config;
+    uint32_t                    wlan_rand;
 
 #ifdef WPRINT_ENABLE_NETWORK_INFO
     wiced_mac_t  mac;
@@ -166,11 +149,18 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 
     wiced_dct_read_unlock( wifi_config, WICED_FALSE );
 
-    result = (wiced_result_t) wwd_management_init( country, wiced_packet_pools );
+    result = (wiced_result_t) wwd_management_wifi_on( country );
     if ( result != WICED_SUCCESS )
     {
         WPRINT_NETWORK_ERROR( ("Error %d while starting WICED!\n", result) );
         return result;
+    }
+
+    /* Get wlan random to seed PRNG. Not all wlan firmware supports this feature. */
+    result = (wiced_result_t) wwd_wifi_get_iovar_value( IOVAR_STR_RAND, &wlan_rand, WWD_STA_INTERFACE );
+    if ( result == WICED_SUCCESS )
+    {
+        wiced_crypto_add_entropy( &wlan_rand, sizeof( wlan_rand ) );
     }
 
     WPRINT_NETWORK_INFO( ( "WWD " BUS " interface initialised\n") );
@@ -189,9 +179,9 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 #endif
 
     /* Configure roaming parameters */
-   wwd_wifi_set_roam_trigger( WICED_WIFI_ROAMING_TRIGGER_MODE );
-   wwd_wifi_set_roam_delta( WICED_WIFI_ROAMING_TRIGGER_DELTA_IN_DBM );
-   wwd_wifi_set_roam_scan_period( WICED_WIFI_ROAMING_SCAN_PERIOD_IN_SECONDS );
+    wwd_wifi_set_roam_trigger( WICED_WIFI_ROAMING_TRIGGER_MODE );
+    wwd_wifi_set_roam_delta( WICED_WIFI_ROAMING_TRIGGER_DELTA_IN_DBM );
+    wwd_wifi_set_roam_scan_period( WICED_WIFI_ROAMING_SCAN_PERIOD_IN_SECONDS );
 
     wiced_wlan_initialised = WICED_TRUE;
 
@@ -212,20 +202,6 @@ wiced_result_t wiced_wifi_up( void )
     CHECK_RETURN( wiced_rtos_set_semaphore( &scan_semaphore ) ); /* Semaphore starts at 1 */
 
     CHECK_RETURN( wiced_rtos_init_timer( &wiced_sta_handshake_timer, HANDSHAKE_TIMEOUT_MS, handshake_timeout_handler, 0 ) );
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_core_deinit( void )
-{
-    if ( wiced_core_initialised != WICED_TRUE )
-    {
-        return WICED_SUCCESS;
-    }
-
-    wiced_rtos_deinit();
-
-    wiced_core_initialised = WICED_FALSE;
 
     return WICED_SUCCESS;
 }
@@ -986,7 +962,14 @@ static void wiced_scan_result_handler( wiced_scan_result_t** result_ptr, void* u
                 }
                 else
                 {
-                    off_channel_results = NULL;
+                    if (result_iter->next == NULL)
+                    {
+                        off_channel_results = NULL;
+                    }
+                    else
+                    {
+                        off_channel_results = result_iter->next;
+                    }
                 }
                 free( result_iter );
                 result_iter = NULL;

@@ -156,7 +156,7 @@ wiced_result_t bt_bus_receive( uint8_t* data_in, uint32_t size, uint32_t timeout
 {
     IS_BUS_INITIALISED();
 
-    return platform_uart_receive_bytes( wiced_bt_uart_driver, (void*)data_in, size, timeout_ms );
+    return platform_uart_receive_bytes( wiced_bt_uart_driver, (void*)data_in, &size, timeout_ms );
 }
 
 wiced_bool_t bt_bus_is_ready( void )

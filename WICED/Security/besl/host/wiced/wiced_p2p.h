@@ -55,7 +55,7 @@ extern besl_result_t            besl_p2p_find_group_owner                       
 extern besl_result_t            besl_p2p_get_discovered_peers                           ( p2p_workspace_t* workspace, p2p_discovered_device_t** devices, uint8_t* device_count );
 extern besl_result_t            besl_p2p_group_owner_start                              ( p2p_workspace_t* workspace );
 extern besl_result_t            besl_p2p_client_enable_powersave                        ( p2p_workspace_t* workspace, uint32_t power_save_mode );
-extern besl_result_t            besl_p2p_send_action_frame                              ( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, p2p_action_frame_writer_t writer, uint32_t channel, wwd_interface_t interface, uint32_t dwell_time );
+extern besl_result_t            besl_p2p_send_action_frame                              ( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, p2p_action_frame_writer_t writer, uint32_t channel, uint32_t dwell_time );
 extern besl_result_t            besl_p2p_start_registrar                                ( void );
 extern p2p_discovered_device_t* besl_p2p_host_find_device                               ( p2p_workspace_t* workspace, const besl_mac_t* mac );
 extern wiced_bool_t             besl_p2p_group_owner_is_up                              ( void );

@@ -447,11 +447,20 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
 
 
 /**
+ * Transmit data over the specified UART port
+ * This should be special version of transmit function used in CPU exception context,
+ * simplest implementation without interrupts.
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_uart_exception_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size );
+
+/**
  * Receive data over the specified UART port
  *
  * @return @ref platform_result_t
  */
-platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms );
+platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms );
 
 
 /**
@@ -678,6 +687,33 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
 
 
 /**
+ * Read bytes via the I2C interface
+ *
+ * @param[in]  i2c                : I2C interface
+ * @param[in]  config             : settings and flags used for transfer
+ * @param[in]  flags              : flags for controlling the the transfer
+ * @param[out] buffer             : pointer to a receiving buffer
+ * @param[in]  buffer_length      : length in bytes of the receiving buffer
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_i2c_read( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, void* buffer, uint16_t buffer_length );
+
+
+/**
+ * Write bytes via the I2C interface
+ *
+ * @param[in]  i2c                : I2C interface
+ * @param[in]  config             : settings and flags used for transfer
+ * @param[in]  flags              : flags for controlling the the transfer
+ * @param[in]  buffer             : pointer to a transmit buffer
+ * @param[in]  buffer_length      : length in bytes of the transmit buffer
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_i2c_write( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, const void* buffer, uint16_t buffer_length );
+
+/**
  * Initialise PWM interface
  *
  * @param[in] pwm_interface : PWM interface
@@ -834,6 +870,8 @@ wiced_result_t platform_time_disable_8021as(void);
  */
 wiced_result_t platform_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
                                          uint32_t *local_secs, uint32_t *local_nanosecs);
+
+
 #ifdef __cplusplus
 } /*"C" */
 #endif

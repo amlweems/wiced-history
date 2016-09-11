@@ -14,7 +14,8 @@ $(NAME)_SOURCES := spi_flash.c spi_flash_wiced.c
 
 $(NAME)_DEFINES += SFLASH_SUPPORT_SST_PARTS \
                    SFLASH_SUPPORT_MACRONIX_PARTS \
-                   SFLASH_SUPPORT_EON_PARTS
+                   SFLASH_SUPPORT_EON_PARTS \
+                   SFLASH_SUPPORT_MICRON_PARTS
 
 GLOBAL_INCLUDES := .
 

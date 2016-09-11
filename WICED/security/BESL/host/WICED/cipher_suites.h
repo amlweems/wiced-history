@@ -17,25 +17,38 @@ extern "C" {
 #endif
 
 
-//#undef USE_SSL3                // Insecure
-//
-//#undef USE_INSECURE_CIPHERS
-//
 //#undef USE_MD5_MAC             // Insecure
 //#undef USE_RC4_128_CIPHER      // Insecure
 //#undef USE_3DES_EDE_CBC_CIPHER // Insecure
 
+#ifndef WICED_USE_CUSTOM_CIPHER_SUITES
 
-#define USE_RSA_KEYSCHEME
-#define USE_SHA_MAC
-#define USE_SHA256_MAC
-#define USE_SHA384_MAC
-#define USE_AES_256_CBC_CIPHER
-#define USE_AES_128_CBC_CIPHER
-#define USE_CAMELLIA_128_CBC_CIPHER
-#define USE_CAMELLIA_256_CBC_CIPHER
-#define USE_SEED_CBC_CIPHER
-#define USE_DHE_RSA_KEYSCHEME
+    /* Default supported key schemes */
+    #define USE_RSA_KEYSCHEME
+    #define USE_DHE_RSA_KEYSCHEME
+    #define USE_ECDH_ECDSA_KEYSCHEME
+    #define USE_ECDHE_ECDSA_KEYSCHEME
+
+    /* Default supported MACs */
+    #define USE_SHA_MAC
+    #define USE_SHA256_MAC
+    //#define USE_SHA384_MAC
+
+    /* Default supported ciphers */
+    #define USE_AES_256_CBC_CIPHER
+    #define USE_AES_128_CBC_CIPHER
+    //#define USE_CAMELLIA_128_CBC_CIPHER
+    //#define USE_CAMELLIA_256_CBC_CIPHER
+    //#define USE_SEED_CBC_CIPHER
+
+    /* Default supported x.509 hashing algorithms */
+    #define X509_SUPPORT_MD5
+    #define X509_SUPPORT_SHA1
+    #define X509_SUPPORT_SHA256
+    //#define X509_SUPPORT_SHA384
+    //#define X509_SUPPORT_SHA512
+
+#endif /* #ifndef WICED_USE_CUSTOM_CIPHER_SUITES */
 
 typedef enum
 {

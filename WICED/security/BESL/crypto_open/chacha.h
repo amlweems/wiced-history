@@ -17,22 +17,12 @@
 #ifndef INCLUDED_CHACHA_H_
 #define INCLUDED_CHACHA_H_
 
-#include <stdint.h>
+#include "crypto_structures.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-/* Prevent redefinition of types from crypto_structures.h */
-#ifndef CRYPTO_STRUCTURE
-
-typedef struct
-{
-  uint32_t input[16];
-} chacha_context_t;
-
-#endif /* ifndef CRYPTO_STRUCTURE */
 
 /**
  * Initialise ChaCha context with a key

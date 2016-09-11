@@ -11,6 +11,7 @@
 #define INCLUDED_SDIO_WWD_BUS_PROTOCOL_H
 
 #include "wwd_buffer.h"
+#include "internal/wwd_thread_internal.h"
 #include "platform/wwd_sdio_interface.h"
 
 #ifdef __cplusplus

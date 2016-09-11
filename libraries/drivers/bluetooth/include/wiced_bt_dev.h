@@ -273,12 +273,12 @@ enum wiced_bt_sec_level_e
 /** Pairing IO Capabilities */
 enum wiced_bt_dev_io_cap_e
 {
-    BTM_IO_CAPABILIES_DISPLAY_ONLY,             /**< Display Only        */
-    BTM_IO_CAPABILIES_DISPLAY_AND_KEYBOARD,     /**< Display Yes/No      */
-    BTM_IO_CAPABILIES_KEYBOARD_ONLY,            /**< Keyboard Only       */
-    BTM_IO_CAPABILIES_NONE,                     /**< No Input, No Output */
-    BTM_IO_CAPABILIES_KEYBOARD_DISPLAY,         /**< Keyboard display    */
-    BTM_IO_CAPABILIES_MAX
+    BTM_IO_CAPABILITIES_DISPLAY_ONLY,             /**< Display Only        */
+    BTM_IO_CAPABILITIES_DISPLAY_AND_KEYBOARD,     /**< Display Yes/No      */
+    BTM_IO_CAPABILITIES_KEYBOARD_ONLY,            /**< Keyboard Only       */
+    BTM_IO_CAPABILITIES_NONE,                     /**< No Input, No Output */
+    BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY,         /**< Keyboard display    */
+    BTM_IO_CAPABILITIES_MAX
 };
 typedef uint8_t wiced_bt_dev_io_cap_t;          /**< IO capabilities (see #wiced_bt_dev_io_cap_e) */
 
@@ -765,7 +765,7 @@ enum wiced_bt_ble_conn_mode_e
     BLE_CONN_MODE_LOW_DUTY,             /**< slow connection scan parameter */
     BLE_CONN_MODE_HIGH_DUTY             /**< fast connection scan parameter */
 };
-#endif 
+#endif
 typedef uint8_t wiced_bt_ble_conn_mode_t;       /**< Conn mode (see #wiced_bt_ble_conn_mode_e) */
 
 /** Structure definitions for Bluetooth Management (wiced_bt_management_cback_t) event notifications */

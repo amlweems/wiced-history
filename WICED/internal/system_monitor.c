@@ -14,8 +14,8 @@
 #include "wiced_platform.h"
 #include "wiced_rtos.h"
 #include "RTOS/wwd_rtos_interface.h"
-#include "wiced_management.h"
 #include "wiced_framework.h"
+#include <string.h>
 
 /******************************************************
  *                      Macros

@@ -10,7 +10,10 @@
 
 NAME := Lib_HTTP_Server
 
-$(NAME)_SOURCES := http_server.c
-GLOBAL_INCLUDES := .
+$(NAME)_SOURCES    := http_server.c
 
-$(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+$(NAME)_COMPONENTS := utilities/linked_list
+
+$(NAME)_CFLAGS      = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+
+GLOBAL_INCLUDES    := .

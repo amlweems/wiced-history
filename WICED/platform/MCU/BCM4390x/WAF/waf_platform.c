@@ -58,21 +58,36 @@
  *                 DCT Functions
  ******************************************************/
 
-void platform_load_app_chunk_from_fs( const image_location_t* app_header_location, void* file_handler, void* physical_address, uint32_t size)
+static wiced_bool_t platform_is_load_permitted( void* physical_address, uint32_t size, wiced_bool_t* is_aon_segment )
 {
     const uint32_t     destination = (uint32_t)physical_address;
     const wiced_bool_t aon_segment = WICED_DEEP_SLEEP_IS_AON_SEGMENT( destination, size ) ? WICED_TRUE : WICED_FALSE;
-    WFILE*             stream      = file_handler;
-
-    UNUSED_PARAMETER( app_header_location );
+    wiced_bool_t       result      = WICED_FALSE;
 
     if ( !aon_segment || !platform_mcu_powersave_is_warmboot() )
     {
+        result          = WICED_TRUE;
+        *is_aon_segment = aon_segment;
+    }
+
+    return result;
+}
+
+void platform_load_app_chunk_from_fs( const image_location_t* app_header_location, void* file_handler, void* physical_address, uint32_t size )
+{
+    wiced_bool_t aon_segment;
+
+    UNUSED_PARAMETER( app_header_location );
+
+    if ( platform_is_load_permitted( physical_address, size, &aon_segment ) )
+    {
+        WFILE* stream = file_handler;
+
         wicedfs_fread( physical_address, size, 1, stream );
 
         if ( aon_segment )
         {
-            WICED_DEEP_SLEEP_TINY_BOOTLOADER_CONFIG->app_elf_fs_address = stream->location;
+            WICED_DEEP_SLEEP_TINY_BOOTLOADER_CONFIG->app_address = stream->location;
         }
     }
 }
@@ -80,11 +95,21 @@ void platform_load_app_chunk_from_fs( const image_location_t* app_header_locatio
 void platform_erase_app_area( uint32_t physical_address, uint32_t size )
 {
     /* App is in RAM, no need for erase */
-    (void) physical_address;
-    (void) size;
+    UNUSED_PARAMETER( physical_address );
+    UNUSED_PARAMETER( size );
 }
 
-void platform_load_app_chunk(const image_location_t* app_header_location, uint32_t offset, void* physical_address, uint32_t size)
+void platform_load_app_chunk(const image_location_t* app_header_location, uint32_t offset, void* physical_address, uint32_t size )
 {
-    wiced_apps_read( app_header_location, physical_address, offset, size);
+    wiced_bool_t aon_segment;
+
+    if ( platform_is_load_permitted( physical_address, size, &aon_segment ) )
+    {
+        wiced_apps_read( app_header_location, physical_address, offset, size );
+
+        if ( aon_segment )
+        {
+            WICED_DEEP_SLEEP_TINY_BOOTLOADER_CONFIG->app_address = app_header_location->detail.external_fixed.location;
+        }
+    }
 }

@@ -122,7 +122,7 @@ void platform_init_mcu_infrastructure( void )
     platform_watchdog_init( );
 
     /* Initialise interrupt priorities */
-    for ( i = 0; i < 81; i++ )
+    for ( i = 0; i < 96; i++ )
     {
         NVIC_SetPriority( (IRQn_Type) i, 0xf );
     }

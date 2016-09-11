@@ -11,7 +11,6 @@
 
 #include "wiced_result.h"
 #include "wiced_utilities.h"
-#include "wiced_bt_constants.h"
 
 #ifdef __cplusplus
 extern "C" {

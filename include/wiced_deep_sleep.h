@@ -48,7 +48,7 @@ typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t
 
 #ifndef WICED_DEEP_SLEEP_EVENT_HANDLER
 #define WICED_DEEP_SLEEP_EVENT_HANDLER( func_name ) \
-    static void UNUSED func_name( wiced_deep_sleep_event_type_t event )
+    static void MAY_BE_UNUSED func_name( wiced_deep_sleep_event_type_t event )
 #endif
 
 #ifndef WICED_DEEP_SLEEP_CALL_EVENT_HANDLERS
@@ -90,6 +90,8 @@ typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+uint32_t wiced_deep_sleep_ticks_since_enter( void );
 
 #ifdef __cplusplus
 } /* extern "C" */

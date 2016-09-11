@@ -60,15 +60,15 @@
 
 const http_status_codes_t restful_smart_http_status_table[] =
 {
-    [BT_REST_GATEWAY_STATUS_200] = HTTP_200_TYPE,
-    [BT_REST_GATEWAY_STATUS_400] = HTTP_400_TYPE,
-    [BT_REST_GATEWAY_STATUS_403] = HTTP_403_TYPE,
-    [BT_REST_GATEWAY_STATUS_404] = HTTP_404_TYPE,
-    [BT_REST_GATEWAY_STATUS_405] = HTTP_405_TYPE,
-    [BT_REST_GATEWAY_STATUS_406] = HTTP_406_TYPE,
-    [BT_REST_GATEWAY_STATUS_412] = HTTP_412_TYPE,
-    [BT_REST_GATEWAY_STATUS_415] = HTTP_415_TYPE,
-    [BT_REST_GATEWAY_STATUS_504] = HTTP_504_TYPE,
+    [REST_SMART_STATUS_200] = HTTP_200_TYPE,
+    [REST_SMART_STATUS_400] = HTTP_400_TYPE,
+    [REST_SMART_STATUS_403] = HTTP_403_TYPE,
+    [REST_SMART_STATUS_404] = HTTP_404_TYPE,
+    [REST_SMART_STATUS_405] = HTTP_405_TYPE,
+    [REST_SMART_STATUS_406] = HTTP_406_TYPE,
+    [REST_SMART_STATUS_412] = HTTP_412_TYPE,
+    [REST_SMART_STATUS_415] = HTTP_415_TYPE,
+    [REST_SMART_STATUS_504] = HTTP_504_TYPE,
 };
 
 const pairing_status_t pairing_status_table[] =
@@ -82,3 +82,4 @@ const pairing_status_t pairing_status_table[] =
     [PASSKEY_DISPLAY_EXPECTED]    = { "6", "Passkey Display Expected"                   },
     [NUMERIC_COMPARISON_EXPECTED] = { "7", "Numeric Comparison Expected"                },
 };
+

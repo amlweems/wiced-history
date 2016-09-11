@@ -71,7 +71,7 @@ typedef struct
     uint8_t                     outer_eap_identity[32];
     uint8_t                     outer_eap_identity_length;
 
-    wiced_tls_simple_context_t* tls_context;
+    wiced_tls_context_t*        tls_context;
     tls_agent_workspace_t       tls_agent;
     uint8_t*                    buffer;    // XXX temporary until we review how the TLS engine is working with EAP transport
     uint32_t                    buffer_size;

@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "platform_toolchain.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,11 +27,6 @@ extern uint16_t htobe16(uint16_t v);
 extern uint32_t htobe32(uint32_t v);
 
 #else /* ifdef LINT */
-
-#if defined( __GNUC__ ) && ( ! defined( __clang__ ) )
-/* XXX More appropriate inclusion in platform_toolchain.h? */
-#define ALWAYS_INLINE __attribute__((always_inline))  /* Required for ROM to ensure there are not repeated */
-#endif /* if defined( __GNUC__ ) && ( ! defined( __clang__ ) ) */
 
 #ifndef htobe16   /* This is defined in POSIX platforms */
 static inline ALWAYS_INLINE uint16_t htobe16(uint16_t v)
@@ -66,11 +62,16 @@ static inline ALWAYS_INLINE uint32_t htobe32(uint32_t v)
 
 #define WICED_VERIFY(x)                               {wiced_result_t res = (x); if (res != WICED_SUCCESS){return res;}}
 
+#define WICED_VERIFY_GOTO( expr, res_var, label )     {res_var = (expr); if (res_var != WICED_SUCCESS){goto label;}}
+
 #define MEMCAT(destination, source, source_length)    (void*)((uint8_t*)memcpy((destination),(source),(source_length)) + (source_length))
 
 #define MALLOC_OBJECT(name,object_type)               ((object_type*)malloc_named(name,sizeof(object_type)))
 
 #define OFFSET(type, member)                          ((uint32_t)&((type *)0)->member)
+
+#define ARRAY_SIZE(a)                                ( sizeof(a) / sizeof(a[0]) )
+#define ARRAY_POSITION( array, element_pointer )     ( ((uint32_t)element_pointer - (uint32_t)array) / sizeof(array[0]) )
 
 /* Macros for comparing MAC addresses */
 #define CMP_MAC( a, b )  (((((unsigned char*)a)[0])==(((unsigned char*)b)[0]))&& \
@@ -121,6 +122,7 @@ typedef enum
 
 #ifdef WICED_ENABLE_MALLOC_DEBUG
 #include "malloc_debug.h"
+extern void malloc_print_mallocs           ( void );
 #else
 #define calloc_named( name, nelems, elemsize) calloc ( nelems, elemsize )
 #define calloc_named_hideleak( name, nelems, elemsize )  calloc ( nelems, elemsize )
@@ -133,6 +135,7 @@ typedef enum
 #define malloc_leak_check( thread, global_flag )
 #define malloc_transfer_to_curr_thread( block )
 #define malloc_transfer_to_thread( block, thread )
+#define malloc_print_mallocs( void )
 #endif /* ifdef WICED_ENABLE_MALLOC_DEBUG */
 
 /* Define macros to assist operation on host MCUs that require aligned memory access */
@@ -380,9 +383,45 @@ static inline ALWAYS_INLINE char* string_append_two_digit_hex_byte( char* string
     return string;
 }
 
+/**
+ ******************************************************************************
+ * Convert WEP security key to the format used by WICED
+ *
+ * @param[out]    wep_key_ouput   The converted key
+ * @param[in]     wep_key_data    The WEP key to convert
+ * @param[in,out] wep_key_length  The length of the WEP key data. Upon return, the length of the converted WEP key
+ * @param[in]     wep_key_format  The current format of the WEP key
+ */
+void format_wep_keys( char* wep_key_output, const char* wep_key_data, uint8_t* wep_key_length, wep_key_format_t wep_key_format );
 
+/**
+ ******************************************************************************
+ * Length limited version of strstr. Adapted from bcmstrnstr in bcmutils.c
+ *
+ * @param     arg  The string to be searched.
+ * @param     arg  The length of the string to be searched.
+ * @param     arg  The string to be found.
+ * @param     arg  The length of the string to be found.
+ *
+ * @return    pointer to the found string if search successful, otherwise NULL
+ */
+char* strnstr( const char* s, uint16_t s_len, const char* substr, uint16_t substr_len );
 
-void format_wep_keys( char* wep_key_ouput, const char* wep_key_data, uint8_t* wep_key_length, wep_key_format_t wep_key_format );
+/**
+ ******************************************************************************
+ * Compare a string to a pattern containing wildcard character(s).
+ *
+ * @note: The following wildcard characters are supported:
+ *        \li '*' for matching zero or more characters
+ *        \li '?' for matching exactly one character
+ *
+ * @param[in] string   The target string to compare with with the pattern
+ * @param[in] length   The length of the target string
+ * @param[in] pattern  The NUL-terminated string pattern which contains wildcard character(s)
+ *
+ * @return    1 if the string matches the pattern; 0 otherwise.
+ */
+uint8_t match_string_with_wildcard_pattern( const char* string, uint32_t length, const char* pattern );
 
 #ifdef __cplusplus
 } /*extern "C" */

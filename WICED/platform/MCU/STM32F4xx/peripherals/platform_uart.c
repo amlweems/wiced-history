@@ -58,10 +58,14 @@ static const uint8_t uart_alternate_functions[NUMBER_OF_UART_PORTS] =
 {
     [0] = GPIO_AF_USART1,
     [1] = GPIO_AF_USART2,
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    [2] = GPIO_AF_USART6,
+#else
     [2] = GPIO_AF_USART3,
     [3] = GPIO_AF_UART4,
     [4] = GPIO_AF_UART5,
     [5] = GPIO_AF_USART6,
+#endif
 };
 
 /* UART peripheral clock functions */
@@ -69,10 +73,14 @@ static const platform_peripheral_clock_function_t uart_peripheral_clock_function
 {
     [0] = RCC_APB2PeriphClockCmd,
     [1] = RCC_APB1PeriphClockCmd,
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    [2] = RCC_APB2PeriphClockCmd,
+#else
     [2] = RCC_APB1PeriphClockCmd,
     [3] = RCC_APB1PeriphClockCmd,
     [4] = RCC_APB1PeriphClockCmd,
     [5] = RCC_APB2PeriphClockCmd,
+#endif
 };
 
 /* UART peripheral clocks */
@@ -80,10 +88,14 @@ static const uint32_t uart_peripheral_clocks[NUMBER_OF_UART_PORTS] =
 {
     [0] = RCC_APB2Periph_USART1,
     [1] = RCC_APB1Periph_USART2,
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    [2] = RCC_APB2Periph_USART6,
+#else
     [2] = RCC_APB1Periph_USART3,
     [3] = RCC_APB1Periph_UART4,
     [4] = RCC_APB1Periph_UART5,
     [5] = RCC_APB2Periph_USART6,
+#endif
 };
 
 /* UART interrupt vectors */
@@ -91,10 +103,18 @@ static const IRQn_Type uart_irq_vectors[NUMBER_OF_UART_PORTS] =
 {
     [0] = USART1_IRQn,
     [1] = USART2_IRQn,
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    [2] = USART6_IRQn,
+#else
     [2] = USART3_IRQn,
     [3] = UART4_IRQn,
     [4] = UART5_IRQn,
     [5] = USART6_IRQn,
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [6] = UART7_IRQn,
+    [7] = UART8_IRQn,
+#endif
+#endif
 };
 
 /******************************************************
@@ -376,19 +396,19 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
     return driver->last_transmit_result;
 }
 
-platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms )
 {
     platform_result_t result = PLATFORM_SUCCESS;
 
-    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != 0 ) );
+    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != NULL ) && ( *expected_data_size != 0 ) );
 
     platform_mcu_powersave_disable();
 
     if ( driver->rx_buffer != NULL )
     {
-        while ( expected_data_size != 0 )
+        while ( *expected_data_size != 0 )
         {
-            uint32_t transfer_size = MIN( driver->rx_buffer->size / 2, expected_data_size );
+            uint32_t transfer_size = MIN( driver->rx_buffer->size / 2, *expected_data_size );
 
             /* Check if ring buffer already contains the required amount of data. */
             if ( transfer_size > ring_buffer_used_space( driver->rx_buffer ) )
@@ -417,7 +437,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
                 }
             }
 
-            expected_data_size -= transfer_size;
+            *expected_data_size -= transfer_size;
 
             // Grab data from the buffer
             do
@@ -440,7 +460,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
     }
     else
     {
-        result = receive_bytes( driver, data_in, expected_data_size, timeout_ms );
+        result = receive_bytes( driver, data_in, *expected_data_size, timeout_ms );
 
         platform_mcu_powersave_enable();
 
@@ -562,7 +582,7 @@ void platform_uart_irq( platform_uart_driver_t* driver )
     platform_uart_port_t* uart = (platform_uart_port_t*) driver->peripheral->port;
 
     // Clear all interrupts. It's safe to do so because only RXNE interrupt is enabled
-    uart->SR = (uint16_t) uart->SR;
+    uart->SR = 0xffff;
 
     // Update tail
     driver->rx_buffer->tail = driver->rx_buffer->size - driver->peripheral->rx_dma_config.stream->NDTR;

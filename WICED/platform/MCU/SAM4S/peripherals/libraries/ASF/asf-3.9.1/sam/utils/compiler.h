@@ -186,12 +186,14 @@
 #endif
 
 /* Define WEAK attribute */
+#ifndef WEAK
 #if defined   ( __CC_ARM   ) /* Keil µVision 4 */
 #   define WEAK __attribute__ ((weak))
 #elif defined ( __ICCARM__ ) /* IAR Ewarm 5.41+ */
 #   define WEAK __weak
 #elif defined (  __GNUC__  ) /* GCC CS3 2009q3-68 */
 #   define WEAK __attribute__ ((weak))
+#endif
 #endif
 
 /* Define NO_INIT attribute */

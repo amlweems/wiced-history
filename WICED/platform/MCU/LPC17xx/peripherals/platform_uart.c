@@ -142,17 +142,17 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
     return WICED_SUCCESS;
 }
 
-platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms )
 {
     /*The following is a temporary implemenration of the UART*/
     platform_result_t result = PLATFORM_SUCCESS;
-    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != 0 ) );
+    wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != NULL ) && ( *expected_data_size != 0 ) );
 
     if ( driver->rx_buffer != NULL )
     {
-        while ( expected_data_size != 0 )
+        while ( *expected_data_size != 0 )
         {
-            uint32_t transfer_size = MIN( driver->rx_buffer->size / 2, expected_data_size );
+            uint32_t transfer_size = MIN( driver->rx_buffer->size / 2, *expected_data_size );
 
             /* Check if ring buffer already contains the required amount of data. */
             if ( transfer_size > ring_buffer_used_space( driver->rx_buffer ) )
@@ -185,7 +185,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
                 }
             }
 
-            expected_data_size -= transfer_size;
+            *expected_data_size -= transfer_size;
 
             // Grab data from the buffer
             do

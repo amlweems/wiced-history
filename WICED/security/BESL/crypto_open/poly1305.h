@@ -16,18 +16,12 @@
 #ifndef POLY1305_DONNA_H
 #define POLY1305_DONNA_H
 
+#include "crypto_structures.h"
 #include <stddef.h>
 
 #ifdef __cplusplus
 extern "C"
 {
-#endif
-
-#ifndef CRYPTO_STRUCTURE
-typedef struct poly1305_context {
-    size_t aligner;
-    unsigned char opaque[136];
-} poly1305_context;
 #endif
 
 #define POLY1305_KEYLEN 32

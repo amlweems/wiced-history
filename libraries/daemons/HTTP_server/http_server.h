@@ -39,6 +39,7 @@
 #include "wiced_tcpip.h"
 #include "wiced_rtos.h"
 #include "wiced_resource.h"
+#include "linked_list.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -95,6 +96,7 @@ extern "C" {
     ENTRY( MIME_TYPE_HAP_VERIFY,              "application/hap+verify"           ) \
     ENTRY( MIME_TYPE_TEXT_HTML,               "text/html"                        ) \
     ENTRY( MIME_TYPE_TEXT_PLAIN,              "text/plain"                       ) \
+    ENTRY( MIME_TYPE_TEXT_EVENT_STREAM,       "text/event-stream"                ) \
     ENTRY( MIME_TYPE_TEXT_CSS,                "text/css"                         ) \
     ENTRY( MIME_TYPE_IMAGE_PNG,               "image/png"                        ) \
     ENTRY( MIME_TYPE_IMAGE_GIF,               "image/gif"                        ) \
@@ -137,6 +139,8 @@ extern "C" {
                                           "Pragma: no-cache"
 #define CRLF                              "\r\n"
 #define CRLF_CRLF                         "\r\n\r\n"
+#define LFLF                              "\n\n"
+#define EVENT_STREAM_DATA                 "data: "
 
 /******************************************************
  *                   Enumerations
@@ -198,11 +202,6 @@ typedef enum
  *                 Type Definitions
  ******************************************************/
 
-/**
- * HTTP server socket callback
- */
-typedef wiced_result_t (*http_server_callback_t)( wiced_tcp_socket_t* socket, uint8_t** data, uint16_t* data_length );
-
 /******************************************************
  *                    Structures
  ******************************************************/
@@ -232,9 +231,15 @@ typedef struct
 } wiced_http_response_stream_t;
 
 /**
+ * HTTP server socket callback
+ */
+typedef wiced_result_t (*http_server_callback_t)( wiced_http_response_stream_t* stream, uint8_t** data, uint16_t* data_length );
+
+
+/**
  * Prototype for URL processor functions
  */
-typedef int32_t (*url_processor_t)(  const char* url, wiced_http_response_stream_t* stream, void* arg, wiced_http_message_body_t* http_data );
+typedef int32_t (*url_processor_t)(  const char* url_path, const char* url_query_string, wiced_http_response_stream_t* stream, void* arg, wiced_http_message_body_t* http_data );
 
 /**
  * HTTP page list structure
@@ -275,25 +280,19 @@ typedef struct
  */
 typedef struct
 {
-    wiced_tcp_server_t       tcp_server;
-    wiced_thread_t           event_thread;
-    wiced_queue_t            event_queue;
-    wiced_worker_thread_t    worker_thread;
-    volatile wiced_bool_t    quit;
-    const wiced_http_page_t* page_database;
-    http_server_callback_t   receive_callback;
+    wiced_tcp_server_t            tcp_server;
+    wiced_thread_t                event_thread;
+    wiced_queue_t                 event_queue;
+    wiced_worker_thread_t         connect_thread;
+    volatile wiced_bool_t         quit;
+    const wiced_http_page_t*      page_database;
+    http_server_callback_t        receive_callback;
+    uint8_t*                      streams;
+    linked_list_t                 active_stream_list;
+    linked_list_t                 inactive_stream_list;
 } wiced_http_server_t;
 
-/**
- * Workspace structure for HTTPS server
- * Users should not access these values - they are provided here only
- * to provide the compiler with datatype size information allowing static declarations
- */
-typedef struct
-{
-    wiced_http_server_t          http_server;
-    wiced_tls_advanced_context_t tls_context;
-} wiced_https_server_t;
+typedef wiced_http_server_t wiced_https_server_t;
 
 /******************************************************
  *                 Global Variables
@@ -316,10 +315,12 @@ typedef struct
  * @param[in] max_sockets    Maximum number of sockets to be served simultaneously
  * @param[in] page_database  A list of web pages / files that will be served by the HTTP server. See @ref wiced_http_page_t for details and snippet apps for examples
  * @param[in] interface      Which network interface the HTTP server should listen on.
+ * @param[in] interface      Thread stack size
+ *
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_interface_t interface, uint32_t url_processor_stack_size );
+wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_interface_t interface, uint32_t http_thread_stack_size );
 
 /**
  *  Stop a HTTP server daemon (web server)
@@ -346,7 +347,7 @@ wiced_result_t wiced_http_server_stop( wiced_http_server_t* server );
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_https_server_start( wiced_https_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, const char* server_cert, const char* server_key, wiced_interface_t interface, uint32_t url_processor_stack_size );
+wiced_result_t wiced_https_server_start( wiced_https_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_tls_identity_t* identity, wiced_interface_t interface, uint32_t url_processor_stack_size );
 
 /**
  *  Stop a HTTPS server daemon (web server)
@@ -379,12 +380,11 @@ wiced_result_t wiced_http_server_deregister_callbacks( wiced_http_server_t* serv
 /**
  * Queue a disconnect request to the HTTP server
  *
- * @param[in] server               : HTTP server
- * @param[in] socket_to_disconnect : TCP socket to disconnect
+ * @param[in] stream : stream to disconnect
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_http_server_queue_disconnect_request( wiced_http_server_t* server, wiced_tcp_socket_t* socket_to_disconnect );
+wiced_result_t wiced_http_response_stream_disconnect( wiced_http_response_stream_t* stream );
 
 /**
  * Initialise HTTP server stream
@@ -465,6 +465,38 @@ wiced_result_t wiced_http_response_stream_write_resource( wiced_http_response_st
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_http_response_stream_flush( wiced_http_response_stream_t* stream );
+
+/**
+ * Search for a parameter (key-value pair) in a URL query string and return a pointer to the value
+ *
+ * @param[in]  url_query       : URL query string
+ * @param[in]  parameter_key   : Key or name of the parameter to find in the URL query string
+ * @param[out] parameter_value : If the parameter with the given key is found, this pointer will point to the parameter value upon return; NULL otherwise
+ * @param[out] value_length    : This variable will contain the length of the parameter value upon return; 0 otherwise
+ *
+ * @return @ref wiced_result_t WICED_SUCCESS if found; WICED_NOT_FOUND if not found
+ */
+wiced_result_t wiced_http_get_query_parameter_value( const char* url_query, const char* parameter_key, char** parameter_value, uint32_t* value_length );
+
+/**
+ * Return the number of parameters found in the URL query string
+ *
+ * @param[in] url_query : URL query string
+ *
+ * @return parameter count
+ */
+uint32_t wiced_http_get_query_parameter_count( const char* url_query );
+
+/**
+ * Match a URL query string contains a parameter with the given parameter key and value
+ *
+ * @param[in]  url_query       : URL query string
+ * @param[in]  parameter_key   : NUL-terminated key or name of the parameter to find in the URL query string
+ * @param[out] parameter_value : NUL-terminated value of the parameter to find in the URL query string
+ *
+ * @return @ref wiced_result_t WICED_SUCCESS if matched; WICED_NOT_FOUND if matching parameter is not found
+ */
+wiced_result_t wiced_http_match_query_parameter( const char* url_query, const char* parameter_key, const char* parameter_value );
 
 #ifdef __cplusplus
 } /* extern "C" */

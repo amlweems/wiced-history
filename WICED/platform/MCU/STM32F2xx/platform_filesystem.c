@@ -71,7 +71,7 @@ static  uint8_t       fs_init_done = 0;
 /* To handle WWD applications that don't go through wiced_init() (yet need to use the file system):
  * File system initialization is called twice
  * wiced_init()->wiced_core_init()->wiced_platform_init()->platform_filesystem_init()
- * wwd_management_init()->wwd_management_wifi_on()->host_platform_init()->platform_filesystem_init()
+ * wwd_management_wifi_on()->host_platform_init()->platform_filesystem_init()
  */
 platform_result_t platform_filesystem_init( void )
 {

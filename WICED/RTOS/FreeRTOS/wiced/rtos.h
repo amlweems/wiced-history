@@ -89,20 +89,20 @@ extern "C" {
 typedef uint32_t  wiced_event_flags_t;
 typedef host_semaphore_type_t wiced_semaphore_t;
 
-typedef xSemaphoreHandle wiced_mutex_t;
+typedef SemaphoreHandle_t wiced_mutex_t;
 
 typedef void (*timer_handler_t)( void* arg );
 
 typedef struct
 {
-    xTimerHandle    handle;
+    TimerHandle_t    handle;
     timer_handler_t function;
     void*           arg;
 }wiced_timer_t;
 
-typedef xTaskHandle wiced_thread_t;
+typedef TaskHandle_t wiced_thread_t;
 
-typedef xQueueHandle wiced_queue_t;
+typedef QueueHandle_t wiced_queue_t;
 
 typedef struct
 {

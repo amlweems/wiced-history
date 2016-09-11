@@ -60,41 +60,49 @@ static const app_header_t wiced_apps_lut[ 8 ] =
     [DCT_FR_APP_INDEX] =
         {
             .count   = FR_APP_ENTRY_COUNT,
+            .secure  = FR_APP_IS_SECURE,
             .sectors = { {FR_APP_SECTOR_START,FR_APP_SECTOR_COUNT} }
         },
     [DCT_DCT_IMAGE_INDEX] =
         {
             .count   = DCT_IMAGE_ENTRY_COUNT,
+            .secure  = DCT_IMAGE_IS_SECURE,
             .sectors = { {DCT_IMAGE_SECTOR_START,DCT_IMAGE_SECTOR_COUNT} }
         },
     [DCT_OTA_APP_INDEX] =
         {
             .count   = OTA_APP_ENTRY_COUNT,
+            .secure  = OTA_APP_IS_SECURE,
             .sectors = { {OTA_APP_SECTOR_START,OTA_APP_SECTOR_COUNT} }
         },
     [DCT_FILESYSTEM_IMAGE_INDEX] =
         {
             .count   = FILESYSTEM_IMAGE_ENTRY_COUNT,
+            .secure  = FILESYSTEM_IMAGE_IS_SECURE,
             .sectors = { {FILESYSTEM_IMAGE_SECTOR_START,FILESYSTEM_IMAGE_SECTOR_COUNT} }
         },
     [DCT_WIFI_FIRMWARE_INDEX] =
         {
             .count   = WIFI_FIRMWARE_ENTRY_COUNT,
+            .secure  = WIFI_FIRMWARE_IS_SECURE,
             .sectors = { {WIFI_FIRMWARE_SECTOR_START,WIFI_FIRMWARE_SECTOR_COUNT} }
         },
     [DCT_APP0_INDEX] =
         {
             .count   = APP0_ENTRY_COUNT,
+            .secure  = APP0_IS_SECURE,
             .sectors = { {APP0_SECTOR_START,APP0_SECTOR_COUNT} }
         },
     [DCT_APP1_INDEX] =
         {
             .count   = APP1_ENTRY_COUNT,
+            .secure  = APP1_IS_SECURE,
             .sectors = { {APP1_SECTOR_START,APP1_SECTOR_COUNT} }
         },
     [DCT_APP2_INDEX] =
         {
             .count   = APP2_ENTRY_COUNT,
+            .secure  = APP2_IS_SECURE,
             .sectors = { {APP2_SECTOR_START,APP2_SECTOR_COUNT} }
         },
 

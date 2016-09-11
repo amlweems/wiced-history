@@ -18,10 +18,11 @@
 #include "RTOS/wwd_rtos_interface.h"
 #include "wiced_tcpip.h"
 #include "wwd_assert.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "dns.h"
 #include "linked_list.h"
 #ifndef WICED_DISABLE_TLS
+#include "wiced_tcpip_tls_api.h"
 #include "wiced_tls.h"
 #include "tls_host_api.h"
 #endif /* ifndef WICED_DISABLE_TLS */
@@ -289,6 +290,48 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
     return netx_returns[result];
 }
 
+wiced_result_t wiced_tcp_get_socket_state( wiced_tcp_socket_t* socket, wiced_socket_state_t* socket_state )
+{
+
+    if( socket == NULL )
+    {
+        *socket_state = WICED_SOCKET_ERROR;
+        return WICED_BADARG;
+    }
+
+    switch( socket->socket.nx_tcp_socket_state )
+    {
+        case NX_TCP_CLOSED:
+            *socket_state = WICED_SOCKET_CLOSED;
+            break;
+        case NX_TCP_CLOSING:
+        case NX_TCP_CLOSE_WAIT:
+        case NX_TCP_FIN_WAIT_1:
+        case NX_TCP_FIN_WAIT_2:
+        case NX_TCP_TIMED_WAIT:
+        case NX_TCP_LAST_ACK  :
+            *socket_state = WICED_SOCKET_CLOSING;
+            break;
+        case NX_TCP_SYN_SENT:
+        case NX_TCP_SYN_RECEIVED:
+            *socket_state = WICED_SOCKET_CONNECTING;
+            break;
+        case NX_TCP_ESTABLISHED:
+            *socket_state = WICED_SOCKET_CONNECTED;
+            break;
+        case NX_TCP_LISTEN_STATE:
+            *socket_state = WICED_SOCKET_LISTEN;
+            break;
+        default:
+            *socket_state = WICED_SOCKET_ERROR;
+            break;
+
+    }
+
+    return WICED_SUCCESS;
+
+}
+
 void wiced_tcp_set_type_of_service( wiced_tcp_socket_t* socket, uint32_t tos )
 {
     socket->socket.nx_tcp_socket_type_of_service = tos << 16;
@@ -377,7 +420,6 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
         result = nx_tcp_client_socket_bind( &socket->socket, NX_ANY_PORT, NX_TIMEOUT(WICED_TCP_BIND_TIMEOUT) );
         if ( result != NX_SUCCESS )
         {
-            wiced_assert("Error binding to port", 0 != 0 );
             return netx_returns[result];
         }
     }
@@ -385,7 +427,6 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
     result = nx_tcp_client_socket_connect( &socket->socket, address->ip.v4, port, NX_TIMEOUT(timeout_ms) );
     if ( result != NX_SUCCESS )
     {
-        wiced_assert("Error connecting to TCP destination", 0 != 0 );
         return netx_returns[result];
     }
 
@@ -786,7 +827,6 @@ wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t por
     result = nx_udp_socket_bind( &socket->socket, ( port == WICED_ANY_PORT )? NX_ANY_PORT : (UINT) port, NX_TIMEOUT( WICED_UDP_BIND_TIMEOUT ) );
     if ( result != NX_SUCCESS )
     {
-        wiced_assert( "Socket bind error", 0 != 0 );
         nx_udp_socket_delete( &socket->socket );
         return netx_returns[ result ];
     }
@@ -824,7 +864,6 @@ wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_addres
     }
 
     result = nx_udp_socket_send(&socket->socket, packet, address->ip.v4, port);
-    wiced_assert( "UDP send error", result == NX_SUCCESS );
     return netx_returns[result];
 }
 
@@ -848,7 +887,6 @@ wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** p
     WICED_LINK_CHECK_UDP_SOCKET( socket );
 
     result = nx_udp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
-    wiced_assert("UDP receive error", result == NX_SUCCESS || result == NX_NO_PACKET || result == NX_WAIT_ABORTED );
 
     if ( result == NX_SUCCESS )
     {
@@ -990,23 +1028,9 @@ wiced_result_t wiced_tcp_server_peer( wiced_tcp_socket_t* socket, wiced_ip_addre
     return netx_returns[result];
 }
 
-wiced_result_t wiced_tcp_server_add_tls( wiced_tcp_server_t* tcp_server, wiced_tls_advanced_context_t* context, const char* server_cert, const char* server_key )
+wiced_result_t wiced_tcp_server_enable_tls( wiced_tcp_server_t* tcp_server, wiced_tls_identity_t* tls_identity )
 {
-    linked_list_node_t* socket_node;
-    wiced_tcp_socket_t* current_socket = NULL;
-
-    wiced_tls_init_advanced_context( context, server_cert, server_key );
-
-    linked_list_get_front_node( &tcp_server->socket_list, &socket_node );
-
-    while( socket_node != NULL )
-    {
-        current_socket = (wiced_tcp_socket_t*)socket_node->data;
-
-        wiced_tcp_enable_tls( current_socket, context );
-
-        socket_node = socket_node->next;
-    }
+    tcp_server->tls_identity = tls_identity;
 
     return WICED_TCPIP_SUCCESS;
 }

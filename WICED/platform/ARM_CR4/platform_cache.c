@@ -65,7 +65,7 @@ static void platform_dcache_range_operation( platform_dcache_range_operation_t o
     uint32_t addr_start = PLATFORM_L1_CACHE_ROUND_DOWN((uint32_t)p);
     const uint32_t addr_end = PLATFORM_L1_CACHE_ROUND_UP((uint32_t)p + length);
 
-    __asm__ __volatile__ ("" : : : "memory");
+    __asm__ __volatile__ ("DSB");
 
     while (addr_start < addr_end)
     {

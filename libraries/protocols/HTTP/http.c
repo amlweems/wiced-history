@@ -13,6 +13,7 @@
  */
 #include "http.h"
 #include "wiced_tcpip.h"
+#include "wiced_tls.h"
 #include "wwd_debug.h"
 #include "wiced_utilities.h"
 
@@ -102,11 +103,11 @@ wiced_result_t wiced_https_get( wiced_ip_address_t* address, const char* query, 
     wiced_tcp_socket_t         socket;
     wiced_packet_t*            reply_packet;
     wiced_result_t             rx_result;
-    wiced_tls_simple_context_t context;
-    wiced_result_t             result     = WICED_ERROR;
+    wiced_tls_context_t        context;
+    wiced_result_t             result;
     char*                      buffer_ptr = (char*) buffer;
 
-    wiced_tls_init_simple_context( &context, peer_cn );
+    wiced_tls_init_context( &context, NULL, peer_cn );
 
     wiced_tcp_create_socket( &socket, WICED_STA_INTERFACE );
     wiced_tcp_enable_tls( &socket, &context );

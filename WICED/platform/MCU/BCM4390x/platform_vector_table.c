@@ -59,6 +59,12 @@ typedef struct
 
 interrupt_vector_t interrupt_vector_table[] =
 {
+#ifdef BOOTLOADER
+    {
+        .irqn  = Timer_ExtIRQn,
+        .isr   = Timer_ISR,
+    },
+#else
     {
         .irqn  = SW0_ExtIRQn,
         .isr   = Sw0_ISR,
@@ -70,6 +76,10 @@ interrupt_vector_t interrupt_vector_table[] =
     {
         .irqn  = Timer_ExtIRQn,
         .isr   = Timer_ISR,
+    },
+    {
+        .irqn  = USB_REMAPPED_ExtIRQn,
+        .isr   = USB_HOST_ISR,
     },
     {
         .irqn  = GMAC_ExtIRQn,
@@ -97,6 +107,7 @@ interrupt_vector_t interrupt_vector_table[] =
         .irqn  = ChipCommon_ExtIRQn,
         .isr   = ChipCommon_ISR,
     },
+#endif
 };
 
 /******************************************************

@@ -20,6 +20,7 @@
 #include "hndpmu.h"
 #include "bcmdevs.h"
 #include "wiced_osl.h"
+#include "wiced_deep_sleep.h"
 
 #include "platform_map.h"
 #include "platform_cache.h"
@@ -36,7 +37,7 @@
 
 #define CLZ(x)                    __builtin_clzl(x)
 
-static uint32_t ilpcycles_per_sec = ILP_CLOCK;
+static uint32_t WICED_DEEP_SLEEP_SAVED_VAR(ilpcycles_per_sec) = ILP_CLOCK;
 
 void
 osl_udelay(unsigned usec)
@@ -165,23 +166,6 @@ osl_alp_clock(void)
 }
 
 uint32
-osl_ht_clock(void)
-{
-    uint32 ht_clock_value = 0;
-
-    /* Attach private SI handle */
-    si_t* si = si_kattach(NULL);
-
-    if (si != NULL)
-    {
-        /* Calculate backplane clock */
-        ht_clock_value = si_pmu_si_clock(si, NULL);
-    }
-
-    return ht_clock_value;
-}
-
-uint32
 osl_ilp_clock(void)
 {
     return ilpcycles_per_sec;
@@ -247,24 +231,6 @@ osl_ilp_clock_measure(uint32 cpu_freq)
     ticks += ticks_high << (32 - pmuticks_per_ms_scale);
 
     ilpcycles_per_sec = ticks;
-}
-
-uint32
-osl_backplane_clock(uint32 core_base)
-{
-    if (PLATFORM_CLOCKSTATUS_REG(core_base)->bits.bp_on_ht)
-    {
-        return osl_ht_clock();
-    }
-    else if (PLATFORM_CLOCKSTATUS_REG(core_base)->bits.bp_on_alp)
-    {
-        return osl_alp_clock();
-    }
-    else
-    {
-        wiced_assert("unknown clock", 0);
-        return 0;
-    }
 }
 
 void

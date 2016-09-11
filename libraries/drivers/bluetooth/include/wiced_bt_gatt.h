@@ -877,10 +877,10 @@ wiced_bt_gatt_status_t wiced_bt_gatt_register (wiced_bt_gatt_cback_t *p_gatt_cba
  *          <b> FALSE </b>           : If connection start failure
  *
  */
-wiced_bool_t wiced_bt_gatt_le_connect (wiced_bt_device_address_t bd_addr,
-                                    wiced_bt_ble_address_type_t bd_addr_type,
-                                    wiced_bt_ble_conn_mode_t conn_mode,
-                                    wiced_bool_t is_direct);
+wiced_bt_gatt_status_t wiced_bt_gatt_le_connect ( wiced_bt_device_address_t bd_addr,
+                                                  wiced_bt_ble_address_type_t bd_addr_type,
+                                                  wiced_bt_ble_conn_mode_t conn_mode,
+                                                  wiced_bool_t is_direct);
 
 /**
  * Function       wiced_bt_gatt_bredr_connect
@@ -938,6 +938,35 @@ wiced_bt_gatt_status_t wiced_bt_gatt_disconnect (uint16_t conn_id);
  */
 wiced_bool_t wiced_bt_gatt_listen (wiced_bool_t start, wiced_bt_device_address_t bd_addr);
 
+/**
+ * Function     wiced_bt_send_vsc
+ *
+ *              Interface to send Vendor specific HCI commands to controller
+ *
+ *  @param[in]   Opcode        : Vendor specif command opcode , the opcode is OR'd with HCI_GRP_VENDOR_SPECIFIC
+ *  @param[in]   param len     : length of the paramater to be sentDevice to add/remove from whitelist
+ *  @param[in]   p_param_buf   : paramater buffer
+    @param[in]   p_cb              : pointer to callback function
+ *  @return <b> BTM_SUCCESS  </b>            : Success
+ *          <b> BTM_CMD_STARTED </b>           : Waiting for command complete event
+ *
+ */
+UINT8 wiced_bt_send_vsc( UINT16 opcode,      UINT8 param_len,
+                             UINT8 *p_param_buf, tBTM_MESH_VSC_CMPL *p_cb);
+/**
+ * Function     wiced_bt_register_vsc_event
+ *
+ *              Interface to register Vendor Specific Events
+ *
+ *  @param[in]   is_register      : TRUE, then the function will be registered , if FALSE the
+ function is deregistered
+ *  @param[in]   p_cb             : callback function to recieve the vendor specific events
+ *
+ *  @return <b> BTM_SUCCESS </b>  : Success
+ *          <b> BTM_BUSY </b>     : if callback already registered
+ *
+ */
+UINT8 wiced_bt_register_vsc_event(tBTM_MESH_VS_EVT_CB *p_cb, BOOLEAN is_register);
 /**@} common_api_functions*/
 
 #ifdef __cplusplus

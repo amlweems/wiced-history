@@ -301,9 +301,7 @@ err_t ethernetif_init( /*@partial@*/ struct netif *netif )
 #endif /* LWIP_NETIF_HOSTNAME */
 
     /* Verify the netif is a valid interface */
-    if ( ( (wwd_interface_t) (int) netif->state != WWD_STA_INTERFACE ) &&
-         ( (wwd_interface_t) (int) netif->state != WWD_AP_INTERFACE  ) &&
-         ( (wwd_interface_t) (int) netif->state != WWD_P2P_INTERFACE ) )
+    if ( (wwd_interface_t) (int) netif->state > WWD_ETHERNET_INTERFACE )
     {
         return ERR_ARG;
     }

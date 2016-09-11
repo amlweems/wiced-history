@@ -15,6 +15,11 @@ reset_handler = _low_start;
 /* Force system to reset via ROM bootloader & serial flash.  This works around A0 issue that FLOPS is not reset by SRSTn */
 irq_instruction_vector_low_reset = 0xB03EF000;
 
+/* DMA descriptors table must be within single 64KB page, and last descriptor must have EOT flag. Let's put all out descriptors in single page and avoid last descriptor. */
+DMA_DESCRIPTORS_SIZE = (64 * 1024 - 16);
+
+BOOTLOADER_SRAM = 0x697000;
+
 ENTRY( _low_start );
 
 MEMORY
@@ -27,14 +32,6 @@ MEMORY
 
 SECTIONS
 {
-    /* Data transfer area for serial flash writing app  - needs to be at start of memory */
-    /* Only exists if building serial flash writer app */
-    .sflash_trnsf :
-    {
-        KEEP(*(*.data_config))
-        KEEP(*(*.data_transfer))
-    }>SRAM AT> SRAM
-
     .always_on_ram :
     {
         . = ALIGN(4);
@@ -43,12 +40,31 @@ SECTIONS
         *(.deep_sleep_saved_vars.*)
     } > AONRAM
 
+    /* Data transfer area for serial flash writing app  - needs to be at start of memory */
+    /* Only exists if building serial flash writer app */
+    .sflash_trnsf :
+    {
+        KEEP(*(*.data_config))
+        KEEP(*(*.data_transfer))
+    } > SRAM
+
+    .dma (NOLOAD) : /* Zero initialised memory used DMA descriptors */
+    {
+        . = ALIGN(32);
+
+        link_dma_location = .;
+        *(.dma.*)
+        link_dma_end = ALIGN(4);
+
+        ASSERT((. <= ORIGIN(SRAM) + DMA_DESCRIPTORS_SIZE), "Need to define second DMA page");
+    } > SRAM
+
     .text :
     {
         . = ALIGN(32);
 
         link_code_location = .;
-        KEEP(*(.text.startup)) /* has to be first */
+        KEEP(*(.text.startup))
         *(.text .text.* .gnu.linkonce.t.*)
         *(.deep_sleep_event_handlers.*)
         KEEP(*(.text.vPortSVCHandler    .text.xPortPendSVHandler .text.xPortSysTickHandler ))
@@ -141,6 +157,7 @@ SECTIONS
         *(.data*)
     } > SRAM
 
+    ASSERT((. <= BOOTLOADER_SRAM), "Application overflowing to Bootloader SRAM")
     .bss : /* Zero initialised memory used for zero initialised variables */
     {
         . = ALIGN(4);

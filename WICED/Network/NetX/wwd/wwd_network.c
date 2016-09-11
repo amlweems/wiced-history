@@ -19,7 +19,7 @@
 #include "wwd_network.h"
 #include "network/wwd_network_constants.h"
 #include "wwd_assert.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 #include "platform_ethernet.h"
 #include "internal/wwd_internal.h"
 
@@ -398,10 +398,7 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
     }
 
     /* Check if interface is valid, if not, drop frame */
-    if ( ( interface != WWD_STA_INTERFACE ) &&
-         ( interface != WWD_AP_INTERFACE ) &&
-         ( interface != WWD_P2P_INTERFACE ) &&
-         ( interface != WWD_ETHERNET_INTERFACE ) )
+    if ( interface >  WWD_ETHERNET_INTERFACE )
     {
         wiced_assert( "invalid interface", 0 != 0 );
         nx_packet_release(packet_ptr);
@@ -491,7 +488,7 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
 UINT nx_rand16( void )
 {
     uint16_t output;
-    wwd_wifi_get_random( &output, 2 );
+    wiced_crypto_get_random( &output, 2 );
     return output;
 }
 

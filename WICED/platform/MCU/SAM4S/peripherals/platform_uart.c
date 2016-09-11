@@ -258,18 +258,13 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t expected_data_size, uint32_t timeout_ms )
+platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms )
 {
-    UNUSED_PARAMETER(driver);
-    UNUSED_PARAMETER(data_in);
-    UNUSED_PARAMETER(expected_data_size);
-    UNUSED_PARAMETER(timeout_ms);
-
     if ( driver->rx_ring_buffer != NULL )
     {
-        while ( expected_data_size != 0 )
+        while ( *expected_data_size != 0 )
         {
-            uint32_t transfer_size = MIN(driver->rx_ring_buffer->size / 2, expected_data_size);
+            uint32_t transfer_size = MIN(driver->rx_ring_buffer->size / 2, *expected_data_size);
 
             /* Check if ring buffer already contains the required amount of data. */
             if ( transfer_size > ring_buffer_used_space( driver->rx_ring_buffer ) )
@@ -287,7 +282,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
                 driver->rx_transfer_size = 0;
             }
 
-            expected_data_size -= transfer_size;
+            *expected_data_size -= transfer_size;
 
             // Grab data from the buffer
             do
@@ -305,7 +300,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
             while ( transfer_size != 0 );
         }
 
-        if ( expected_data_size != 0 )
+        if ( *expected_data_size != 0 )
         {
             return PLATFORM_ERROR;
         }

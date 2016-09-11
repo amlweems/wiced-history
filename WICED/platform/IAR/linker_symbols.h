@@ -17,7 +17,7 @@ extern "C"
 /******************************************************
  *                     Macros
  ******************************************************/
-#define ENTRY_ADDRESS (wiced_program_start)
+#define ENTRY_ADDRESS (__iar_program_start)
 
 /******************************************************
  *                    Constants

@@ -11,7 +11,9 @@
 /** @file
  *  Platform Deep Sleep Functions
  */
+
 #include "wiced_deep_sleep.h"
+#include "platform_isr.h"
 
 /******************************************************
  *                      Macros
@@ -56,4 +58,9 @@ void wiced_deep_sleep_call_event_handlers( wiced_deep_sleep_event_type_t event )
     {
         (*p->handler)( event );
     }
+}
+
+uint32_t wiced_deep_sleep_ticks_since_enter( void )
+{
+    return platform_tick_get_time( PLATFORM_TICK_GET_TICKS_SINCE_LAST_DEEP_SLEEP );
 }

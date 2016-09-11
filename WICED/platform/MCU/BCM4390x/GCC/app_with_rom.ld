@@ -15,34 +15,68 @@ reset_handler = _low_start;
 /* Force system to reset via ROM bootloader & serial flash.  This works around A0 issue that FLOPS is not reset by SRSTn */
 irq_instruction_vector_low_reset = 0xB03EF000;
 
-ENTRY( _low_start );
+/* DMA descriptors table must be within single 64KB page, and last descriptor must have EOT flag. Let's put all out descriptors in single page and avoid last descriptor. */
+DMA_DESCRIPTORS_SIZE = (64 * 1024 - 16);
 
-INCLUDE WICED/platform/MCU/BCM4390x/GCC/rom_symbols.ld
+BOOTLOADER_SRAM = 0x697000;
+
+ENTRY( _low_start );
 
 MEMORY
 {
     ROM              (rx)   : ORIGIN = 0x00400000, LENGTH = 640K
     FLOPS            (rwx)  : ORIGIN = 0x00000000, LENGTH = 32
-    SRAM             (rwx)  : ORIGIN = 0x004A0000, LENGTH = 2036K /* Till the start of ROM_GLOBALS_SRAM memory */
-    ROM_GLOBALS_SRAM (rw)   : ORIGIN = 0x0069D000, LENGTH = 8K
-
-    INCLUDE WICED/platform/MCU/BCM4390x/GCC/rom_jump1.ld
+    SRAM             (rwx)  : ORIGIN = 0x004A0000, LENGTH = 2008K /* Till the start of ROM_GLOBALS_SRAM memory */
+    ROM_GLOBALS_SRAM (rw)   : ORIGIN = 0x00696000, LENGTH = 36K
+    ROM_JUMPS        (rwx)  : ORIGIN = 0x0069F000, LENGTH = 4K
+    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 8K
 }
+
+INCLUDE GCC_rom.ld
 
 SECTIONS
 {
-    INCLUDE WICED/platform/MCU/BCM4390x/GCC/rom_jump2.ld
+    INCLUDE GCC_rom_sections.ld
 
-    .text :
+    .always_on_ram :
     {
         . = ALIGN(4);
 
+        KEEP(*(.rodata.tinybl*))
+        *(.deep_sleep_saved_vars.*)
+    } > AONRAM
+
+    /* Data transfer area for serial flash writing app  - needs to be at start of memory */
+    /* Only exists if building serial flash writer app */
+    .sflash_trnsf :
+    {
+        KEEP(*(*.data_config))
+        KEEP(*(*.data_transfer))
+    } > SRAM
+
+    .dma (NOLOAD) : /* Zero initialised memory used DMA descriptors */
+    {
+        . = ALIGN(32);
+
+        link_dma_location = .;
+        *(.dma.*)
+        link_dma_end = ALIGN(4);
+
+        ASSERT((. <= ORIGIN(SRAM) + DMA_DESCRIPTORS_SIZE), "Need to define second DMA page");
+    } > SRAM
+
+    .text :
+    {
+        . = ALIGN(32);
+
         link_code_location = .;
-        KEEP(*(.text.startup)) /* has to be first */
+        KEEP(*(.text.startup))
         *(.text .text.* .gnu.linkonce.t.*)
+        *(.deep_sleep_event_handlers.*)
         KEEP(*(.text.vPortSVCHandler    .text.xPortPendSVHandler .text.xPortSysTickHandler ))
         KEEP(*(.text.__tx_SVCallHandler .text.__tx_PendSVHandler .text.__tx_SysTickHandler ))
-        KEEP(*(.text.NoOS_systick_irq ))
+        KEEP(*(.text.platform_tick_isr ))
+        KEEP(*(.text.irq ))
         KEEP(*(.text.sdio_rtos_irq .text.sdio_irq ))
         KEEP(*(.text.uart_rtos_irq .text.uart_irq ))
         KEEP(*(.text.dma_rtos_irq  .text.dma_irq  ))
@@ -55,12 +89,21 @@ SECTIONS
         KEEP(*(.text.usart1_rx_dma_rtos_irq .text.usart1_rx_dma_irq ))
         KEEP(*(.text.usart2_rx_dma_rtos_irq .text.usart2_rx_dma_irq ))
         link_code_end = .;
+    } > SRAM
 
-        . = ALIGN(4);
+    .rodata :
+    {
+        . = ALIGN(32);
 
         link_const_variable_data_location = .;
         *(.rodata .rodata.* .gnu.linkonce.r.*)
         link_const_variable_data_end = .;
+
+        . = ALIGN(4);
+
+        link_deep_sleep_event_registrations_location = .;
+        KEEP(*(.deep_sleep_event_registrations.*))
+        link_deep_sleep_event_registrations_end = .;
 
         . = ALIGN(4);
 
@@ -81,16 +124,13 @@ SECTIONS
         KEEP (*(SORT(.dtors.*)))
         KEEP (*crtend.o(.dtors))
         link_destructors_end = .;
-
-        . = ALIGN(16);
-
-    } > SRAM_LOAD
+    } > SRAM
 
     .vectors_copyfrom :
     {
         link_interrupt_vectors_copyfrom = LOADADDR(.vectors_copyfrom);
         KEEP(*(.vectors_copyfrom))
-    } > FLOPS AT > SRAM_LOAD
+    } > FLOPS AT > SRAM
 
     /*
      * The .ARM.exidx and .ARM.extab sections are used for C++ exception handling.
@@ -105,7 +145,7 @@ SECTIONS
         __exidx_start = .;
         *(.ARM.exidx* .gnu.linkonce.armexidx.*)
         __exidx_end = .;
-    } > SRAM_LOAD
+    } > SRAM
 
     .ARM.extab :
     {
@@ -114,15 +154,16 @@ SECTIONS
         __extab_start = .;
         *(.ARM.extab*)
         __extab_end = .;
-    } > SRAM_LOAD
+    } > SRAM
 
     .data : /* Contains the non-zero initialised global variables */
     {
-        . = ALIGN(4);
+        . = ALIGN(32);
 
         *(.data*)
-    } > SRAM_LOAD
+    } > SRAM
 
+    ASSERT((. <= BOOTLOADER_SRAM), "Application overflowing to Bootloader SRAM")
     .bss : /* Zero initialised memory used for zero initialised variables */
     {
         . = ALIGN(4);
@@ -131,7 +172,7 @@ SECTIONS
         *(.bss*)
         *(COMMON)
         link_bss_end = ALIGN(4);
-    } > SRAM_LOAD
+    } > SRAM
 
     .stack_start :
     {
@@ -141,7 +182,7 @@ SECTIONS
         *(.stack)
         . = MAX(link_stack_location + START_STACK_SIZE , .);
         link_stack_end = ALIGN(8);
-    } > SRAM_LOAD
+    } > SRAM
 
     .stack_isr :
     {
@@ -150,7 +191,7 @@ SECTIONS
         link_stack_isr_location = .;
         . = . + link_stack_isr_location + SYS_STACK_SIZE + IRQ_STACK_SIZE + FIQ_STACK_SIZE + 3 * 8;
         link_stack_isr_end = ALIGN(8);
-    } > SRAM_LOAD
+    } > SRAM
 
     /DISCARD/ :
     {
@@ -172,7 +213,6 @@ SECTIONS
         *(.eh_frame)
         *(.glue*)
     }
-
 }
 
 /* Declare libc Heap to start at end of allocated RAM and end at top of RAM, aligned 8 byte */

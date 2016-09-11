@@ -76,6 +76,7 @@
  */
 
 #include "tls_host_api.h"
+#include "cipher_suites.h"
 #include "x509.h"
 #include "base64.h"
 #include "des.h"
@@ -87,48 +88,82 @@
 #include "sha2.h"
 #include "sha4.h"
 #include "bignum.h"
+#include "uECC.h"
 
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
+
+static int32_t x509_get_rsa_public_key( const unsigned char **p, const unsigned char *end, mpi * N, mpi * E );
+
+uint32_t x509_read_cert_length( const uint8_t* der_certificate_data )
+{
+    uint32_t length;
+    uint8_t bytes_used;
+
+    /* Use ASN.1 read length, but we need to skip the first "type" byte */
+    if ( asn1_read_length( der_certificate_data+1, &length, &bytes_used ) != 0 )
+    {
+        return 0;
+    }
+    return length + bytes_used + 1;
+}
+
 /*
  * ASN.1 DER decoding routines
  */
-static int32_t asn1_get_len(const unsigned char **p, const unsigned char *end, uint32_t *len)
+int32_t asn1_read_length( const uint8_t* p, uint32_t* length, uint8_t* bytes_used )
 {
-    if ((end - *p) < 1)
-        return (TROPICSSL_ERR_ASN1_OUT_OF_DATA);
+    if ( ( *p & 0x80 ) == 0 )
+    {
+        *length = *p;
+        *bytes_used = 1;
+    }
+    else
+    {
+        switch ( *p & 0x7F )
+        {
+            case 1:
+                *length = p[ 1 ];
+                *bytes_used = 2;
+                break;
 
-    if ((**p & 0x80) == 0)
-        *len = *(*p)++;
-    else {
-        switch (**p & 0x7F) {
-        case 1:
-            if ((end - *p) < 2)
-                return (TROPICSSL_ERR_ASN1_OUT_OF_DATA);
+            case 2:
+                *length = ( p[ 1 ] << 8 ) | p[ 2 ];
+                *bytes_used = 3;
+                break;
 
-            *len = (*p)[1];
-            (*p) += 2;
-            break;
-
-        case 2:
-            if ((end - *p) < 3)
-                return (TROPICSSL_ERR_ASN1_OUT_OF_DATA);
-
-            *len = ((*p)[1] << 8) | (*p)[2];
-            (*p) += 3;
-            break;
-
-        default:
-            return (TROPICSSL_ERR_ASN1_INVALID_LENGTH);
-            break;
+            default:
+                return ( TROPICSSL_ERR_ASN1_INVALID_LENGTH );
+                break;
         }
     }
+    return 0;
+}
 
-    if (*len > (int)(end - *p))
-        return (TROPICSSL_ERR_ASN1_OUT_OF_DATA);
+static int32_t asn1_get_len(const unsigned char **p, const unsigned char *end, uint32_t *len)
+{
+    uint8_t bytes_used;
+
+    if ( ( end - *p ) < 1 )
+    {
+        return ( TROPICSSL_ERR_ASN1_OUT_OF_DATA );
+    }
+
+    asn1_read_length( *p, len, &bytes_used );
+
+    if ( bytes_used > ( end - *p ) )
+    {
+        return ( TROPICSSL_ERR_ASN1_OUT_OF_DATA );
+    }
+    *p += bytes_used;
+
+    if ( *len > (int) ( end - *p ) )
+    {
+        return ( TROPICSSL_ERR_ASN1_OUT_OF_DATA );
+    }
 
     return (0);
 }
@@ -203,7 +238,7 @@ static int32_t asn1_get_mpi(const unsigned char **p, const unsigned char *end, m
 /*
  *    Version     ::=  INTEGER  {  v1(0), v2(1), v3(2)  }
  */
-static int32_t x509_get_version(const unsigned char **p, const unsigned char *end, int32_t *ver)
+static int32_t x509_get_version(const unsigned char **p, const unsigned char *end, int32_t* ver)
 {
     int32_t ret;
     uint32_t len;
@@ -280,18 +315,20 @@ static int32_t x509_get_alg(const unsigned char **p, const unsigned char *end, x
     alg->p = *p;
     *p += alg->len;
 
-    if (*p == end)
-        return (0);
+    /* We won't deal with additional parameters here but we should verify the tags are valid */
+    while ( *p < end )
+    {
+        /* Skip the type */
+        *p += 1;
+        ret = asn1_get_len(p, end, &len);
+        if ( ret != 0 )
+            return ( TROPICSSL_ERR_X509_CERT_INVALID_ALG | ret );
 
-    /*
-     * assume the algorithm parameters must be NULL
-     */
-    if ((ret = asn1_get_tag(p, end, &len, ASN1_NULL)) != 0)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_ALG | ret);
+        *p += len;
+    }
 
-    if (*p != end)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_ALG |
-            TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
+    if ( *p != end )
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_ALG | TROPICSSL_ERR_ASN1_LENGTH_MISMATCH );
 
     return (0);
 }
@@ -515,59 +552,129 @@ static int32_t x509_get_dates(const unsigned char **p,
  *         algorithm              AlgorithmIdentifier,
  *         subjectPublicKey      BIT STRING }
  */
-static int32_t x509_get_pubkey( const unsigned char **p,
-               const unsigned char *end,
-               x509_buf * pk_alg_oid, mpi * N, mpi * E)
+static int32_t x509_get_public_key( x509_cert* crt, const unsigned char **p, const unsigned char *end )
 {
     int32_t ret;
     uint32_t len;
     const unsigned char *end2;
 
-    if ((ret = x509_get_alg(p, end, pk_alg_oid)) != 0)
-        return (ret);
+    ret = x509_get_alg( p, end, &crt->pk_oid );
+    if ( ret != 0 )
+    {
+        return ( ret );
+    }
 
-    /*
-     * only RSA public keys handled at this time
-     */
-    if (pk_alg_oid->len != 9 ||
-        memcmp(pk_alg_oid->p, OID_PKCS1_RSA, 9) != 0)
-        return (TROPICSSL_ERR_X509_CERT_UNKNOWN_PK_ALG);
+    ret = asn1_get_tag( p, end, &len, ASN1_BIT_STRING );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret );
+    }
 
-    if ((ret = asn1_get_tag(p, end, &len, ASN1_BIT_STRING)) != 0)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret);
-
-    if ((end - *p) < 1)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY |
-            TROPICSSL_ERR_ASN1_OUT_OF_DATA);
+    if ( ( end - *p ) < 1 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | TROPICSSL_ERR_ASN1_OUT_OF_DATA );
+    }
 
     end2 = *p + len;
 
-    if (*(*p)++ != 0)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY);
+    if ( *( *p )++ != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY );
+    }
+
+    /* Check for PKCS1 public keys */
+    if ( crt->pk_oid.len == 9 && memcmp( crt->pk_oid.p, OID_PKCS1, 8 ) == 0 )
+    {
+        rsa_context* rsa_key = tls_host_malloc( "pubkey", sizeof(rsa_context) );
+        if ( rsa_key == NULL )
+        {
+            return TLS_ERROR_OUT_OF_MEMORY;
+        }
+        crt->public_key = (wiced_tls_key_t*) rsa_key;
+        memset( crt->public_key, 0, sizeof(rsa_context) );
+        crt->public_key->type = TLS_RSA_KEY;
+
+        ret = x509_get_rsa_public_key( p, end2, &rsa_key->N, &rsa_key->E );
+        if ( ret != 0 )
+        {
+            return ( ret );
+        }
+
+        ret = rsa_check_pubkey( rsa_key );
+        if ( ret != 0 )
+        {
+            return ( ret );
+        }
+
+        crt->public_key->length = mpi_size( &rsa_key->N );
+    }
+    /* Check for X9.62 public keys */
+    else if ( crt->pk_oid.len == 7 && memcmp( crt->pk_oid.p, OID_x962_KEY_TYPES, 6 ) == 0 )
+    {
+        uint8_t compression_type = *(*p)++;
+        if ( compression_type != 0x04 && compression_type != 0x02 )
+        {
+            return TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY;
+        }
+
+        wiced_tls_ecc_key_t* ecc_key = tls_host_malloc("x509", sizeof(wiced_tls_ecc_key_t));
+        if ( ecc_key == NULL )
+        {
+            return TLS_ERROR_OUT_OF_MEMORY;
+        }
+        memset( ecc_key, 0xFF, sizeof( *ecc_key ) );
+        ecc_key->type   = TLS_ECC_KEY;
+        ecc_key->length = len - 2;
+        memcpy( ecc_key->key, *p, ecc_key->length );
+        crt->public_key = (wiced_tls_key_t*) ecc_key;
+        *p += ecc_key->length;
+    }
+
+    if ( *p != end )
+    {
+        return TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY;
+    }
+
+    return 0;
+}
+
+static int32_t x509_get_rsa_public_key( const unsigned char **p, const unsigned char *end, mpi * N, mpi * E )
+{
+    int32_t ret;
+    uint32_t len;
 
     /*
-     *      RSAPublicKey ::= SEQUENCE {
-     *              modulus                   INTEGER,      -- n
-     *              publicExponent    INTEGER       -- e
-     *      }
+     *  RSAPublicKey ::= SEQUENCE {
+     *      modulus           INTEGER,  -- n
+     *      publicExponent    INTEGER   -- e
+     *  }
      */
-    if ((ret = asn1_get_tag(p, end2, &len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret);
+    ret = asn1_get_tag( p, end, &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret );
+    }
 
-    if (*p + len != end2)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY |
-            TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
+    if ( *p + len != end )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | TROPICSSL_ERR_ASN1_LENGTH_MISMATCH );
+    }
 
-    if ((ret = asn1_get_mpi(p, end2, N)) != 0 ||
-        (ret = asn1_get_mpi(p, end2, E)) != 0)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret);
+    ret = asn1_get_mpi( p, end, N );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret );
+    }
+    ret = asn1_get_mpi( p, end, E );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | ret );
+    }
 
-    if (*p != end)
-        return (TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY |
-            TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
+    if ( *p != end )
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY | TROPICSSL_ERR_ASN1_LENGTH_MISMATCH );
 
-    return (0);
+    return ( 0 );
 }
 
 static int32_t x509_get_sig(const unsigned char **p, const unsigned char *end, x509_buf *sig)
@@ -738,88 +845,121 @@ static int32_t x509_get_ext(const unsigned char **p,
     return (0);
 }
 
-/*
- * Parse one or more certificates and add them to the chained list
- */
-static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint32_t buflen)
+int32_t x509_convert_pem_to_der( const unsigned char* pem_certificate, uint32_t pem_certificate_length, const uint8_t** der_certificate, uint32_t* total_der_bytes )
 {
-    int32_t ret;
-    int32_t len;
-    const unsigned char *s1, *s2;
-    unsigned char *p;
-    const unsigned char *end;
-    x509_cert *crt;
+    int32_t length;
+    int i;
+    const unsigned char *s1;
+    const unsigned char *s2;
+    uint32_t cert_count = 0;
+    uint32_t total_pem_bytes = 0;
+    const unsigned char* p = pem_certificate;
 
-    crt = chain;
+    struct
+    {
+        const unsigned char* pem_cert_start;
+        uint32_t             pem_cert_length;
+    } chained_cert_details[5];
 
-    while (crt->version != 0)
-        crt = crt->next;
-
-    /*
-     * check if the certificate is encoded in base64
-     */
-    s1 = (unsigned char *)strstr((char *)buf,
-                     "-----BEGIN CERTIFICATE-----");
-
-    if (s1 != NULL) {
-        s2 = (unsigned char *)strstr((char *)buf,
-                         "-----END CERTIFICATE-----");
-
-        if (s2 == NULL || s2 <= s1)
-            return (TROPICSSL_ERR_X509_CERT_INVALID_PEM);
-
-        s1 += 27;
-        if (*s1 == '\r')
-            s1++;
-        if (*s1 == '\n')
-            s1++;
-        else
-            return (TROPICSSL_ERR_X509_CERT_INVALID_PEM);
-
-        /*
-         * get the DER data length and decode the buffer
-         */
-        len = 3 * ( (((uint32_t) ( s2 - s1 )) + 3 ) / 4);
-
-
-        if( ( p = (unsigned char *) tls_host_malloc( "x509",  len ) ) == NULL )
-            return (1);
-
-        len = base64_decode( s1, (uint32_t) ( s2 - s1 ), p, len, BASE64_STANDARD );
-        if ( len < 0 )
+    do
+    {
+        /* Verify the certificate is encoded in base64 */
+        s1 = (unsigned char *) strstr( (char *) p, "-----BEGIN CERTIFICATE-----" );
+        if ( s1 == NULL )
         {
-            tls_host_free( p );
+            return TROPICSSL_ERR_X509_CERT_INVALID_PEM;
+        }
+
+        s2 = (unsigned char *) strstr( (char *) p, "-----END CERTIFICATE-----" );
+        if ( s2 == NULL || s2 <= s1 )
+        {
             return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
         }
 
-        /*
-         * update the buffer size and offset
-         */
+        s1 += 27;
+        if ( *s1 == '\r' )
+            s1++;
+        if ( *s1 == '\n' )
+            s1++;
+        else
+            return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
+
+        /* Get the PEM data length */
+        chained_cert_details[cert_count].pem_cert_length = s2 - s1;
+        chained_cert_details[cert_count].pem_cert_start  = s1;
+
+        total_pem_bytes += chained_cert_details[cert_count].pem_cert_length;
+
+        /* Update the buffer size and offset */
         s2 += 25;
-        if (*s2 == '\r')
-            s2++;
-        if (*s2 == '\n')
-            s2++;
-        else {
-            tls_host_free ( p );
-            return (TROPICSSL_ERR_X509_CERT_INVALID_PEM);
+
+        /* Check if it is the end of chain of certificates */
+        if ( ( s2 - pem_certificate ) >= pem_certificate_length )
+        {
+            ++cert_count;
+            break;
         }
 
-        buflen -= s2 - buf;
-        buf = s2;
-    } else {
-        /*
-         * nope, copy the raw DER data
-         */
-        p = (unsigned char *) tls_host_malloc( "x509",  len = buflen );
+        if ( *s2 == '\r' )
+        {
+            s2++;
+        }
+        if ( *s2 == '\n' )
+        {
+            s2++;
+        }
+        else
+        {
+            return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
+        }
 
-        if (p == NULL)
-            return (1);
+        ++cert_count;
 
-        memcpy(p, buf, buflen);
+        /* Move start of PEM certificate to the end of the current one */
+        p = s2;
+    } while ( ( s2 - pem_certificate ) < pem_certificate_length );
 
-        buflen = 0;
+    /* Malloc space to store all the PEM certificates in DER format */
+    *total_der_bytes = 3*total_pem_bytes/4;
+    unsigned char* temp = (unsigned char *) tls_host_malloc( "x509", 3*total_pem_bytes/4 );
+    if ( temp == NULL )
+    {
+        return ( 1 );
     }
+
+    *der_certificate = temp;
+
+    for ( i = 0; i < cert_count; ++i )
+    {
+        length = base64_decode( chained_cert_details[ i ].pem_cert_start, chained_cert_details[ i ].pem_cert_length, temp, *total_der_bytes - (temp - *der_certificate), BASE64_STANDARD );
+        if ( length < 0 )
+        {
+            tls_host_free( (void*)*der_certificate );
+            *der_certificate = NULL;
+            *total_der_bytes = 0;
+            return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
+        }
+        temp += length;
+    }
+
+    if ( ( temp - *der_certificate ) > *total_der_bytes )
+    {
+        /* Fatal error. We've overrun our DER buffer */
+    }
+
+    /* Update the total DER bytes with the actual after base64 processing */
+    *total_der_bytes =  temp - *der_certificate;
+
+    return 0;
+}
+
+/*
+ * Data MUST be in DER format
+ */
+int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uint32_t len )
+{
+    int32_t ret;
+    const unsigned char *end;
 
     crt->raw.p = p;
     crt->raw.len = len;
@@ -831,16 +971,15 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
      *              signatureAlgorithm       AlgorithmIdentifier,
      *              signatureValue           BIT STRING      }
      */
-    if( ( ret = asn1_get_tag((const unsigned char**) &p, end, (uint32_t*)&len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT);
+    ret = asn1_get_tag( (const unsigned char**) &p, end, (uint32_t*) &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT );
     }
 
-    if (len != (int)(end - p)) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT |
-            TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
+    if ( len != (int) ( end - p ) )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | TROPICSSL_ERR_ASN1_LENGTH_MISMATCH );
     }
 
     /*
@@ -848,10 +987,10 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
      */
     crt->tbs.p = p;
 
-    if( ( ret = asn1_get_tag((const unsigned char**) &p, end, (uint32_t*)&len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret);
+    ret = asn1_get_tag( (const unsigned char**) &p, end, (uint32_t*) &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
     }
 
     end = p + len;
@@ -865,68 +1004,93 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
      * signature                    AlgorithmIdentifier
      */
     ret = x509_get_version( (const unsigned char**) &p, end, &crt->version );
-    if (ret != 0 )
+    if ( ret != 0 )
     {
         crt->version = 1;
     }
-    if( (ret = x509_get_serial((const unsigned char**) &p, end, &crt->serial)) != 0 ||
-        (ret = x509_get_alg((const unsigned char**) &p, end, &crt->sig_oid1)) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_serial( (const unsigned char**) &p, end, &crt->serial );
+    if ( ret != 0 )
+    {
+        return ret;
+    }
+    ret = x509_get_alg( (const unsigned char**) &p, end, &crt->sig_oid1 );
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
     crt->version++;
 
-    if (crt->version > 3) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_UNKNOWN_VERSION);
-    }
-
-    if (crt->sig_oid1.len != 9 ||
-        memcmp(crt->sig_oid1.p, OID_PKCS1, 8) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG);
-    }
-
-    const unsigned char hash_algorithm = crt->sig_oid1.p[8];
-
-    /**
-     * Hash Algorithms for PKCS1 RSA Certificates
-     * 1 = No Hash
-     * 2 = MD2
-     * 3 = MD4
-     * 4 = MD5
-     * 5 = SHA-1
-     * 6 = rsaOAEPEncryptionSET
-     * 7 = id-RSAES-OAEP
-     * 10 = RSASSA-PSS
-     * 11 = SHA-256
-     * 12 = SHA-384
-     * 13 = SHA-512
-     */
-
-    if ( ( hash_algorithm < 2 ) ||
-         ( ( hash_algorithm > 5 ) && ( hash_algorithm < 11 ) ) ||
-         ( hash_algorithm > 13 ) )
+    if ( crt->version > 3 )
     {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG);
+        return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_VERSION );
     }
+
+    unsigned char hash_algorithm;
+    /* Check for PKCS1 signatures*/
+    if ( memcmp( crt->sig_oid1.p, OID_PKCS1, 8 ) == 0 )
+    {
+        if ( crt->sig_oid1.len != 9 )
+        {
+            return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
+        }
+        hash_algorithm = crt->sig_oid1.p[8];
+        /**
+         * Hash Algorithms for PKCS1 RSA Certificates
+         * 1 = No Hash
+         * 2 = MD2
+         * 3 = MD4
+         * 4 = MD5
+         * 5 = SHA-1
+         * 6 = rsaOAEPEncryptionSET
+         * 7 = id-RSAES-OAEP
+         * 10 = RSASSA-PSS
+         * 11 = SHA-256
+         * 12 = SHA-384
+         * 13 = SHA-512
+         */
+        if ( ( hash_algorithm < 2 ) || ( ( hash_algorithm > 5 ) && ( hash_algorithm < 11 ) ) || ( hash_algorithm > 13 ) )
+        {
+            return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
+        }
+    }
+    /* Check for X9.62 signatures */
+    else if ( memcmp( crt->sig_oid1.p, OID_x962_SIGNATURES, 6 ) == 0 )
+    {
+        if (crt->sig_oid1.len == 7)
+        {
+            hash_algorithm = crt->sig_oid1.p[6];
+            if ( hash_algorithm != 1 || hash_algorithm != 2 )
+            {
+                return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
+            }
+        }
+        else if ( crt->sig_oid1.len == 8 )
+        {
+            hash_algorithm = crt->sig_oid1.p[7];
+            if ( crt->sig_oid1.p[ 6 ] != 3 || hash_algorithm > 4 || hash_algorithm == 0 )
+            {
+                return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
+            }
+        }
+    }
+
 
     /*
-     * issuer                               Name
+     * issuer   Name
      */
     crt->issuer_raw.p = p;
 
-    if ((ret = asn1_get_tag((const unsigned char**) &p, end, (uint32_t*)&len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret);
+    ret = asn1_get_tag( (const unsigned char**) &p, end, (uint32_t*) &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
     }
 
-    if ((ret = x509_get_name((const unsigned char**) &p, p + len, &crt->issuer )) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_name( (const unsigned char**) &p, p + len, &crt->issuer );
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
     crt->issuer_raw.len = p - crt->issuer_raw.p;
@@ -937,53 +1101,43 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
      *              notAfter           Time }
      *
      */
-    if ((ret = x509_get_dates((const unsigned char**) &p, end, &crt->valid_from,
-                  &crt->valid_to)) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_dates( (const unsigned char**) &p, end, &crt->valid_from, &crt->valid_to );
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
     /*
-     * subject                              Name
+     * subject  Name
      */
     crt->subject_raw.p = p;
 
-    if ((ret = asn1_get_tag((const unsigned char**) &p, end, (uint32_t*)&len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret);
+    ret = asn1_get_tag( (const unsigned char**) &p, end, (uint32_t*) &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
     }
 
-    if ((ret = x509_get_name((const unsigned char**) &p, p + len, &crt->subject)) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_name( (const unsigned char**) &p, p + len, &crt->subject );
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
     crt->subject_raw.len = p - crt->subject_raw.p;
 
     /*
      * SubjectPublicKeyInfo  ::=  SEQUENCE
-     *              algorithm                        AlgorithmIdentifier,
+     *              algorithm                AlgorithmIdentifier,
      *              subjectPublicKey         BIT STRING      }
      */
-    if ((ret = asn1_get_tag((const unsigned char**) &p, end, (uint32_t*)&len,
-                ASN1_CONSTRUCTED | ASN1_SEQUENCE)) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret);
+    ret = asn1_get_tag( (const unsigned char**) &p, end, (uint32_t*) &len, ASN1_CONSTRUCTED | ASN1_SEQUENCE );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
     }
 
-    if ((ret = x509_get_pubkey((const unsigned char**) &p, p + len, &crt->pk_oid,
-                   &crt->rsa.N, &crt->rsa.E)) != 0) {
-        x509_free(crt);
-        return (ret);
-    }
-
-    if ((ret = rsa_check_pubkey(&crt->rsa)) != 0) {
-        x509_free(crt);
-        return (ret);
-    }
-
-    crt->rsa.len = mpi_size(&crt->rsa.N);
+    ret = x509_get_public_key(crt, &p, p + len );
 
     /*
      *      issuerUniqueID  [1]      IMPLICIT UniqueIdentifier OPTIONAL,
@@ -996,7 +1150,6 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
     if (crt->version == 2 || crt->version == 3) {
         ret = x509_get_uid((const unsigned char**) &p, end, &crt->issuer_id, 1);
         if (ret != 0) {
-            x509_free(crt);
             return (ret);
         }
     }
@@ -1004,7 +1157,6 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
     if (crt->version == 2 || crt->version == 3) {
         ret = x509_get_uid((const unsigned char**) &p, end, &crt->subject_id, 2);
         if (ret != 0) {
-            x509_free(crt);
             return (ret);
         }
     }
@@ -1013,13 +1165,11 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
         ret = x509_get_ext((const unsigned char**) &p, end, &crt->v3_ext,
                    &crt->ca_istrue, &crt->max_pathlen);
         if (ret != 0) {
-            x509_free(crt);
             return (ret);
         }
     }
 
     if (p != end) {
-        x509_free(crt);
         return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT |
             TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
     }
@@ -1030,39 +1180,28 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
      *      signatureAlgorithm       AlgorithmIdentifier,
      *      signatureValue           BIT STRING
      */
-    if ((ret = x509_get_alg((const unsigned char**) &p, end, &crt->sig_oid2)) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_alg( (const unsigned char**) &p, end, &crt->sig_oid2 ) ;
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
-    if (memcmp(crt->sig_oid1.p, crt->sig_oid2.p, 9) != 0) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_SIG_MISMATCH);
+    if ( memcmp( crt->sig_oid1.p, crt->sig_oid2.p, crt->sig_oid1.len ) != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_SIG_MISMATCH );
     }
 
-    if ((ret = x509_get_sig((const unsigned char**) &p, end, &crt->sig)) != 0) {
-        x509_free(crt);
-        return (ret);
+    ret = x509_get_sig( (const unsigned char**) &p, end, &crt->sig );
+    if ( ret != 0 )
+    {
+        return ( ret );
     }
 
-    if (p != end) {
-        x509_free(crt);
-        return (TROPICSSL_ERR_X509_CERT_INVALID_FORMAT |
-            TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
+    if ( p != end )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT |
+        TROPICSSL_ERR_ASN1_LENGTH_MISMATCH );
     }
-
-    crt->next = (x509_cert *) tls_host_malloc( "x509",  sizeof( x509_cert ) );
-
-    if (crt->next == NULL) {
-        x509_free(crt);
-        return (1);
-    }
-
-    crt = crt->next;
-    memset(crt, 0, sizeof(x509_cert));
-
-    if (buflen > 0)
-        return (x509parse_crt(crt, buf, buflen));
 
     return (0);
 }
@@ -1070,16 +1209,50 @@ static int32_t _x509parse_crt_1(x509_cert *chain, const unsigned char *buf, uint
 /*
  * Parse one or more certificates and add them to the chained list
  */
-int32_t x509parse_crt(x509_cert * chain, const unsigned char *buf, uint32_t buflen)
+int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t buflen )
 {
-    int ret;
-    unsigned char *buf1 = malloc(buflen);
-    if (buf1 == NULL) {
-          return (1);
+    int            ret;
+    const uint8_t* der_certificate;
+    uint32_t       der_certificate_length;
+    uint32_t       total_der_bytes = 0;
+
+    /* Check if certificate is PEM
+     * Note: This function will malloc space for DER cert */
+    ret = x509_convert_pem_to_der( buf, buflen, &der_certificate, &total_der_bytes );
+    if ( ret != 0 )
+    {
+        der_certificate = buf;
+        total_der_bytes = buflen;
     }
-    memcpy(buf1, buf, buflen);
-    ret = _x509parse_crt_1(chain, buf1, buflen);
-    free(buf1);
+
+    do
+    {
+        der_certificate_length = x509_read_cert_length( der_certificate );
+
+        ret = x509_parse_certificate_data( chain, der_certificate, der_certificate_length );
+        if ( ret != 0 )
+        {
+            x509_free( chain );
+            return ret;
+        }
+
+        total_der_bytes -= der_certificate_length;
+        der_certificate += der_certificate_length;
+
+        if ( total_der_bytes > 0 )
+        {
+            chain->next = (x509_cert *) tls_host_malloc( "x509", sizeof(x509_cert) );
+
+            if ( chain->next == NULL )
+            {
+                x509_free( chain );
+                return ( 1 );
+            }
+
+            chain = chain->next;
+            memset( chain, 0, sizeof(x509_cert) );
+        }
+    } while ( total_der_bytes > 0 );
     return ret;
 }
 
@@ -1161,7 +1334,6 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
     int32_t  newlen;
     const unsigned char *s1, *s2;
     const unsigned char *p = buf, *end;
-    x509_buf pk_oid;
     unsigned char *decode_buf = NULL;
     unsigned char des3_iv[8];
     s1 = (unsigned char *)strstr((char *)buf,
@@ -1276,7 +1448,7 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
 
     end = p + len;
 
-    if ((ret = x509_get_pubkey( &p, p + len, &pk_oid, &rsa->N, &rsa->E)) != 0) {
+    if ((ret = x509_get_rsa_public_key( &p, p + len, &rsa->N, &rsa->E)) != 0) {
         if (s1 != NULL)
             tls_host_free ( decode_buf );
 
@@ -1284,7 +1456,7 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
         return( ret );
     }
 
-    rsa->len = mpi_size( &rsa->N );
+    rsa->length = mpi_size( &rsa->N );
 
     if (p != end) {
         if (s1 != NULL)
@@ -1445,7 +1617,7 @@ static int32_t _x509parse_key_1(rsa_context * rsa, const unsigned char *buf, uin
 
     end = p + len;
 
-    if ((ret = asn1_get_int(&p, end, &rsa->ver)) != 0) {
+    if ((ret = asn1_get_int(&p, end, (int32_t*)&rsa->version)) != 0) {
         if (s1 != NULL)
             tls_host_free ( decode_buf );
 
@@ -1453,7 +1625,7 @@ static int32_t _x509parse_key_1(rsa_context * rsa, const unsigned char *buf, uin
         return (TROPICSSL_ERR_X509_KEY_INVALID_FORMAT | ret);
     }
 
-    if (rsa->ver != 0) {
+    if (rsa->version != 0) {
         if (s1 != NULL)
             tls_host_free ( decode_buf );
 
@@ -1476,7 +1648,7 @@ static int32_t _x509parse_key_1(rsa_context * rsa, const unsigned char *buf, uin
         return (ret | TROPICSSL_ERR_X509_KEY_INVALID_FORMAT);
     }
 
-    rsa->len = mpi_size(&rsa->N);
+    rsa->length = mpi_size(&rsa->N);
 
     if (p != end) {
         if (s1 != NULL)
@@ -1727,28 +1899,45 @@ static void x509_hash(const unsigned char *in, int32_t len, int32_t alg, unsigne
         md2(in, len, out);
         break;
 #endif
+
 #if defined(TROPICSSL_MD4_C)
     case RSA_MD4:
         md4(in, len, out);
         break;
 #endif
+
+#if defined( X509_SUPPORT_MD5 )
     case RSA_MD5:
         md5(in, len, out);
         break;
+#endif
+
+#if defined( X509_SUPPORT_SHA1 )
     case RSA_SHA1:
         sha1(in, len, out);
         break;
+#endif
+
+#if defined( X509_SUPPORT_SHA256 )
     case RSA_SHA256:
         sha2( in, len, out, 0 );
         break;
+#endif
+
+#if defined( X509_SUPPORT_SHA384 )
     case RSA_SHA384:
         sha4( in, len, out, 1 );
         break;
+#endif
+
+#if defined( X509_SUPPORT_SHA512 )
     case RSA_SHA512:
         sha4( in, len, out, 0 );
         break;
+#endif
+
     default:
-        memset(out, '\xFF', len);
+        memset( out, '\xFF', 64 );
         break;
     }
 }
@@ -1788,23 +1977,23 @@ int32_t x509parse_verify(const x509_cert *crt,
     *flags |= BADCERT_NOT_TRUSTED;
 
     /* Traverse through cert chain attempting to find a matching trusted cert */
-    for ( cur = crt; ( *flags & BADCERT_NOT_TRUSTED ) != 0 && cur->version != 0; cur = cur->next )
+    for ( cur = crt; cur != NULL && ( *flags & BADCERT_NOT_TRUSTED ) != 0 && cur->version != 0; cur = cur->next )
     {
         /* Verify current certificate is correctly signed by next */
-        if ( cur->next->version != 0 )
+        if ( cur->next != NULL && cur->next->version != 0 )
         {
             hash_id = cur->sig_oid1.p[ 8 ];
 
             x509_hash( cur->tbs.p, cur->tbs.len, hash_id, hash );
 
-            if ( rsa_pkcs1_verify( &cur->next->rsa, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
+            if ( rsa_pkcs1_verify( (rsa_context*)cur->next->public_key, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
             {
                 return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
             }
         }
 
         /* Check if current cert has been issued by trusted root cert */
-        for ( trusted_ca_iter = trust_ca; trusted_ca_iter->version != 0; trusted_ca_iter = trusted_ca_iter->next )
+        for ( trusted_ca_iter = trust_ca; trusted_ca_iter != NULL && trusted_ca_iter->version != 0; trusted_ca_iter = trusted_ca_iter->next )
         {
             if ( cur->issuer_raw.len == trusted_ca_iter->subject_raw.len &&
                  memcmp( cur->issuer_raw.p, trusted_ca_iter->subject_raw.p, cur->issuer_raw.len ) == 0 )
@@ -1813,9 +2002,19 @@ int32_t x509parse_verify(const x509_cert *crt,
 
                 x509_hash( cur->tbs.p, cur->tbs.len, hash_id, hash );
 
-                if ( rsa_pkcs1_verify( &trusted_ca_iter->rsa, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
+                if ( trusted_ca_iter->public_key->type == TLS_RSA_KEY )
                 {
-                    return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
+                    if ( rsa_pkcs1_verify( (rsa_context*) trusted_ca_iter->public_key, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
+                    {
+                        return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
+                    }
+                }
+                else if ( trusted_ca_iter->public_key->type == TLS_ECC_KEY )
+                {
+                    if ( uECC_verify( trusted_ca_iter->public_key->data, hash, cur->sig.p ) != 0 )
+                    {
+                        return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
+                    }
                 }
 
                 *flags &= ~BADCERT_NOT_TRUSTED;
@@ -1844,7 +2043,19 @@ void x509_free(x509_cert * crt)
         return;
 
     do {
-        rsa_free(&cert_cur->rsa);
+        if ( cert_cur->public_key != NULL )
+        {
+            if ( cert_cur->public_key->type == TLS_RSA_KEY )
+            {
+                rsa_free( (rsa_context*) cert_cur->public_key );
+                tls_host_free( cert_cur->public_key );
+            }
+            else
+            {
+                __asm("bkpt");
+            }
+            cert_cur->public_key = NULL;
+        }
 
         name_cur = cert_cur->issuer.next;
         while (name_cur != NULL) {
@@ -1863,8 +2074,8 @@ void x509_free(x509_cert * crt)
         }
 
         if (cert_cur->raw.p != NULL) {
-            memset(cert_cur->raw.p, 0, cert_cur->raw.len);
-            tls_host_free ( cert_cur->raw.p );
+//            memset(cert_cur->raw.p, 0, cert_cur->raw.len);
+//            tls_host_free ( cert_cur->raw.p );
         }
 
         cert_cur = cert_cur->next;

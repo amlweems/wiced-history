@@ -269,8 +269,13 @@ static wiced_buffer_t /*@owned@*/ /*@null@*/ wwd_sdpcm_send_queue_tail   = (wice
 
 static wwd_wifi_raw_packet_processor_t       wwd_sdpcm_raw_packet_processor = NULL;
 
+static uint32_t        wwd_host_interface_to_bss_index_array[3] = { WWD_STA_INTERFACE, WWD_AP_INTERFACE, WWD_P2P_INTERFACE }; /* Default mapping of host interface to BSS index */
+static wwd_interface_t wwd_bss_index_to_host_interface_array[3] = { WWD_STA_INTERFACE, WWD_AP_INTERFACE, WWD_P2P_INTERFACE };
+
+
 /* QoS related variables */
 uint8_t sdpcm_highest_rx_tos = 0; // XXX remove later, currently used by 11n certification test applications
+
 
 /******************************************************
  *             SDPCM Logging
@@ -469,7 +474,6 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     wwd_result_t         result;
     uint8_t* dscp = NULL;
     uint8_t priority = 0;
-    static const int32_t packet_overhead = (int32_t) ( sizeof( sdpcm_common_header_t ) + sizeof ( uint8_t ) * 2 + sizeof ( sdpcm_bdc_header_t ) );
     sdpcm_ethernet_header_t* ethernet_header = (sdpcm_ethernet_header_t*)host_buffer_get_current_piece_data_pointer( buffer );
     uint16_t ether_type;
 
@@ -485,7 +489,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
 
 
     /* Add link space at front of packet */
-    result = host_buffer_add_remove_at_front( &buffer, -packet_overhead );
+    result = host_buffer_add_remove_at_front( &buffer, - (int) (sizeof(sdpcm_data_header_t)) );
     if ( result != WWD_SUCCESS )
     {
         WPRINT_WWD_DEBUG(("Unable to adjust header space\n"));
@@ -495,9 +499,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
 
     packet = (sdpcm_data_header_t*) host_buffer_get_current_piece_data_pointer( buffer );
 
-    if ( ( interface != WWD_STA_INTERFACE ) &&
-         ( interface != WWD_AP_INTERFACE  ) &&
-         ( interface != WWD_P2P_INTERFACE  ) )
+    if ( interface > WWD_P2P_INTERFACE )
     {
         WPRINT_WWD_DEBUG(("No interface for packet send\n"));
         host_buffer_release( buffer, WWD_NETWORK_TX );
@@ -528,7 +530,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
         packet->bdc_header.priority = priority;
     }
 
-    packet->bdc_header.flags2   = (uint8_t) ( interface&3 );
+    packet->bdc_header.flags2   = (uint8_t)wwd_get_bss_index( interface );
     packet->bdc_header.data_offset = 0;
 
     /* Add the length of the BDC header and pass "down" */
@@ -601,7 +603,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
     /* Check whether the packet is big enough to contain the SDPCM header (or) it's too big to handle */
     if ( ( size < (uint16_t) SDPCM_HEADER_LEN ) || ( size > (uint16_t) WICED_LINK_MTU ) )
     {
-        wiced_assert( "Packet size invalid", 0 == 1 );
+        wiced_verify( "Packet size invalid", 0 == 1 );
         WPRINT_WWD_DEBUG(("Received a packet that is too small to contain anything useful (or) too big. Packet Size = [%d]\n", size));
         host_buffer_release( buffer, WWD_NETWORK_RX );
         return;
@@ -764,8 +766,8 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                     host_buffer_release( buffer, WWD_NETWORK_RX );
                     break;
                 }
-                wwd_event->interface  = ( event->event.raw.ifidx & 3);
-
+                //wwd_event->interface  = ( event->event.raw.ifidx & 3);
+                wwd_event->interface  =  (uint8_t)wwd_bss_index_to_host_interface_array[event->event.raw.ifidx];
 
                 /* This is necessary because people who defined event statuses and reasons overlapped values. */
                 if ( wwd_event->event_type == WLC_E_PSK_SUP )
@@ -809,7 +811,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
             break;
 
         default:
-            wiced_assert("SDPCM packet of unknown channel received - dropping packet", 0 != 0);
+            wiced_verify("SDPCM packet of unknown channel received - dropping packet", 0 != 0);
             host_buffer_release( buffer, WWD_NETWORK_RX );
             break;
     }
@@ -844,7 +846,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     sdpcm_control_header_t* send_packet;
     sdpcm_common_header_t*  common_header;
     sdpcm_cdc_header_t*     cdc_header;
-    uint8_t interface_val = (uint8_t) (interface & 3);
+    uint32_t                bss_index = wwd_host_interface_to_bss_index_array[interface & 3];
 
     /* Acquire mutex which prevents multiple simultaneous IOCTLs */
     retval = host_rtos_get_semaphore( &wwd_sdpcm_ioctl_mutex, NEVER_TIMEOUT, WICED_FALSE );
@@ -881,7 +883,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     /* Prepare the CDC header */
     send_packet->cdc_header.cmd    = command;
     send_packet->cdc_header.len    = data_length;
-    send_packet->cdc_header.flags  = ( ( (uint32_t) ++wwd_sdpcm_requested_ioctl_id << CDCF_IOC_ID_SHIFT ) & CDCF_IOC_ID_MASK ) | type | (uint32_t) interface_val << CDCF_IOC_IF_SHIFT;
+    send_packet->cdc_header.flags  = ( ( (uint32_t) ++wwd_sdpcm_requested_ioctl_id << CDCF_IOC_ID_SHIFT ) & CDCF_IOC_ID_MASK ) | type | bss_index << CDCF_IOC_IF_SHIFT;
     send_packet->cdc_header.status = 0;
 
     /* Manufacturing test can receive big buffers, but sending big buffers causes a wlan firmware error */
@@ -935,7 +937,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
             host_buffer_release( *response_buffer_hnd, WWD_NETWORK_RX );
             *response_buffer_hnd = NULL;
         }
-/*        wiced_assert("IOCTL failed\n", 0 != 0 ); */
+        wiced_verify("IOCTL failed\n", 0 != 0 );
         return retval;
     }
 
@@ -1018,13 +1020,13 @@ wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t*
     }
 
     /* Send the new event mask value to the wifi chip */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) WL_EVENTING_MASK_LEN + 4, IOVAR_STR_BSSCFG_EVENT_MSGS );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) WL_EVENTING_MASK_LEN + 4, "bsscfg:" IOVAR_STR_EVENT_MSGS );
     if ( data == NULL )
     {
         return WWD_BUFFER_UNAVAILABLE_PERMANENT;
     }
 
-    data[0] = interface;
+    data[0] = wwd_get_bss_index( interface );
     event_mask = (uint8_t*)&data[1];
 
     /* Keep the wlan awake while we set the event_msgs */
@@ -1148,7 +1150,7 @@ wwd_result_t wwd_sdpcm_get_packet_to_send( /*@special@*/ /*@out@*/  wiced_buffer
  *
  * @return The number of bus credits available
  */
-uint8_t wWd_sdpcm_get_available_credits( void )
+uint8_t wwd_sdpcm_get_available_credits( void )
 {
     return (uint8_t)( wwd_sdpcm_last_bus_data_credit - wwd_sdpcm_packet_transmit_sequence_number );
 }
@@ -1169,6 +1171,16 @@ wwd_result_t wwd_wifi_set_raw_packet_processor( wwd_wifi_raw_packet_processor_t 
 {
     wwd_sdpcm_raw_packet_processor = function;
     return WWD_SUCCESS;
+}
+
+
+uint32_t wwd_get_bss_index( wwd_interface_t interface )
+{
+    if ( interface <= WWD_P2P_INTERFACE )
+    {
+        return wwd_host_interface_to_bss_index_array[interface];
+    }
+    return 0;
 }
 
 
@@ -1300,5 +1312,17 @@ static uint8_t wwd_map_dscp_to_priority( uint8_t val )
 
 static wwd_interface_t wwd_wifi_get_source_interface( uint8_t flags2 )
 {
-    return (wwd_interface_t)(flags2 & BDC_FLAG2_IF_MASK);
+    uint32_t bssid_index = (uint32_t)(flags2 & BDC_FLAG2_IF_MASK);
+
+    if ( bssid_index <= WWD_P2P_INTERFACE )
+    {
+        return wwd_bss_index_to_host_interface_array[bssid_index];
+    }
+    return WWD_STA_INTERFACE;
+}
+
+void wwd_update_host_interface_to_bss_index_mapping( wwd_interface_t interface, uint32_t bss_index )
+{
+    wwd_host_interface_to_bss_index_array[interface] = bss_index;
+    wwd_bss_index_to_host_interface_array[bss_index] = interface;
 }

@@ -73,11 +73,18 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
-                   WWD/wwd_platform.c \
-                   WWD/wwd_$(BUS).c \
                    WWD/hsmci_pdc.c \
                    WWD/sdmmc.c	\
                    WAF/waf_platform.c \
+
+ifdef PLATFORM_SUPPORTS_BUTTONS
+$(NAME)_SOURCES += ../platform_button.c
+endif
+
+ifndef NO_WIFI
+$(NAME)_SOURCES += WWD/wwd_platform.c \
+                   WWD/wwd_$(BUS).c
+endif
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \

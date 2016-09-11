@@ -23,6 +23,11 @@ GLOBAL_INCLUDES := .
 GLOBAL_INCLUDES += include
 
 # Build firmware image for the BT chip specified
-$(NAME)_SOURCES += ../drivers/bluetooth/firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/bt_firmware_image.c \
-                   wiced_logmsg.c \
-                   wiced_bt.c
+ifeq ($(BT_CHIP_XTAL_FREQUENCY),)
+$(NAME)_SOURCES += ../drivers/bluetooth/firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/bt_firmware_image.c
+else
+$(NAME)_SOURCES += ../drivers/bluetooth/firmware/$(BT_CHIP)$(BT_CHIP_REVISION)/$(BT_CHIP_XTAL_FREQUENCY)/bt_firmware_image.c
+endif
+
+$(NAME)_SOURCES +=  bt_logmsg/wiced_bt_logmsg.c \
+                    wiced_bt.c

@@ -22,6 +22,7 @@
 #include "wwd_constants.h"
 #include "wwd_assert.h"
 #include "platform/wwd_platform_interface.h"
+#include "wwd_rtos_interface.h"
 
 /******************************************************
  *                      Macros

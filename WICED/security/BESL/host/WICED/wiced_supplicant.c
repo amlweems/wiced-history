@@ -20,12 +20,13 @@
 #include "network/wwd_buffer_interface.h"
 #include "supplicant_structures.h"
 #include "wiced_supplicant.h"
+
+#include "wiced_tcpip_tls_api.h"
 #include "wiced_utilities.h"
 #include "wwd_eapol.h"
 #include "wwd_events.h"
 #include "wwd_wifi.h"
 #include "wiced_time.h"
-#include "wiced_tls.h"
 
 /******************************************************
  *            Includes

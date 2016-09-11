@@ -93,18 +93,11 @@
 #ifndef HEADER_SEED_H
 #define HEADER_SEED_H
 
-#include <stdint.h>
+#include "crypto_structures.h"
 
 
 #ifdef  __cplusplus
 extern "C" {
-#endif
-
-
-#ifndef CRYPTO_STRUCTURE
-typedef struct {
-    uint32_t data[32];
-} seed_context_t;
 #endif
 
 

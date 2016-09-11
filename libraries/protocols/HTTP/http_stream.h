@@ -34,13 +34,23 @@ extern "C" {
  *                   Enumerations
  ******************************************************/
 
+/* rfc2616 */
 typedef enum
 {
-    HTTP_GET  = 0,
-    HTTP_POST = 1,
-    HTTP_HEAD = 2,
-    HTTP_PUT  = 3,
-    HTTP_END  = 4,
+    HTTP_UNKNOWN  = -1,
+    HTTP_OPTIONS  =  0,
+    HTTP_GET      =  1,
+    HTTP_HEAD     =  2,
+    HTTP_POST     =  3,
+    HTTP_PUT      =  4,
+    HTTP_DELETE   =  5,
+    HTTP_TRACE    =  6,
+    HTTP_CONNECT  =  7,
+    HTTP_NOTIFY   =  8,
+    HTTP_M_SEARCH =  9,
+    HTTP_END      = 10,
+
+    HTTP_METHODS_MAX,   /* must be last! */
 } http_request_t;
 
 typedef enum
@@ -138,7 +148,24 @@ wiced_result_t http_stream_read     ( http_stream_t* session, uint8_t* data, uin
 wiced_result_t http_stream_receive  ( http_stream_t* session, wiced_packet_t** packet, uint32_t timeout );
 wiced_result_t http_extract_headers ( wiced_packet_t* packet, http_header_t* headers, uint16_t number_of_headers );
 wiced_result_t http_get_body        ( wiced_packet_t* packet, uint8_t** body, uint32_t* body_length );
+http_request_t http_determine_method(wiced_packet_t* packet);
 wiced_result_t http_process_response( wiced_packet_t* packet, http_status_code_t* response_code );
+
+
+/** Process the packet headers in palce
+ *
+ * NOTE: Inserts null characters ('\0') at end of header names and header values IN PLACE
+ *
+ * @param packet                - [packet]
+ * @param headers               - [in]      pointer to http_header_t structure array to be filled
+ * @param number_of_headers     - [in]      number of headers in array
+ *                                [out]     number of headers parsed into array
+ * @return  WICED_SUCCESS
+ *          WICED_BADARG
+ *          WICED_ERROR
+ */
+wiced_result_t http_process_headers_in_place( wiced_packet_t* packet, http_header_t* headers_handle, uint16_t* number_of_headers );
+
 
 #ifdef __cplusplus
 } /* extern "C" */

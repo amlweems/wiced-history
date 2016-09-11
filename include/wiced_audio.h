@@ -158,8 +158,7 @@ typedef struct
     wiced_result_t (*audio_device_deinit)         ( void* device_data );
     wiced_result_t (*audio_device_configure)      ( void* device_data, wiced_audio_config_t* config, uint32_t* mclk );
     wiced_result_t (*audio_device_start_streaming)( void* device_data );
-    wiced_result_t (*audio_device_pause)          ( void* device_data );
-    wiced_result_t (*audio_device_resume)         ( void* device_data );
+    wiced_result_t (*audio_device_stop_streaming) ( void* device_data );
     wiced_result_t (*audio_device_set_volume)     ( void* device_data, double decibles );
     wiced_result_t (*audio_device_set_treble)     ( void* device_data, uint8_t percentage );
     wiced_result_t (*audio_device_set_bass)       ( void* device_data, uint8_t percentage );
@@ -212,7 +211,7 @@ wiced_result_t wiced_audio_get_current_buffer_weight   ( wiced_audio_session_ref
 /* Returns the latency of the audio system in audio frames */
 wiced_result_t wiced_audio_get_latency                 ( wiced_audio_session_ref sh, uint32_t* latency );
 wiced_result_t wiced_register_audio_device             ( const char* name, wiced_audio_device_interface_t* interface );
-
+wiced_result_t wiced_audio_set_pll_fractional_divider  ( wiced_audio_session_ref sh, float value );
 
 #ifdef __cplusplus
 } /* extern "C" */

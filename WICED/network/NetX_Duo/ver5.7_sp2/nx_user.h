@@ -16,7 +16,7 @@
 #define WICED_CUSTOM_NX_USER_H
 
 /* Setup the characteristics of the Physical layer */
-#define NX_PHYSICAL_HEADER          (14 + 12 + 22 )
+#define NX_PHYSICAL_HEADER          (14 + 12 + 18 )
 #define NX_PHYSICAL_TRAILER         (0)
 #undef NX_LINK_MTU
 

@@ -38,6 +38,44 @@ extern "C"
 #define PLATFORM_DDR_FUNCCALL(type) do {PLATFORM_DDR_FUNCDECL(type); PLATFORM_DDR_FUNCNAME(type)();} while (0)
 #endif
 
+#define PLATFORM_DMA_DESCRIPTORS_STR_EXPAND( name )     #name
+#define PLATFORM_DMA_DESCRIPTORS_SECTION_NAME( name )   ".dma."PLATFORM_DMA_DESCRIPTORS_STR_EXPAND( name )
+#define PLATFORM_DMA_DESCRIPTORS_SECTION( var )         SECTION( PLATFORM_DMA_DESCRIPTORS_SECTION_NAME( var ) ) var
+
+#define PLATFORM_CAPABILITY_ENAB(capability)            ((platform_capabilities_word & capability) != 0)
+
+#if PLATFORM_WLAN_POWERSAVE
+#define PLATFORM_WLAN_POWERSAVE_RES_UP()                       platform_wlan_powersave_res_up()
+#define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force ) platform_wlan_powersave_res_down( check_ready, force )
+#else
+#define PLATFORM_WLAN_POWERSAVE_RES_UP()
+#define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force )
+#endif
+
+#if PLATFORM_WLAN_POWERSAVE && PLATFORM_WLAN_POWERSAVE_STATS
+#define PLATFORM_WLAN_POWERSAVE_GET_STATS( counter)            platform_wlan_powersave_get_stats( counter )
+#else
+#define PLATFORM_WLAN_POWERSAVE_GET_STATS( counter)            ( (uint32_t)0 )
+#endif
+
+#if PLATFORM_ALP_CLOCK_RES_FIXUP
+#define PLATFORM_ALP_CLOCK_RES_UP()                            PLATFORM_WLAN_POWERSAVE_RES_UP()
+#define PLATFORM_ALP_CLOCK_RES_DOWN( check_ready, force )      PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force )
+#else
+#define PLATFORM_ALP_CLOCK_RES_UP()
+#define PLATFORM_ALP_CLOCK_RES_DOWN( check_ready, force )
+#endif
+
+#ifdef DEBUG
+#define PLATFORM_TIMEOUT_BEGIN( start_var_name ) \
+    const uint32_t start_var_name = platform_tick_get_time( PLATFORM_TICK_GET_SLOW_TIME_STAMP ); REFERENCE_DEBUG_ONLY_VARIABLE( start_var_name );
+#define PLATFORM_TIMEOUT_SEC_ASSERT( assert_string, start_var_name, good_cond, seconds ) \
+    wiced_assert( assert_string, ( platform_tick_get_time( PLATFORM_TICK_GET_SLOW_TIME_STAMP ) - ( start_var_name ) < platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ILP ) * ( seconds ) ) || ( good_cond ) );
+#else
+#define PLATFORM_TIMEOUT_BEGIN( start_var_name)
+#define PLATFORM_TIMEOUT_SEC_ASSERT( assert_string, start_var_name, good_cond, seconds )
+#endif
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -49,35 +87,8 @@ extern "C"
 
 #define UART_CONSOLE_MASK    (0x01)
 
-/* OTP regions */
-typedef enum
-{
-    PLATFORM_OTP_HW_RGN   = 1,
-    PLATFORM_OTP_SW_RGN   = 2,
-    PLATFORM_OTP_CI_RGN   = 4,
-    PLATFORM_OTP_FUSE_RGN = 8,
-    PLATFORM_OTP_ALL_RGN  = 0xf /* From h/w region to end of OTP including checksum */
-} platform_otp_region_t;
-
-/* Platform Capabilities */
-typedef enum
-{
-    PLATFORM_CAPS_SDIO = (1 << 0),
-    PLATFORM_CAPS_GMAC = (1 << 1),
-    PLATFORM_CAPS_USB  = (1 << 2),
-    PLATFORM_CAPS_HSIC = (1 << 3),
-    PLATFORM_CAPS_I2S  = (1 << 4),
-    PLATFORM_CAPS_I2C  = (1 << 5),
-    PLATFORM_CAPS_UART = (1 << 6),
-    PLATFORM_CAPS_DDR  = (1 << 7),
-    PLATFORM_CAPS_SPI  = (1 << 8),
-    PLATFORM_CAPS_JTAG = (1 << 9)
-} platform_caps_t;
-
 /* BCM4390x Platform Common Capabilities */
 #define PLATFORM_CAPS_COMMON (PLATFORM_CAPS_I2C | PLATFORM_CAPS_UART | PLATFORM_CAPS_SPI)
-
-#define PLATFORM_CAPABILITY_ENAB(capability) ((platform_capabilities_word & capability) != 0)
 
 /******************************************************
  *                   Enumerations
@@ -357,11 +368,38 @@ typedef enum
     MCU_POWERSAVE_DEFAULT = MCU_POWERSAVE_DEEP_SLEEP
 } platform_mcu_powersave_mode_t;
 
+/* OTP regions */
+typedef enum
+{
+    PLATFORM_OTP_HW_RGN   = 1,
+    PLATFORM_OTP_SW_RGN   = 2,
+    PLATFORM_OTP_CI_RGN   = 4,
+    PLATFORM_OTP_FUSE_RGN = 8,
+    PLATFORM_OTP_ALL_RGN  = 0xf /* From h/w region to end of OTP including checksum */
+} platform_otp_region_t;
+
+/* Platform Capabilities */
+typedef enum
+{
+    PLATFORM_CAPS_SDIO = (1 << 0),
+    PLATFORM_CAPS_GMAC = (1 << 1),
+    PLATFORM_CAPS_USB  = (1 << 2),
+    PLATFORM_CAPS_HSIC = (1 << 3),
+    PLATFORM_CAPS_I2S  = (1 << 4),
+    PLATFORM_CAPS_I2C  = (1 << 5),
+    PLATFORM_CAPS_UART = (1 << 6),
+    PLATFORM_CAPS_DDR  = (1 << 7),
+    PLATFORM_CAPS_SPI  = (1 << 8),
+    PLATFORM_CAPS_JTAG = (1 << 9)
+} platform_caps_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
 
 typedef void (*platform_tick_sleep_idle_func)( void );
+
+typedef platform_result_t (*platform_otp_cis_parse_callback_func)( void* context, uint8_t tag, uint8_t brcm_tag, uint16_t offset, uint8_t size );
 
 /******************************************************
  *                    Structures
@@ -518,6 +556,22 @@ typedef enum
     PLATFORM_BACKPLANE_AON
 } platform_backplane_t;
 
+typedef enum
+{
+    PLATFORM_REFERENCE_CLOCK_CPU,
+    PLATFORM_REFERENCE_CLOCK_BACKPLANE,
+    PLATFORM_REFERENCE_CLOCK_ALP,
+    PLATFORM_REFERENCE_CLOCK_ILP,
+    PLATFORM_REFERENCE_CLOCK_FAST_UART
+} platform_reference_clock_t;
+
+typedef enum
+{
+    PLATFORM_WLAN_POWERSAVE_STATS_CALL_NUM,
+    PLATFORM_WLAN_POWERSAVE_STATS_UP_TIME,
+    PLATFORM_WLAN_POWERSAVE_STATS_WAIT_UP_TIME
+} platform_wlan_powersave_stats_t;
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -565,17 +619,27 @@ uint32_t          platform_gci_chipstatus       (uint8_t reg_offset);
 */
 uint32_t          platform_pmu_chipcontrol      ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
 
+uint32_t          platform_pmu_res_updown_time  ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+uint32_t          platform_pmu_res_dep_mask     ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
 /*
  * Set specific PMU regulator register.
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
 */
-uint32_t          platform_pmu_regulatorcontrol (uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask);
+uint32_t          platform_pmu_regulatorcontrol (uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+/*
+ * Set specific PMU PLL control register.
+ * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
+*/
+uint32_t          platform_pmu_pllcontrol       (uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
 
 /*
  * Modify generic register.
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
  */
-uint32_t          platform_common_chipcontrol   (volatile uint32_t* reg, uint32_t clear_mask, uint32_t set_mask);
+uint32_t          platform_common_chipcontrol   (volatile uint32_t* reg, uint32_t clear_mask, uint32_t set_mask );
 
 /* Return default PWM clock. Platform code can redefine if want to choose another. */
 platform_clock_t  platform_pwm_getclock         ( void );
@@ -583,6 +647,8 @@ platform_clock_t  platform_pwm_getclock         ( void );
 platform_result_t platform_filesystem_init      ( void );
 
 platform_result_t platform_watchdog_init        ( void );
+
+platform_result_t platform_watchdog_deinit      ( void );
 
 platform_result_t platform_backplane_init       ( void );
 
@@ -595,6 +661,8 @@ void              platform_irq_init             ( void );
 platform_result_t platform_irq_remap_source     ( uint32_t wrapper_addr, uint8_t source_num, uint8_t bus_line_num );
 
 platform_result_t platform_irq_remap_sink       ( uint8_t bus_line_num, uint8_t sink_num );
+
+void              platform_cores_powersave_init ( void );
 
 platform_result_t platform_mcu_powersave_init         ( void );
 
@@ -610,11 +678,13 @@ wiced_bool_t      platform_wlan_powersave_res_down ( wiced_bool_t(*check_ready)(
 
 void              platform_wlan_powersave_res_event( void );
 
+uint32_t          platform_wlan_powersave_get_stats( platform_wlan_powersave_stats_t which_counter );
+
+uint32_t          platform_reference_clock_get_freq( platform_reference_clock_t clock );
+
 uint32_t          platform_tick_sleep           ( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission );
 
 void              platform_tick_execute_command ( platform_tick_command_t command );
-
-void              platform_lpo_clock_init       ( void );
 
 void              platform_sflash_init          ( void );
 
@@ -623,13 +693,22 @@ platform_result_t platform_hibernation_init     ( const platform_hibernation_t* 
 /* Functions related to platform OTP driver */
 platform_result_t platform_otp_init             ( void );
 platform_result_t platform_otp_status           ( uint32_t* status );
-platform_result_t platform_otp_size             ( uint32_t* size );
-platform_result_t platform_otp_read_bit         ( unsigned int offset, uint16_t* read_bit );
-platform_result_t platform_otp_read_word        ( unsigned int wn, uint16_t* data );
-platform_result_t platform_otp_read_region      ( platform_otp_region_t region, uint16_t* data, unsigned int* wlen );
+platform_result_t platform_otp_size             ( uint16_t* size );
+platform_result_t platform_otp_read_bit         ( uint16_t bit_number, uint16_t* read_bit );
+platform_result_t platform_otp_read_word        ( uint16_t word_number, uint16_t* read_word );
+platform_result_t platform_otp_read_array       ( uint16_t byte_number, void* data, uint16_t byte_len );
+platform_result_t platform_otp_get_region       ( platform_otp_region_t region, uint16_t* word_number, uint16_t* word_len );
+platform_result_t platform_otp_read_region      ( platform_otp_region_t region, uint16_t* data, uint16_t* word_len );
 platform_result_t platform_otp_newcis           ( uint16_t* newcis_bit );
 platform_result_t platform_otp_isunified        ( wiced_bool_t* is_unified );
 platform_result_t platform_otp_avsbitslen       ( uint16_t* avsbitslen );
+platform_result_t platform_otp_cis_parse        ( platform_otp_region_t region, platform_otp_cis_parse_callback_func callback, void* context );
+platform_result_t platform_otp_read_tag         ( platform_otp_region_t region, uint8_t tag, void* data, uint16_t* byte_len );
+platform_result_t platform_otp_package_options  ( uint32_t* package_options );
+#ifdef OTP_DEBUG
+platform_result_t platform_otp_dump             ( void );
+platform_result_t platform_otp_dumpstats        ( void );
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

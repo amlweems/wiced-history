@@ -14,6 +14,9 @@
 #include "platform_mcu_peripheral.h"
 #include "platform_config.h"
 #include "m2m_hnddma.h"
+#include "platform_m2m.h"
+#include "crypto_api.h"
+#include <platform_toolchain.h>
 
 #if (PLATFORM_NO_SFLASH_WRITE == 0)
 #include "wiced_osl.h"
@@ -79,7 +82,13 @@ const sflash_capabilities_table_element_t sflash_capabilities_table[] =
 #ifdef SFLASH_SUPPORT_ISSI_PARTS
         { SFLASH_ID_ISSI25CQ032, { .size = 4*MEGABYTE,  .max_write_size = 256, .write_enable_required_before_every_write = 1, .normal_read_divider = 6, .fast_read_divider = 2, .supports_quad_read = 1, .supports_quad_write = 1, .supports_fast_read = 1, .fast_dummy_cycles = 8 } },
         { SFLASH_ID_ISSI25LP064, { .size = 8*MEGABYTE,  .max_write_size = 256, .write_enable_required_before_every_write = 1, .normal_read_divider = 6, .fast_read_divider = 2, .supports_quad_read = 1, .supports_quad_write = 1, .supports_fast_read = 1, .fast_dummy_cycles = 8 } },
-#endif
+#endif /* ifdef SFLASH_SUPPORT_ISSI_PARTS */
+#ifdef SFLASH_SUPPORT_MICRON_PARTS
+        { SFLASH_ID_N25Q064A, { .size = 8*MEGABYTE,  .max_write_size = 256, .write_enable_required_before_every_write = 1, .normal_read_divider = 6, .fast_read_divider = 2, .supports_quad_read = 1, .supports_quad_write = 1, .supports_fast_read = 1, .fast_dummy_cycles = 8 } },
+#endif /* ifdef SFLASH_SUPPORT_MICRON_PARTS */
+#ifdef SFLASH_SUPPORT_WINBOND_PARTS
+        { SFLASH_ID_W25Q64FV, { .size = 8*MEGABYTE,  .max_write_size = 256, .write_enable_required_before_every_write = 1, .normal_read_divider = 6, .fast_read_divider = 2, .supports_quad_read = 1, .supports_quad_write = 1, .supports_fast_read = 1, .fast_dummy_cycles = 8 } },
+#endif /* ifdef SFLASH_SUPPORT_WINBOND_PARTS */
         { SFLASH_ID_DEFAULT,     { .size = 0,           .max_write_size = 1, .write_enable_required_before_every_write = 1, .normal_read_divider = MAX_DIVIDER, .fast_read_divider = MAX_DIVIDER, .supports_quad_read = 0, .supports_quad_write = 0, .supports_fast_read = 0, .fast_dummy_cycles = 0 } }
 };
 
@@ -90,6 +99,8 @@ static const uint32_t address_masks[SFLASH_ACTIONCODE_MAX_ENUM] =
         [SFLASH_ACTIONCODE_3ADDRESS]       = 0x00ffffff,
         [SFLASH_ACTIONCODE_3ADDRESS_1DATA] = 0x00ffffff,
         [SFLASH_ACTIONCODE_3ADDRESS_4DATA] = 0x00ffffff,
+        [SFLASH_ACTIONCODE_2DATA]          = 0x00,
+        [SFLASH_ACTIONCODE_4DATA]          = 0x00,
 };
 
 static const uint32_t data_masks[SFLASH_ACTIONCODE_MAX_ENUM] =
@@ -99,6 +110,8 @@ static const uint32_t data_masks[SFLASH_ACTIONCODE_MAX_ENUM] =
         [SFLASH_ACTIONCODE_3ADDRESS]       = 0x00000000,
         [SFLASH_ACTIONCODE_3ADDRESS_1DATA] = 0x000000ff,
         [SFLASH_ACTIONCODE_3ADDRESS_4DATA] = 0xffffffff,
+        [SFLASH_ACTIONCODE_2DATA]          = 0x0000ffff,
+        [SFLASH_ACTIONCODE_4DATA]          = 0xffffffff,
 };
 
 static const uint8_t data_bytes[SFLASH_ACTIONCODE_MAX_ENUM] =
@@ -108,6 +121,8 @@ static const uint8_t data_bytes[SFLASH_ACTIONCODE_MAX_ENUM] =
         [SFLASH_ACTIONCODE_3ADDRESS]       = 0,
         [SFLASH_ACTIONCODE_3ADDRESS_1DATA] = 1,
         [SFLASH_ACTIONCODE_3ADDRESS_4DATA] = 4,
+        [SFLASH_ACTIONCODE_2DATA]          = 2,
+        [SFLASH_ACTIONCODE_4DATA]          = 4,
 };
 
 static uint ccrev;
@@ -123,13 +138,22 @@ static int generic_sflash_command(                               const sflash_ha
 
 /*@access sflash_handle_t@*/ /* Lint: permit access to abstract sflash handle implementation */
 
+static int sflash_read_internal( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size , wiced_bool_t blocking );
+static void sflash_read_post_read_operations( const sflash_handle_t* const handle, void* data_addr, unsigned int size );
+static int sflash_verify_data( uint8_t* aes128_key, uint8_t* aes128_iv, uint32_t crypt_size, uint32_t auth_size,
+        uint8_t* hmac_key, uint32_t hmac_key_len, uint8_t* input_buffer, uint8_t* output_buffer, uint8_t* hmac_output );
+static int sflash_read_nonblocking( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size );
+static void sflash_read_wait_for_completion( void* data_addr, unsigned int size );
+
 int sflash_read_ID( const sflash_handle_t* handle, /*@out@*/ device_id_t* data_addr )
 {
     /* The indirect SFLASH interface does not allow reading of 3 bytes - read 4 bytes instead and copy */
     uint32_t temp_data;
     int retval;
 
-    retval = generic_sflash_command( handle, SFLASH_READ_JEDEC_ID, SFLASH_ACTIONCODE_3ADDRESS_4DATA, 0, NULL, &temp_data );
+    retval = generic_sflash_command( handle, SFLASH_READ_JEDEC_ID, SFLASH_ACTIONCODE_4DATA, 0, NULL, &temp_data );
 
     memset( data_addr, 0, 3 );
     memcpy( data_addr, &temp_data, 3 );
@@ -227,93 +251,132 @@ int sflash_read_status_register( const sflash_handle_t* const handle, /*@out@*/ 
     return generic_sflash_command( handle, SFLASH_READ_STATUS_REGISTER, SFLASH_ACTIONCODE_1DATA, 0, NULL, dest_addr );
 }
 
-
-
-int sflash_read( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size )
+int sflash_read_status_register2( const sflash_handle_t* const handle, /*@out@*/  /*@dependent@*/ unsigned char* const dest_addr )
 {
-#ifdef SLFASH_43909_INDIRECT
+    return generic_sflash_command( handle, SFLASH_READ_STATUS_REGISTER2, SFLASH_ACTIONCODE_1DATA, 0, NULL, dest_addr );
+}
 
-    unsigned int i;
-    int retval;
-    for ( i = 0; i < size; i++ )
+static int sflash_verify_data( uint8_t* aes128_key, uint8_t* aes128_iv, uint32_t crypt_size, uint32_t auth_size, uint8_t* hmac_key, uint32_t hmac_key_len, uint8_t* input_buffer, uint8_t* output_buffer, uint8_t* hmac_output )
+{
+    int result = 0;
+    uint8_t *expected_digest;
+
+    platform_hwcrypto_aescbc_decrypt_sha256_hmac( aes128_key, aes128_iv, crypt_size, auth_size, hmac_key,
+            hmac_key_len, input_buffer, output_buffer, hmac_output );
+
+    /* Compare Computed Signature with the Digest */
+    /* Digest is stored at SECURE_SECTOR_DATA_SIZE offset from start */
+    expected_digest = (uint8_t*) output_buffer + SECURE_SECTOR_DATA_SIZE;
+    result = memcmp( expected_digest, hmac_output, HMAC256_OUTPUT_SIZE );
+    if ( result != 0 )
     {
-        retval = generic_sflash_command( handle, SFLASH_READ, SFLASH_ACTIONCODE_3ADDRESS_1DATA, ( (device_address+i) & 0x00ffffff ), NULL, &((char*)data_addr)[i] );
-        if ( retval != 0 )
-        {
-            return retval;
-        }
+        result = -1;
     }
 
-#else /* SLFASH_43909_INDIRECT */
+    return result;
+}
 
-    void* direct_address = (void*) ( SI_SFLASH + device_address );
+int sflash_read_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*//*@dependent@*/void* data_addr, unsigned int size )
+{
+    uint8_t     aes128_iv[ 16 ];
+    uint8_t*    data_addr_ptr;
+    uint8_t*    buffer0;
+    uint8_t*    buffer1;
+    uint8_t*    crypto_buffer = NULL;
+    uint8_t*    sflash_buffer = NULL;
+    uint32_t    remaining_size;
+    uint32_t    read_size;
+    uint32_t    prev_sector_read_size = 0;
+    uint32_t    prev_sector_read_offset = 0;
+    bool        sflash_read_finished = FALSE;
+    int         result = 0;
+    static uint8_t buffer [ SECURE_SECTOR_SIZE * 2 ];
+    unsigned long sector_aligned_sflash_addr;
+    unsigned long read_offset;
+    /* Use temporary keys for verificaiton */
+    /* TODO read keys from OTP */
+    uint8_t hmac_key[ ] = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb";
+    uint8_t aes128_key[ ] = "BcmEncryptionKey";
+    uint8_t hmac_output[ SHA256_HASH_SIZE ] ALIGNED(CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT) =  { 0 };
 
-    bcm43909_sflash_ctrl_reg_t ctrl = { .bits = { .opcode                     = SFLASH_READ,
-                                                  .action_code                = SFLASH_ACTIONCODE_3ADDRESS_4DATA,
-                                                  .use_four_byte_address_mode = 0,
-                                                  .use_opcode_reg             = 1,
-                                                  .mode_bit_enable            = 0,
-                                                  .num_dummy_cycles           = 0,
-                                                  .num_burst                  = 3,
-                                                  .high_speed_mode            = 0,
-                                                  .start_busy                 = 0,
-                                                }
-                                      };
 
-    if ( ( handle->capabilities->supports_fast_read == 1 ) ||  ( handle->capabilities->supports_quad_read == 1 ) )
+    buffer0         = (uint8_t*) buffer;
+    buffer1         = (uint8_t*) buffer + SECURE_SECTOR_SIZE;
+    data_addr_ptr   = (uint8_t*) data_addr;
+    sflash_buffer   = (uint8_t*) buffer0;
+    crypto_buffer   = (uint8_t*) buffer1;
+    remaining_size  = size;
+
+    platform_hwcrypto_init( );
+
+    /* read in chunks of SECURE_SECTOR_SIZE */
+    while ( remaining_size != 0 )
     {
+        /* Offset from start of sector*/
+        read_offset = device_address % SECURE_SECTOR_SIZE;
+        /* How much data can be read from the current sector */
+        read_size = MIN( remaining_size, ( SECURE_SECTOR_DATA_SIZE - read_offset ) );
 
-        if ( handle->capabilities->supports_quad_read == 1 )
+        sector_aligned_sflash_addr = ALIGN_TO_SECTOR_ADDRESS( device_address );
+
+        /* Read FULL Sector, for verification */
+        sflash_read_nonblocking( handle, (unsigned long) sector_aligned_sflash_addr, sflash_buffer, SECURE_SECTOR_SIZE );
+
+        if ( sflash_read_finished == TRUE )
         {
-#ifdef CHECK_QUAD_ENABLE_EVERY_READ
-            unsigned char status_register;
-            int status;
-            /* Check status register */
-            if ( 0 != ( status = sflash_read_status_register( handle, &status_register ) ) )
+            memset( aes128_iv, 0, AES128_IV_LEN );
+            result = sflash_verify_data( aes128_key, aes128_iv, SECURE_SECTOR_SIZE, SECURE_SECTOR_DATA_SIZE, hmac_key, 32,
+                        crypto_buffer, crypto_buffer, hmac_output );
+            if ( result != 0 )
             {
-                return status;
+                break;
             }
-            wiced_assert("", (status_register & SFLASH_STATUS_REGISTER_QUAD_ENABLE) != 0 );
-            (void) status_register;
-#endif /* ifdef CHECK_QUAD_ENABLE_EVERY_READ */
 
-#ifndef FCBU_SWAP_SFLASH_BITS_2_3
-            /* Both address and data in 4-bit mode */
-            ctrl.bits.opcode = SFLASH_X4IO_READ;
-            ctrl.bits.num_dummy_cycles = 6;
-
-            if ( ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_ISSI_CQ ) ||
-                 ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_ISSI_LP ) )
-            {
-                ctrl.bits.mode_bit_enable = 1;
-                ctrl.bits.num_dummy_cycles = 4;
-            }
-#else
-            /* Address in 1-bit and data in 4-bit mode */
-            ctrl.bits.opcode = SFLASH_QUAD_READ;
-            ctrl.bits.num_dummy_cycles = handle->capabilities->fast_dummy_cycles;
-#endif
-        }
-        else
-        {
-            ctrl.bits.opcode = SFLASH_FAST_READ;
+            /* Copy back requested data to output buffer */
+            memcpy( data_addr_ptr, ( (uint8_t*) crypto_buffer + prev_sector_read_offset ), prev_sector_read_size );
+            data_addr_ptr += prev_sector_read_size;
         }
 
-        /* Set SPI flash clock to higher speed if possible */
-        PLATFORM_CHIPCOMMON->clock_control.divider.bits.serial_flash_divider = handle->capabilities->fast_read_divider;
+        /* Wait for sflash_read_nonblocking() to complete */
+        sflash_read_wait_for_completion( (void*)sflash_buffer, SECURE_SECTOR_SIZE );
+        sflash_read_finished = TRUE;
+        sflash_read_post_read_operations( handle, (void*)sector_aligned_sflash_addr, SECURE_SECTOR_SIZE );
 
-        ctrl.bits.high_speed_mode = ( handle->capabilities->fast_read_divider == 2 ) ? 1 : 0;
+        /* SWAP crypto_buffer and sflash_buffer */
+        SWAP( uint8_t * ,crypto_buffer, sflash_buffer );
+
+        /* Update counters */
+        prev_sector_read_size   = read_size;
+        prev_sector_read_offset = read_offset;
+        device_address          = sector_aligned_sflash_addr + SECURE_SECTOR_SIZE;
+        remaining_size          -= read_size;
     }
 
-    PLATFORM_CHIPCOMMON->sflash.control.raw = ctrl.raw;
+    if ( result == 0 )
+    {
+        /* Last Block */
+        memset( aes128_iv, 0, AES128_IV_LEN );
+        result = sflash_verify_data( aes128_key, aes128_iv, SECURE_SECTOR_SIZE, SECURE_SECTOR_DATA_SIZE, hmac_key, 32,
+                    crypto_buffer, crypto_buffer, hmac_output );
+        if ( result != 0 )
+        {
+            return result;
+        }
 
+        memcpy( data_addr_ptr, ( crypto_buffer + prev_sector_read_offset ), prev_sector_read_size );
+    }
 
-    wiced_assert("Check match between highspeed mode and divider",
-            ( PLATFORM_CHIPCOMMON->clock_control.divider.bits.serial_flash_divider == 2 ) ==
-            ( PLATFORM_CHIPCOMMON->sflash.control.bits.high_speed_mode == 1 ) );
+    return result;
+}
 
-    m2m_unprotected_blocking_dma_memcpy( data_addr, direct_address, size );
+static void sflash_read_wait_for_completion( void* data_addr, unsigned int size )
+{
+    m2m_switch_off_dma_post_completion( );
+    m2m_post_dma_completion_operations( data_addr, size );
+}
 
+static void sflash_read_post_read_operations( const sflash_handle_t* const handle, void* data_addr, unsigned int size )
+{
 
     /* Set SPI flash clock back to Backplane-Clock / 6 so that ROM bootloader will work -
      * required because 43909A0 does not reset the register properly. sflash control register does get reset, so ok to leave current value
@@ -349,8 +412,135 @@ int sflash_read( const sflash_handle_t* const handle, unsigned long device_addre
         }
         wiced_assert("", swap_ptr==&((unsigned char*)data_addr)[size]);
     }
+#else
+    UNUSED_PARAMETER( data_addr );
+    UNUSED_PARAMETER( size );
 #endif /* FCBU_SWAP_SFLASH_BITS_2_3 */
 
+
+}
+int sflash_read( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size )
+{
+    int result;
+    wiced_bool_t blocking = WICED_TRUE;
+
+    result = sflash_read_internal( handle, device_address, data_addr, size, blocking );
+    return result;
+}
+
+static int sflash_read_nonblocking( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size )
+{
+    int result;
+    wiced_bool_t blocking = WICED_FALSE;
+
+    result = sflash_read_internal( handle, device_address, data_addr, size, blocking );
+    return result;
+}
+
+static int sflash_read_internal( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size, wiced_bool_t blocking )
+{
+#ifdef SLFASH_43909_INDIRECT
+
+    unsigned int i;
+    int retval;
+    for ( i = 0; i < size; i++ )
+    {
+        retval = generic_sflash_command( handle, SFLASH_READ, SFLASH_ACTIONCODE_3ADDRESS_1DATA, ( (device_address+i) & 0x00ffffff ), NULL, &((char*)data_addr)[i] );
+        if ( retval != 0 )
+        {
+            return retval;
+        }
+    }
+
+#else /* SLFASH_43909_INDIRECT */
+
+    void* direct_address = (void*) ( SI_SFLASH + device_address );
+
+    bcm43909_sflash_ctrl_reg_t ctrl = { .bits = { .opcode                     = SFLASH_READ,
+                                                  .action_code                = SFLASH_ACTIONCODE_3ADDRESS_4DATA,
+                                                  .use_four_byte_address_mode = 0,
+                                                  .use_opcode_reg             = 1,
+                                                  .mode_bit_enable            = 0,
+                                                  .num_dummy_cycles           = 0,
+                                                  .num_burst                  = 3,
+                                                  .high_speed_mode            = 0,
+                                                  .start_busy                 = 0,
+                                                }
+                                      };
+    if ( ( handle->capabilities->supports_fast_read == 1 ) ||  ( handle->capabilities->supports_quad_read == 1 ) )
+    {
+
+        if ( handle->capabilities->supports_quad_read == 1 )
+        {
+#ifdef CHECK_QUAD_ENABLE_EVERY_READ
+            unsigned char status_register;
+            int status;
+            /* Check status register */
+            if ( 0 != ( status = sflash_read_status_register( handle, &status_register ) ) )
+            {
+                return status;
+            }
+            wiced_assert("", (status_register & SFLASH_STATUS_REGISTER_QUAD_ENABLE) != 0 );
+            (void) status_register;
+#endif /* ifdef CHECK_QUAD_ENABLE_EVERY_READ */
+
+#ifndef FCBU_SWAP_SFLASH_BITS_2_3
+            /* Both address and data in 4-bit mode */
+            if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MACRONIX )
+            {
+                ctrl.bits.opcode = SFLASH_X4IO_READ;
+                ctrl.bits.num_dummy_cycles = 6;
+            }
+
+            if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MICRON )
+            {
+                ctrl.bits.opcode = SFLASH_X4IO_READ;
+                ctrl.bits.num_dummy_cycles = 10;
+            }
+
+            if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_WINBOND )
+            {
+                ctrl.bits.opcode = SFLASH_X4IO_READ;
+                ctrl.bits.num_dummy_cycles = 4;
+                ctrl.bits.mode_bit_enable = 1;
+            }
+
+            if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_ISSI_CQ )
+            {
+                ctrl.bits.mode_bit_enable = 1;
+                ctrl.bits.num_dummy_cycles = 4;
+            }
+#else
+            /* Address in 1-bit and data in 4-bit mode */
+            ctrl.bits.opcode = SFLASH_QUAD_READ;
+            ctrl.bits.num_dummy_cycles = handle->capabilities->fast_dummy_cycles;
+#endif
+        }
+        else
+        {
+            ctrl.bits.opcode = SFLASH_FAST_READ;
+            ctrl.bits.num_dummy_cycles = handle->capabilities->fast_dummy_cycles;
+        }
+
+        /* Set SPI flash clock to higher speed if possible */
+        PLATFORM_CHIPCOMMON->clock_control.divider.bits.serial_flash_divider = handle->capabilities->fast_read_divider;
+
+        ctrl.bits.high_speed_mode = ( handle->capabilities->fast_read_divider == 2 ) ? 1 : 0;
+    }
+
+    PLATFORM_CHIPCOMMON->sflash.control.raw = ctrl.raw;
+
+
+    wiced_assert("Check match between highspeed mode and divider",
+            ( PLATFORM_CHIPCOMMON->clock_control.divider.bits.serial_flash_divider == 2 ) ==
+            ( PLATFORM_CHIPCOMMON->sflash.control.bits.high_speed_mode == 1 ) );
+
+    m2m_unprotected_dma_memcpy( data_addr, direct_address, size , blocking );
+
+    if ( blocking == WICED_TRUE )
+    {
+        sflash_read_post_read_operations( handle, data_addr, size );
+    }
 
 
 #endif /* ifdef SLFASH_43909_INDIRECT */
@@ -390,6 +580,63 @@ static inline int is_quad_write_allowed( uint ccrev_in, const sflash_handle_t* c
 #endif
 }
 
+/* TODO Read Keys from OTP */
+int sflash_write_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@observer@*/const void* const data_addr, unsigned int size )
+{
+
+
+    uint8_t     hmacsha256_key[ ] = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb";
+    uint8_t     aes128_key[ ] = "BcmEncryptionKey";
+    uint8_t     aes128_iv[ 16 ];
+    uint8_t*    data_ptr;
+    uint32_t    write_size;
+    uint32_t    write_offset;
+    uint32_t    remaining_size;
+    int         result;
+    unsigned long sector_aligned_device_address;
+    uint8_t read_buffer[ SECURE_SECTOR_SIZE ] ALIGNED( CRYPTO_OPTIMIZED_DESCRIPTOR_ALIGNMENT );
+
+    remaining_size  = size;
+    data_ptr        = (uint8_t*) data_addr;
+
+    platform_hwcrypto_init( );
+
+    while ( remaining_size != 0 )
+    {
+        /* aligned to SECURE_SECTOR_SIZE */
+        sector_aligned_device_address = ALIGN_TO_SECTOR_ADDRESS( device_address );
+        write_offset = device_address % SECURE_SECTOR_SIZE;
+        write_size = MIN( remaining_size, ( SECURE_SECTOR_DATA_SIZE - write_offset ) );
+
+        /* Read the Virtual sector */
+        sflash_read( handle, sector_aligned_device_address, read_buffer, SECURE_SECTOR_SIZE );
+        memset( aes128_iv, 0, AES_BLOCK_SZ );
+        platform_hwcrypto_aes128cbc_decrypt( aes128_key, 16, aes128_iv, SECURE_SECTOR_SIZE, read_buffer, read_buffer );
+        memcpy( (uint8_t*) read_buffer + write_offset, data_ptr, write_size );
+
+        /* Compute Digest */
+        platform_hwcrypto_sha256_hmac( hmacsha256_key, 32, read_buffer, SECURE_SECTOR_DATA_SIZE, read_buffer, NULL );
+
+        /* Encrypt */
+        memset( aes128_iv, 0, AES_BLOCK_SZ );
+        platform_hwcrypto_aes128cbc_encrypt( aes128_key, AES128_KEY_LEN, aes128_iv, SECURE_SECTOR_SIZE, read_buffer, read_buffer );
+
+        /* Write the Modified sector back using sflash_write */
+        sflash_sector_erase( handle, sector_aligned_device_address );
+        result = sflash_write( handle, sector_aligned_device_address, read_buffer, SECURE_SECTOR_SIZE );
+        if ( result != 0 )
+        {
+            return -1;
+        }
+
+        data_ptr        += write_size;
+        remaining_size  = remaining_size - write_size;
+        device_address  = sector_aligned_device_address + SECURE_SECTOR_SIZE;
+    }
+
+    return 0;
+}
+
 int sflash_write( const sflash_handle_t* const handle, unsigned long device_address, /*@observer@*/ const void* const data_addr, unsigned int size )
 {
     int status;
@@ -421,6 +668,8 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
             opcode = SFLASH_X4IO_WRITE;
         }
         else if ( ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_ISSI_CQ ) ||
+                  ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MICRON ) ||
+                  ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_WINBOND ) ||
                   ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_ISSI_LP ) )
         {
             opcode = SFLASH_QUAD_WRITE;
@@ -435,10 +684,8 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
     while ( size > 0 )
     {
         write_size = ( size >= max_write_size )? max_write_size : size;
-
         /* All transmitted data must not go beyond the end of the current page in a write */
         write_size = MIN( max_write_size - (device_address % max_write_size), write_size );
-
 #ifndef SLFASH_43909_INDIRECT
         if ( (write_size >= DIRECT_WRITE_BURST_LENGTH) && ((device_address & 0x03) == 0x00) && (((unsigned long)data_addr_ptr & 0x03) == 0x00) )
         {
@@ -615,27 +862,6 @@ int init_sflash( /*@out@*/ sflash_handle_t* const handle, /*@shared@*/ void* per
 
     PLATFORM_CHIPCOMMON->clock_control.divider.bits.serial_flash_divider = handle->capabilities->normal_read_divider;
 
-    if (  handle->capabilities->supports_quad_read == 1 )
-    {
-        unsigned char status_register;
-        /* Check status register */
-        if ( 0 != ( status = sflash_read_status_register( handle, &status_register ) ) )
-        {
-            return status;
-        }
-
-        if ( ( status_register & SFLASH_STATUS_REGISTER_QUAD_ENABLE ) == 0 )
-        {
-            status_register |= SFLASH_STATUS_REGISTER_QUAD_ENABLE;
-
-            status = sflash_write_status_register( handle, status_register );
-            if ( status != 0 )
-            {
-                return status;
-            }
-        }
-    }
-
     if ( write_allowed_in == SFLASH_WRITE_ALLOWED )
     {
 #if PLATFORM_NO_SFLASH_WRITE
@@ -650,6 +876,84 @@ int init_sflash( /*@out@*/ sflash_handle_t* const handle, /*@shared@*/ void* per
             return status;
         }
 #endif
+    }
+
+    if (  handle->capabilities->supports_quad_read == 1 )
+    {
+        unsigned char status_register;
+        unsigned char status_register2;
+        unsigned short status_register_new;
+        if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MACRONIX )
+        {
+            /* Check status register */
+            if ( 0 != ( status = sflash_read_status_register( handle, &status_register ) ) )
+            {
+                return status;
+            }
+
+            if ( ( status_register & SFLASH_STATUS_REGISTER_QUAD_ENABLE ) == 0 )
+            {
+                status_register |= SFLASH_STATUS_REGISTER_QUAD_ENABLE;
+
+                status = sflash_write_status_register( handle, status_register );
+                if ( status != 0 )
+                {
+                    return status;
+                }
+            }
+        }
+
+        if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_WINBOND )
+        {
+            if ( 0 != sflash_read_status_register( handle, &status_register ) )
+            {
+                return status;
+            }
+
+            if ( 0 != sflash_read_status_register2( handle, &status_register2 ) )
+            {
+                return status;
+            }
+
+            status_register2 |= WINBOND_SFLASH_STATUS_REGISTER2_QUAD_ENABLE; // Enable Quad mode
+            status_register_new = (unsigned short)((status_register << 8) | status_register2);
+
+            /* Send non-volatile status register (register-1 + register-2) for WINBOND*/
+            status = generic_sflash_command( handle, SFLASH_WRITE_STATUS_REGISTER, SFLASH_ACTIONCODE_2DATA, 0, &status_register_new, NULL );
+            if ( status != 0 )
+            {
+                return status;
+            }
+        }
+
+        if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_MICRON )
+        {
+            /* Reading data in Quad mode with Micron sflash, we should disable HOLD# first or it will interfere Quad mode.
+             * 1. If sflash in Quade mode, it will use DQ3 as input/output and we should disable function of HOLD#. (P. 11)
+             * 2. MICRON_SFLASH_ENH_VOLATILE_STATUS_REGISTER_HOLD is volatile register, it should be configured again after each power-cycle. (P. 24)
+             * 3. In any sflash action of PROGRAM & ERASE & WRITE, we should issue SFLASH_WRITE_ENALBE first. (P. 48)*/
+            status = sflash_read_status_register( handle, &status_register );
+            if ( !( status_register & SFLASH_STATUS_REGISTER_WRITE_ENABLED ) )
+            {
+                status = generic_sflash_command( handle, SFLASH_WRITE_ENABLE, SFLASH_ACTIONCODE_ONLY, 0, NULL, NULL );
+                status_register = 0;
+            }
+
+            status = generic_sflash_command( handle, SFLASH_READ_ENH_VOLATILE_REGISTER, SFLASH_ACTIONCODE_1DATA, 0, NULL, &status_register );
+            if ( status != 0 )
+            {
+                return status;
+            }
+
+            /* Disable function of HOLD# for Quad mode */
+            status_register &= (unsigned char)~(MICRON_SFLASH_ENH_VOLATILE_STATUS_REGISTER_HOLD);
+
+            status = generic_sflash_command( handle, SFLASH_WRITE_ENH_VOLATILE_REGISTER, SFLASH_ACTIONCODE_1DATA, 0, &status_register, NULL );
+            if ( status != 0 )
+            {
+                return status;
+            }
+        }
     }
 
     return 0;

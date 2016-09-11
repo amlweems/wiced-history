@@ -46,7 +46,7 @@
 #include "lwip/mem.h"
 #include "lwip/stats.h"
 #include "wiced_utilities.h"
-#include "wwd_crypto.h"
+#include "wiced_crypto.h"
 
 /* Message queue constants. */
 #define archMESG_QUEUE_LENGTH     ( (unsigned long) 6 )
@@ -111,7 +111,7 @@ void sys_mbox_free( /*@special@*/ sys_mbox_t *mbox ) /*@releases *mbox@*/
 void sys_mbox_post( sys_mbox_t *mbox, void *msg )
 {
     signed portBASE_TYPE retval;
-    retval = xQueueSend( *mbox, &msg, ( portTickType ) ( archPOST_BLOCK_TIME_MS / portTICK_RATE_MS ) );
+    retval = xQueueSend( *mbox, &msg, ( TickType_t ) ( archPOST_BLOCK_TIME_MS / portTICK_PERIOD_MS ) );
     LWIP_ASSERT("Error posting to LwIP mailbox", retval == pdTRUE );
 }
 
@@ -134,7 +134,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32
 {
     void *dummyptr;
     void ** tmp_ptr;
-    portTickType start_time, end_time, elapsed_time;
+    TickType_t start_time, end_time, elapsed_time;
 
     start_time = xTaskGetTickCount( );
 
@@ -155,7 +155,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32
             elapsed_time = end_time - start_time;
             if ( elapsed_time == 0 )
             {
-                elapsed_time = (portTickType) 1;
+                elapsed_time = (TickType_t) 1;
             }
             return ( elapsed_time );
         }
@@ -170,7 +170,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32
     }
     else /* block forever for a message. */
     {
-        if ( xQueueReceive( *mbox, &(*tmp_ptr), (portTickType) 0xFFFFFFFF ) == errQUEUE_EMPTY)
+        if ( xQueueReceive( *mbox, &(*tmp_ptr), (TickType_t) 0xFFFFFFFF ) == errQUEUE_EMPTY)
         {
             *tmp_ptr = NULL;
             return SYS_ARCH_TIMEOUT;
@@ -180,7 +180,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32
         elapsed_time = end_time - start_time;
         if ( elapsed_time == 0 )
         {
-            elapsed_time = (portTickType) 1;
+            elapsed_time = (TickType_t) 1;
         }
         return ( elapsed_time ); /* return time blocked TBD test */
     }
@@ -211,7 +211,7 @@ err_t sys_sem_new( /*@special@*/ /*@out@*/ sys_sem_t *sem, u8_t count) /*@alloca
 
     if ( count == (u8_t) 0 ) /* Means it can't be taken */
     {
-        if ( pdTRUE != xSemaphoreTake( *sem, (portTickType) 1 ) )
+        if ( pdTRUE != xSemaphoreTake( *sem, (TickType_t) 1 ) )
         {
             vQueueDelete( *sem );
             portEXIT_CRITICAL();
@@ -245,7 +245,7 @@ err_t sys_sem_new( /*@special@*/ /*@out@*/ sys_sem_t *sem, u8_t count) /*@alloca
  */
 u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
 {
-    portTickType start_time, end_time, elapsed_time;
+    TickType_t start_time, end_time, elapsed_time;
 
     start_time = xTaskGetTickCount( );
 
@@ -257,7 +257,7 @@ u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
             elapsed_time = end_time - start_time;
             if ( elapsed_time == 0 )
             {
-                elapsed_time = (portTickType) 1;
+                elapsed_time = (TickType_t) 1;
             }
             return ( elapsed_time ); /* return time blocked TBD test */
         }
@@ -268,7 +268,7 @@ u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
     }
     else /* must block without a timeout */
     {
-        while ( xSemaphoreTake( *sem, (portTickType) 10000 ) != (long) pdTRUE )
+        while ( xSemaphoreTake( *sem, (TickType_t) 10000 ) != (long) pdTRUE )
         {
             /* Do nothing */
         }
@@ -276,7 +276,7 @@ u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
         elapsed_time = end_time - start_time;
         if ( elapsed_time == 0 )
         {
-            elapsed_time = (portTickType) 1;
+            elapsed_time = (TickType_t) 1;
         }
 
         return ( elapsed_time ); /* return time blocked */
@@ -375,10 +375,10 @@ sys_arch_timeouts(void)
  */
 /*@null@*/ sys_thread_t sys_thread_new( const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio )
 {
-    xTaskHandle created_task;
+    TaskHandle_t created_task;
     signed portBASE_TYPE result;
     /* The first time this is called we are creating the lwIP handler. */
-    result = xTaskCreate( thread, ( signed char * ) name, (unsigned short) stacksize, arg, (unsigned portBASE_TYPE) prio, &created_task );
+    result = xTaskCreate( thread, name, (unsigned short) stacksize, arg, (unsigned portBASE_TYPE) prio, &created_task );
 
 #if LWIP_SYS_ARCH_TIMEOUTS
     /* For each task created, store the task handle (pid) in the timers array.
@@ -518,6 +518,6 @@ void sys_sem_set_invalid( sys_sem_t *sem )
 uint16_t sys_rand16( void )
 {
     uint16_t output;
-    wwd_wifi_get_random( &output, 2 );
+    wiced_crypto_get_random( &output, 2 );
     return output;
 }

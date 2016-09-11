@@ -152,6 +152,7 @@ static platform_result_t platform_hibernation_clock_init( const platform_hiberna
 
     if ( external_clock )
     {
+        /* If you are hung here, check whether your platform supports an external clock! */
         while ( platform_hibernation_get_status( ).bits.pmu_ext_lpo_avail == 0 );
 
         platform_gci_chipcontrol( GCI_CHIPCONTROL_HIB_FORCE_EXT_LPO_REG, GCI_CHIPCONTROL_HIB_FORCE_EXT_LPO_MASK, GCI_CHIPCONTROL_HIB_FORCE_EXT_LPO_EXEC );
@@ -232,7 +233,7 @@ uint32_t platform_hibernation_get_clock_freq( void )
 {
 #if PLATFORM_HIBERNATE_CLOCK_AS_EXT_LPO
 
-    return osl_ilp_clock( );
+    return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ILP );
 
 #else
 

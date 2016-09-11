@@ -16,10 +16,10 @@
 
 #include "wwd_constants.h"
 #include "wiced_resource.h"
-#include "security/BESL/include/besl_structures.h"
+#include "besl_structures.h"
 #include "platform_constants.h"
 #include "wiced_constants.h"
-#include "../libraries/drivers/bluetooth/include/wiced_bt_constants.h"
+#include "wiced_bluetooth.h"
 
 #ifdef __cplusplus
 extern "C" {

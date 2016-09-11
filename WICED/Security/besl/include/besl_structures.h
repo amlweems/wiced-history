@@ -80,7 +80,8 @@ extern "C" {
     RESULT_ENUM( prefix, BUFFER_ALLOC_FAIL,                       3041 ),   /**<   */ \
     RESULT_ENUM( prefix, OTHER_ENROLLEE,                          3042 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_RECEIVED_INVALID_CREDENTIALS,      3043 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,                   3044 ),   /**<   */
+    RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,                   3044 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_UNABLE_TO_SET_WLAN_SECURITY,       3045 ),   /**<   */
 
 #define TLS_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
@@ -127,7 +128,8 @@ extern "C" {
     RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,               5040 ),   /**<   */ \
     RESULT_ENUM( prefix, CERTIFICATE_REVOKED,                 5041 ),   /**<   */ \
     RESULT_ENUM( prefix, NO_DATA,                             5042 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_UNSUPPORTED_EXTENSION,         5043 ),   /**<   */
+    RESULT_ENUM( prefix, ERROR_UNSUPPORTED_EXTENSION,         5043 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_UNITIALIZED_CONTEXT,           5044 ),   /**<   */
 
 
     #define SUPPLICANT_RESULT_LIST( prefix ) \

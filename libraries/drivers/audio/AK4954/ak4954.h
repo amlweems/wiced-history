@@ -85,14 +85,6 @@ struct ak4954_device_data
     wiced_i2s_t                     data_port;
 };
 
-struct ak4954_device_data2
-{
-    wiced_i2c_device_t *            i2c_data;
-    ak4954_clock_settings_t         ck;
-    wiced_gpio_t                    pdn;
-    wiced_i2s_t                     data_port;
-};
-
 /******************************************************
  *             Variable declarations
  ******************************************************/

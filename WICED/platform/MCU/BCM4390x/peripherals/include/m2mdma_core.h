@@ -1,7 +1,13 @@
 /*
- * BCM43XX M2M DMA core hardware definitions.
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
  *
- * $Copyright Open Broadcom Corporation$
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ *
+ * BCM43XX M2M DMA core hardware definitions.
  *
  * $Id:m2mdma _core.h 421139 2013-08-30 17:56:15Z kiranm $
  */

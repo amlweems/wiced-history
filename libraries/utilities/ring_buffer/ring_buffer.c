@@ -11,6 +11,9 @@
 /** @file
  *
  */
+#if defined ( IAR_TOOLCHAIN )
+#include "platform_cmis.h"
+#endif
 #include <string.h>
 #include "ring_buffer.h"
 #include "wwd_constants.h"

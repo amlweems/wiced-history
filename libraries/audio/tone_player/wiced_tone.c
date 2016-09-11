@@ -24,16 +24,27 @@ typedef struct
     uint32_t cur_idx;
 }tone_data_t;
 
+#define TONE_SAMPLE_RATE            44100
+#define TONE_NUM_CHANNELS           2
+#define TONE_SAMPLE_DEPTH_BYTES     2
 #define NR_USECONDS_IN_SECONDS      (1000*1000)
 #define NR_MSECONDS_IN_SECONDS      (1000)
 #define TONE_PLAYER_THREAD_PRI             10
 #define TONE_PLAYER_THREAD_NAME            ((const char*) "TONE_THREAD")
 #define TONE_PLAYER_THREAD_STACK_SIZE      0x1000
-#define TONE_PERIOD_SIZE                   (1*1024)
-#define TONE_BUFFER_SIZE                   6*TONE_PERIOD_SIZE
-#define TX_START_THRESHOLD                 (6*TONE_PERIOD_SIZE)
-#define EXTRA_MILLIS                       (10)
+#define AUDIO_PERIOD_SIZE                  (1*1024)
+#define AUDIO_BUFFER_SIZE                   (6*AUDIO_PERIOD_SIZE)
+#define TX_START_THRESHOLD                 (3*AUDIO_PERIOD_SIZE)
+#define GUARD_TIME_MS                      (50)
 #define TONE_DATA_LEN                      45
+#define DEFAULT_TONE_LENGTH_MS             600 /*Should be > FADE_IN_DURATION_MS+FADE_OUT_DURATION_MS*/
+#define DEFAULT_TONE_DATA_LENGTH           (DEFAULT_TONE_LENGTH_MS*TONE_SAMPLE_RATE*TONE_NUM_CHANNELS*TONE_SAMPLE_DEPTH_BYTES/1000)
+#define DEFAULT_TONE_VOLUME_LEVEL          ((double)(7.0/15.0))
+
+#define FADE_IN_DURATION_MS               (150)
+#define FADE_OUT_DURATION_MS              (100)
+#define FADE_IN_DATA_LENGTH               (FADE_IN_DURATION_MS*TONE_SAMPLE_RATE*TONE_NUM_CHANNELS*TONE_SAMPLE_DEPTH_BYTES/1000)
+#define FADE_OUT_DATA_LENGTH              (FADE_OUT_DURATION_MS*TONE_SAMPLE_RATE*TONE_NUM_CHANNELS*TONE_SAMPLE_DEPTH_BYTES/1000)
 
 #define TONE_PLAYER_CLEANUP() \
                                 do { \
@@ -41,7 +52,6 @@ typedef struct
                                     is_session_initialized = 0; \
                                     wiced_audio_stop(session); \
                                     wiced_audio_deinit(session); \
-                                    wiced_rtos_deinit_semaphore(&tone_complete_semaphore); \
                                     if(args) \
                                         memset(args, 0, sizeof(tone_data_t)); \
                                     wiced_rtos_unlock_mutex(p_session_init_mutex); \
@@ -50,7 +60,7 @@ typedef struct
 
 
 static const int16_t            tone_data[TONE_DATA_LEN] =
-{   /* sin 980Hz */
+{
     0xffff,0xe42,0x1c38,0x29a8,0x3643,0x41d1,0x4c1b,0x54e3,
     0x5c0b,0x6162,0x64d9,0x6655,0x65d9,0x635a,0x5ef2,0x58af,
     0x50af,0x4725,0x3c2e,0x3015,0x2304,0x154c,0x723,0xf8dd,
@@ -61,12 +71,12 @@ static const int16_t            tone_data[TONE_DATA_LEN] =
 
 wiced_thread_t                     tone_player_thread_id;
 static wiced_audio_session_ref     session;
-static wiced_semaphore_t           tone_complete_semaphore;
 static uint8_t                     is_session_initialized;
 static wiced_mutex_t*              p_session_init_mutex;
 static tone_data_t *args = NULL;
 uint8_t tone_player_thread_stack[TONE_PLAYER_THREAD_STACK_SIZE] __attribute__((section (".ccm")));
-
+extern wiced_bool_t wiced_audio_is_underrun( wiced_audio_session_ref sh );
+extern wiced_result_t wiced_audio_underrun_sem_wait(wiced_audio_session_ref sh);
 
 static void wiced_tone_player_task(uint32_t context);
 
@@ -134,14 +144,14 @@ static wiced_result_t initialize_audio_device(const char *dev, wiced_audio_confi
     /* Initialize device. */
     if (result == WICED_SUCCESS)
     {
-        result = wiced_audio_init(dev, &sh, TONE_PERIOD_SIZE);
+        result = wiced_audio_init(dev, &sh, AUDIO_PERIOD_SIZE);
         wiced_assert("wiced_audio_init", WICED_SUCCESS == result);
     }
 
     /* Allocate audio buffer. */
     if (result == WICED_SUCCESS)
     {
-        result = wiced_audio_create_buffer(sh, TONE_BUFFER_SIZE, NULL, NULL);
+        result = wiced_audio_create_buffer(sh, AUDIO_BUFFER_SIZE, NULL, NULL);
         wiced_assert("wiced_audio_create_buffer", WICED_SUCCESS == result);
     }
 
@@ -199,20 +209,49 @@ static void destroy_session_init_mutex(void)
 static wiced_result_t copy_data(tone_data_t *tone, uint8_t *buf, uint16_t nrbytes)
 {
     int i;
-    static int last_pos;
+    static unsigned int last_pos=0;
+    uint16_t words_to_copy = nrbytes/2;
+    int16_t *buf16 = (int16_t *)buf;
+
+    double ramp;
+
+    if(tone->cur_idx+nrbytes >= tone->length)
+    {
+        words_to_copy = (tone->length-(tone->cur_idx))/2;
+    }
 
     if(tone->cur_idx == 0)
         last_pos = 0;
 
-    for (i = 0; i < nrbytes/2; )
+    for ( i = 0; i < words_to_copy; )
     {
-        int16_t *buf16 = (int16_t *)buf;
-        buf16[i++] = tone_data[last_pos];
-        buf16[i++] = tone_data[last_pos];
+        if( tone->cur_idx <= FADE_IN_DATA_LENGTH )
+        {
+            ramp = (double) tone->cur_idx/(double)FADE_IN_DATA_LENGTH;
+        }
+        else if( (tone->length - tone->cur_idx) <= FADE_OUT_DATA_LENGTH )
+        {
+            ramp = ((double)(tone->length - tone->cur_idx))/(double)FADE_OUT_DATA_LENGTH;
+        }
+        else
+        {
+            ramp = 1;
+        }
+
+        buf16[i++] = (int16_t) (((double) tone_data[last_pos])*ramp);
+        buf16[i++] = (int16_t) (((double) tone_data[last_pos])*ramp);
 
         if (++last_pos >= sizeof(tone_data)/sizeof(tone_data[0]))
+        {
             last_pos = 0;
+        }
     }
+    if(words_to_copy < nrbytes/2)
+    {
+        memset(&buf16[i], 0, (nrbytes-words_to_copy*2));
+        //WPRINT_APP_INFO(("[TONE] cur_idx = %d, memset to 0 = %d bytes\n", tone->cur_idx, (nrbytes-words_to_copy*2)));
+    }
+
     tone->cur_idx += nrbytes;
     return WICED_SUCCESS;
 }
@@ -226,7 +265,9 @@ static wiced_result_t copy_from_mem(tone_data_t *tone, uint8_t *dst, uint32_t sz
     /* Copy predefined data. */
     if (tone->data)
     {
-        uint32_t cpy_len = (sz > tone->length)?tone->length:sz;
+        uint32_t rem_len = tone->length - tone->cur_idx;
+        uint32_t cpy_len = MIN(rem_len, sz);
+
         memcpy(dst, &tone->data[tone->cur_idx], cpy_len);
         tone->cur_idx += cpy_len;
 
@@ -245,7 +286,6 @@ static wiced_result_t copy_from_mem(tone_data_t *tone, uint8_t *dst, uint32_t sz
 uint32_t get_tone_length(tone_data_t *tone)
 {
     uint32_t len;
-    wiced_audio_config_t *config = &tone->audio_info;
 
     if(tone->data)
     {
@@ -253,17 +293,11 @@ uint32_t get_tone_length(tone_data_t *tone)
     }
     else
     {
-        if(!tone->length)
-            len = 3*TX_START_THRESHOLD; //TX_START_THRESHOLD+TONE_PERIOD_SIZE; //128ms
-        else
-        {
-            len = (((config->sample_rate * (config->bits_per_sample/8) * config->channels) * tone->length*32)/NR_MSECONDS_IN_SECONDS); //TODO:to change this
-        if(len < TX_START_THRESHOLD)
-            len += (TX_START_THRESHOLD-len+TX_START_THRESHOLD);
-        }
+        len = DEFAULT_TONE_DATA_LENGTH;
     }
     return len;
 }
+
 
 static void wiced_tone_player_task(uint32_t context)
 {
@@ -295,11 +329,9 @@ static void wiced_tone_player_task(uint32_t context)
         return;
     }
 
-    wiced_rtos_init_semaphore(&tone_complete_semaphore);
-
     if ( WICED_SUCCESS == wiced_audio_get_volume_range( session, &min_volume_in_db, &max_volume_in_db ) )
     {
-        decibels = (max_volume_in_db + min_volume_in_db)/2;
+        decibels = ( double ) (( max_volume_in_db - min_volume_in_db )*DEFAULT_TONE_VOLUME_LEVEL)+min_volume_in_db ;
         wiced_audio_set_volume( session, decibels );
         //WPRINT_APP_INFO(( "[TONE] Volume changed[ Min:%.2f Max:%.2f now:%.2f ]\n",min_volume_in_db, max_volume_in_db, decibels ));
     }
@@ -323,67 +355,87 @@ static void wiced_tone_player_task(uint32_t context)
                     {
                         is_tx_started = 1;
                     }
+                    if(result != WICED_SUCCESS)
+                    {
+                        WPRINT_APP_INFO(("wiced_audio_start error %d\n", result));
+                    }
                 }
             }
 
             if (result == WICED_SUCCESS)
             {
                 /* Wait for slot in transmit buffer. */
-                wiced_audio_config_t *config = &args->audio_info;
-                uint32_t timeout = (((NR_USECONDS_IN_SECONDS/(config->sample_rate * config->channels)) * TONE_PERIOD_SIZE)/NR_MSECONDS_IN_SECONDS);
-                result = wiced_audio_wait_buffer(session, TONE_PERIOD_SIZE, timeout);
-                if (result == WICED_SUCCESS)
+                result = wiced_audio_wait_buffer(session, AUDIO_PERIOD_SIZE, 100);
+                wiced_assert(("wait buffer returned error = %d",result), (result == WICED_SUCCESS));
+                if(result != WICED_SUCCESS)
                 {
-                    /* Copy available data to transmit buffer. */
-                    remaining = TONE_PERIOD_SIZE;
-                    while (0 != remaining && result == WICED_SUCCESS)
-                    {
-                        uint8_t *buf;
-                        uint16_t avail = remaining;
+                    WPRINT_APP_INFO(("wiced_audio_wait_buffer error %d\n", result));
+                    break;
+                }
+                /* Copy available data to transmit buffer. */
+                remaining = AUDIO_PERIOD_SIZE;
+                while (0 != remaining && result == WICED_SUCCESS)
+                {
+                    uint8_t *buf;
+                    uint16_t avail = remaining;
 
-                        result = wiced_audio_get_buffer(session, &buf, &avail);
-                        if (result == WICED_SUCCESS)
-                        {
-                            if(!silence)
-                                copy_from_mem(args, buf, avail);
-                            else
-                            {
-                                memset(buf, 0, avail);
-                                args->cur_idx+=avail;
-                            }
-                            result = wiced_audio_release_buffer(session, avail);
-                            remaining -= avail;
-                        }
+                    result = wiced_audio_get_buffer(session, &buf, &avail);
+                    if(result != WICED_SUCCESS)
+                    {
+                        WPRINT_APP_INFO(("wiced_audio_get_buffer error %d\n", result));
+                        break;
                     }
+                    if(!silence)
+                        copy_from_mem(args, buf, avail);
+                    else
+                    {
+                        memset(buf, 0, avail);
+                        args->cur_idx+=avail;
+                    }
+                    result = wiced_audio_release_buffer(session, avail);
+                    remaining -= avail;
                 }
             }
+
             if(result != WICED_SUCCESS)
             {
                 args->repeat = 0;
                 break;
             }
         }
+
         if(args->repeat)
         {
             if(!silence)
+            {
                 silence = 1;
+            }
             else
             {
                 args->repeat--;
                 silence = 0;
             }
         }
-    }while(args->repeat);
+        else
+        {
+            break;
+        }
+
+    }while(1);
 
     if(result == WICED_SUCCESS)
     {
         wiced_audio_get_current_buffer_weight(session, &weight);
+        //WPRINT_APP_INFO( ("\n[TONE] weight=%d\n",(int)weight) );
         if (weight > 0)
         {
-            uint32_t timeout = (((NR_USECONDS_IN_SECONDS/(args->audio_info.sample_rate * args->audio_info.channels)) * weight)/NR_MSECONDS_IN_SECONDS)+EXTRA_MILLIS;
-            wiced_rtos_get_semaphore(&tone_complete_semaphore,timeout);
+            uint32_t timeout = (((NR_USECONDS_IN_SECONDS/(args->audio_info.sample_rate * args->audio_info.channels*2)) * weight)/NR_MSECONDS_IN_SECONDS)+GUARD_TIME_MS;
+            wiced_rtos_delay_milliseconds(timeout);
         }
     }
+
+    wiced_audio_get_current_buffer_weight(session,&weight);
+
     TONE_PLAYER_CLEANUP();
     WPRINT_APP_INFO(("[TONE] exit tone player loop\n"));
 }

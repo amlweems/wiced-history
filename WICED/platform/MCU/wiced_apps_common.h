@@ -38,6 +38,7 @@ typedef struct
 typedef struct
 {
         uint8_t     count;          /* Number of entries */
+        uint8_t     secure;         /* Is this app secure (Signed/Encrypted) or not */
         app_entry_t sectors[8];     /* An app can have a maximum of 8 amendments (for simplicity) */
 }app_header_t;
 

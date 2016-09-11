@@ -55,8 +55,19 @@ typedef enum {
     WICED_BT_AVK_AUDIO_STATE_REMOTE_SUSPEND = 0,
     WICED_BT_AVK_AUDIO_STATE_STOPPED,
     WICED_BT_AVK_AUDIO_STATE_STARTED,
+    WICED_BT_AVK_AUDIO_STATE_CONFIGURED
 } wiced_bt_avk_audio_state_t;
 
+/** \brief Bluetooth AV data associated with datapath states */
+typedef union {
+
+    struct {
+        unsigned long sample_rate;
+        unsigned char bits_per_sample;
+        unsigned char channels;
+    } config;
+
+} wiced_bt_avk_audio_data_t;
 
 /** \brief AVK connection status notification callback.
 *
@@ -72,11 +83,26 @@ typedef void ( *wiced_bt_avk_connection_state_callback )( wiced_bt_avk_connectio
 *
 *   The library issues this call back to notify change in BT AVK audio connection state.
 *
-*   \param state  AVK audio connection state
-*   \param bd_addr  remote device address
+*   \param state         AVK audio connection state
+*   \param bd_addr       remote device address
+*   \param audio_data    data associated with audio state
 **/
 typedef void ( *wiced_bt_avk_audio_state_callback )( wiced_bt_avk_audio_state_t state,
-                                                                  wiced_bt_bdaddr_t *bd_addr );
+                                                     wiced_bt_bdaddr_t *bd_addr,
+                                                     wiced_bt_avk_audio_data_t *audio_data );
+
+
+/** \brief AVK audio path decoded/rendered data
+*
+*   The library issues this call back to provide decoded/rendered data (PCM samples)
+*
+*   \param buf           pointer to buffer of PCM samples
+*   \param length        length of PCM buffer
+*   \param timestamp_ns  timestamp in nanosecs associated with PCM buffer
+**/
+typedef void (*wiced_bt_avk_audio_data_callback)(unsigned char *buf,
+                                                 unsigned short length,
+                                                 unsigned long long timestamp_ns);
 
 
 /**    \brief     struct used to pass AVK callbacks to library.
@@ -87,8 +113,9 @@ typedef void ( *wiced_bt_avk_audio_state_callback )( wiced_bt_avk_audio_state_t 
 **/
 typedef struct
 {
-    wiced_bt_avk_connection_state_callback  connection_state_cb; //!<Callback function pointer
-    wiced_bt_avk_audio_state_callback audio_state_cb; //!<Callback function pointer
+    wiced_bt_avk_connection_state_callback connection_state_cb; //!<Callback function pointer
+    wiced_bt_avk_audio_state_callback      audio_state_cb;      //!<Callback function pointer
+    wiced_bt_avk_audio_data_callback       audio_data_cb;       //!<Callback function pointer
 } wiced_bt_avk_callbacks_t;
 
 

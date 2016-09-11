@@ -6,12 +6,9 @@
  * the contents of this file may not be disclosed to third parties, copied
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
- */
-/*
+ *
  * Generic Broadcom Home Networking Division (HND) DMA engine SW interface
  * This supports the following chips: BCM42xx, 44xx, 47xx .
- *
- * $Copyright Open Broadcom Corporation$
  *
  * $Id: hnddma.h 321146 2012-03-14 08:27:23Z deepakd $
  */
@@ -43,6 +40,7 @@ typedef enum {
 
 void m2m_dma_detach(m2m_hnddma_t *di);
 void m2m_dma_txinit(m2m_hnddma_t *di);
+int m2m_dma_txactive(m2m_hnddma_t *di_in);
 int BCMFASTPATH m2m_dma_txfast(m2m_hnddma_t *di, void *p0, uint16_t len, bool commit);
 void BCMFASTPATH m2m_dma_txreclaim(m2m_hnddma_t *di, txd_range_t range);
 void * BCMFASTPATH m2m_dma_getnexttxp(m2m_hnddma_t *di, txd_range_t range);
@@ -55,7 +53,6 @@ int m2m_dma_rxactive(m2m_hnddma_t *di_in);
 void m2m_dma_rxreclaim(m2m_hnddma_t *di);
 void m2m_dma_fifoloopbackenable(m2m_hnddma_t *di);
 uint m2m_dma_ctrlflags(m2m_hnddma_t *di, uint mask, uint flags);
-int  m2m_unprotected_blocking_dma_memcpy( void* destination, const void* source, uint32_t byte_count );
 bool m2m_dma_txreset_inner(void *osh, void *txregs);
 bool m2m_dma_rxreset_inner(void *osh, void *rxregs);
 

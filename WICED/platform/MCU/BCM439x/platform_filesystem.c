@@ -89,7 +89,7 @@ void platform_sflash_init( void )
 /* To handle WWD applications that don't go through wiced_init() (yet need to use the file system):
  * File system initialization is called twice
  * wiced_init()->wiced_core_init()->wiced_platform_init()->platform_filesystem_init()
- * wwd_management_init()->wwd_management_wifi_on()->host_platform_init()->platform_filesystem_init()
+ * wwd_management_wifi_on()->host_platform_init()->platform_filesystem_init()
  */
 platform_result_t platform_filesystem_init( void )
 {
@@ -250,4 +250,24 @@ platform_result_t platform_get_sflash_dct_loc( sflash_handle_t* sflash_handle, u
 
     *loc = 0;
     return PLATFORM_SUCCESS;
+}
+
+int sflash_read_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@out@*/ /*@dependent@*/ void* const data_addr, unsigned int size )
+{
+    UNUSED_PARAMETER( handle );
+    UNUSED_PARAMETER( device_address );
+    UNUSED_PARAMETER( data_addr );
+    UNUSED_PARAMETER( size );
+    wiced_assert( "sflash_read_secure not supported", WICED_FALSE );
+    return 0;
+}
+
+int sflash_write_secure( const sflash_handle_t* const handle, unsigned long device_address, /*@observer@*/ const void* const data_addr, unsigned int size )
+{
+    UNUSED_PARAMETER( handle );
+    UNUSED_PARAMETER( device_address );
+    UNUSED_PARAMETER( data_addr );
+    UNUSED_PARAMETER( size );
+    wiced_assert( "sflash_write_secure not supported", WICED_FALSE );
+    return 0;
 }
