@@ -18,6 +18,8 @@
 #include "wwd_network_interface.h"
 #include "wiced_network.h"
 #include <limits.h>
+#include "wiced_resource.h"
+#include "wiced_wifi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,11 +59,15 @@ extern "C" {
  ******************************************************/
 
 typedef void (*wiced_ip_address_change_callback_t)( void* arg );
+typedef wiced_result_t (*wiced_tcp_stream_write_callback_t)( void* tcp_stream, const void* data, uint32_t data_length );
 
 /******************************************************
  *            Enumerations
  ******************************************************/
 
+/**
+ * IP Version
+ */
 typedef enum
 {
     WICED_IPV4 = 4,
@@ -69,12 +75,18 @@ typedef enum
     WICED_INVALID_IP = INT_MAX
 } wiced_ip_version_t;
 
+/**
+ * IPv6 Address Type
+ */
 typedef enum
 {
     IPv6_LINK_LOCAL_ADDRESS,
     IPv6_GLOBAL_ADDRESS,
 } wiced_ipv6_address_type_t;
 
+/**
+ * TCP Callback Events
+ */
 typedef enum
 {
     WICED_TCP_DISCONNECTED_EVENT = (1 << 0),
@@ -86,14 +98,23 @@ typedef enum
  *             Structures
  ******************************************************/
 
+/**
+ * TCP Stream Structure
+ */
 typedef struct
 {
     wiced_tcp_socket_t* socket;
-    wiced_packet_t*     packet;
-    uint8_t*            packet_data;
-    uint16_t            packet_space_available;
+    wiced_packet_t*     tx_packet;
+    uint8_t*            tx_packet_data;
+    uint16_t            tx_packet_space_available;
+    wiced_packet_t*     rx_packet;
+    wiced_bool_t                      use_custom_tcp_stream;
+    wiced_tcp_stream_write_callback_t tcp_stream_write_callback;
 } wiced_tcp_stream_t;
 
+/**
+ * IP Address Structure
+ */
 typedef struct
 {
     wiced_ip_version_t version;
@@ -140,7 +161,8 @@ extern const wiced_ip_address_t wiced_ip_broadcast;
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_tls_init_simple_context( wiced_tls_simple_context_t* context );
+wiced_result_t wiced_tls_init_simple_context( wiced_tls_simple_context_t* context, const char* peer_cn );
+
 
 /** Initialises an advanced TLS context handle using a supplied certificate and private key
  *
@@ -163,6 +185,7 @@ wiced_result_t wiced_tls_init_advanced_context( wiced_tls_advanced_context_t* co
  */
 wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certificates );
 
+
 /** De-initialise the trusted root CA certificates
  *
  *  De-initialises the collection of trusted root CA certificates used to verify received certificates
@@ -179,6 +202,7 @@ wiced_result_t wiced_tls_deinit_root_ca_certificates( void );
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_tls_deinit_context( wiced_tls_simple_context_t* context );
+
 
 /** Reset a previously inited simple or advanced context
  *
@@ -234,6 +258,14 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
 wiced_result_t wiced_tcp_register_callbacks( wiced_tcp_socket_t* socket, wiced_socket_callback_t connect_callback, wiced_socket_callback_t receive_callback, wiced_socket_callback_t disconnect_callback);
 
 
+/** Un-registers all callback functions associated with the indicated TCP socket
+ *
+ * @param[in,out] socket              : A pointer to a TCP socket handle that has been previously created with @ref wiced_tcp_create_socket
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_unregister_callbacks( wiced_tcp_socket_t* socket );
+
 /** Binds a TCP socket to a local TCP port
  *
  *  Binds a TCP socket to a local port.
@@ -271,13 +303,14 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
  */
 wiced_result_t wiced_tcp_listen( wiced_tcp_socket_t* socket, uint16_t port );
 
-/** Returns the details( ip address and the source port) of the client  
+
+/** Returns the details( ip address and the source port) of the client
  *  which is connected currently to a server
- *  
- *  @param[in] socket  : A pointer to a socket handle that has been previously created with @ref wiced_tcp_create_socket 
- *  @param[in/out] address: returned IP address of the connected client
- *  @param[in/out] address: returned source port of the connected client
- *  
+ *
+ *  @param[in]  socket : A pointer to a socket handle that has been previously created with @ref wiced_tcp_create_socket
+ *  @param[out] address: returned IP address of the connected client
+ *  @param[out] port   : returned source port of the connected client
+ *
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_tcp_server_peer( wiced_tcp_socket_t* socket, wiced_ip_address_t* address, uint16_t* port );
@@ -292,6 +325,7 @@ wiced_result_t wiced_tcp_server_peer( wiced_tcp_socket_t* socket, wiced_ip_addre
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket );
+
 
 /** Disconnect a TCP connection
  *
@@ -345,7 +379,28 @@ wiced_result_t wiced_tcp_enable_tls( wiced_tcp_socket_t* socket, void* context )
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_tcp_start_tls(wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification );
+wiced_result_t wiced_tcp_start_tls( wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification );
+
+
+/** Start TLS on a TCP Connection with a particular set of cipher suites
+ *
+ * Start Transport Layer Security (successor to SSL) on a TCP Connection
+ *
+ * @param[in,out] socket       : The TCP socket to use for TLS
+ * @param[in]     type         : Identifies whether the device will be TLS client or server
+ * @param[in]     verification : Indicates whether to verify the certificate chain against a root server.
+ * @param[in]     cipher_list  : a list of cipher suites. Null terminated.
+ *                               e.g.
+ *                                    static const cipher_suite_t* my_ciphers[] =
+ *                                    {
+ *                                          &TLS_RSA_WITH_AES_128_CBC_SHA,
+ *                                          &TLS_RSA_WITH_AES_256_CBC_SHA,
+ *                                          0
+ *                                    };
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[] );
 
 
 /*****************************************************************************/
@@ -388,7 +443,6 @@ wiced_result_t wiced_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t
  */
 wiced_result_t wiced_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
 
-
 /** @} */
 /*****************************************************************************/
 /** @addtogroup tcpbfr       TCP buffer comms
@@ -413,7 +467,6 @@ wiced_result_t wiced_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t** p
  */
 wiced_result_t wiced_tcp_send_buffer( wiced_tcp_socket_t* socket, const void* buffer, uint16_t buffer_length );
 
-
 /** @} */
 /*****************************************************************************/
 /** @addtogroup tcpstream       TCP stream comms
@@ -425,7 +478,6 @@ wiced_result_t wiced_tcp_send_buffer( wiced_tcp_socket_t* socket, const void* bu
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Creates a stream for a TCP connection
  *
@@ -464,7 +516,34 @@ wiced_result_t wiced_tcp_stream_deinit( wiced_tcp_stream_t* tcp_stream );
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const void* data, uint16_t data_length );
+wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const void* data, uint32_t data_length );
+
+
+/** Write data from a resource object into a TCP stream
+ *
+ *  Write resource object data into an open TCP stream.
+ *  Data will only be sent if it causes the current internal packet
+ *  to become full, or if @ref wiced_tcp_stream_flush is called.
+ *
+ * @param tcp_stream  : A pointer to a stream handle that will be initialised
+ * @param res_id      : The resource to send
+  *
+ * @return    WICED_SUCCESS : on success.
+ *            WICED_ERROR   : if an error occurred
+ */
+wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, const resource_hnd_t* res_id );
+
+
+/** Read data from a TCP stream
+ *
+ * @param[in,out] tcp_stream    : A pointer to a stream handle where data will be written
+ * @param[out]    buffer        : The memory buffer to write data into
+ * @param[in]     buffer_length : The number of bytes to read into the buffer
+ * @param[in]     timeout       : Timeout value in milliseconds or WICED_NEVER_TIMEOUT
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_stream_read( wiced_tcp_stream_t* tcp_stream, void* buffer, uint16_t buffer_length, uint32_t timeout );
 
 
 /** Flush pending TCP stream data out to remote host
@@ -477,6 +556,7 @@ wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const voi
  */
 wiced_result_t wiced_tcp_stream_flush( wiced_tcp_stream_t* tcp_stream );
 
+
 /* Enable TCP keepalive mechanism on a specified socket
  *
  * @param[in]     socket    : Pointer to a tcp_socket
@@ -488,9 +568,69 @@ wiced_result_t wiced_tcp_stream_flush( wiced_tcp_stream_t* tcp_stream );
 */
 wiced_result_t wiced_tcp_enable_keepalive(wiced_tcp_socket_t* socket, uint16_t interval, uint16_t probes, uint16_t _time );
 
+/** @} */
+/*****************************************************************************/
+/** @addtogroup tcpserver       TCP server comms
+ *  @ingroup tcp
+ *
+ * Functions for communication over TCP as a server
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/** Initializes the TCP server, and creates and begins listening on specified port
+ *
+ * @param[in] tcp_server         : pointer to TCP server structure
+ * @param[in] interface          : The interface (AP or STA) for which the socket should be created
+ * @param[in] port               : TCP server listening port
+ * @param[in] connect_callback   : listening socket connect callback
+ * @param[in] receive_callback   : listening socket receive callback
+ * @param[in] disconnect_callback: listening socket disconnect callback
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_interface_t interface, uint16_t port, wiced_socket_callback_t connect_callback, wiced_socket_callback_t receive_callback, wiced_socket_callback_t disconnect_callback);
+
+/** Server accepts incoming connection on specified socket
+ *
+ * @param[in] tcp_server      : pointer to TCP server structure
+ * @param[in] socket          : TCP socket structure
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_server_accept( wiced_tcp_server_t* tcp_server, wiced_tcp_socket_t* socket );
+
+/** Add TLS security to a TCP server ( all server sockets )
+ *
+ * @param[in] tcp_server   : pointer to TCP server structure
+ * @param[in] context      : A pointer to a wiced_tls_advanced_context_t context object that will be initialized
+ * @param[in] certificate  : The server x509 certificate in base64 encoded string format
+ * @param[in] key          : The server private key in base64 encoded string format
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_server_add_tls( wiced_tcp_server_t* tcp_server, wiced_tls_advanced_context_t* context, const char* server_cert, const char* server_key );
+
+/** Stop and tear down TCP server
+ *
+ * @param[in] tcp_server   : pointer to TCP server structure
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_server_stop( wiced_tcp_server_t* server );
+
+/** Disconnect server socket
+ *
+ * @param[in] tcp_server      : pointer to TCP server structure
+ * @param[in] socket          : TCP socket structure
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_tcp_server_disconnect_socket( wiced_tcp_server_t* tcp_server, wiced_tcp_socket_t* socket);
 
 /** @} */
-/** @} */
+
 /*****************************************************************************/
 /** @addtogroup udp       UDP
  *  @ingroup ipcoms
@@ -564,7 +704,6 @@ wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** p
 wiced_result_t wiced_udp_reply( wiced_udp_socket_t* socket, wiced_packet_t* in_packet, wiced_packet_t* out_packet );
 
 
-
 /** Deletes a UDP socket
  *
  *  Deletes a UDP socket that has been created with @ref wiced_udp_create_socket
@@ -592,7 +731,7 @@ wiced_result_t wiced_udp_packet_get_info( wiced_packet_t* packet, wiced_ip_addre
 
 /** Registers a callback function with the indicated UDP socket
  *
- * @param[in,out] socket           : A pointer to a TCP socket handle that has been previously created with @ref wiced_tcp_create_socket
+ * @param[in,out] socket           : A pointer to a TCP socket handle that has been previously created with @ref wiced_udp_create_socket
  * @param[in]     receive_callback : The callback function that will be called when a UDP packet is received
  *
  * @return @ref wiced_result_t
@@ -600,6 +739,13 @@ wiced_result_t wiced_udp_packet_get_info( wiced_packet_t* packet, wiced_ip_addre
 wiced_result_t wiced_udp_register_callbacks( wiced_udp_socket_t* socket, wiced_socket_callback_t receive_callback );
 
 
+/** Un-registers all callback functions associated with the indicated UDP socket
+ *
+ * @param[in,out] socket              : A pointer to a UDP socket handle that has been previously created with @ref wiced_udp_create_socket
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_udp_unregister_callbacks( wiced_udp_socket_t* socket );
 
 /** @} */
 
@@ -640,7 +786,6 @@ wiced_result_t wiced_ping( wiced_interface_t interface, const wiced_ip_address_t
  */
 /*****************************************************************************/
 
-
 /** Looks up a hostname via DNS
  *
  *  Sends a DNS query to find an IP address for a given hostname string.
@@ -655,7 +800,6 @@ wiced_result_t wiced_ping( wiced_interface_t interface, const wiced_ip_address_t
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_hostname_lookup( const char* hostname, wiced_ip_address_t* address, uint32_t timeout_ms );
-
 
 /** @} */
 
@@ -705,7 +849,6 @@ wiced_result_t wiced_multicast_leave( wiced_interface_t interface, const wiced_i
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Allocates a TCP packet from the pool
  *
@@ -791,16 +934,15 @@ wiced_result_t wiced_packet_delete( wiced_packet_t* packet );
  * Retrieves a data buffer pointer for a given packet handle at a particular offset.
  * For fragmented packets, the offset input is used to traverse through the packet chain.
  *
- * @param[in,out] packet                : the packet handle for which to get a data pointer
- * @param[in]     offset                : the offset from the starting address.
- * @param[out]    data                  : a pointer which will receive the data pointer
- * @param[out]    data_length           : the current length of data in the packet in bytes.
- * @param[out]    available_data_length : for a TX packet: the current amount of extra data space that is available in bytes.
- *                                        for an RX packet: the amount of data available to be read from all fragments
+ * @param[in,out] packet                          : the packet handle for which to get a data pointer
+ * @param[in]     offset                          : the offset from the starting address.
+ * @param[out]    data                            : a pointer which will receive the data pointer
+ * @param[out]    fragment_available_data_length  : receives the length of data in the current fragment after the specified offset
+ * @param[out]    total_available_data_length     : receives the total length of data in the all fragments after the specified offset
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_packet_get_data( wiced_packet_t* packet, uint16_t offset, uint8_t** data, uint16_t* data_length, uint16_t *available_data_length );
+wiced_result_t wiced_packet_get_data( wiced_packet_t* packet, uint16_t offset, uint8_t** data, uint16_t* fragment_available_data_length, uint16_t *total_available_data_length );
 
 
 /** Set the size of data in a packet
@@ -815,6 +957,7 @@ wiced_result_t wiced_packet_get_data( wiced_packet_t* packet, uint16_t offset, u
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_packet_set_data_end( wiced_packet_t* packet, uint8_t* data_end );
+
 
 /** Set the size of data in a packet
  *
@@ -853,7 +996,6 @@ wiced_result_t wiced_packet_get_next_fragment( wiced_packet_t* packet, wiced_pac
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Retrieves the IPv4 address for an interface
  *

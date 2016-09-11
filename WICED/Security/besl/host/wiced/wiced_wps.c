@@ -16,9 +16,9 @@
  ******************************************************/
 
 #include "wps_host.h"
-#include "Network/wwd_buffer_interface.h"
-#include "Network/wwd_network_interface.h"
-#include "Network/wwd_network_constants.h"
+#include "network/wwd_buffer_interface.h"
+#include "network/wwd_network_interface.h"
+#include "network/wwd_network_constants.h"
 #include "string.h"
 #include "wps_host_interface.h"
 #include "wwd_wifi.h"
@@ -27,10 +27,12 @@
 #include "stdlib.h"
 #include "wps_constants.h"
 #include "wps_common.h"
+#include "wiced_rtos.h"
+#include "wiced_time.h"
 #include "wps_p2p_interface.h"
 #include "besl_host.h"
 #include "besl_host_interface.h"
-#include "internal/SDPCM.h"
+#include "internal/wwd_sdpcm.h"
 #include "wiced_wps.h"
 
 /******************************************************
@@ -40,14 +42,10 @@
 #define EAPOL_HEADER_SPACE       (sizeof(ether_header_t) + sizeof(eapol_header_t))
 
 #define WL_CHANSPEC_CHAN_MASK    0x00ff
-#define WL_CHANSPEC_BAND_MASK    0xf000
-#define WL_CHANSPEC_BAND_2G      0x2000
 
 #define WPS_THREAD_STACK_SIZE  (8*1024)
 #define WPS_THREAD_PRIORITY    3
 
-#define SECONDS              (1000)
-#define MINUTES              (60 * SECONDS)
 #define WPS_TOTAL_MAX_TIME   (120*1000) /* In milliseconds */
 
 #define AUTHORIZED_MAC_LIST_LENGTH   (1)
@@ -61,6 +59,8 @@
 /******************************************************
  *             Macros
  ******************************************************/
+
+#define IF_TO_WORKSPACE( interface )   ( active_wps_workspaces[ (((interface)==WWD_STA_INTERFACE)?0:1) ] )     /* STA = 0,  AP = 1 */
 
 /******************************************************
  *             Local Structures
@@ -79,7 +79,7 @@ typedef struct
     wiced_time_t            timer_reference;
     uint32_t                timer_timeout;
 
-    uint32_t interface;
+    wwd_interface_t         interface;
 
     union
     {
@@ -116,33 +116,32 @@ typedef struct
 static wps_agent_t* active_wps_workspaces[ACTIVE_WPS_WORKSPACE_ARRAY_SIZE] = {0,0,0};
 
 static       wps_pbc_overlap_record_t pbc_overlap_array[2] = { { 0 } };
-static       wps_pbc_overlap_record_t last_pbc_enrollee = { 0 };
-static const wiced_event_num_t        wps_events[]         = { WLC_E_PROBREQ_MSG, WLC_E_NONE };
+static       wps_pbc_overlap_record_t last_pbc_enrollee    = { 0 };
+static const wwd_event_num_t        wps_events[]         = { WLC_E_PROBREQ_MSG, WLC_E_NONE };
 
 /******************************************************
  *             Static Function Prototypes
  ******************************************************/
 
-static void  wiced_wps_thread( uint32_t arg );
-static void  scan_result_handler( wiced_scan_result_t** result_ptr, void* user_data );
-static void* wps_softap_event_handler( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data );
-static void  wps_update_pbc_overlap_array(const besl_mac_t* mac );
-static wiced_result_t besl_wps_pbc_overlap_check( const besl_mac_t* mac );
+static void          wiced_wps_thread             ( uint32_t arg );
+static void          scan_result_handler          ( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status );
+static void*         wps_softap_event_handler     ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+static void          wps_update_pbc_overlap_array ( const besl_mac_t* mac );
+static besl_result_t besl_wps_pbc_overlap_check   ( const besl_mac_t* mac );
 
 /******************************************************
  *             Function definitions
  ******************************************************/
 
-wiced_result_t besl_wps_init(wps_agent_t* workspace, const besl_wps_device_detail_t* details, wps_agent_type_t type, wiced_interface_t interface )
+besl_result_t besl_wps_init(wps_agent_t* workspace, const besl_wps_device_detail_t* details, wps_agent_type_t type, wwd_interface_t interface )
 {
-    //wiced_result_t        result;
     wps_host_workspace_t* host_workspace;
 
     memset(workspace, 0, sizeof(wps_agent_t));
     host_workspace = besl_host_malloc("wps", sizeof(wps_host_workspace_t));
     if (host_workspace == NULL)
     {
-        return WICED_NOMEM;
+        return BESL_OUT_OF_HEAP_SPACE;
     }
     memset(host_workspace, 0, sizeof(wps_host_workspace_t));
     workspace->wps_host_workspace = host_workspace;
@@ -153,7 +152,7 @@ wiced_result_t besl_wps_init(wps_agent_t* workspace, const besl_wps_device_detai
     {
         besl_host_free(workspace->wps_host_workspace);
         workspace->wps_host_workspace = NULL;
-        return WICED_ERROR;
+        return BESL_ERROR_WPS_STACK_MALLOC_FAIL;
     }
 #else
     host_workspace->wps_thread_stack = NULL;
@@ -164,6 +163,9 @@ wiced_result_t besl_wps_init(wps_agent_t* workspace, const besl_wps_device_detai
     workspace->agent_type     = type;
     workspace->device_details = details;
     workspace->wps_result     = WPS_NOT_STARTED;
+    workspace->wps_mode       = WPS_PIN_MODE;
+
+    host_rtos_init_queue( &host_workspace->event_queue, host_workspace->event_buffer, sizeof( host_workspace->event_buffer ), sizeof(wps_event_message_t) );
 
     wps_init_workspace( workspace );
 
@@ -178,43 +180,33 @@ wiced_result_t besl_wps_init(wps_agent_t* workspace, const besl_wps_device_detai
     return WICED_SUCCESS;
 }
 
-wiced_result_t besl_wps_management_set_event_handler( wps_agent_t* workspace, wiced_bool_t enable )
+besl_result_t besl_wps_management_set_event_handler( wps_agent_t* workspace, wiced_bool_t enable )
 {
-    wiced_result_t        result;
+    wwd_result_t        result;
 
-    // Add WPS event handler
+    /* Add WPS event handler */
     if ( enable == WICED_TRUE )
     {
-        result = wwd_management_set_event_handler( wps_events, wps_softap_event_handler, workspace, WICED_AP_INTERFACE );
+        result = wwd_management_set_event_handler( wps_events, wps_softap_event_handler, workspace, WWD_AP_INTERFACE );
     }
     else
     {
-        result = wwd_management_set_event_handler( wps_events, NULL, workspace, WICED_AP_INTERFACE );
+        result = wwd_management_set_event_handler( wps_events, NULL, workspace, WWD_AP_INTERFACE );
     }
 
-    if ( result != WICED_SUCCESS )
+    if ( result != WWD_SUCCESS )
     {
-        WPRINT_APP_INFO(("Error setting event %u\r\n", (unsigned int)result));
+        WPRINT_APP_INFO(("Error setting event %u\n", (unsigned int)result));
     }
     return result;
 }
 
-wiced_result_t besl_wps_get_result( wps_agent_t* workspace )
+besl_result_t besl_wps_get_result( wps_agent_t* workspace )
 {
-    switch ( workspace->wps_result)
-    {
-        case WPS_COMPLETE:
-            return WICED_SUCCESS;
-
-        case WPS_PBC_OVERLAP:
-            return WICED_WPS_PBC_OVERLAP;
-
-        default:
-            return WICED_ERROR;
-    }
+    return workspace->wps_result;
 }
 
-wiced_result_t besl_wps_deinit( wps_agent_t* workspace )
+besl_result_t besl_wps_deinit( wps_agent_t* workspace )
 {
     wps_host_workspace_t* host_workspace = (wps_host_workspace_t*)workspace->wps_host_workspace;
 
@@ -224,33 +216,38 @@ wiced_result_t besl_wps_deinit( wps_agent_t* workspace )
 
     if ( host_workspace != NULL )
     {
-        /* TODO: Ensure the thread is finished */
-        host_rtos_delete_terminated_thread(&host_workspace->wps_thread);
+        /* Delete the WPS thread */
+        if ( workspace->wps_result != WPS_NOT_STARTED )
+        {
+            host_rtos_delete_terminated_thread( &host_workspace->wps_thread );
+        }
 
         if ( host_workspace->wps_thread_stack != NULL )
         {
             besl_host_free( host_workspace->wps_thread_stack );
             host_workspace->wps_thread_stack = NULL;
         }
+
+        host_rtos_deinit_queue( &host_workspace->event_queue );
         besl_host_free( host_workspace );
         workspace->wps_host_workspace = NULL;
     }
-    return WICED_SUCCESS;
+    return BESL_SUCCESS;
 }
 
-wiced_result_t besl_wps_start( wps_agent_t* workspace, besl_wps_mode_t mode, char* password, besl_wps_credential_t* credentials, uint16_t credential_length )
+besl_result_t besl_wps_start( wps_agent_t* workspace, besl_wps_mode_t mode, const char* password, besl_wps_credential_t* credentials, uint16_t credential_length )
 {
-    wiced_result_t result;
+    besl_result_t result;
     wps_host_workspace_t* host_workspace = (wps_host_workspace_t*) workspace->wps_host_workspace;
 
     if ( ( workspace->agent_type == WPS_REGISTRAR_AGENT ) &&
-         ( besl_wps_pbc_overlap_check( NULL ) == WICED_WPS_PBC_OVERLAP ) && ( mode == BESL_WPS_PBC_MODE ) )
+         ( besl_wps_pbc_overlap_check( NULL ) == BESL_PBC_OVERLAP ) && ( mode == BESL_WPS_PBC_MODE ) )
     {
-        return WICED_WPS_PBC_OVERLAP;
+        return BESL_PBC_OVERLAP;
     }
 
     result = wps_internal_init( workspace, workspace->interface, mode, password, credentials, credential_length );
-    if ( result == WICED_SUCCESS )
+    if ( result == BESL_SUCCESS )
     {
         result = host_rtos_create_thread_with_arg( &host_workspace->wps_thread, wiced_wps_thread, "wps", host_workspace->wps_thread_stack, WPS_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (uint32_t) workspace );
     }
@@ -258,13 +255,13 @@ wiced_result_t besl_wps_start( wps_agent_t* workspace, besl_wps_mode_t mode, cha
     return result;
 }
 
-wiced_result_t besl_wps_restart( wps_agent_t* workspace )
+besl_result_t besl_wps_restart( wps_agent_t* workspace )
 {
     workspace->start_time = host_rtos_get_time( );
-    return WICED_SUCCESS;
+    return BESL_SUCCESS;
 }
 
-wiced_result_t wps_internal_init( wps_agent_t* workspace, uint32_t interface, besl_wps_mode_t mode, char* password, besl_wps_credential_t* credentials, uint16_t credential_length )
+besl_result_t wps_internal_init( wps_agent_t* workspace, uint32_t interface, besl_wps_mode_t mode, const char* password, besl_wps_credential_t* credentials, uint16_t credential_length )
 {
     wps_host_workspace_t* host_workspace = (wps_host_workspace_t*)workspace->wps_host_workspace;
 
@@ -285,17 +282,20 @@ wiced_result_t wps_internal_init( wps_agent_t* workspace, uint32_t interface, be
         host_workspace->stuff.registrar.ap_details = credentials;
     }
 
-    return WICED_SUCCESS;
+    return BESL_SUCCESS;
 }
 
-wiced_result_t besl_wps_wait_till_complete( wps_agent_t* workspace )
+besl_result_t besl_wps_wait_till_complete( wps_agent_t* workspace )
 {
-    wps_host_workspace_t* host_workspace = (wps_host_workspace_t*) workspace->wps_host_workspace;
-    host_rtos_join_thread( &host_workspace->wps_thread );
-    return WICED_SUCCESS;
+    if ( workspace->wps_result != WPS_NOT_STARTED )
+    {
+        wps_host_workspace_t* host_workspace = (wps_host_workspace_t*) workspace->wps_host_workspace;
+        host_rtos_join_thread( &host_workspace->wps_thread );
+    }
+    return BESL_SUCCESS;
 }
 
-wiced_result_t besl_wps_abort( wps_agent_t* workspace )
+besl_result_t besl_wps_abort( wps_agent_t* workspace )
 {
     wps_host_workspace_t* host      = (wps_host_workspace_t*)workspace->wps_host_workspace;
     wps_event_message_t   message;
@@ -304,13 +304,53 @@ wiced_result_t besl_wps_abort( wps_agent_t* workspace )
     return host_rtos_push_to_queue(&host->event_queue, &message, WICED_NEVER_TIMEOUT);
 }
 
-static wiced_result_t besl_wps_pbc_overlap_check( const besl_mac_t* mac )
+besl_result_t besl_wps_scan( wps_agent_t* workspace, wps_ap_t** ap_array, uint16_t* ap_array_size )
+{
+    wwd_result_t          result;
+    wps_event_message_t   message;
+    wps_host_workspace_t* host = (wps_host_workspace_t*) workspace->wps_host_workspace;
+
+    /* Verify that WPS hasn't started */
+    if ( workspace->wps_result != WPS_NOT_STARTED )
+    {
+        return BESL_ERROR_ALREADY_STARTED;
+    }
+
+    IF_TO_WORKSPACE( WWD_STA_INTERFACE ) = workspace;
+    memset(host->stuff.enrollee.ap_list, 0, sizeof(host->stuff.enrollee.ap_list));
+    wps_host_scan( workspace, wps_scan_result_handler );
+
+    do
+    {
+        result = host_rtos_pop_from_queue( &host->event_queue, &message, 5000 );
+    } while ( result == WWD_SUCCESS && message.event_type != WPS_EVENT_DISCOVER_COMPLETE );
+
+    IF_TO_WORKSPACE( WWD_STA_INTERFACE ) = NULL;
+
+    if ( result == WWD_SUCCESS )
+    {
+        *ap_array = host->stuff.enrollee.ap_list;
+        *ap_array_size = host->stuff.enrollee.ap_list_counter;
+    }
+
+    return (besl_result_t) result;
+}
+
+besl_result_t besl_wps_set_directed_wps_target( wps_agent_t* workspace, wps_ap_t* ap, uint32_t maximum_join_attempts )
+{
+    workspace->directed_wps_max_attempts = maximum_join_attempts;
+    workspace->ap = ap;
+
+    return BESL_SUCCESS;
+}
+
+static besl_result_t besl_wps_pbc_overlap_check( const besl_mac_t* mac )
 {
     if ( wps_pbc_overlap_check( mac ) != WPS_SUCCESS )
     {
-        return WICED_WPS_PBC_OVERLAP;
+        return BESL_PBC_OVERLAP;
     }
-    return WICED_SUCCESS;
+    return BESL_SUCCESS;
 }
 
 static void wiced_wps_thread( uint32_t arg )
@@ -320,7 +360,7 @@ static void wiced_wps_thread( uint32_t arg )
     wiced_wps_thread_main( arg );
 
     host_rtos_finish_thread( &host->wps_thread );
-    WICED_END_OF_THREAD(NULL);
+    WICED_END_OF_CURRENT_THREAD( );
 }
 
 void wiced_wps_thread_main( uint32_t arg )
@@ -331,35 +371,33 @@ void wiced_wps_thread_main( uint32_t arg )
     wps_agent_t*          workspace = (wps_agent_t*)arg;
     wps_host_workspace_t* host      = (wps_host_workspace_t*)workspace->wps_host_workspace;
 
-    host_rtos_init_queue( &host->event_queue, host->event_buffer, sizeof( host->event_buffer ), sizeof(wps_event_message_t) );
+    workspace->wps_result = WPS_IN_PROGRESS;
 
-    // Now that our queue is initialized we can flag the workspace as active
-    active_wps_workspaces[workspace->interface] = workspace;
+    /* Now that our queue is initialized we can flag the workspace as active */
+    IF_TO_WORKSPACE( workspace->interface ) = workspace;
 
     wps_prepare_workspace_crypto( workspace );
 
-    // Start 120 second timer
+    /* Start 120 second timer */
     workspace->start_time = host_rtos_get_time( );
 
     if ( workspace->agent_type == WPS_REGISTRAR_AGENT )
     {
-        WPS_INFO(("Starting WPS Registrar\r\n"));
+        WPS_INFO(("Starting WPS Registrar\n"));
         wps_registrar_start( workspace );
 
         /* Allow clients to connect to AP using Open authentication for WPS handshake */
         wiced_buffer_t buffer;
-        uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
-        BESL_WRITE_32(&data[0], SDPCM_AP_INTERFACE);
+        uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+        BESL_WRITE_32(&data[0], CHIP_AP_INTERFACE);
         BESL_WRITE_32(&data[1], ( host->stuff.registrar.ap_details->security | SES_OW_ENABLED ));
-        wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
+        wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
     }
     else
     {
-        WPS_INFO(("Starting WPS Enrollee\r\n"));
+        WPS_INFO(("Starting WPS Enrollee\n"));
         wps_enrollee_start( workspace );
     }
-
-    workspace->wps_result = WPS_IN_PROGRESS;
 
     while ( workspace->wps_result == WPS_IN_PROGRESS )
     {
@@ -370,7 +408,7 @@ void wiced_wps_thread_main( uint32_t arg )
 
         if (( current_time - workspace->start_time ) >= 2 * MINUTES )
         {
-            workspace->wps_result = WPS_TIMED_OUT;
+            workspace->wps_result = WPS_TIMEOUT;
             continue;
         }
 
@@ -381,7 +419,7 @@ void wiced_wps_thread_main( uint32_t arg )
             time_to_wait = MIN( time_to_wait, host->timer_timeout - (current_time - host->timer_reference));
         }
 
-        if ( host_rtos_pop_from_queue( &host->event_queue, &message, time_to_wait ) != WICED_SUCCESS )
+        if ( host_rtos_pop_from_queue( &host->event_queue, &message, time_to_wait ) != WWD_SUCCESS )
         {
             /* Create a timeout message */
             message.event_type = WPS_EVENT_TIMER_TIMEOUT;
@@ -394,15 +432,16 @@ void wiced_wps_thread_main( uint32_t arg )
         {
             if ( result == WPS_ATTEMPTED_EXTERNAL_REGISTRAR_DISCOVERY )
             {
-                WPS_INFO(("Client attempted external registrar discovery\r\n"));
+                WPS_INFO(("Client attempted external registrar discovery\n"));
             }
             else
             {
                 if ( waiting_for_event == WICED_TRUE )
                 {
+                    int32_t time_left;
                     current_time = host_rtos_get_time( );
-                    int32_t time_left = MAX( ( ( 2 * MINUTES ) - ( current_time - workspace->start_time ) )/1000, 0);
-                    WPS_INFO(( "WPS Procedure failed. Restarting with %li seconds left\r\n", time_left));
+                    time_left = MAX( ( ( 2 * MINUTES ) - ( current_time - workspace->start_time ) )/1000, 0);
+                    WPS_INFO(( "WPS Procedure failed. Restarting with %li seconds left\n", (long)time_left));
                     REFERENCE_DEBUG_ONLY_VARIABLE( time_left );
                 }
             }
@@ -412,7 +451,7 @@ void wiced_wps_thread_main( uint32_t arg )
             {
                 workspace->agent_type = WPS_REGISTRAR_AGENT;
             }
-            
+
             if ( workspace->agent_type == WPS_ENROLLEE_AGENT )
             {
                 wps_host_leave();
@@ -423,16 +462,17 @@ void wiced_wps_thread_main( uint32_t arg )
     }
 
     /* Remove workspace from list of active workspaces */
-    active_wps_workspaces[workspace->interface] = NULL;
+    IF_TO_WORKSPACE( workspace->interface ) = NULL;
 
     /* Print result (if enabled) */
     if ( workspace->wps_result == WPS_COMPLETE )
     {
-        WPS_INFO(( "WPS completed successfully\r\n" ));
+        WPS_INFO(( "WPS completed successfully\n" ));
+        workspace->wps_result = WPS_SUCCESS;
     }
     else if ( workspace->wps_result == WPS_PBC_OVERLAP )
     {
-        WPS_INFO(( "PBC overlap detected - wait and try again\r\n" ));
+        WPS_INFO(( "PBC overlap detected - wait and try again\n" ));
     }
     else if ( workspace->wps_result == WPS_ABORTED )
     {
@@ -440,7 +480,7 @@ void wiced_wps_thread_main( uint32_t arg )
     }
     else
     {
-        WPS_INFO(( "WPS timed out\r\n" ));
+        WPS_INFO(( "WPS timed out\n" ));
     }
 
     /* De-init the workspace */
@@ -450,10 +490,10 @@ void wiced_wps_thread_main( uint32_t arg )
     {
         /* Remove ability for clients to connect to AP using Open authentication */
         wiced_buffer_t buffer;
-        uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
-        BESL_WRITE_32(&data[0], SDPCM_AP_INTERFACE);
+        uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSSCFG_WSEC );
+        BESL_WRITE_32(&data[0], CHIP_AP_INTERFACE);
         BESL_WRITE_32(&data[1], ( host->stuff.registrar.ap_details->security ));
-        wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
+        wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
 
         /* Re-advertise WPS. The IEs are removed in wps_deinit_workspace() */
         wps_advertise_registrar( workspace, 0 );
@@ -467,7 +507,7 @@ void wiced_wps_thread_main( uint32_t arg )
     }
 
     /* Clean up left over messages in the event queue */
-    while ( host_rtos_pop_from_queue( &host->event_queue, &message, 0 ) == WICED_SUCCESS )
+    while ( host_rtos_pop_from_queue( &host->event_queue, &message, 0 ) == WWD_SUCCESS )
     {
         if (message.event_type == WPS_EVENT_EAPOL_PACKET_RECEIVED)
         {
@@ -475,28 +515,28 @@ void wiced_wps_thread_main( uint32_t arg )
         }
     }
 
-    /* Clean up the event queue and WPS thread */
-    host_rtos_deinit_queue( &host->event_queue );
+    /* Clean up the WPS thread */
     host_rtos_finish_thread( &host->wps_thread );
 
-    WICED_END_OF_THREAD(NULL);
+    WICED_END_OF_CURRENT_THREAD( );
 }
 
-void host_network_process_eapol_data( /*@only@*/ wiced_buffer_t buffer, wiced_interface_t interface )
+void host_network_process_eapol_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface )
 {
-    if ( active_wps_workspaces[interface] != NULL )
+    wps_agent_t* workspace = IF_TO_WORKSPACE( interface );
+    if ( workspace != NULL )
     {
         wps_event_message_t message;
         message.event_type = WPS_EVENT_EAPOL_PACKET_RECEIVED;
         message.data.packet = buffer;
-        if ( host_rtos_push_to_queue( &( (wps_host_workspace_t*) active_wps_workspaces[interface]->wps_host_workspace )->event_queue, &message, WICED_NEVER_TIMEOUT ) != WICED_SUCCESS )
+        if ( host_rtos_push_to_queue( &( (wps_host_workspace_t*) workspace->wps_host_workspace )->event_queue, &message, WICED_NEVER_TIMEOUT ) != WWD_SUCCESS )
         {
-            host_buffer_release( buffer, WICED_NETWORK_RX );
+            host_buffer_release( buffer, WWD_NETWORK_RX );
         }
     }
     else
     {
-        host_buffer_release( buffer, WICED_NETWORK_RX );
+        host_buffer_release( buffer, WWD_NETWORK_RX );
     }
 }
 
@@ -506,7 +546,7 @@ void host_network_process_eapol_data( /*@only@*/ wiced_buffer_t buffer, wiced_in
 
 void wps_host_create_eapol_packet(wps_eapol_packet_t* packet, uint16_t size)
 {
-    if (host_buffer_get((wiced_buffer_t*)packet, WICED_NETWORK_TX, size + WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX, WICED_TRUE) != WICED_SUCCESS)
+    if (host_buffer_get((wiced_buffer_t*)packet, WWD_NETWORK_TX, size + WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX, WICED_TRUE) != WWD_SUCCESS)
     {
         *packet = 0;
         return;
@@ -526,19 +566,19 @@ uint16_t wps_host_get_eapol_packet_size(wps_eapol_packet_t packet)
 
 void wps_host_free_eapol_packet( wps_eapol_packet_t packet )
 {
-    host_buffer_release( (wiced_buffer_t) packet, WICED_NETWORK_RX );
+    host_buffer_release( (wiced_buffer_t) packet, WWD_NETWORK_RX );
 }
 
 void wps_host_send_packet(void* workspace, wps_eapol_packet_t packet, uint16_t size)
 {
     wps_host_workspace_t* host = (wps_host_workspace_t*)workspace;
-    host_buffer_set_data_end( (wiced_buffer_t) packet, host_buffer_get_current_piece_data_pointer((wiced_buffer_t)packet) + size );
-    wiced_network_send_ethernet_data( packet, host->interface );
+    host_buffer_set_size( (wiced_buffer_t) packet, size );
+    wwd_network_send_ethernet_data( packet, host->interface );
 }
 
 wps_result_t wps_host_leave( void )
 {
-    wiced_wifi_leave( );
+    wwd_wifi_leave( WWD_STA_INTERFACE );
     return WPS_SUCCESS;
 }
 
@@ -546,30 +586,30 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap )
 {
     wps_host_workspace_t* host = (wps_host_workspace_t*) workspace;
 
-    WPS_INFO( ("Joining '%.*s'\r\n", ap->SSID.len, ap->SSID.val) );
+    WPS_INFO( ("Joining '%.*s'\n", ap->SSID.length, ap->SSID.value) );
 
     uint8_t attempts = 0;
-    wiced_result_t ret;
-    host_semaphore_type_t semaphore;
-    host_rtos_init_semaphore( &semaphore );
+    besl_result_t ret;
+    wiced_semaphore_t semaphore;
+    wiced_rtos_init_semaphore(&semaphore);
     do
     {
         ++attempts;
-        ret = wiced_wifi_join_specific( ap, NULL, 0, &semaphore );
-        if ( ret != WICED_SUCCESS )
+        ret = wwd_wifi_join_specific( ap, NULL, 0, &semaphore, WWD_STA_INTERFACE );
+        if (ret != BESL_SUCCESS)
         {
             continue;
         }
-        ret = host_rtos_get_semaphore( &semaphore, DEFAULT_WPS_JOIN_TIMEOUT, WICED_FALSE );
-    } while ( ret != WICED_SUCCESS && attempts < 2 );
+        ret = wiced_rtos_get_semaphore(&semaphore, DEFAULT_WPS_JOIN_TIMEOUT);
+    } while ( ret != BESL_SUCCESS && attempts < 2 );
 
-    host_rtos_deinit_semaphore( &semaphore );
+    wiced_rtos_deinit_semaphore(&semaphore);
 
-    if ( ret != WICED_SUCCESS )
+    if ( ret != BESL_SUCCESS )
     {
-        WPS_ERROR( ("WPS join failed\r\n") );
+        WPS_ERROR( ("WPS join failed\n") );
         wps_host_start_timer( host, 100 );
-        return WPS_ERROR;
+        return WPS_ERROR_JOIN_FAILED;
     }
 
     wps_event_message_t message;
@@ -582,12 +622,12 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap )
 
 void wps_host_add_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wiced_wifi_manage_custom_ie( interface, WICED_ADD_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( interface, WICED_ADD_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
 }
 
 void wps_host_remove_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wiced_wifi_manage_custom_ie( interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
 }
 
 /*
@@ -603,7 +643,7 @@ wps_ap_t* wps_host_store_ap( void* workspace, wl_escan_result_t* scan_result )
         int a;
         wps_ap_t* ap;
 
-        // Check if this AP has already been added
+        /* Check if this AP has already been added */
         for (a = 0; a < host->stuff.enrollee.ap_list_counter; ++a)
         {
             ap = &host->stuff.enrollee.ap_list[a];
@@ -613,12 +653,12 @@ wps_ap_t* wps_host_store_ap( void* workspace, wl_escan_result_t* scan_result )
             }
         }
 
-        // Add to AP list
+        /* Add to AP list */
         ap = &host->stuff.enrollee.ap_list[host->stuff.enrollee.ap_list_counter++];
 
-        // Save SSID, BSSID, channel, security and band
-        ap->SSID.len = scan_result->bss_info[0].SSID_len;
-        memcpy( ap->SSID.val, scan_result->bss_info[0].SSID, scan_result->bss_info[0].SSID_len );
+        /* Save SSID, BSSID, channel, security and band */
+        ap->SSID.length = scan_result->bss_info[0].SSID_len;
+        memcpy( ap->SSID.value, scan_result->bss_info[0].SSID, scan_result->bss_info[0].SSID_len );
         memcpy( &ap->BSSID, &scan_result->bss_info[0].BSSID, sizeof(wiced_mac_t) );
         ap->channel  = scan_result->bss_info[0].chanspec & WL_CHANSPEC_CHAN_MASK;
         ap->security = WICED_SECURITY_WPS_SECURE;
@@ -652,18 +692,18 @@ void wps_host_store_credential( void* workspace, wps_credential_t* credential )
     wps_host_workspace_t* host = (wps_host_workspace_t*)workspace;
     besl_wps_credential_t* temp;
 
-    // Store credentials if we have room
+    /* Store credentials if we have room */
     if ( host->stuff.enrollee.stored_credential_count < host->stuff.enrollee.enrollee_output_length)
     {
         temp = &host->stuff.enrollee.enrollee_output[host->stuff.enrollee.stored_credential_count];
         credential->ssid[credential->ssid_length] = 0;
-        WPS_INFO( ("Storing credentials for %s\r\n", credential->ssid) );
+        WPS_INFO( ("Storing credentials for %s\n", credential->ssid) );
 
         memset( temp, 0, sizeof(besl_wps_credential_t) );
         temp->passphrase_length = credential->network_key_length;
         memcpy( temp->passphrase, credential->network_key, credential->network_key_length );
-        temp->ssid.len = credential->ssid_length;
-        memcpy( temp->ssid.val, credential->ssid, credential->ssid_length );
+        temp->ssid.length = credential->ssid_length;
+        memcpy( temp->ssid.value, credential->ssid, credential->ssid_length );
 
         switch ( credential->encryption_type )
         {
@@ -708,8 +748,8 @@ void wps_host_retrieve_credential( void* workspace, wps_credential_t* credential
     wps_host_workspace_t*  host       = (wps_host_workspace_t*) workspace;
     const besl_wps_credential_t* ap_details = host->stuff.registrar.ap_details;
 
-    credential->ssid_length = ap_details->ssid.len;
-    memcpy( credential->ssid, ap_details->ssid.val, sizeof( credential->ssid ) );
+    credential->ssid_length = ap_details->ssid.length;
+    memcpy( credential->ssid, ap_details->ssid.value, sizeof( credential->ssid ) );
     credential->network_key_length = ap_details->passphrase_length;
     memcpy( credential->network_key, ap_details->passphrase, sizeof( credential->network_key ) );
 
@@ -760,7 +800,7 @@ void wps_host_stop_timer( void* workspace )
     host->timer_timeout = 0;
 }
 
-static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_data )
+static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status )
 {
     uint8_t a;
 
@@ -796,19 +836,19 @@ void wps_host_scan( wps_agent_t* workspace, wps_scan_handler_t result_handler )
     host->stuff.enrollee.ap_list_counter  = 0;
     host->stuff.enrollee.scan_handler_ptr = result_handler;
     uint8_t attempts = 0;
-    wiced_result_t ret;
+    besl_result_t ret;
     uint16_t chlist[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,0 };
-    wiced_scan_extended_params_t extparam = { 5, 110, 110, 50 };
+    wiced_scan_extended_params_t extparam = { 2, 40, 110, 50 };
 
     do
     {
         ++attempts;
-        ret = wiced_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_INFRASTRUCTURE, 0, 0, chlist, &extparam, scan_result_handler, 0, workspace );
-    } while ( ret != WICED_SUCCESS && attempts < 5 );
+        ret = wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_INFRASTRUCTURE, 0, 0, chlist, &extparam, scan_result_handler, 0, workspace, WWD_STA_INTERFACE );
+    } while ( ret != BESL_SUCCESS && attempts < 5 );
 
-    if (ret != WICED_SUCCESS)
+    if (ret != BESL_SUCCESS)
     {
-        WPS_ERROR( ("WPS scan failure\r\n") );
+        WPS_ERROR( ("WPS scan failure\n") );
         wps_host_start_timer( host, 100 );
     }
     else
@@ -827,12 +867,12 @@ void wps_host_get_authorized_macs( void* workspace, besl_mac_t** mac_list, uint8
 
 void wps_host_deauthenticate_client( const besl_mac_t* mac, uint32_t reason )
 {
-    wiced_wifi_deauth_sta( (wiced_mac_t*) mac, reason );
+    wwd_wifi_deauth_sta( (wiced_mac_t*) mac, reason );
 }
 
-static void* wps_softap_event_handler( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data )
+static void* wps_softap_event_handler( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data )
 {
-    uint8_t*      data;
+    const uint8_t*      data;
     uint32_t      length = event_header->datalen;
     tlv8_data_t*  tlv8;
 
@@ -840,7 +880,7 @@ static void* wps_softap_event_handler( wiced_event_header_t* event_header, uint8
     {
         return handler_user_data;
     }
-    length -= 24; // XXX length of management frame MAC header
+    length -= 24; /* XXX length of management frame MAC header */
     data = event_data + 24;
 
     switch ( event_header->event_type )
@@ -870,7 +910,7 @@ static void* wps_softap_event_handler( wiced_event_header_t* event_header, uint8
                     {
                         /* Look for pwd ID, check if it is the same mode that we are */
                         tlv16_uint16_t* pwd_id = (tlv16_uint16_t*) tlv_find_tlv16( &tlv8->data[4], tlv8->length - 4, WPS_ID_DEVICE_PWD_ID );
-                        if ( pwd_id != NULL && htobe16( pwd_id->data ) == WPS_PUSH_BTN_DEVICEPWDID )
+                        if ( pwd_id != NULL && besl_host_hton16( pwd_id->data ) == WPS_PUSH_BTN_DEVICEPWDID )
                         {
                             wps_update_pbc_overlap_array( (besl_mac_t*)(event_data + 10) );
                         }
@@ -912,12 +952,12 @@ static void wps_update_pbc_overlap_array(const besl_mac_t* mac )
     }
 
     /* If this is a new MAC address replace oldest existing entry with this MAC address */
-    if ( pbc_overlap_array[0].probe_request_rx_time == 0 ) // Initial condition for array record 0
+    if ( pbc_overlap_array[0].probe_request_rx_time == 0 ) /* Initial condition for array record 0 */
     {
         memcpy((char*)&pbc_overlap_array[0].probe_request_mac, mac, sizeof(besl_mac_t));
         pbc_overlap_array[0].probe_request_rx_time = rx_time;
     }
-    else if ( pbc_overlap_array[1].probe_request_rx_time == 0 ) // Initial condition for array record 1
+    else if ( pbc_overlap_array[1].probe_request_rx_time == 0 ) /* Initial condition for array record 1 */
     {
         memcpy((char*)&pbc_overlap_array[1].probe_request_mac, mac, sizeof(besl_mac_t));
         pbc_overlap_array[1].probe_request_rx_time = rx_time;
@@ -953,7 +993,7 @@ wps_result_t wps_pbc_overlap_check(const besl_mac_t* mac )
         detection_window_start = time_now - WPS_PBC_OVERLAP_WINDOW;
     }
 
-    WPS_DEBUG( ("PBC overlap detection window start %u\r\n", (unsigned int)detection_window_start) );
+    WPS_DEBUG( ("PBC overlap detection window start %u\n", (unsigned int)detection_window_start) );
 
     /* This tests the case where M1 has arrived and there may or may not be a probe request from the same enrollee
      * in the detection array, but there is a probe request from another enrollee.
@@ -982,8 +1022,8 @@ wps_result_t wps_pbc_overlap_check(const besl_mac_t* mac )
         if ( ( pbc_overlap_array[0].probe_request_rx_time > detection_window_start ) &&
              ( pbc_overlap_array[1].probe_request_rx_time > detection_window_start ) )
         {
-            WPS_DEBUG(("PBC overlap array entry 0 %u\r\n", (unsigned int)pbc_overlap_array[0].probe_request_rx_time));
-            WPS_DEBUG(("PBC overlap array entry 1 %u\r\n", (unsigned int)pbc_overlap_array[1].probe_request_rx_time));
+            WPS_DEBUG(("PBC overlap array entry 0 %u\n", (unsigned int)pbc_overlap_array[0].probe_request_rx_time));
+            WPS_DEBUG(("PBC overlap array entry 1 %u\n", (unsigned int)pbc_overlap_array[1].probe_request_rx_time));
             return WPS_PBC_OVERLAP;
         }
     }

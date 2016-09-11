@@ -7,6 +7,7 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
+#pragma once
 
 /** @file
  *  Defines the Bus part of the WICED Platform Interface.
@@ -15,10 +16,7 @@
  *  the hardware communications bus for a platform.
  */
 
-#ifndef INCLUDED_WWD_BUS_INTERFACE_H_
-#define INCLUDED_WWD_BUS_INTERFACE_H_
-
-#include "wiced_utilities.h"  /* for wiced_result_t */
+#include "network/wwd_buffer_interface.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -48,9 +46,9 @@ extern "C"
  * the interrupts for the WICED bus, enable power and clocks to the bus, and
  * set up the bus peripheral.
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t host_platform_bus_init( void );
+extern wwd_result_t host_platform_bus_init( void );
 
 /**
  * De-Initializes the WICED Bus
@@ -59,20 +57,48 @@ extern wiced_result_t host_platform_bus_init( void );
  * platform in use.
  * This function does the reverse of @ref host_platform_bus_init
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t host_platform_bus_deinit( void );
+extern wwd_result_t host_platform_bus_deinit( void );
 
 
 /**
- * Informs WICED of an interrupt
+ * Informs WWD of an interrupt
  *
  * This function should be called from the SDIO/SPI interrupt function
  * and usually indicates newly received data is available.
- * It wakes the WICED Thread, forcing it to check the send/receive
+ * It wakes the WWD Thread, forcing it to check the send/receive
  *
  */
-extern void wiced_platform_notify_irq( void );
+extern void wwd_thread_notify_irq( void );
+
+
+/**
+ * Enables the bus interrupt
+ *
+ * This function is called by WICED during init, once
+ * the system is ready to receive interrupts
+ */
+extern wwd_result_t host_platform_bus_enable_interrupt( void );
+
+/**
+ * Disables the bus interrupt
+ *
+ * This function is called by WICED during de-init, to stop
+ * the system supplying any more interrupts in preparation
+ * for shutdown
+ */
+extern wwd_result_t host_platform_bus_disable_interrupt( void );
+
+
+/**
+ * Informs the platform bus implementation that a buffer has been freed
+ *
+ * This function is called by WICED during buffer release to allow
+ * the platform to reuse the released buffer - especially where
+ * a DMA chain needs to be refilled.
+ */
+extern void host_platform_bus_buffer_freed( wwd_buffer_dir_t direction );
 
 /** @} */
 /** @} */
@@ -80,5 +106,3 @@ extern void wiced_platform_notify_irq( void );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* ifndef INCLUDED_WWD_BUS_INTERFACE_H_ */

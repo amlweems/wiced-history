@@ -48,6 +48,10 @@
 #include "platform_assert.h"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef unsigned  char   u8_t;
 typedef signed    char   s8_t;
 typedef unsigned  short  u16_t;
@@ -84,7 +88,7 @@ typedef int              sys_prot_t;
 #define LWIP_PLATFORM_DIAG(x)    {printf x;}
 #else  /* if 0 */
 #include "wiced_logging.h"
-#define LWIP_PLATFORM_DIAG(x)    {WICED_LOG(x);}
+#define LWIP_PLATFORM_DIAG(x)    {WWD_LOG(x);}
 #endif /* if 0 */
 
 #ifdef WICED_LWIP_DEBUG
@@ -92,4 +96,9 @@ typedef int              sys_prot_t;
 #else
 #define LWIP_PLATFORM_ASSERT(x)
 #endif /* ifdef WICED_LWIP_DEBUG */
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif
+
 #endif /* __CC_H__ */

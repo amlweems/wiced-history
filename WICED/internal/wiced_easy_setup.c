@@ -35,11 +35,11 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 /******************************************************
@@ -51,12 +51,12 @@ wiced_result_t wiced_easy_setup_start_cooee( wiced_easy_setup_cooee_callback_t c
     wiced_cooee_workspace_t* workspace = malloc_named( "cooee", sizeof(wiced_cooee_workspace_t) );
     if ( workspace == NULL )
     {
-        return WICED_NOMEM;
+        return WICED_OUT_OF_HEAP_SPACE;
     }
     memset(workspace, 0, sizeof(wiced_cooee_workspace_t));
     wiced_wifi_cooee( workspace );
 
-    callback( workspace->user_processed_data, workspace->received_byte_count - ( workspace->user_processed_data - workspace->received_cooee_data ) );
+    callback( workspace->user_processed_data, (uint16_t) ( workspace->received_byte_count - ( workspace->user_processed_data - workspace->received_cooee_data ) ) );
 
     free( workspace );
 

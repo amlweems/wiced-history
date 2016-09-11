@@ -20,14 +20,14 @@
 
 #include "wwd_network.h"
 #include "wwd_wifi.h"
-#include "Network/wwd_network_interface.h"
-#include "Network/wwd_buffer_interface.h"
+#include "network/wwd_network_interface.h"
+#include "network/wwd_buffer_interface.h"
 #include "wwd_assert.h"
 #include <stdlib.h>
 
 #ifdef ADD_LWIP_EAPOL_SUPPORT
 #define ETHTYPE_EAPOL    0x888E
-/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wiced_interface_t interface );
+/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wwd_interface_t interface );
 #endif
 
 /*****************************************************************************
@@ -121,9 +121,9 @@ static void low_level_init( /*@partial@*/ struct netif *netif )
     netif->hwaddr_len = (u8_t) ETHARP_HWADDR_LEN;
 
     /* Setup the physical address of this IP instance. */
-    if ( wiced_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ) ) != WICED_SUCCESS )
+    if ( wwd_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ), WWD_STA_INTERFACE ) != WWD_SUCCESS )
     {
-        WPRINT_NETWORK_DEBUG(("Couldn't get MAC address\r\n"));
+        WPRINT_NETWORK_DEBUG(("Couldn't get MAC address\n"));
         return;
     }
 
@@ -161,13 +161,13 @@ static err_t low_level_output( struct netif *netif, /*@only@*/ struct pbuf *p )
     UNUSED_PARAMETER( netif );
     /*@+noeffect@*/
 
-    if ( wiced_wifi_is_ready_to_transceive( (wiced_interface_t) (int) netif->state ) == WICED_SUCCESS )
+    if ( wwd_wifi_is_ready_to_transceive( (wwd_interface_t) (int) netif->state ) == WWD_SUCCESS )
     {
         /* Take a reference to this packet */
         pbuf_ref( p );
 
         LWIP_ASSERT( "No chained buffers", ( ( p->next == NULL ) && ( ( p->tot_len == p->len ) ) ) );
-        wiced_network_send_ethernet_data( p, (wiced_interface_t) (int) netif->state );
+        wwd_network_send_ethernet_data( p, (wwd_interface_t) (int) netif->state );
 
         LINK_STATS_INC( link.xmit );
 
@@ -190,7 +190,7 @@ static err_t low_level_output( struct netif *netif, /*@only@*/ struct pbuf *p )
  *
  * @param p : the incoming ethernet packet
  */
-void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced_interface_t interface )
+void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface )
 {
     struct eth_hdr* ethernet_header;
     struct netif*   tmp_netif;
@@ -220,7 +220,7 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced
             {
                 /* Received a packet for a network interface is not initialised Cannot do anything with packet - just drop it. */
                 result = pbuf_free( buffer );
-                LWIP_ASSERT("Failed to release packet buffer", ( result != 0 ) );
+                LWIP_ASSERT("Failed to release packet buffer", ( result != (u8_t)0 ) );
                 buffer = NULL;
                 return;
             }
@@ -233,7 +233,7 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced
                 /* Stop lint warning - packet has not been released in this case */ /*@-usereleased@*/
                 result = pbuf_free( buffer );
                 /*@+usereleased@*/
-                LWIP_ASSERT("Failed to release packet buffer", ( result != 0 ) );
+                LWIP_ASSERT("Failed to release packet buffer", ( result != (u8_t)0 ) );
                 buffer = NULL;
             }
             break;
@@ -245,7 +245,7 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced
 #endif
         default:
             result = pbuf_free( buffer );
-            LWIP_ASSERT("Failed to release packet buffer", ( result != 0 ) );
+            LWIP_ASSERT("Failed to release packet buffer", ( result != (u8_t)0 ) );
             buffer = NULL;
             break;
     }
@@ -273,7 +273,7 @@ err_t ethernetif_init( /*@partial@*/ struct netif *netif )
 #endif /* LWIP_NETIF_HOSTNAME */
 
     /* Verify the netif is a valid interface */
-    if ( ( (wiced_interface_t) (int) netif->state != WICED_STA_INTERFACE ) && ( (wiced_interface_t) (int) netif->state != WICED_AP_INTERFACE ) )
+    if ( ( (wwd_interface_t) (int) netif->state != WWD_STA_INTERFACE ) && ( (wwd_interface_t) (int) netif->state != WWD_AP_INTERFACE ) )
     {
         return ERR_ARG;
     }
@@ -316,21 +316,21 @@ static err_t lwip_igmp_mac_filter( struct netif *netif, ip_addr_t *group, u8_t a
     switch ( action )
     {
         case IGMP_ADD_MAC_FILTER:
-            if ( wiced_wifi_register_multicast_address( &mac ) != WICED_SUCCESS )
+            if ( wwd_wifi_register_multicast_address( &mac ) != WWD_SUCCESS )
             {
                 return ERR_VAL;
             }
             break;
 
         case IGMP_DEL_MAC_FILTER:
-            if ( wiced_wifi_unregister_multicast_address( &mac ) != WICED_SUCCESS )
+            if ( wwd_wifi_unregister_multicast_address( &mac ) != WWD_SUCCESS )
             {
                 return ERR_VAL;
             }
             break;
 
         default:
-        	return ERR_VAL;
+            return ERR_VAL;
     }
 
     return ERR_OK;

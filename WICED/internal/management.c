@@ -13,7 +13,6 @@
  */
 
 #include "wiced_management.h"
-#include "bootloader_app.h"
 
 /******************************************************
  *                      Macros
@@ -36,26 +35,14 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-void wiced_start_ota_upgrade( void )
-{
-    bootloader_api->start_ota_upgrade( );
-}
-
-void wiced_restore_factory_image( uint32_t magic_value)
-{
-    if ( magic_value == WICED_FACTORY_RESET_MAGIC_VALUE )
-    {
-        bootloader_api->perform_factory_reset( );
-    }
-}

@@ -309,6 +309,32 @@ void sys_timeouts_init(void)
 #endif
 }
 
+/** Deinitialize this module */
+void sys_timeouts_deinit(void)
+{
+#if LWIP_DNS
+  sys_untimeout(dns_timer, NULL);
+#endif /* LWIP_DNS */
+#if LWIP_IGMP
+  sys_untimeout(igmp_timer, NULL);
+#endif /* LWIP_IGMP */
+#if LWIP_AUTOIP
+  sys_untimeout(autoip_timer, NULL);
+#endif /* LWIP_AUTOIP */
+#if LWIP_DHCP
+  sys_untimeout(dhcp_timer_coarse, NULL);
+  sys_untimeout(dhcp_timer_fine, NULL);
+#endif /* LWIP_DHCP */
+#if LWIP_ARP
+  sys_untimeout(arp_timer, NULL);
+#endif /* LWIP_ARP */
+#if IP_REASSEMBLY
+  sys_untimeout(ip_reass_timer, NULL);
+#endif /* IP_REASSEMBLY */
+}
+
+
+
 /**
  * Create a one-shot timer (aka timeout). Timeouts are processed in the
  * following cases:
@@ -480,15 +506,15 @@ sys_restart_timeouts(void)
 void
 sys_timeouts_mbox_fetch(sys_mbox_t *mbox, void **msg)
 {
-  u32_t time_needed;
   struct sys_timeo *tmptimeout;
   sys_timeout_handler handler;
   void *arg;
 
  again:
   if (!next_timeout) {
-    time_needed = sys_arch_mbox_fetch(mbox, msg, 0);
+    sys_arch_mbox_fetch(mbox, msg, 0);
   } else {
+    u32_t time_needed;
     if (next_timeout->time > 0) {
       time_needed = sys_arch_mbox_fetch(mbox, msg, next_timeout->time);
     } else {

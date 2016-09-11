@@ -7,10 +7,13 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-#ifndef INCLUDED_WICED_BUFFER_H_
-#define INCLUDED_WICED_BUFFER_H_
+#ifndef INCLUDED_WWD_BUFFER_H_
+#define INCLUDED_WWD_BUFFER_H_
 
-
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /******************************************************
  *             Constants
@@ -20,7 +23,7 @@
  *             Structures
  ******************************************************/
 
-typedef struct pbuf * wiced_buffer_t;
+typedef /*@owned@*/ struct pbuf * wiced_buffer_t;
 
 /******************************************************
  *             Function declarations
@@ -31,5 +34,8 @@ typedef struct pbuf * wiced_buffer_t;
  ******************************************************/
 
 
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
-#endif /* ifndef INCLUDED_WICED_BUFFER_H_ */
+#endif /* ifndef INCLUDED_WWD_BUFFER_H_ */

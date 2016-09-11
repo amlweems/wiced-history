@@ -9,6 +9,10 @@
  */
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -69,12 +73,16 @@ extern void wps_abort( wps_agent_t* workspace );
 extern wps_result_t wps_send_basic_packet( wps_agent_t* workspace, uint8_t type, uint16_t optional_config_error );
 
 
-extern void wps_enrollee_init( wps_agent_t* workspace );
-extern void wps_enrollee_start( wps_agent_t* workspace );
-extern void wps_enrollee_reset( wps_agent_t* workspace );
-extern void wps_registrar_init( wps_agent_t* workspace );
-extern void wps_registrar_start( wps_agent_t* workspace );
-extern void wps_registrar_reset( wps_agent_t* workspace );
-extern wps_result_t wps_pbc_overlap_check(const besl_mac_t* data );
-extern void wps_clear_pbc_overlap_array( void );
+extern void         wps_enrollee_init(   wps_agent_t* workspace );
+extern void         wps_enrollee_start(  wps_agent_t* workspace );
+extern void         wps_enrollee_reset(  wps_agent_t* workspace );
+extern void         wps_registrar_init(  wps_agent_t* workspace );
+extern void         wps_registrar_start( wps_agent_t* workspace );
+extern void         wps_registrar_reset( wps_agent_t* workspace );
+extern wps_result_t wps_pbc_overlap_check( const besl_mac_t* data );
+extern void         wps_clear_pbc_overlap_array( void );
 extern void wps_record_last_pbc_enrollee( const besl_mac_t* mac );
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

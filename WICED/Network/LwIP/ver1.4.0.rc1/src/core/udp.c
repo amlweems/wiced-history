@@ -153,7 +153,7 @@ udp_input(struct pbuf *p, struct netif *inp)
 #endif /* LWIP_DHCP */
   {
     prev = NULL;
-    local_match = 0;
+//    local_match = 0;
     uncon_pcb = NULL;
     /* Iterate through the UDP pcb list for a matching pcb.
      * 'Perfect match' pcbs (connected to the remote port & ip address) are

@@ -43,10 +43,10 @@ extern "C"
  * @param val : pointer to a variable which will receive the
  *              generated random number
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
 
-extern wiced_result_t wiced_wifi_get_random( uint16_t* val );
+extern wwd_result_t wwd_wifi_get_random( void* buffer, uint16_t buffer_length );
 
 /** @} */
 

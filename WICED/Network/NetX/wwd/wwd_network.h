@@ -7,10 +7,15 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-#ifndef INCLUDED_WICED_NETWORK_H_
-#define INCLUDED_WICED_NETWORK_H_
+#ifndef INCLUDED_WWD_NETWORK_H_
+#define INCLUDED_WWD_NETWORK_H_
 
 #include "nx_api.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /******************************************************
  *             Function declarations
@@ -26,4 +31,8 @@
 extern VOID wiced_sta_netx_driver_entry( NX_IP_DRIVER* driver );
 extern VOID wiced_ap_netx_driver_entry ( NX_IP_DRIVER* driver );
 
-#endif /* ifndef INCLUDED_WICED_NETWORK_H_ */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* ifndef INCLUDED_WWD_NETWORK_H_ */

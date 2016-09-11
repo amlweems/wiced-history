@@ -13,7 +13,7 @@
 #include "tx_port.h" /* Needed by nx_dhcp.h that follows */
 #include "netx_applications/dhcp/nx_dhcp.h"
 #include "tls_types.h"
-#include "wwd_constants.h"
+#include "wiced_result.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -24,12 +24,19 @@ extern "C"
  *                      Macros
  ******************************************************/
 
+#define IP_HANDLE(interface)   (wiced_ip_handle[(interface==WICED_STA_INTERFACE)?0:1])
+
 /******************************************************
  *                    Constants
  ******************************************************/
 
+#define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (5)
+#define WICED_MAXIMUM_NUMBER_OF_SERVER_SOCKETS            (WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS)
+
+#define SIZE_OF_ARP_ENTRY           sizeof(NX_ARP)
+
 #define IP_STACK_SIZE               (2*1024)
-#define ARP_CACHE_SIZE              (3*52)
+#define ARP_CACHE_SIZE              (6 * SIZE_OF_ARP_ENTRY)
 #define DHCP_STACK_SIZE             (1024)
 
 #define WICED_ANY_PORT              (0)
@@ -38,12 +45,19 @@ extern "C"
  *                   Enumerations
  ******************************************************/
 
+typedef enum
+{
+    WICED_TCP_DISCONNECT_CALLBACK_INDEX = 0,
+    WICED_TCP_RECEIVE_CALLBACK_INDEX    = 1,
+    WICED_TCP_CONNECT_CALLBACK_INDEX    = 2,
+} wiced_tcp_callback_index_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
 
-typedef NX_UDP_SOCKET     wiced_udp_socket_t;
-typedef NX_PACKET         wiced_packet_t;
+typedef NX_UDP_SOCKET    wiced_udp_socket_t;
+typedef NX_PACKET        wiced_packet_t;
 typedef wiced_result_t (*wiced_socket_callback_t)( void* socket );
 
 /******************************************************
@@ -73,7 +87,16 @@ typedef struct
     NX_TCP_SOCKET               socket;
     wiced_tls_simple_context_t* tls_context;
     wiced_bool_t                context_malloced;
+    wiced_socket_callback_t     callbacks[3];
+
 } wiced_tcp_socket_t;
+
+typedef struct
+{
+    wiced_tcp_socket_t  socket[WICED_MAXIMUM_NUMBER_OF_SERVER_SOCKETS];
+    int                 interface;
+    uint16_t            port;
+} wiced_tcp_server_t;
 
 /******************************************************
  *                 Global Variables

@@ -18,6 +18,7 @@
 #define INCLUDED_WWD_NETWORK_CONSTANTS_H_
 
 #include "wwd_buffer_interface.h"
+#include "wwd_bus_protocol.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -29,16 +30,30 @@ extern "C"
  ******************************************************/
 
 /**
+ * The maximum size of the wwd_buffer_header_t structure (i.e. largest bus implementation)
+ */
+#define MAX_BUS_HEADER_LENGTH (12)
+
+/**
+ * The maximum size of the SDPCM + BDC header, including offsets and reserved space
+ * 12 bytes - SDPCM header
+ * 2 bytes  - Extra offset for SDPCM headers that come as 14 bytes
+ * 4 bytes  - BDC header
+ * 4 bytes  - offset for one extra BDC reserved long int.
+ */
+#define MAX_SDPCM_HEADER_LENGTH (22)
+
+/**
  * The space in bytes required for headers in front of the Ethernet header.
  */
-#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME ( sizeof(wiced_buffer_header_t) + 12 + 4 + 2 )
+#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME ( sizeof(wwd_buffer_header_t) + WWD_SPDCM_HEADER_LENGTH )
 
 /**
  * The maximum space in bytes required for headers in front of the Ethernet header.
  * This definition allows WICED to use a pre-built bus-generic network stack library regardless of choice of bus.
  * Note: adjust accordingly if a new bus is added.
  */
-#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX ( 8 + 12 + 4 + 2 )
+#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX ( MAX_BUS_HEADER_LENGTH + MAX_SDPCM_HEADER_LENGTH )
 
 /**
  * The space in bytes required after the end of an Ethernet packet

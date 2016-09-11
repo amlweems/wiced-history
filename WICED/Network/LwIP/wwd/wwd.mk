@@ -15,7 +15,10 @@ GLOBAL_INCLUDES := .
 $(NAME)_SOURCES := wwd_network.c \
                    wwd_buffer.c
 
-$(NAME)_COMPONENTS := Wiced/Network/LwIP/wwd/$(RTOS)
+$(NAME)_COMPONENTS := WICED/network/LwIP/WWD/$(RTOS)
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
+$(NAME)_CHECK_HEADERS := \
+                         wwd_buffer.h \
+                         wwd_network.h

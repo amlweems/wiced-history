@@ -16,11 +16,11 @@
 #include "wiced_utilities.h"
 #include "wwd_wifi.h"
 #include "wwd_crypto.h"
-#include "internal/SDPCM.h"
+#include "internal/wwd_sdpcm.h"
 #include "besl_host.h"
-#include "internal/bcmendian.h"
+#include "internal/wwd_bcmendian.h"
 #include <string.h>
-#include "Network/wwd_buffer_interface.h"
+#include "network/wwd_buffer_interface.h"
 
 /******************************************************
  *                      Macros
@@ -43,11 +43,11 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 /******************************************************
@@ -68,21 +68,21 @@ void besl_host_get_mac_address(besl_mac_t* address, uint32_t interface )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t result;
+    wwd_result_t result;
     uint32_t*      data;
 
-    data = wiced_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), IOVAR_STR_BSSCFG_CUR_ETHERADDR );
     if ( data == NULL )
     {
         return;
     }
     *data = interface;
 
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result == WICED_SUCCESS )
+    result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
+    if ( result == WWD_SUCCESS )
     {
         memcpy( address, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
-        host_buffer_release( response, WICED_NETWORK_RX );
+        host_buffer_release( response, WWD_NETWORK_RX );
     }
 }
 
@@ -91,7 +91,7 @@ void besl_host_set_mac_address(besl_mac_t* address, uint32_t interface )
     wiced_buffer_t buffer;
     uint32_t*      data;
 
-    data = wiced_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
     if ( data == NULL )
     {
         return;
@@ -99,7 +99,7 @@ void besl_host_set_mac_address(besl_mac_t* address, uint32_t interface )
     data[0] = interface;
     memcpy(&data[1], address, sizeof(wiced_mac_t));
 
-    wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
 }
 
 
@@ -110,18 +110,18 @@ wiced_result_t wiced_besl_wifi_get_random( uint16_t* val )
     wiced_result_t ret;
     static uint16_t pseudo_random = 0;
 
-    (void) wiced_get_iovar_buffer( &buffer, (uint16_t) 2, IOVAR_STR_RAND ); /* Do not need to put anything in buffer hence void cast */
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
+    (void) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 2 ); /* Do not need to put anything in buffer hence void cast */
+    ret = wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RANDOM_BYTES, buffer, &response, WWD_STA_INTERFACE );
 
     if ( ret == WICED_SUCCESS )
     {
         uint8_t* data = (uint8_t*) host_buffer_get_current_piece_data_pointer( response );
         memcpy( val, data, (size_t) 2 );
-        host_buffer_release( response, WICED_NETWORK_RX );
+        host_buffer_release( response, WWD_NETWORK_RX );
     }
     else
     {
-        // Use a pseudo random number
+        /* Use a pseudo random number */
         if ( pseudo_random == 0 )
         {
             pseudo_random = (uint16_t) host_rtos_get_time( );
@@ -143,7 +143,7 @@ void besl_host_random_bytes(uint8_t* buffer, uint16_t buffer_length)
         if ( wiced_besl_wifi_get_random( &temp_random ) != WICED_SUCCESS )
         {
             int32_t temp = 0xA5;
-            wiced_wifi_get_rssi( &temp );
+            wwd_wifi_get_rssi( &temp );
             BESL_WRITE_16(buffer, temp);
         }
         else
@@ -181,7 +181,7 @@ uint16_t besl_host_hton16(uint16_t intshort)
 
 uint16_t besl_host_ltoh16(uint16_t intshort)
 {
-	return ntoh16(intshort);
+    return ntoh16(intshort);
 }
 
 uint32_t besl_host_hton32_ptr(uint8_t * in, uint8_t * out)

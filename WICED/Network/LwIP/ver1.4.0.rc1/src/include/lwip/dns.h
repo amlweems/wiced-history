@@ -100,6 +100,7 @@ struct local_hostlist_entry {
 typedef void (*dns_found_callback)(const char *name, ip_addr_t *ipaddr, void *callback_arg);
 
 void           dns_init(void);
+void           dns_deinit(void);
 void           dns_tmr(void);
 void           dns_setserver(u8_t numdns, ip_addr_t *dnsserver);
 ip_addr_t      dns_getserver(u8_t numdns);

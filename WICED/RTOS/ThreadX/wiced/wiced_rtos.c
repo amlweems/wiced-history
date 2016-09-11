@@ -63,17 +63,15 @@ typedef struct
 } wiced_event_message_t;
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 static void application_thread_main    ( ULONG thread_input );
 static void application_thread_cleanup ( TX_THREAD* thread_ptr, UINT condition );
-static void worker_thread_main         ( uint32_t arg );
-static void timed_event_handler        ( void* arg );
 extern void system_monitor_thread_main ( void* arg );
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 const uint32_t        ms_to_tick_ratio = 1000 / SYSTICK_FREQUENCY;
@@ -116,8 +114,8 @@ int main( void )
  */
 void tx_application_define( void *first_unused_memory )
 {
-	TX_THREAD* app_thread_handle;
-	char*      app_thread_stack;
+    TX_THREAD* app_thread_handle;
+    char*      app_thread_stack;
 
     UNUSED_PARAMETER(first_unused_memory);
 
@@ -137,10 +135,10 @@ void application_thread_cleanup( TX_THREAD *thread_ptr, UINT condition )
         malloc_transfer_to_curr_thread(thread_ptr->tx_thread_stack_start);
         malloc_transfer_to_curr_thread(thread_ptr);
         tx_thread_terminate( thread_ptr );
+        malloc_leak_check(thread_ptr, LEAK_CHECK_THREAD);
         tx_thread_delete( thread_ptr );
         free( thread_ptr->tx_thread_stack_start );
         free( thread_ptr );
-        malloc_thread_leak_check(thread_ptr);
     }
 }
 
@@ -154,84 +152,63 @@ void application_thread_main( ULONG thread_input )
 #endif /* WICED_DISABLE_WATCHDOG */
 
     application_start( );
+    malloc_leak_check(NULL, LEAK_CHECK_THREAD);
 }
 
-wiced_result_t wiced_rtos_init( void )
+wiced_result_t wiced_rtos_create_thread( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, uint32_t stack_size, void* arg )
 {
-    wiced_result_t result = WICED_SUCCESS;
+    wiced_result_t result;
 
-    WPRINT_RTOS_INFO(("Started ThreadX " ThreadX_VERSION "\r\n"));
-
-    if ( wiced_rtos_create_worker_thread( WICED_HARDWARE_IO_WORKER_THREAD, WICED_DEFAULT_WORKER_PRIORITY, HARDWARE_IO_WORKER_THREAD_STACK_SIZE, HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE ) != WICED_SUCCESS )
+    thread->stack = malloc_named( "stack", stack_size );
+    if (thread->stack == NULL)
     {
-        WPRINT_RTOS_INFO(("Failed to create WICED_HARDWARE_IO_WORKER_THREAD\r\n"));
-        result = WICED_ERROR;
+        return WICED_OUT_OF_HEAP_SPACE;
     }
+    malloc_transfer_to_curr_thread( thread->stack );
 
-    if ( wiced_rtos_create_worker_thread( WICED_NETWORKING_WORKER_THREAD,  WICED_NETWORK_WORKER_PRIORITY,  NETWORKING_WORKER_THREAD_STACK_SIZE,  NETWORKING_WORKER_THREAD_QUEUE_SIZE  ) != WICED_SUCCESS )
+    result = host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, thread->stack, stack_size, priority, (uint32_t)arg );
+
+    if ( result != WICED_WWD_SUCCESS )
     {
-        WPRINT_RTOS_INFO(("Failed to create WICED_NETWORKING_WORKER_THREAD\r\n"));
-        result = WICED_ERROR;
+        free( thread->stack );
+        thread->stack = NULL;
     }
 
     return result;
 }
 
-wiced_result_t wiced_rtos_deinit( void )
+wiced_result_t wiced_rtos_create_thread_with_stack( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, void* stack, uint32_t stack_size, void* arg )
 {
-    wiced_rtos_delete_worker_thread(WICED_HARDWARE_IO_WORKER_THREAD);
-    wiced_rtos_delete_worker_thread(WICED_NETWORKING_WORKER_THREAD);
+    wiced_result_t result;
 
-    return WICED_SUCCESS;
+    memset(thread, 0, sizeof(wiced_thread_t));
+    result = host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, stack, stack_size, priority, (uint32_t)arg );
+
+    return result;
 }
-
-wiced_result_t wiced_rtos_create_thread( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, uint32_t stack_size, void* arg )
-{
-    thread->stack = malloc_named("stack",stack_size);
-    if (thread->stack == NULL)
-    {
-        return WICED_NOMEM;
-    }
-    malloc_transfer_to_curr_thread(thread->stack);
-
-	if ( tx_thread_create( &thread->handle, (CHAR*) name, (native_thread_t) function, (ULONG) arg, thread->stack, stack_size, priority, priority, TX_NO_TIME_SLICE, TX_AUTO_START ) != TX_SUCCESS )
-    {
-        free( thread->stack );
-        thread->stack = NULL;
-        malloc_thread_leak_check(thread);
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
 
 wiced_result_t wiced_rtos_delete_thread( wiced_thread_t* thread )
 {
-    tx_thread_terminate( &thread->handle );
+    wiced_result_t result = host_rtos_finish_thread( WICED_GET_THREAD_HANDLE( thread ) );
 
-    malloc_transfer_to_curr_thread(thread->stack);
-
-    if ( tx_thread_delete( &thread->handle ) != TX_SUCCESS )
+    if ( result != WICED_WWD_SUCCESS )
     {
-        malloc_thread_leak_check(thread);
-        return WICED_ERROR;
+        return result;
     }
 
-    free( thread->stack );
-    thread->stack = NULL;
-    malloc_thread_leak_check(thread);
-    return WICED_SUCCESS;
-}
+    malloc_transfer_to_curr_thread( thread->stack );
 
+    malloc_leak_check( &thread->handle, LEAK_CHECK_THREAD );
 
-wiced_result_t wiced_rtos_thread_join( wiced_thread_t* thread )
-{
-    while ( thread->handle.tx_thread_state != TX_COMPLETED )
+    result = host_rtos_delete_terminated_thread( WICED_GET_THREAD_HANDLE( thread ) );
+
+    if ( result == WICED_WWD_SUCCESS )
     {
-        wiced_rtos_delay_milliseconds( 10 );
+        free( thread->stack );
+        thread->stack = NULL;
     }
-    return WICED_SUCCESS;
+
+    return result;
 }
 
 
@@ -250,11 +227,7 @@ wiced_result_t wiced_rtos_is_current_thread( wiced_thread_t* thread )
 
 wiced_result_t wiced_rtos_check_stack( void )
 {
-    // TODO: Add stack checking here.
-
-    // TX_THREAD* current_thread;
-    // TX_THREAD_GET_CURRENT(current_thread);
-    // TX_THREAD_STACK_CHECK(current_thread);
+    /* TODO: Add stack checking here. */
 
     return WICED_SUCCESS;
 }
@@ -273,17 +246,6 @@ wiced_result_t wiced_rtos_thread_force_awake( wiced_thread_t* thread )
 }
 
 
-wiced_result_t wiced_rtos_delay_milliseconds( uint32_t milliseconds )
-{
-    if ( ( tx_thread_sleep( (ULONG) milliseconds / ms_to_tick_ratio ) ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
 wiced_result_t wiced_time_get_time( wiced_time_t* time_ptr )
 {
     *time_ptr = (wiced_time_t) ( tx_time_get( ) * ms_to_tick_ratio );
@@ -291,61 +253,9 @@ wiced_result_t wiced_time_get_time( wiced_time_t* time_ptr )
 }
 
 
-wiced_result_t wiced_time_set_time( wiced_time_t* time_ptr )
+wiced_result_t wiced_time_set_time( const wiced_time_t* time_ptr )
 {
     tx_time_set( ( *time_ptr ) / ms_to_tick_ratio );
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_init_semaphore( wiced_semaphore_t* semaphore )
-{
-    if ( tx_semaphore_create( semaphore, (CHAR*) "", 0 ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_set_semaphore( wiced_semaphore_t* semaphore )
-{
-    if ( tx_semaphore_put( semaphore ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_get_semaphore( wiced_semaphore_t* semaphore, uint32_t timeout_ms )
-{
-    UINT result = tx_semaphore_get( semaphore, TX_TIMEOUT( timeout_ms ) );
-
-    if (result == TX_SUCCESS )
-    {
-        return WICED_SUCCESS;
-    }
-    else if (result == TX_NO_INSTANCE)
-    {
-        return WICED_TIMEOUT;
-    }
-    else
-    {
-        return WICED_ERROR;
-    }
-}
-
-
-wiced_result_t wiced_rtos_deinit_semaphore( wiced_semaphore_t* semaphore )
-{
-    if ( tx_semaphore_delete( semaphore ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
     return WICED_SUCCESS;
 }
 
@@ -398,60 +308,49 @@ wiced_result_t wiced_rtos_deinit_mutex( wiced_mutex_t* mutex )
 wiced_result_t wiced_rtos_init_queue( wiced_queue_t* queue, const char* name, uint32_t message_size, uint32_t number_of_messages )
 {
     uint32_t queue_size = message_size * number_of_messages;
+    wiced_result_t result;
+
+    UNUSED_PARAMETER( name );
 
     if ( ( message_size % 4 ) > 0 )
     {
         return WICED_ERROR;
     }
 
-    queue->buffer = (void*) malloc_named("queue", queue_size);
-    malloc_transfer_to_curr_thread(queue->buffer);
+    queue->buffer = (void*) malloc_named( "queue", queue_size );
+    if ( queue->buffer == NULL )
+    {
+        return WICED_OUT_OF_HEAP_SPACE;
+    }
+    malloc_transfer_to_curr_thread( queue->buffer );
 
-    if ( tx_queue_create( &queue->handle, (CHAR*) name, (UINT) ( message_size / 4 ), (VOID *) queue->buffer, (ULONG) queue_size ) != TX_SUCCESS )
+    result = host_rtos_init_queue( WICED_GET_QUEUE_HANDLE( queue ), queue->buffer, queue_size, message_size );
+
+    if ( result != WICED_WWD_SUCCESS )
     {
         free( queue->buffer );
         queue->buffer = NULL;
-        return WICED_ERROR;
     }
 
-    return WICED_SUCCESS;
+    return result;
 }
 
-
-wiced_result_t wiced_rtos_push_to_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
-{
-    if ( tx_queue_send( &queue->handle, (VOID*)message, TX_TIMEOUT( timeout_ms ) ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_pop_from_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
-{
-    if ( tx_queue_receive( &queue->handle, (VOID*)message, TX_TIMEOUT( timeout_ms ) ) != TX_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
 
 wiced_result_t wiced_rtos_deinit_queue( wiced_queue_t* queue )
 {
+    wiced_result_t result;
+
     malloc_transfer_to_curr_thread( queue->buffer );
 
-    if ( tx_queue_delete( &queue->handle ) != TX_SUCCESS )
+    result = host_rtos_deinit_queue( WICED_GET_QUEUE_HANDLE( queue ) );
+
+    if ( result == WICED_WWD_SUCCESS )
     {
-        return WICED_ERROR;
+        free( queue->buffer );
+        queue->buffer = NULL;
     }
 
-    free( queue->buffer );
-    queue->buffer = NULL;
-
-    return WICED_SUCCESS;
+    return result;
 }
 
 wiced_result_t wiced_rtos_is_queue_empty( wiced_queue_t* queue )
@@ -477,6 +376,11 @@ wiced_result_t wiced_rtos_init_timer( wiced_timer_t* timer, uint32_t time_ms, ti
 
 wiced_result_t wiced_rtos_start_timer( wiced_timer_t* timer )
 {
+    if ( tx_timer_change( timer, timer->tx_timer_internal.tx_timer_internal_re_initialize_ticks, timer->tx_timer_internal.tx_timer_internal_re_initialize_ticks ) != TX_SUCCESS )
+    {
+        return WICED_ERROR;
+    }
+
     if ( tx_timer_activate( timer ) != WICED_SUCCESS )
     {
         return WICED_ERROR;
@@ -489,17 +393,6 @@ wiced_result_t wiced_rtos_start_timer( wiced_timer_t* timer )
 wiced_result_t wiced_rtos_stop_timer( wiced_timer_t* timer )
 {
     if ( tx_timer_deactivate( timer ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_reload_timer( wiced_timer_t* timer )
-{
-    if ( tx_timer_change( timer, timer->tx_timer_internal.tx_timer_internal_re_initialize_ticks, timer->tx_timer_internal.tx_timer_internal_re_initialize_ticks ) != TX_SUCCESS )
     {
         return WICED_ERROR;
     }
@@ -525,113 +418,6 @@ wiced_result_t wiced_rtos_is_timer_running( wiced_timer_t* timer )
 }
 
 
-static void worker_thread_main( uint32_t arg )
-{
-    wiced_worker_thread_t* worker_thread = (wiced_worker_thread_t*) arg;
-
-    while ( 1 )
-    {
-        wiced_event_message_t message;
-
-        if ( wiced_rtos_pop_from_queue( &worker_thread->event_queue, &message, WICED_WAIT_FOREVER ) == WICED_SUCCESS )
-        {
-            message.function( message.arg );
-        }
-    }
-
-    WICED_END_OF_THREAD(NULL);
-}
-
-wiced_result_t wiced_rtos_create_worker_thread( wiced_worker_thread_t* worker_thread, uint8_t priority, uint32_t stack_size, uint32_t event_queue_size )
-{
-    memset( worker_thread, 0, sizeof( *worker_thread ) );
-
-    if ( wiced_rtos_init_queue( &worker_thread->event_queue, "worker queue", sizeof(wiced_event_message_t), event_queue_size ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    if ( wiced_rtos_create_thread( &worker_thread->thread, priority, "worker thread", worker_thread_main, stack_size, (void*) worker_thread ) != WICED_SUCCESS )
-    {
-        wiced_rtos_deinit_queue( &worker_thread->event_queue );
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_delete_worker_thread( wiced_worker_thread_t* worker_thread )
-{
-    tx_thread_terminate( &worker_thread->thread.handle );
-
-    if ( WICED_SUCCESS != wiced_rtos_deinit_queue( &worker_thread->event_queue ) )
-    {
-        return WICED_ERROR;
-    }
-
-    if ( WICED_SUCCESS != wiced_rtos_delete_thread( &worker_thread->thread ) )
-    {
-        return WICED_ERROR;
-    }
-
-    malloc_thread_leak_check(&worker_thread->thread);
-
-    return WICED_SUCCESS;
-}
-
-
-static void timed_event_handler( void* arg )
-{
-    wiced_timed_event_t*  event_object = (wiced_timed_event_t*) arg;
-    wiced_event_message_t message;
-
-    message.function = event_object->function;
-    message.arg      = event_object->arg;
-
-    wiced_rtos_push_to_queue( &event_object->thread->event_queue, &message, WICED_NO_WAIT );
-}
-
-wiced_result_t wiced_rtos_register_timed_event( wiced_timed_event_t* event_object, wiced_worker_thread_t* worker_thread, event_handler_t function, uint32_t time_ms, void* arg )
-{
-    if ( wiced_rtos_init_timer( &event_object->timer, time_ms, timed_event_handler, (void*) event_object ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    event_object->function   = function;
-    event_object->thread     = worker_thread;
-    event_object->arg        = arg;
-
-    if ( wiced_rtos_start_timer( &event_object->timer ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_deregister_timed_event( wiced_timed_event_t* event_object )
-{
-    if ( wiced_rtos_deinit_timer( &event_object->timer ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    memset( event_object, 0, sizeof( *event_object ) );
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_send_asynchronous_event( wiced_worker_thread_t* worker_thread, event_handler_t function, void* arg )
-{
-    wiced_event_message_t message;
-
-    message.function = function;
-    message.arg      = arg;
-
-    return wiced_rtos_push_to_queue( &worker_thread->event_queue, &message, WICED_NO_WAIT );
-}
-
 wiced_result_t wiced_rtos_init_event_flags( wiced_event_flags_t* event_flags )
 {
     if ( tx_event_flags_create( event_flags, (CHAR*)"Event flags" ) != TX_SUCCESS )
@@ -641,6 +427,7 @@ wiced_result_t wiced_rtos_init_event_flags( wiced_event_flags_t* event_flags )
 
     return WICED_SUCCESS;
 }
+
 
 wiced_result_t wiced_rtos_wait_for_event_flags( wiced_event_flags_t* event_flags, uint32_t flags_to_wait_for, uint32_t* flags_set, wiced_bool_t clear_set_flags, wiced_event_flags_wait_option_t wait_option, uint32_t timeout_ms )
 {
@@ -657,6 +444,7 @@ wiced_result_t wiced_rtos_wait_for_event_flags( wiced_event_flags_t* event_flags
     return WICED_SUCCESS;
 }
 
+
 wiced_result_t wiced_rtos_set_event_flags( wiced_event_flags_t* event_flags, uint32_t flags_to_set )
 {
     if ( tx_event_flags_set( event_flags, flags_to_set, TX_OR ) != WICED_SUCCESS )
@@ -666,6 +454,7 @@ wiced_result_t wiced_rtos_set_event_flags( wiced_event_flags_t* event_flags, uin
 
     return WICED_SUCCESS;
 }
+
 
 wiced_result_t wiced_rtos_deinit_event_flags( wiced_event_flags_t* event_flags )
 {

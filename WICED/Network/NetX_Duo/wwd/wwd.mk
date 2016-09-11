@@ -16,3 +16,7 @@ $(NAME)_SOURCES := wwd_buffer.c \
                    wwd_network.c
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+
+$(NAME)_CHECK_HEADERS := \
+                         wwd_buffer.h \
+                         wwd_network.h

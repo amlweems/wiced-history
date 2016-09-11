@@ -62,8 +62,8 @@
 #define LWIP_DBG_HALT          0x08U
 
 #ifndef LWIP_NOASSERT
-#define LWIP_ASSERT(message, assertion) do { if(!(assertion)){ \
-  LWIP_PLATFORM_ASSERT(message);} } while(0)
+#define LWIP_ASSERT(message, assertion)  /*@-noeffect@*/ do { if(!(assertion)){ \
+  LWIP_PLATFORM_ASSERT(message);} } while(0==1) /*@+noeffect@*/
 #else  /* LWIP_NOASSERT */
 #define LWIP_ASSERT(message, assertion) 
 #endif /* LWIP_NOASSERT */
@@ -71,7 +71,7 @@
 /** if "expression" isn't true, then print "message" and execute "handler" expression */
 #ifndef LWIP_ERROR
 #define LWIP_ERROR(message, expression, handler) do { if (!(expression)) { \
-  LWIP_PLATFORM_ASSERT(message); handler;}} while(0)
+  LWIP_PLATFORM_ASSERT(message); handler;}} while(0==1)
 #endif /* LWIP_ERROR */
 
 #ifdef LWIP_DEBUG
@@ -80,15 +80,17 @@
  */
 #define LWIP_DEBUGF(debug, message) do { \
                                if ( \
-                                   ((debug) & LWIP_DBG_ON) && \
-                                   ((debug) & LWIP_DBG_TYPES_ON) && \
+                                   (((debug) & LWIP_DBG_ON)!=0) && \
+                                   (((debug) & LWIP_DBG_TYPES_ON)!=0) && \
                                    ((s16_t)((debug) & LWIP_DBG_MASK_LEVEL) >= LWIP_DBG_MIN_LEVEL)) { \
                                  LWIP_PLATFORM_DIAG(message); \
-                                 if ((debug) & LWIP_DBG_HALT) { \
-                                   while(1); \
+                                 if (((debug) & LWIP_DBG_HALT)!=0) { \
+                                   /*@-infloops@*/ /*@-whileempty@*/ \
+                                   while(1==1); \
+                                   /*@+infloops@*/ /*@-whileempty@*/ \
                                  } \
                                } \
-                             } while(0)
+                             } while(0==1)
 
 #else  /* LWIP_DEBUG */
 #define LWIP_DEBUGF(debug, message) 

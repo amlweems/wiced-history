@@ -21,56 +21,52 @@
  *
  */
 
-
 #include "wwd_rtos.h"
 #include <stdint.h>
-
+#include "platform_config.h"
+#include "platform_cmsis.h"
+#include "platform_init.h"
 
 volatile uint32_t noos_total_time = 0;
 
-
-
-typedef struct
-{
-    uint32_t CTRL;
-    uint32_t LOAD;
-    uint32_t VAL;
-    uint32_t CALIB;
-} STK_t;
-
-
 #define CYCLES_PER_SYSTICK  ( ( CPU_CLOCK_HZ / SYSTICK_FREQUENCY ) - 1 )
-#define STK                 ((STK_t   *) 0xE000E010)
-#define SCB_SHP             ((uint8_t *) 0xE000ED18)
-#define SYSTICK_ENABLE      (1)
-#define SYSTICK_INT_ENABLE  (2)
-#define SYSTICK_SOURCE      (4)
-
 
 void NoOS_setup_timing( void )
 {
     /* Setup the system handler priorities */
-    SCB_SHP[11] = (uint8_t) 0x40; /* SysTick system handler priority */
+    SCB->SHP[11] = (uint8_t) 0x40; /* SysTick system handler priority */
 
 
     /* Setup the system tick */
-    STK->LOAD = (uint32_t) ( CYCLES_PER_SYSTICK );
-    STK->CTRL = (uint32_t) ( SYSTICK_ENABLE | SYSTICK_INT_ENABLE | SYSTICK_SOURCE );  /* clock source is processor clock - AHB */
+    SysTick->LOAD = (uint32_t) ( CYCLES_PER_SYSTICK );
+    SysTick->CTRL = (uint32_t) ( SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_CLKSOURCE_Msk );  /* clock source is processor clock - AHB */
 }
-
 
 void NoOS_stop_timing( void )
 {
     /* Setup the system handler priorities */
-    SCB_SHP[11] = (uint8_t) 0x40; /* SysTick system handler priority */
+    SCB->SHP[11] = (uint8_t) 0x40; /* SysTick system handler priority */
 
 
     /* Setup the system tick */
-    STK->CTRL &= (uint32_t) ~( SYSTICK_ENABLE | SYSTICK_INT_ENABLE );
+    SysTick->CTRL &= (uint32_t) ~( SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk );
 }
 
-void NoOS_systick_irq( void )
+/* NoOS interrupt priority setup. Called by platform_init_mcu_infrastructure() */
+void platform_init_rtos_irq_priorities( void )
+{
+    /* Setup the system handler priorities */
+    NVIC_SetPriority( MemoryManagement_IRQn,  0 ); /* Mem Manage system handler priority    */
+    NVIC_SetPriority( BusFault_IRQn        ,  0 ); /* Bus Fault system handler priority     */
+    NVIC_SetPriority( UsageFault_IRQn      ,  0 ); /* Usage Fault system handler priority   */
+    NVIC_SetPriority( SVCall_IRQn          ,  0 ); /* SVCall system handler priority        */
+    NVIC_SetPriority( DebugMonitor_IRQn    ,  0 ); /* Debug Monitor system handler priority */
+    NVIC_SetPriority( PendSV_IRQn          ,  0 ); /* PendSV system handler priority        */
+    NVIC_SetPriority( SysTick_IRQn         , 15 ); /* SysTick system handler priority       */
+}
+
+/* NoOS SysTick handler */
+WWD_RTOS_DEFINE_ISR( NoOS_systick_irq )
 {
     noos_total_time++;
 }
-

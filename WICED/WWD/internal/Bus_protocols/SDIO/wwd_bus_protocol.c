@@ -11,22 +11,21 @@
 /** @file
  *  Broadcom WLAN SDIO Protocol interface
  *
- *  Implements the WICED Bus Protocol Interface for SDIO
+ *  Implements the WWD Bus Protocol Interface for SDIO
  *  Provides functions for initialising, de-intitialising 802.11 device,
  *  sending/receiving raw packets etc
  */
 
 
-#include "internal/SDPCM.h"
 #include <string.h> /* For memcpy */
 #include "wwd_assert.h"
-#include "Network/wwd_buffer_interface.h"
-#include "internal/wwd_internal.h"
+#include "network/wwd_buffer_interface.h"
 #include "RTOS/wwd_rtos_interface.h"
-#include "internal/wifi_image/wwd_wifi_image_interface.h"
-#include "Platform/wwd_platform_interface.h"
-#include "internal/Bus_protocols/wwd_bus_protocol_interface.h"
+#include "platform/wwd_platform_interface.h"
 #include "chip_constants.h"
+#include "internal/wwd_internal.h"
+#include "internal/wwd_sdpcm.h"
+#include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 
 /******************************************************
  *             Constants
@@ -48,10 +47,14 @@
 
 #define BUS_PROTOCOL_LEVEL_MAX_RETRIES   5
 
-#define VERIFY_RESULT( x )  { wiced_result_t verify_result; verify_result = (x); if ( verify_result != WICED_SUCCESS ) return verify_result; }
+#define VERIFY_RESULT( x )  { wwd_result_t verify_result; verify_result = (x); if ( verify_result != WWD_SUCCESS ) { wiced_assert("command failed",0==1); return verify_result; } }
 
-#ifndef WICED_BUS_RESET_DELAY
-#define WICED_BUS_RESET_DELAY    (1)
+#ifndef WWD_BUS_SDIO_RESET_DELAY
+#define WWD_BUS_SDIO_RESET_DELAY    (1)
+#endif
+
+#ifndef WWD_BUS_SDIO_AFTER_RESET_DELAY
+#define WWD_BUS_SDIO_AFTER_RESET_DELAY    (1)
 #endif
 
 /******************************************************
@@ -83,7 +86,7 @@ typedef struct
     unsigned int  raw_flag         : 1; /* 27    */
     unsigned int  function_number  : 3; /* 28-30 */
     unsigned int  rw_flag          : 1; /* 31    */
-} sdio_cmd52_argument_t;
+} wwd_bus_sdio_cmd52_argument_t;
 
 typedef struct
 {
@@ -93,15 +96,15 @@ typedef struct
     unsigned int  block_mode       : 1; /* 27    */
     unsigned int  function_number  : 3; /* 28-30 */
     unsigned int  rw_flag          : 1; /* 31    */
-} sdio_cmd53_argument_t;
+} wwd_bus_sdio_cmd53_argument_t;
 
 typedef union
 {
     uint32_t              value;
     sdio_cmd5_argument_t  cmd5;
     sdio_cmd5x_argument_t cmd5x;
-    sdio_cmd52_argument_t cmd52;
-    sdio_cmd53_argument_t cmd53;
+    wwd_bus_sdio_cmd52_argument_t cmd52;
+    wwd_bus_sdio_cmd53_argument_t cmd53;
 } sdio_cmd_argument_t;
 
 typedef struct
@@ -140,22 +143,22 @@ typedef union
  *             Variables
  ******************************************************/
 
-static wiced_bool_t bus_is_up                 = WICED_FALSE;
-static wiced_bool_t wiced_bus_flow_controlled = WICED_FALSE;
+static wiced_bool_t bus_is_up               = WICED_FALSE;
+static wiced_bool_t wwd_bus_flow_controlled = WICED_FALSE;
 
 /******************************************************
- *             Function declarations
+ *             Static Function Declarations
  ******************************************************/
 
-static wiced_result_t wiced_sdio_transfer    ( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/  uint8_t* data, sdio_response_needed_t response_expected );
-static wiced_result_t sdio_cmd52             ( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, uint8_t value, sdio_response_needed_t response_expected, /*@out@*/ uint8_t* response );
-static wiced_result_t sdio_cmd53             ( bus_transfer_direction_t direction, bus_function_t function, sdio_transfer_mode_t mode, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/  uint8_t* data, sdio_response_needed_t response_expected, /*@null@*/ /*@out@*/ uint32_t* response );
-static wiced_result_t wiced_abort_read       ( wiced_bool_t retry );
-static wiced_result_t wiced_download_firmware( void );
-static wiced_result_t wiced_read_register_value( bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value );
+static wwd_result_t wwd_bus_sdio_transfer               ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/  uint8_t* data, sdio_response_needed_t response_expected );
+static wwd_result_t wwd_bus_sdio_cmd52                  ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint8_t value, sdio_response_needed_t response_expected, /*@out@*/ uint8_t* response );
+static wwd_result_t wwd_bus_sdio_cmd53                  ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, sdio_transfer_mode_t mode, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/  uint8_t* data, sdio_response_needed_t response_expected, /*@null@*/ /*@out@*/ uint32_t* response );
+static wwd_result_t wwd_bus_sdio_abort_read             ( wiced_bool_t retry );
+static wwd_result_t wwd_bus_sdio_download_firmware      ( void );
+static wwd_result_t wwd_bus_sdio_read_register_value    ( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value );
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE
-static wiced_result_t wiced_sdio_redirect_oob_interrupt( void );
+static wwd_result_t wwd_bus_sdio_set_oob_interrupt      ( uint8_t gpio_pin_number );
 #endif
 
 /******************************************************
@@ -170,8 +173,8 @@ static wiced_result_t wiced_sdio_redirect_oob_interrupt( void );
 
 typedef struct sdio_log_entry_struct
 {
-    bus_transfer_direction_t  direction;
-    bus_function_t            function;
+    wwd_bus_transfer_direction_t  direction;
+    wwd_bus_function_t            function;
     uint32_t                  address;
     unsigned long             time;
     unsigned long             length;
@@ -183,7 +186,7 @@ typedef struct sdio_log_entry_struct
 static int next_sdio_log_pos = 0;
 static sdio_log_entry_t sdio_log_data[SDIO_LOG_SIZE];
 
-static void add_log_entry( bus_transfer_direction_t dir, bus_function_t function, uint32_t address, unsigned long length, uint8_t* data )
+static void add_log_entry( wwd_bus_transfer_direction_t dir, wwd_bus_function_t function, uint32_t address, unsigned long length, uint8_t* data )
 {
     sdio_log_data[next_sdio_log_pos].direction = dir;
     sdio_log_data[next_sdio_log_pos].function  = function;
@@ -211,57 +214,62 @@ static void add_log_entry( bus_transfer_direction_t dir, bus_function_t function
  ******************************************************/
 
 /* Device data transfer functions */
-wiced_result_t wiced_bus_transfer_buffer( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, wiced_buffer_t buffer )
+wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 {
-    return wiced_bus_transfer_bytes( direction, function, address, (uint16_t) ( host_buffer_get_current_piece_size( buffer ) - sizeof(wiced_buffer_t) ), (wiced_transfer_bytes_packet_t*)( host_buffer_get_current_piece_data_pointer( buffer ) + sizeof(wiced_buffer_t) ) );
+    wwd_result_t retval;
+    retval = wwd_bus_transfer_bytes( BUS_WRITE, WLAN_FUNCTION, 0, (uint16_t) ( host_buffer_get_current_piece_size( buffer ) - sizeof(wiced_buffer_t) ), (wwd_transfer_bytes_packet_t*)( host_buffer_get_current_piece_data_pointer( buffer ) + sizeof(wiced_buffer_t) ) );
+    host_buffer_release( buffer, WWD_NETWORK_TX );
+    return retval;
 }
 
-
-wiced_result_t wiced_bus_init( void )
+wwd_result_t wwd_bus_init( void )
 {
     uint8_t        byte_data;
-    wiced_result_t result;
+    wwd_result_t   result;
     uint32_t       loop_count;
 
-    wiced_bus_flow_controlled = WICED_FALSE;
+    wwd_bus_flow_controlled = WICED_FALSE;
 
-    host_platform_power_wifi( WICED_TRUE );
+    wwd_bus_init_backplane_window( );
+
     host_platform_reset_wifi( WICED_TRUE );
-    (void) host_rtos_delay_milliseconds( (uint32_t) WICED_BUS_RESET_DELAY );  /* Ignore return - nothing can be done if it fails */
+    host_platform_power_wifi( WICED_TRUE );
+    (void) host_rtos_delay_milliseconds( (uint32_t) WWD_BUS_SDIO_RESET_DELAY );  /* Ignore return - nothing can be done if it fails */
     host_platform_reset_wifi( WICED_FALSE );
+    (void) host_rtos_delay_milliseconds( (uint32_t) WWD_BUS_SDIO_AFTER_RESET_DELAY );  /* Ignore return - nothing can be done if it fails */
 
-    host_platform_sdio_enumerate();
+    VERIFY_RESULT( host_platform_sdio_enumerate() );
 
     /* Setup the backplane*/
     loop_count = 0;
     do
     {
         /* Enable function 1 (backplane) */
-        VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, SDIO_FUNC_ENABLE_1 ) );
+        VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, SDIO_FUNC_ENABLE_1 ) );
         if (loop_count != 0)
         {
             (void) host_rtos_delay_milliseconds( (uint32_t) 1 );  /* Ignore return - nothing can be done if it fails */
         }
-        VERIFY_RESULT( wiced_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, &byte_data ) );
+        VERIFY_RESULT( wwd_bus_sdio_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, &byte_data ) );
         loop_count++;
         if ( loop_count >= (uint32_t) F0_WORKING_TIMEOUT_MS )
         {
-            return WICED_TIMEOUT;
+            return WWD_TIMEOUT;
         }
     } while (byte_data != (uint8_t) SDIO_FUNC_ENABLE_1);
 
 #ifndef SDIO_1_BIT
     /* Read the bus width and set to 4 bits */
-    VERIFY_RESULT( wiced_read_register_value (BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, &byte_data) );
-    VERIFY_RESULT( wiced_write_register_value(BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, (byte_data & (~BUS_SD_DATA_WIDTH_MASK)) | BUS_SD_DATA_WIDTH_4BIT ) );
+    VERIFY_RESULT( wwd_bus_sdio_read_register_value (BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, &byte_data) );
+    VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, (byte_data & (~BUS_SD_DATA_WIDTH_MASK)) | BUS_SD_DATA_WIDTH_4BIT ) );
     /* NOTE: We don't need to change our local bus settings since we're not sending any data (only using CMD52) until after we change the bus speed further down */
 #endif
     /* Set the block size */
 
     /* Wait till the backplane is ready */
     loop_count = 0;
-    while ( ( ( result = wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) ) == WICED_SUCCESS ) &&
-            ( ( result = wiced_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, &byte_data                ) ) == WICED_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) ) == WWD_SUCCESS ) &&
+            ( ( result = wwd_bus_sdio_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, &byte_data                ) ) == WWD_SUCCESS ) &&
             ( byte_data != (uint8_t)  SDIO_64B_BLOCK ) &&
             ( loop_count < (uint32_t) F0_WORKING_TIMEOUT_MS ) )
     {
@@ -270,31 +278,31 @@ wiced_result_t wiced_bus_init( void )
         if ( loop_count >= (uint32_t) F0_WORKING_TIMEOUT_MS )
         {
             /* If the system fails here, check the high frequency crystal is working */
-            return WICED_TIMEOUT;
+            return WWD_TIMEOUT;
         }
     }
 
     VERIFY_RESULT( result );
 
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0,   (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F1BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F2BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F2BLKSIZE_1, (uint8_t) 1, (uint32_t) 0              ) ); /* Function 2 = 64 */
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0,   (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F1BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F2BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_F2BLKSIZE_1, (uint8_t) 1, (uint32_t) 0              ) ); /* Function 2 = 64 */
 
     /* Enable/Disable Client interrupts */
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_INTEN,       (uint8_t) 1, INTR_CTL_MASTER_EN | INTR_CTL_FUNC1_EN | INTR_CTL_FUNC2_EN ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_INTEN,       (uint8_t) 1, INTR_CTL_MASTER_EN | INTR_CTL_FUNC1_EN | INTR_CTL_FUNC2_EN ) );
 
 
 #if 0
     /* This code is required if we want more than 25 MHz clock */
-    VERIFY_RESULT( wiced_read_register_value( BUS_FUNCTION, SDIOD_CCCR_SPEED_CONTROL, 1, &byte_data ) );
+    VERIFY_RESULT( wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_SPEED_CONTROL, 1, &byte_data ) );
     if ( ( byte_data & 0x1 ) != 0 )
     {
-        VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_SPEED_CONTROL, 1, byte_data | SDIO_SPEED_EHS ) );
+        VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_SPEED_CONTROL, 1, byte_data | SDIO_SPEED_EHS ) );
     }
     else
     {
-        return WICED_ERROR;
+        return WWD_BUS_READ_REGISTER_ERROR;
     }
 #endif
 
@@ -303,7 +311,7 @@ wiced_result_t wiced_bus_init( void )
 
     /* Wait till the backplane is ready */
     loop_count = 0;
-    while ( ( ( result = wiced_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WICED_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SDIO_FUNC_READY_1 ) == 0 ) &&
             ( loop_count < (uint32_t) F1_AVAIL_TIMEOUT_MS ) )
     {
@@ -312,15 +320,15 @@ wiced_result_t wiced_bus_init( void )
     }
     if ( loop_count >= (uint32_t) F1_AVAIL_TIMEOUT_MS )
     {
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
     VERIFY_RESULT( result );
 
     /* Set the ALP */
-    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t)( SBSDIO_FORCE_HW_CLKREQ_OFF | SBSDIO_ALP_AVAIL_REQ | SBSDIO_FORCE_ALP ) ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t)( SBSDIO_FORCE_HW_CLKREQ_OFF | SBSDIO_ALP_AVAIL_REQ | SBSDIO_FORCE_ALP ) ) );
 
     loop_count = 0;
-    while ( ( ( result = wiced_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &byte_data ) ) == WICED_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SBSDIO_ALP_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) ALP_AVAIL_TIMEOUT_MS ) )
     {
@@ -329,49 +337,41 @@ wiced_result_t wiced_bus_init( void )
     }
     if ( loop_count >= (uint32_t) ALP_AVAIL_TIMEOUT_MS )
     {
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
     VERIFY_RESULT( result );
 
     /* Clear request for ALP */
-    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, 0 ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, 0 ) );
 
     /* Disable the extra SDIO pull-ups */
-#ifndef WICED_USE_WLAN_SDIO_PULLUPS
-    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_PULL_UP,  (uint8_t) 1, 0 ) );
+#ifndef WWD_BUS_SDIO_USE_WLAN_SDIO_PULLUPS
+    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_PULL_UP,  (uint8_t) 1, 0 ) );
 #endif
 
     /* Enable F1 and F2 */
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, SDIO_FUNC_ENABLE_1 | SDIO_FUNC_ENABLE_2 ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, SDIO_FUNC_ENABLE_1 | SDIO_FUNC_ENABLE_2 ) );
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE
     /* Enable out-of-band interrupt */
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_SEP_INT_CTL, (uint8_t) 1, SEP_INTR_CTL_MASK | SEP_INTR_CTL_EN | SEP_INTR_CTL_POL ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_SEP_INT_CTL, (uint8_t) 1, SEP_INTR_CTL_MASK | SEP_INTR_CTL_EN | SEP_INTR_CTL_POL ) );
 
-    if ( host_platform_get_oob_interrupt_pin( ) == 1 )
-    {
-        /* If OOB interrupt pin is connected to GPIO1, redirect it */
-        wiced_sdio_redirect_oob_interrupt();
-    }
+    /* Set OOB interrupt to the correct WLAN GPIO pin */
+    VERIFY_RESULT( wwd_bus_sdio_set_oob_interrupt( host_platform_get_oob_interrupt_pin( ) ) );
 
-    host_enable_oob_interrupt( );
+    VERIFY_RESULT( host_enable_oob_interrupt( ) );
 #endif /* ifndef WICED_DISABLE_MCU_POWERSAVE */
 
     /* Enable F2 interrupt only */
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_INTEN, (uint8_t) 1, INTR_CTL_MASTER_EN | INTR_CTL_FUNC2_EN ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_INTEN, (uint8_t) 1, INTR_CTL_MASTER_EN | INTR_CTL_FUNC2_EN ) );
 
-    VERIFY_RESULT( wiced_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) );
+    VERIFY_RESULT( wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) );
 
-    result = wiced_download_firmware( );
-    if ( result != WICED_SUCCESS )
-    {
-        WPRINT_WWD_ERROR(("Could not download firmware\r\n"));
-        return result;
-    }
+    VERIFY_RESULT( wwd_bus_sdio_download_firmware( ) );
 
     /* Wait for F2 to be ready */
     loop_count = 0;
-    while ( ( ( result = wiced_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WICED_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SDIO_FUNC_READY_2 ) == 0 ) &&
             ( loop_count < (uint32_t) F2_READY_TIMEOUT_MS ) )
     {
@@ -385,8 +385,10 @@ wiced_result_t wiced_bus_init( void )
          * check that it matches the WLAN device on your platform, including the
          * crystal frequency.
          */
-        WPRINT_WWD_ERROR(("Timeout while waiting for function 2 to be ready\r\n"));
-        return WICED_TIMEOUT;
+        WPRINT_WWD_ERROR(("Timeout while waiting for function 2 to be ready\n"));
+        /*@-unreachable@*/ /* Reachable after hitting assert */
+        return WWD_TIMEOUT;
+        /*@+unreachable@*/
     }
 
     bus_is_up = WICED_TRUE;
@@ -394,37 +396,40 @@ wiced_result_t wiced_bus_init( void )
     return result;
 }
 
-wiced_result_t wiced_bus_deinit( void )
+wwd_result_t wwd_bus_deinit( void )
 {
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
 
     bus_is_up = WICED_FALSE;
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_bus_ack_interrupt(uint32_t intstatus)
+wwd_result_t wwd_bus_ack_interrupt(uint32_t intstatus)
 {
-    return wiced_write_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, intstatus);
+    return wwd_bus_write_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, intstatus);
 }
 
-
-uint32_t wiced_bus_process_interrupt(void)
+uint32_t wwd_bus_packet_available_to_read(void)
 {
     uint32_t int_status = 0;
 
-    // Read the IntStatus
-    if ( wiced_read_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, (uint8_t*)&int_status ) != WICED_SUCCESS )
+    /* Read the IntStatus */
+    if ( wwd_bus_read_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, (uint8_t*)&int_status ) != WWD_SUCCESS )
     {
     }
 
     /* Clear any interrupts */
-    if ( wiced_write_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, int_status ) != WICED_SUCCESS )
+    if ( wwd_bus_write_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, int_status ) != WWD_SUCCESS )
     {
     }
 
-    return int_status;
+#if defined(WICED_PLATFORM_MASKS_BUS_IRQ)
+    host_platform_unmask_sdio_interrupt();
+#endif
+
+    return ((int_status) & (FRAME_AVAILABLE_MASK));
 }
 
 /*
@@ -435,47 +440,44 @@ uint32_t wiced_bus_process_interrupt(void)
  * - if a frame is available, the tag read should return a nonzero length (>= 4) and the host can then read the remainder of the frame by issuing one or more CMD53 reads
  * - if a frame is not available, the 4byte tag read should return zero
  */
-/*@only@*//*@null@*/wiced_result_t wiced_read_frame( wiced_buffer_t* buffer )
+wwd_result_t wwd_bus_read_frame( /*@out@*/ wiced_buffer_t* buffer )
 {
     uint16_t hwtag[8];
     uint16_t extra_space_required;
-    wiced_result_t result;
+    wwd_result_t result;
 
     *buffer = NULL;
 
     /* Ensure the wlan backplane bus is up */
-    if ( wiced_bus_ensure_wlan_bus_is_up() != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
+    VERIFY_RESULT( wwd_bus_ensure_is_up() );
 
     /* Read the frame header and verify validity */
     memset( hwtag, 0, sizeof(hwtag) );
 
-    if ( WICED_SUCCESS != ( result = wiced_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, (uint16_t) INITIAL_READ, (uint8_t*)hwtag, RESPONSE_NEEDED) ) )
+    result = wwd_bus_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, (uint16_t) INITIAL_READ, (uint8_t*)hwtag, RESPONSE_NEEDED);
+    if ( result != WWD_SUCCESS )
     {
-        wiced_abort_read( WICED_FALSE );
-        return WICED_ERROR;
+        (void) wwd_bus_sdio_abort_read( WICED_FALSE ); /* ignore return - not much can be done if this fails */
+        return WWD_SDIO_RX_FAIL;
     }
 
     if ( ( ( hwtag[0] | hwtag[1] ) == 0                 ) ||
          ( ( hwtag[0] ^ hwtag[1] ) != (uint16_t) 0xFFFF ) )
     {
-        return WICED_ERROR;
+        return WWD_HWTAG_MISMATCH;
     }
 
-    if (hwtag[0] == 12 && (wiced_wlan_status.state == WLAN_UP))
+    if ( ( hwtag[0] == (uint16_t) 12 ) &&
+         ( wwd_wlan_status.state == WLAN_UP) )
     {
-        result = wiced_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, 8, (uint8_t*)&hwtag[2], RESPONSE_NEEDED);
-        if ( result == WICED_SUCCESS )
+        result = wwd_bus_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, (uint16_t) 8, (uint8_t*) &hwtag[2], RESPONSE_NEEDED);
+        if ( result != WWD_SUCCESS )
         {
-            wiced_process_bus_credit_update((uint8_t*)hwtag);
+            (void) wwd_bus_sdio_abort_read( WICED_FALSE ); /* ignore return - not much can be done if this fails */
+            return WWD_SDIO_RX_FAIL;
         }
-        else
-        {
-            wiced_abort_read( WICED_FALSE );
-        }
-        return WICED_SUCCESS;
+        wwd_sdpcm_update_credit((uint8_t*)hwtag);
+        return WWD_SUCCESS;
     }
 
     /* Calculate the space we need to store entire packet */
@@ -489,38 +491,41 @@ uint32_t wiced_bus_process_interrupt(void)
     }
 
     /* Allocate a suitable buffer */
-    result = host_buffer_get( buffer, WICED_NETWORK_RX, (unsigned short) ( (uint16_t) INITIAL_READ + extra_space_required + (uint16_t) sizeof(wiced_buffer_header_t) ), WICED_FALSE );
-    if ( result != WICED_SUCCESS )
+    result = host_buffer_get( buffer, WWD_NETWORK_RX, (unsigned short) ( (uint16_t) INITIAL_READ + extra_space_required + (uint16_t) sizeof(wwd_buffer_header_t) ), WICED_FALSE );
+    if ( result != WWD_SUCCESS )
     {
-        /* Read out the first 12 bytes to get the bus credit information */
-        uint8_t temp_buffer[12];
-        wiced_assert( "Get buffer error", ( ( result == WICED_BUFFER_UNAVAILABLE_TEMPORARY ) || ( result == WICED_BUFFER_UNAVAILABLE_PERMANENT ) ) );
-        wiced_bus_transfer_bytes( BUS_READ, WLAN_FUNCTION, 0, 12, (wiced_transfer_bytes_packet_t*) temp_buffer );
-        result = wiced_abort_read( WICED_FALSE );
-        wiced_assert( "Read-abort failed", result==WICED_SUCCESS )
-        wiced_process_bus_credit_update( (uint8_t*) ( temp_buffer ) );
-        return WICED_ERROR;
+        /* Read out the first 12 bytes to get the bus credit information, 4 bytes are already read in hwtag */
+        wiced_assert( "Get buffer error", ( ( result == WWD_BUFFER_UNAVAILABLE_TEMPORARY ) || ( result == WWD_BUFFER_UNAVAILABLE_PERMANENT ) ) );
+        result = wwd_bus_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, (uint16_t) 8, (uint8_t*) &hwtag[2], RESPONSE_NEEDED);
+        if ( result != WWD_SUCCESS )
+        {
+            (void) wwd_bus_sdio_abort_read( WICED_FALSE ); /* ignore return - not much can be done if this fails */
+            return WWD_SDIO_RX_FAIL;
+        }
+        result = wwd_bus_sdio_abort_read( WICED_FALSE );
+        wiced_assert( "Read-abort failed", result==WWD_SUCCESS );
+        wwd_sdpcm_update_credit( (uint8_t *)hwtag );
+        return WWD_RX_BUFFER_ALLOC_FAIL;
     }
 
     /* Copy the data already read */
-    memset( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wiced_buffer_header_t), 0, ( size_t )( INITIAL_READ + extra_space_required ) );
-    memcpy( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wiced_buffer_header_t), hwtag, (size_t) INITIAL_READ );
+    memset( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wwd_buffer_header_t), 0, ( size_t )( INITIAL_READ + extra_space_required ) );
+    memcpy( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wwd_buffer_header_t), hwtag, (size_t) INITIAL_READ );
 
     /* Read the rest of the data */
     if ( extra_space_required > 0 )
     {
-        result = wiced_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, extra_space_required, host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wiced_buffer_header_t) + INITIAL_READ, RESPONSE_NEEDED);
-        if ( result != WICED_SUCCESS )
+        result = wwd_bus_sdio_transfer(BUS_READ, WLAN_FUNCTION, 0, extra_space_required, host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wwd_buffer_header_t) + INITIAL_READ, RESPONSE_NEEDED);
+        if ( result != WWD_SUCCESS )
         {
-            wiced_abort_read( WICED_FALSE );
-            host_buffer_release(*buffer, WICED_NETWORK_RX);
-            return WICED_ERROR;
+            (void) wwd_bus_sdio_abort_read( WICED_FALSE ); /* ignore return - not much can be done if this fails */
+            host_buffer_release(*buffer, WWD_NETWORK_RX);
+            return WWD_SDIO_RX_FAIL;
         }
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
-
 
 
 /******************************************************
@@ -528,29 +533,29 @@ uint32_t wiced_bus_process_interrupt(void)
  ******************************************************/
 
 /* Device register access functions */
-wiced_result_t wiced_write_backplane_value( uint32_t address, uint8_t register_length, uint32_t value )
+wwd_result_t wwd_bus_write_backplane_value( uint32_t address, uint8_t register_length, uint32_t value )
 {
-    VERIFY_RESULT( wiced_set_backplane_window( address ) );
+    VERIFY_RESULT( wwd_bus_set_backplane_window( address ) );
 
-    return wiced_sdio_transfer( BUS_WRITE, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, (uint8_t*) &value, RESPONSE_NEEDED );
+    return wwd_bus_sdio_transfer( BUS_WRITE, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, (uint8_t*) &value, RESPONSE_NEEDED );
 }
 
-wiced_result_t wiced_read_backplane_value( uint32_t address, uint8_t register_length, /*@out@*/ uint8_t* value )
+wwd_result_t wwd_bus_read_backplane_value( uint32_t address, uint8_t register_length, /*@out@*/ uint8_t* value )
 {
     *value = 0;
-    VERIFY_RESULT( wiced_set_backplane_window( address ) );
+    VERIFY_RESULT( wwd_bus_set_backplane_window( address ) );
 
-    return wiced_sdio_transfer( BUS_READ, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, value, RESPONSE_NEEDED );
+    return wwd_bus_sdio_transfer( BUS_READ, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, value, RESPONSE_NEEDED );
 }
 
-wiced_result_t wiced_write_register_value( bus_function_t function, uint32_t address, uint8_t value_length, uint32_t value )
+wwd_result_t wwd_bus_write_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, uint32_t value )
 {
-    return wiced_sdio_transfer( BUS_WRITE, function, address, value_length, (uint8_t*) &value, RESPONSE_NEEDED );
+    return wwd_bus_sdio_transfer( BUS_WRITE, function, address, value_length, (uint8_t*) &value, RESPONSE_NEEDED );
 }
 
-wiced_result_t wiced_bus_transfer_bytes( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, uint16_t size, /*@in@*/ /*@out@*/ wiced_transfer_bytes_packet_t* data )
+wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint16_t size, /*@in@*/ /*@out@*/ wwd_transfer_bytes_packet_t* data )
 {
-    return wiced_sdio_transfer( direction, function, address, size, (uint8_t*)data, RESPONSE_NEEDED );
+    return wwd_bus_sdio_transfer( direction, function, address, size, (uint8_t*)data, RESPONSE_NEEDED );
 }
 
 
@@ -558,41 +563,43 @@ wiced_result_t wiced_bus_transfer_bytes( bus_transfer_direction_t direction, bus
  *             Static  Function definitions
  ******************************************************/
 
-static wiced_result_t wiced_sdio_transfer( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/ uint8_t* data, sdio_response_needed_t response_expected )
+static wwd_result_t wwd_bus_sdio_transfer( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/ uint8_t* data, sdio_response_needed_t response_expected )
 {
-    wiced_result_t result;
+    wwd_result_t result;
     uint8_t retry_count = 0;
     do
     {
         if ( data_size == (uint16_t) 1 )
         {
-            result = sdio_cmd52( direction, function, address, *data, response_expected, data );
+            result = wwd_bus_sdio_cmd52( direction, function, address, *data, response_expected, data );
         }
         else
         {
-            result = sdio_cmd53( direction, function, ( data_size >= (uint16_t) 64 ) ? SDIO_BLOCK_MODE : SDIO_BYTE_MODE, address, data_size, data, response_expected, NULL );
+            result = wwd_bus_sdio_cmd53( direction, function, ( data_size >= (uint16_t) 64 ) ? SDIO_BLOCK_MODE : SDIO_BYTE_MODE, address, data_size, data, response_expected, NULL );
         }
 
-        if ( result != WICED_SUCCESS )
+        if ( result != WWD_SUCCESS )
         {
             return result;
-//            if (function == WLAN_FUNCTION && direction == BUS_READ)
-//            {
-//                (void) wiced_abort_read( WICED_TRUE ); /* Ignore return as there is not much to be done if this fails */
-//                wiced_assert("Attempting to abort read after transfer failure - may not fix bus", 0 != 0 );
-//            }
-//
-//            ++retry_count;
+#if 0
+            if (function == WLAN_FUNCTION && direction == BUS_READ)
+            {
+                (void) wwd_bus_sdio_abort_read( WICED_TRUE ); /* Ignore return as there is not much to be done if this fails */
+                wiced_assert("Attempting to abort read after transfer failure - may not fix bus", 0 != 0 );
+            }
+
+            ++retry_count;
+#endif /* if 0 */
         }
-    } while ( ( result != WICED_SUCCESS ) && ( retry_count < (uint8_t) BUS_PROTOCOL_LEVEL_MAX_RETRIES ) );
+    } while ( ( result != WWD_SUCCESS ) && ( retry_count < (uint8_t) BUS_PROTOCOL_LEVEL_MAX_RETRIES ) );
 
     return result;
 }
 
-static wiced_result_t sdio_cmd52( bus_transfer_direction_t direction, bus_function_t function, uint32_t address, uint8_t value, sdio_response_needed_t response_expected, uint8_t* response )
+static wwd_result_t wwd_bus_sdio_cmd52( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint8_t value, sdio_response_needed_t response_expected, uint8_t* response )
 {
     uint32_t sdio_response;
-    wiced_result_t result;
+    wwd_result_t result;
     sdio_cmd_argument_t arg;
     arg.value = 0;
     arg.cmd52.function_number  = (unsigned int) ( function & BUS_FUNCTION_MASK );
@@ -607,10 +614,10 @@ static wiced_result_t sdio_cmd52( bus_transfer_direction_t direction, bus_functi
     return result;
 }
 
-static wiced_result_t sdio_cmd53( bus_transfer_direction_t direction, bus_function_t function, sdio_transfer_mode_t mode, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/ uint8_t* data, sdio_response_needed_t response_expected, /*@null@*/ uint32_t* response )
+static wwd_result_t wwd_bus_sdio_cmd53( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, sdio_transfer_mode_t mode, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/ uint8_t* data, sdio_response_needed_t response_expected, /*@null@*/ uint32_t* response )
 {
     sdio_cmd_argument_t arg;
-    wiced_result_t result;
+    wwd_result_t result;
 
     if ( direction == BUS_WRITE )
     {
@@ -624,7 +631,7 @@ static wiced_result_t sdio_cmd53( bus_transfer_direction_t direction, bus_functi
     arg.cmd53.rw_flag = (unsigned int) ( ( direction == BUS_WRITE ) ? 1 : 0 );
     if ( mode == SDIO_BYTE_MODE )
     {
-        wiced_assert("SDIO_CMD53: data_size > 512 for byte mode", (data_size <= 512));
+        wiced_assert( "wwd_bus_sdio_cmd53: data_size > 512 for byte mode", ( data_size <= (uint16_t) 512 ) );
         arg.cmd53.count = (unsigned int) ( data_size & 0x1FF );
     }
     else
@@ -647,41 +654,48 @@ static wiced_result_t sdio_cmd53( bus_transfer_direction_t direction, bus_functi
     return result;
 }
 
-static wiced_result_t wiced_download_firmware( void )
+static wwd_result_t wwd_bus_sdio_download_firmware( void )
 {
     uint8_t csr_val = 0;
-    wiced_result_t result;
+    wwd_result_t result;
     uint32_t loop_count;
 
-    VERIFY_RESULT( wiced_disable_device_core( ARM_CORE ) );
-    VERIFY_RESULT( wiced_disable_device_core( SOCRAM_CORE ) );
-    VERIFY_RESULT( wiced_reset_device_core( SOCRAM_CORE ) );
+    VERIFY_RESULT( wwd_disable_device_core( ARM_CORE ) );
+    VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE ) );
+    VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE ) );
 
 #if 0
     /* 43362 specific: Remap JTAG pins to UART output */
     uint32_t data = 0;
-    VERIFY_RESULT( wiced_write_backplane_value(0x18000650, 1, 1) );
-    VERIFY_RESULT( wiced_read_backplane_value(0x18000654, 4, (uint8_t*)&data) );
+    VERIFY_RESULT( wwd_bus_write_backplane_value(0x18000650, 1, 1) );
+    VERIFY_RESULT( wwd_bus_read_backplane_value(0x18000654, 4, (uint8_t*)&data) );
     data |= (1 << 24);
-    VERIFY_RESULT( wiced_write_backplane_value(0x18000654, 4, data) );
+    VERIFY_RESULT( wwd_bus_write_backplane_value(0x18000654, 4, data) );
 #endif
 
-    VERIFY_RESULT( wiced_write_wifi_firmware_image( ) );
-    VERIFY_RESULT( wiced_write_wifi_nvram_image( ) );
+
+#ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
+    VERIFY_RESULT( external_write_wifi_firmware_and_nvram_image( ) );
+#else
+    VERIFY_RESULT( wwd_bus_write_wifi_firmware_image( ) );
+    VERIFY_RESULT( wwd_bus_write_wifi_nvram_image( ) );
+#endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
 
     /* Take the ARM core out of reset */
-    VERIFY_RESULT( wiced_reset_device_core( ARM_CORE ) );
+    VERIFY_RESULT( wwd_reset_device_core( ARM_CORE ) );
 
-    result = wiced_device_core_is_up( ARM_CORE );
-    if ( result != WICED_SUCCESS )
+    result = wwd_device_core_is_up( ARM_CORE );
+    if ( result != WWD_SUCCESS )
     {
-        WPRINT_WWD_ERROR(("Could not bring ARM core up\r\n"));
+        WPRINT_WWD_ERROR(("Could not bring ARM core up\n"));
+        /*@-unreachable@*/ /* Reachable after hitting assert */
         return result;
+        /*@+unreachable@*/
     }
 
     /* Wait until the High Throughput clock is available */
     loop_count = 0;
-    while ( ( ( result = wiced_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WICED_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WWD_SUCCESS ) &&
             ( ( csr_val & SBSDIO_HT_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) HT_AVAIL_TIMEOUT_MS ) )
     {
@@ -694,25 +708,29 @@ static wiced_result_t wiced_download_firmware( void )
          * Check that your WLAN chip matches the 'wifi_image.c' being built - in GNU toolchain, $(CHIP)
          * makefile variable must be correct.
          */
-         WPRINT_WWD_ERROR(("Timeout while waiting for high throughput clock\r\n"));
-        return WICED_TIMEOUT;
+         WPRINT_WWD_ERROR(("Timeout while waiting for high throughput clock\n"));
+         /*@-unreachable@*/ /* Reachable after hitting assert */
+         return WWD_TIMEOUT;
+         /*@+unreachable@*/
     }
-    if ( result != WICED_SUCCESS )
+    if ( result != WWD_SUCCESS )
     {
-        WPRINT_WWD_ERROR(("Error while waiting for high throughput clock\r\n"));
+        WPRINT_WWD_ERROR(("Error while waiting for high throughput clock\n"));
+        /*@-unreachable@*/ /* Reachable after hitting assert */
         return result;
+        /*@+unreachable@*/
     }
 
     /* Set up the interrupt mask and enable interrupts */
-    VERIFY_RESULT( wiced_write_backplane_value( SDIO_INT_HOST_MASK, (uint8_t) 4, I_HMB_SW_MASK ) );
+    VERIFY_RESULT( wwd_bus_write_backplane_value( SDIO_INT_HOST_MASK, (uint8_t) 4, I_HMB_SW_MASK ) );
 
     /* Enable F2 interrupts. This wasn't required for 4319 but is for the 43362 */
-    VERIFY_RESULT( wiced_write_backplane_value( SDIO_FUNCTION_INT_MASK, (uint8_t) 1, (uint32_t) 2) );
+    VERIFY_RESULT( wwd_bus_write_backplane_value( SDIO_FUNCTION_INT_MASK, (uint8_t) 1, (uint32_t) 2) );
 
     /* Lower F2 Watermark to avoid DMA Hang in F2 when SD Clock is stopped. */
-    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_FUNCTION2_WATERMARK, (uint8_t) 1, (uint32_t) SDIO_F2_WATERMARK ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_FUNCTION2_WATERMARK, (uint8_t) 1, (uint32_t) SDIO_F2_WATERMARK ) );
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 /** Aborts a SDIO read of a packet from the 802.11 device
@@ -733,120 +751,125 @@ static wiced_result_t wiced_download_firmware( void )
  * @param retry : WICED_TRUE if 802.11 device is to keep and resend packet
  *                WICED_FALSE if 802.11 device is to drop packet
  *
- * @return WICED_SUCCESS if successful, otherwise error code
+ * @return WWD_SUCCESS if successful, otherwise error code
  */
-static wiced_result_t wiced_abort_read( wiced_bool_t retry )
+static wwd_result_t wwd_bus_sdio_abort_read( wiced_bool_t retry )
 {
     /* Abort transfer on WLAN_FUNCTION */
-    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOABORT, (uint8_t) 1, (uint32_t) WLAN_FUNCTION ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_IOABORT, (uint8_t) 1, (uint32_t) WLAN_FUNCTION ) );
 
     /* Send frame terminate */
-    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_FRAME_CONTROL, (uint8_t) 1, SFC_RF_TERM ) );
+    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_FRAME_CONTROL, (uint8_t) 1, SFC_RF_TERM ) );
 
     /* If we want to retry message, send NAK */
     if ( retry == WICED_TRUE )
     {
-        VERIFY_RESULT( wiced_write_backplane_value( (uint32_t) SDIO_TO_SB_MAIL_BOX, (uint8_t) 1, SMB_NAK ) );
+        VERIFY_RESULT( wwd_bus_write_backplane_value( (uint32_t) SDIO_TO_SB_MAIL_BOX, (uint8_t) 1, SMB_NAK ) );
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
-static wiced_result_t wiced_read_register_value( bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
+static wwd_result_t wwd_bus_sdio_read_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
 {
     memset( value, 0, (size_t) value_length );
-    return wiced_sdio_transfer( BUS_READ, function, address, value_length, value, RESPONSE_NEEDED );
+    return wwd_bus_sdio_transfer( BUS_READ, function, address, value_length, value, RESPONSE_NEEDED );
 }
 
-wiced_result_t wiced_bus_ensure_wlan_bus_is_up( void )
+wwd_result_t wwd_bus_ensure_is_up( void )
 {
-    wiced_result_t result;
+    wwd_result_t result;
     uint8_t csr = 0;
     uint32_t attempts = (uint32_t) WLAN_BUS_UP_ATTEMPTS;
 
     /* Ensure HT clock is up */
     if (bus_is_up == WICED_TRUE)
     {
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
     }
 
-    if ( WICED_SUCCESS != ( result = wiced_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t) SBSDIO_HT_AVAIL_REQ | SBSDIO_FORCE_HT ) ) )
+    if ( WWD_SUCCESS != ( result = wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t) SBSDIO_HT_AVAIL_REQ | SBSDIO_FORCE_HT ) ) )
     {
         return result;
     }
 
     do
     {
-        if ( WICED_SUCCESS != ( result = wiced_read_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr ) ) )
+        if ( WWD_SUCCESS != ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr ) ) )
         {
             return result;
         }
         --attempts;
     }
-    while (((csr & SBSDIO_HT_AVAIL) == 0) && (attempts != 0) && (host_rtos_delay_milliseconds(1),1==1));
+    while ( ( ( csr & SBSDIO_HT_AVAIL ) == 0 ) &&
+            ( attempts != 0 ) &&
+            ( host_rtos_delay_milliseconds( (uint32_t) 1 ), 1==1 ) );
 
     if (attempts == 0)
     {
-        return WICED_ERROR;
+        return WWD_SDIO_BUS_UP_FAIL;
     }
     else
     {
         bus_is_up = WICED_TRUE;
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
     }
 }
 
-wiced_result_t wiced_bus_poke_wlan( void )
+wwd_result_t wwd_bus_poke_wlan( void )
 {
-    return wiced_write_backplane_value( SDIO_TO_SB_MAILBOX, (uint8_t) 4, (1 << 3) );
+    /*TODO: change 1<<3 to a register hash define */
+    return wwd_bus_write_backplane_value( SDIO_TO_SB_MAILBOX, (uint8_t) 4, (uint32_t)( 1 << 3 ) );
 }
 
-wiced_result_t wiced_bus_set_flow_control( uint8_t value )
+wwd_result_t wwd_bus_set_flow_control( uint8_t value )
 {
     if ( value != 0 )
     {
-        wiced_bus_flow_controlled = WICED_TRUE;
+        wwd_bus_flow_controlled = WICED_TRUE;
     }
     else
     {
-        wiced_bus_flow_controlled = WICED_FALSE;
+        wwd_bus_flow_controlled = WICED_FALSE;
     }
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
-wiced_bool_t wiced_bus_is_flow_controlled( void )
+wiced_bool_t wwd_bus_is_flow_controlled( void )
 {
-    return wiced_bus_flow_controlled;
+    return wwd_bus_flow_controlled;
 }
 
-wiced_result_t wiced_bus_allow_wlan_bus_to_sleep( void )
+wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
 {
     /* Clear HT clock request */
     if (bus_is_up == WICED_TRUE)
     {
         bus_is_up = WICED_FALSE;
-        return wiced_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, 0 );
+        return wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, 0 );
     }
     else
     {
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
     }
 }
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE
-static wiced_result_t wiced_sdio_redirect_oob_interrupt( void )
+static wwd_result_t wwd_bus_sdio_set_oob_interrupt( uint8_t gpio_pin_number )
 {
-    /* The following register writes redirect the OOB interrupt to GPIO1 */
+    if ( gpio_pin_number == 1 )
+    {
+        /* Redirect to OOB interrupt to GPIO1 */
+        VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_SELECT, (uint8_t)1, (uint32_t) 0xF ) );
+        VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_OUTPUT, (uint8_t)1, (uint32_t) 0x0 ) );
 
-    wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_SELECT, (uint8_t)1, 0xF );
-    wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_OUTPUT, (uint8_t)1, 0x0 );
+        /* Enable GPIOx (bit x) */
+        VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_ENABLE, (uint8_t)1, (uint32_t)0x2 ) );
 
-    /* Enable GPIO1 (bit 1) */
-    wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_GPIO_ENABLE, (uint8_t)1, 0x2 );
+        /* Set GPIOx (bit x) on Chipcommon GPIO Control register */
+        VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, CHIPCOMMON_GPIO_CONTROL, (uint8_t)4, (uint32_t)0x2 ) );
+    }
 
-    /* Set GPIO1 (bit 1) on Chipcommon GPIO Control register */
-    wiced_write_register_value( BACKPLANE_FUNCTION, CHIPCOMMON_GPIO_CONTROL, (uint8_t)4, 0x2 );
-
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 #endif

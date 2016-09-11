@@ -98,6 +98,7 @@ struct memp_malloc_helper
 #endif /* MEM_USE_POOLS */
 
 void  memp_init(void);
+void  memp_deinit(void);
 
 #if MEMP_OVERFLOW_CHECK
 void *memp_malloc_fn(memp_t type, const char* file, const int line);

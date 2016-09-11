@@ -263,6 +263,13 @@ dns_init()
 #endif
 }
 
+void
+dns_deinit()
+{
+    udp_remove( dns_pcb );
+    dns_pcb = NULL;
+}
+
 /**
  * Initialize one of the DNS servers.
  *

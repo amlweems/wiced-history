@@ -102,6 +102,19 @@ snmp_init(void)
   snmp_coldstart_trap();
 }
 
+void
+snmp_deinit(void)
+{
+#ifdef SNMP_PRIVATE_MIB_DEINIT
+  /* If defined, rhis must be a function-like define to deinitialize the
+   * private MIB before the stack has been deinitialized.
+   * The private MIB can also be deinitialized in tcpip_callback (or after
+   * the stack is deinitialized), this define is only for convenience. */
+  SNMP_PRIVATE_MIB_DEINIT();
+#endif /* SNMP_PRIVATE_MIB_DEINIT */
+    udp_remove( snmp1_pcb );
+}
+
 static void
 snmp_error_response(struct snmp_msg_pstat *msg_ps, u8_t error)
 {

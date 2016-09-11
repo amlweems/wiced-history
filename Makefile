@@ -8,12 +8,14 @@
 # written permission of Broadcom Corporation.
 #
 
+default: Help
+
 export SOURCE_ROOT:=$(dir $(word $(words $(MAKEFILE_LIST)), $(MAKEFILE_LIST)))
+export MAKEFILES_PATH := $(SOURCE_ROOT)tools/makefiles
 
+MAKEFILE_TARGETS := clean test testlist iar_project
 
-MAKEFILE_TARGETS := clean testlist iar_project
-
-include $(SOURCE_ROOT)wiced_toolchain_common.mk
+include $(MAKEFILES_PATH)/wiced_toolchain_common.mk
 
 define USAGE_TEXT
 Aborting due to invalid targets
@@ -23,10 +25,10 @@ Usage: make <target> [download] [run | debug] [JTAG=xxx] [no_dct]
 
   <target>
     One each of the following mandatory [and optional] components separated by '-'
-      * Application (Apps in sub-directories are referenced by subdir.appname)
-      * Hardware Platform ($(filter-out common  include README.txt,$(notdir $(wildcard Wiced/Platform/*))))
-      * [RTOS] ($(notdir $(wildcard Wiced/RTOS/*)))
-      * [Network Stack] ($(notdir $(wildcard Wiced/Network/*)))
+      * Application (apps in sub-directories are referenced by subdir.appname)
+      * Hardware Platform ($(filter-out common  include README.txt,$(notdir $(wildcard WICED/platforms/*))))
+      * [RTOS] ($(notdir $(wildcard WICED/RTOS/*)))
+      * [Network Stack] ($(notdir $(wildcard WICED/network/*)))
       * [MCU-WLAN Interface Bus] (SDIO SPI)
 
   [download]
@@ -39,25 +41,25 @@ Usage: make <target> [download] [run | debug] [JTAG=xxx] [no_dct]
     Connect to the target platform and run the debugger
 
   [JTAG=xxx]
-    JTAG interface configuration file from the Tools/OpenOCD dirctory
+    JTAG interface configuration file from the tools/OpenOCD dirctory
     Default option is BCM9WCD1EVAL1, direct JTAG option is jlink
 
   [no_dct]
     DCT downloading is disabled and the DCT remains unmodified.
     Only valid when the 'download' option is present
-    
+
   [factory_reset_dct]
     Generates a factory reset DCT
 
   [VERBOSE=1]
     Shows the commands as they are being executed
-  
+
   [JOBS=x]
     Sets the maximum number of parallel build threads (default=4)
 
   Notes
     * Component names are case sensitive
-    * 'Wiced', 'SDIO', 'SPI' and 'debug' are reserved component names
+    * 'WICED', 'SDIO', 'SPI' and 'debug' are reserved component names
     * Component names MUST NOT include space or '-' characters
     * Building for release is assumed unless '-debug' is appended to the target
     * Some platforms may only support a single interface bus option
@@ -108,11 +110,13 @@ DOWNLOAD_LOG := >> $(OPENOCD_LOG_FILE)
 BOOTLOADER_LOG_FILE ?= build/bootloader.log
 export HOST_OS
 export VERBOSE
+export SUB_BUILD
+export OPENOCD_LOG_FILE
 export EXTERNAL_WICED_GLOBAL_DEFINES
 
-.PHONY: $(BUILD_STRING) main_app bootloader download_only testlist clean iar_project Help download no_dct download_dct download_work copy_elf_for_eclipse run debug download_bootloader sflash_image .gdbinit factory_reset_dct
+.PHONY: $(BUILD_STRING) main_app bootloader download_only test testlist clean iar_project Help download no_dct download_dct download_work copy_elf_for_eclipse run debug download_bootloader sflash_image .gdbinit factory_reset_dct
 
-Help:
+Help: $(TOOLCHAIN_HOOK_TARGETS)
 	$(error $(USAGE_TEXT))
 
 IAR_PROJECT_BUILDER = $(TOOLS_ROOT)/IAR/wiced_sdk_project/build_iar_project.exe
@@ -124,8 +128,8 @@ iar_project:
 	$(QUIET) $(IAR_PROJECT_BUILDER) $(subst /,\,$(CURDIR))
 	$(QUIET)$(ECHO) Generated. Now opening.... This may take several seconds
 	$(QUIET)cmd /C start "$(IAR_WORKBENCH_EXECUTABLE)" "$(TOOLS_ROOT)/IAR/wiced_sdk_project/wiced_sdk_workspace.eww"
-		
-	
+
+
 
 clean:
 	$(QUIET)$(ECHO) Cleaning...
@@ -133,15 +137,14 @@ clean:
 	$(QUIET)$(RM) -rf .gdbinit
 	$(QUIET)$(ECHO) Done
 
+
+test:
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_test.mk test
+
 testlist:
-	$(QUIET)$(MAKE) $(SILENT) -f $(SOURCE_ROOT)wiced_test.mk
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_test.mk testlist
 
 
-DOWNLOAD_STRING := $(CLEANED_BUILD_STRING)
-ifneq (,$(findstring download_only,$(MAKECMDGOALS)))
-$(BUILD_STRING):
-BUILD_STRING :=
-endif
 
 # Processing of factory_reset_dct
 ifneq (,$(findstring factory_reset_dct,$(MAKECMDGOALS)))
@@ -154,11 +157,11 @@ endif
 ifneq ($(BUILD_STRING),)
 -include build/$(CLEANED_BUILD_STRING)/config.mk
 # Now we know the target architecture - include all toolchain makefiles and check one of them can handle the architecture
-include $(SOURCE_ROOT)wiced_toolchain_ARM_GNU.mk
+include $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk
 
-build/$(CLEANED_BUILD_STRING)/config.mk: $(SOURCE_ROOT)Makefile $(SOURCE_ROOT)wiced_config.mk $(SOURCE_ROOT)wiced_toolchain_common.mk $(SOURCE_ROOT)wiced_toolchain_ARM_GNU.mk $(WICED_MAKEFILES)
-	$(QUIET)$(ECHO) $(if $(WICED_MAKEFILES),Applying changes made to: $?,Making config file for first time)
-	$(QUIET)$(MAKE) -r $(SILENT) -f $(SOURCE_ROOT)wiced_config.mk $(DIR_BUILD_STRING)
+build/$(CLEANED_BUILD_STRING)/config.mk: $(SOURCE_ROOT)Makefile $(MAKEFILES_PATH)/wiced_config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk $(WICED_SDK_MAKEFILES)
+	$(QUIET)$(ECHO) $(if $(WICED_SDK_MAKEFILES),Applying changes made to: $?,Making config file for first time)
+	$(QUIET)$(MAKE) -r $(SILENT) -f $(MAKEFILES_PATH)/wiced_config.mk $(DIR_BUILD_STRING)
 endif
 
 ifeq ($(IAR),1)
@@ -171,103 +174,28 @@ ifeq (,$(SUB_BUILD))
 JOBSNO := $(if $(findstring 1,$(LINT)), , -j$(JOBS) )
 endif
 
-
+PASSDOWN_TARGETS := $(strip $(filter-out $(MAKEFILE_TARGETS) $(BUILD_STRING),$(MAKECMDGOALS)))
 
 $(BUILD_STRING): main_app $(if $(SFLASH),sflash_image) copy_elf_for_eclipse
 
-main_app: build/$(CLEANED_BUILD_STRING)/config.mk $(WICED_PRE_APP_BUILDS) $(SOURCE_ROOT)wiced_elf.mk .gdbinit
-	$(QUIET)$(COMMON_TOOLS_PATH)mkdir -p $(OUTPUT_DIR)/Binary $(OUTPUT_DIR)/Modules $(OUTPUT_DIR)/Libraries $(OUTPUT_DIR)/Resources
-	$(QUIET)$(MAKE) -r $(JOBSNO) $(SILENT) -f $(SOURCE_ROOT)wiced_elf.mk $(DIR_BUILD_STRING)
+$(PASSDOWN_TARGETS):
+	@:
+
+main_app: build/$(CLEANED_BUILD_STRING)/config.mk $(WICED_SDK_PRE_APP_BUILDS) $(MAKEFILES_PATH)/wiced_elf.mk $(if $(SUB_BUILD),,.gdbinit)
+	$(QUIET)$(COMMON_TOOLS_PATH)mkdir -p $(OUTPUT_DIR)/binary $(OUTPUT_DIR)/modules $(OUTPUT_DIR)/libraries $(OUTPUT_DIR)/resources
+	$(QUIET)$(MAKE) -r $(JOBSNO) $(SILENT) -f $(MAKEFILES_PATH)/wiced_elf.mk $(DIR_BUILD_STRING) $(PASSDOWN_TARGETS)
 	$(QUIET)$(ECHO) Build complete
 
-.gdbinit: build/$(CLEANED_BUILD_STRING)/config.mk $(SOURCE_ROOT)wiced_toolchain_common.mk
+.gdbinit: build/$(CLEANED_BUILD_STRING)/config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk
 	$(QUIET)$(ECHO) Making .gdbinit
 	$(QUIET)$(ECHO) set remotetimeout 20 > .gdbinit
 	$(QUIET)$(ECHO) $(GDBINIT_STRING) >> .gdbinit
 
-download_only: download_work
-
-ifneq (,$(findstring wwd.,$(MAKECMDGOALS)))
-download: $(BUILD_STRING) download_work copy_elf_for_eclipse
-else
-ifneq ($(NO_BUILD_BOOTLOADER),1)
-download: $(BUILD_STRING) download_bootloader copy_bootloader_elf_for_eclipse download_work copy_elf_for_eclipse $(if $(findstring no_dct,$(MAKECMDGOALS)),,download_dct)
-else
-download: $(BUILD_STRING) download_work copy_elf_for_eclipse $(if $(findstring no_dct,$(MAKECMDGOALS)),,download_dct)
-endif
-endif
-
-no_dct:
-	$(QUIET)$(ECHO) DCT unmodified
-
-download_dct:
-	$(QUIET)$(ECHO) Downloading DCT ...
-	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "verify_image_checksum $(BUILD_DIR)/$(DOWNLOAD_STRING)/DCT.stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) No changes detected && $(ECHO_BLANK_LINE) || $(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "flash write_image erase $(BUILD_DIR)/$(DOWNLOAD_STRING)/DCT.stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) Download complete && $(ECHO_BLANK_LINE) || $(ECHO) "**** OpenOCD failed - ensure you have installed the driver from the drivers directory, and that the debugger is not running **** In Linux this may be due to USB access permissions. In a virtual machine it may be due to USB passthrough settings. Check in the task list that another OpenOCD process is not running. Check that you have the correct target and JTAG device plugged in. ****"
-
-download_work:
-ifneq (,$(and $(OPENOCD_PATH),$(OPENOCD_FULL_NAME)))
-	$(QUIET)$(ECHO) Downloading Application ...
-	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "verify_image_checksum $(BUILD_DIR)/$(DOWNLOAD_STRING)/Binary/$(DOWNLOAD_STRING).stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) No changes detected && $(ECHO_BLANK_LINE) || $(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "flash write_image erase $(BUILD_DIR)/$(DOWNLOAD_STRING)/Binary/$(DOWNLOAD_STRING).stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) Download complete && $(ECHO_BLANK_LINE) || $(ECHO) "**** OpenOCD failed - ensure you have installed the driver from the drivers directory, and that the debugger is not running **** In Linux this may be due to USB access permissions. In a virtual machine it may be due to USB passthrough settings. Check in the task list that another OpenOCD process is not running. Check that you have the correct target and JTAG device plugged in. ****"
-else
-	$(error Path to OpenOCD has not been set using OPENOCD_PATH and OPENOCD_FULL_NAME)
-endif
-
-copy_elf_for_eclipse: main_app
-	$(QUIET)$(call MKDIR, $(BUILD_DIR)/eclipse_debug/)
-	$(QUIET)$(CP) build/$(DOWNLOAD_STRING)/Binary/$(DOWNLOAD_STRING).elf $(BUILD_DIR)/eclipse_debug/last_built.elf
-
-BOOTLOADER_TARGET := waf.bootloader-NoOS-NoNS-$(PLATFORM_FULL)-$(BUS)
-BOOTLOADER_OUTFILE := $(BUILD_DIR)/$(call CONV_COMP,$(subst .,/,$(BOOTLOADER_TARGET)))/Binary/$(call CONV_COMP,$(subst .,/,$(BOOTLOADER_TARGET)))
-
-copy_bootloader_elf_for_eclipse:
-	$(QUIET)$(call MKDIR, $(BUILD_DIR)/eclipse_debug/)
-	$(QUIET)$(CP) $(BOOTLOADER_OUTFILE).elf $(BUILD_DIR)/eclipse_debug/last_bootloader.elf
-
-run: $(SHOULD_I_WAIT_FOR_DOWNLOAD)
-	$(QUIET)$(ECHO) Resetting target
-	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -c "log_output $(OPENOCD_LOG_FILE)" -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -c init -c "reset run" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) Target running
-
-debug: $(BUILD_STRING)
-ifneq (,$(and $(OPENOCD_PATH),$(OPENOCD_FULL_NAME)))
-	$(QUIET)$(GDB_COMMAND) $(OUTPUT_DIR)/Binary/$(CLEANED_BUILD_STRING).elf -x .gdbinit_attach
-
-else
-	$(error Path to OpenOCD has not been set using OPENOCD_PATH and OPENOCD_FULL_NAME)
-endif
-
-ifneq ($(VERBOSE),1)
-BOOTLOADER_REDIRECT	= > $(BOOTLOADER_LOG_FILE)
-endif
-
-ifneq ($(NO_BUILD_BOOTLOADER),1)
-bootloader:
-	$(QUIET)$(ECHO) Building Bootloader
-	$(QUIET)$(MAKE) -r $(SILENT) -f $(SOURCE_ROOT)Makefile $(BOOTLOADER_TARGET) -I$(OUTPUT_DIR)  SFLASH= $(BOOTLOADER_REDIRECT)
-	$(QUIET)$(ECHO_BLANK_LINE)
-	$(QUIET)$(ECHO) Building App
-	$(QUIET)$(ECHO_BLANK_LINE)
-
-download_bootloader:
-ifneq (,$(and $(OPENOCD_PATH),$(OPENOCD_FULL_NAME)))
-	$(QUIET)$(ECHO) Downloading Bootloader ...
-	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "verify_image_checksum $(BOOTLOADER_OUTFILE).stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) No changes detected && $(ECHO_BLANK_LINE) || $(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_MICRO).cfg -f $(OPENOCD_PATH)$(HOST_MICRO)-flash-app.cfg -c "flash write_image erase $(BOOTLOADER_OUTFILE).stripped.elf" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) Download complete && $(ECHO_BLANK_LINE) || $(ECHO) "**** OpenOCD failed - ensure you have installed the driver from the drivers directory, and that the debugger is not running **** In Linux this may be due to USB access permissions. In a virtual machine it may be due to USB passthrough settings. Check in the task list that another OpenOCD process is not running. Check that you have the correct target and JTAG device plugged in. ****"
-else
-	$(error Path to OpenOCD has not been set using OPENOCD_PATH and OPENOCD_FULL_NAME)
-endif
-
-else
-bootloader:
-	$(QUIET)$(ECHO) Skipping building bootloader due to commandline spec
-endif
-
-generated_mac_address.txt: $(TOOLS_ROOT)/mac_generator/mac_generator.pl
-	$(QUIET)$(PERL) $(TOOLS_ROOT)/mac_generator/mac_generator.pl > $@
-
 
 ifneq ($(SFLASH),)
-sflash_image: main_app bootloader
+sflash_image: main_app
 	$(QUIET)$(ECHO) Building Serial Flash Image
-	$(QUIET)$(MAKE) $(SILENT) -f $(SOURCE_ROOT)mfg_image.mk $(SFLASH) FRAPP=$(CLEANED_BUILD_STRING) SFLASH= 
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/mfg_image.mk $(SFLASH) FRAPP=$(CLEANED_BUILD_STRING) SFLASH=
 endif
 
 factory_reset_dct: $(SOURCE_ROOT)wiced_factory_reset.mk Makefile

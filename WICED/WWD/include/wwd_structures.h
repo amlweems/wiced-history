@@ -9,7 +9,7 @@
  */
 
 /** @file
- *  Defines common structures used with WICED
+ *  Defines common structures used with WWD
  *
  */
 
@@ -39,14 +39,17 @@ extern "C" {
  ******************************************************/
 
 /** @cond !ADDTHIS*/
-typedef volatile void*  wiced_buffer_pointer_t;
 
-typedef volatile void*  host_semaphore_pointer_t;
-typedef volatile void*  host_mutex_pointer_t;
-typedef volatile void*  host_thread_pointer_t;
+typedef volatile void*    host_semaphore_pointer_t;
+typedef volatile void*    host_mutex_pointer_t;
+typedef volatile void*    host_thread_pointer_t;
 
-typedef uint32_t wiced_time_t;          /* Time value in milliseconds */
-typedef wl_bss_info_t wiced_bss_info_t;
+typedef uint32_t          wwd_time_t;          /* Time value in milliseconds */
+typedef wl_bss_info_t     wiced_bss_info_t;
+
+typedef edcf_acparam_t    wiced_edcf_ac_param_t;
+typedef wl_action_frame_t wiced_action_frame_t;
+
 /** @endcond */
 
 /******************************************************
@@ -70,34 +73,19 @@ typedef wl_bss_info_t wiced_bss_info_t;
     -------------------------------------------------
     */
 
-/** Settings to describe a network packet filter
-*/
-typedef struct
-{
-    uint16_t     offset;     /**< Offset in bytes to start filtering (referenced to the start of the ethernet packet) */
-    uint16_t     mask_size;  /**< Size of the mask in bytes */
-    uint8_t*     mask;       /**< Pattern mask bytes to be ANDed with the pattern eg. "\xff00" (must be in network byte order) */
-    uint8_t*     pattern;    /**< Pattern bytes used to filter eg. "\x0800"  (must be in network byte order) */
-} wiced_packet_filter_pattern_t;
-
-/**
- * Settings for a network packet filter list item
-*/
-typedef struct
-{
-    wiced_packet_filter_rule_t     rule;          /**< Filter matches are either POSITIVE or NEGATIVE matching */
-    uint32_t                       pattern_count; /**< Number of patterns to match per rule ** ONLY 1 PATTERN IS CURRENTLY SUPPORTED! */
-    wiced_packet_filter_pattern_t* pattern_list;  /**< Pointer to @ref wiced_packet_filter_pattern_t structure*/
-} wiced_packet_filter_settings_t;
 
 /**
  * Structure describing a packet filter list item
 */
-typedef struct wiced_packet_filter
+typedef struct
 {
-    uint32_t                       id;       /**< Unique identifier for a packet filter item                             */
-    wiced_packet_filter_settings_t settings; /**< Settings for the packet filter see @ref wiced_packet_filter_settings_t */
-    struct wiced_packet_filter*    next;     /**< Pointer to the next @ref wiced_packet_filter_t structure in the list   */
+    uint32_t                       id;            /**< Unique identifier for a packet filter item                             */
+    wiced_packet_filter_rule_t     rule;          /**< Filter matches are either POSITIVE or NEGATIVE matching */
+    uint16_t                       offset;        /**< Offset in bytes to start filtering (referenced to the start of the ethernet packet) */
+    uint16_t                       mask_size;     /**< Size of the mask in bytes */
+    uint8_t*                       mask;          /**< Pattern mask bytes to be ANDed with the pattern eg. "\xff00" (must be in network byte order) */
+    uint8_t*                       pattern;       /**< Pattern bytes used to filter eg. "\x0800"  (must be in network byte order) */
+    wiced_bool_t                   enabled_status; /**< When returned from wwd_wifi_get_packet_filters, indicates if the filter is enabled */
 } wiced_packet_filter_t;
 
 /** @cond */
@@ -120,8 +108,8 @@ typedef struct
  */
 typedef struct
 {
-    uint8_t len;     /**< SSID length */
-    uint8_t val[32]; /**< SSID name (AP name)  */
+    uint8_t length;     /**< SSID length */
+    uint8_t value[32]; /**< SSID name (AP name)  */
 } wiced_ssid_t;
 
 /**
@@ -194,20 +182,6 @@ typedef struct
 } wiced_wep_key_t;
 
 
-/** @cond */
-/**
- * Template structure for an 802.11 action frame
- *
- */
-typedef struct
-{
-    wiced_mac_t destination; /**< Destination address */
-    uint16_t    len;         /**< Length of the frame */
-    uint32_t    packetId;    /**< ID of the frame     */
-    uint8_t     data[1];     /**< Represents the entire frame and is not restricted to 1 byte */
-} wiced_action_frame_t;
-/** @endcond */
-
 /** Structure for storing 802.11 powersave listen interval values \n
  * See @ref wiced_wifi_get_listen_interval for more information
  */
@@ -227,7 +201,7 @@ typedef struct
 typedef struct
 {
     uint32_t    count;         /**< Number of MAC addresses in the list    */
-    wiced_mac_t mac_list[1];   /**< Variable length array of MAC addresses */
+    wiced_mac_t   mac_list[1];   /**< Variable length array of MAC addresses */
 } wiced_maclist_t;
 
 #pragma pack()

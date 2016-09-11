@@ -17,7 +17,7 @@
 #include "wiced_rtos.h"
 #include "wiced_defaults.h"
 #include "RTOS/wwd_rtos_interface.h"
-#include "Platform/wwd_platform_interface.h"
+#include "platform/wwd_platform_interface.h"
 #include "queue.h"
 #include "semphr.h"
 #include "task.h"
@@ -26,7 +26,7 @@
 #include "wiced_time.h"
 #include "internal/wiced_internal_api.h"
 #include "wwd_assert.h"
-#include "crt0.h"
+#include "platform_init.h"
 
 /******************************************************
  *                      Macros
@@ -75,11 +75,9 @@ typedef struct
 } wiced_event_message_t;
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
-static void timed_event_handler( xTimerHandle xTimer );
-static void timed_event_thread_main( void* arg );
 static void application_thread_main( void *arg );
 extern void system_monitor_thread_main( void* arg );
 
@@ -90,7 +88,7 @@ void __malloc_unlock(struct _reent *ptr);
 #endif /* ifdef __GNUC__ */
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 extern const uint32_t ms_to_tick_ratio;
@@ -101,8 +99,6 @@ static xTaskHandle  app_thread_handle;
 #ifndef WICED_DISABLE_WATCHDOG
 static xTaskHandle  system_monitor_thread_handle;
 #endif /* WICED_DISABLE_WATCHDOG */
-static xTaskHandle  timer_thread;
-static xQueueHandle timer_thread_queue;
 static wiced_time_t wiced_time_offset = 0;
 
 /******************************************************
@@ -135,10 +131,10 @@ int main( void )
 
 #ifdef __GNUC__
     {
-    	wiced_result_t result;
-    	result = wiced_freertos_init_malloc_mutex();
-    	wiced_assert( "Unable t create a freertos malloc mutex", result == WICED_SUCCESS );
-    	(void) result;
+        wiced_result_t result;
+        result = wiced_freertos_init_malloc_mutex();
+        wiced_assert( "Unable t create a freertos malloc mutex", result == WICED_SUCCESS );
+        (void) result;
     }
 #endif /* ifdef __GNUC__ */
 
@@ -154,76 +150,38 @@ static void application_thread_main( void *arg )
     UNUSED_PARAMETER( arg );
     application_start( );
 
+    malloc_leak_check(NULL, LEAK_CHECK_THREAD);
     vTaskDelete( NULL );
-}
-
-wiced_result_t wiced_rtos_init( void )
-{
-    wiced_result_t result = WICED_SUCCESS;
-
-    WPRINT_RTOS_INFO(("Started FreeRTOS " FreeRTOS_VERSION "\r\n"));
-
-    if ( wiced_rtos_create_worker_thread( WICED_HARDWARE_IO_WORKER_THREAD, HARDWARE_IO_WORKER_THREAD_PRIORITY, HARDWARE_IO_WORKER_THREAD_STACK_SIZE, HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE ) != WICED_SUCCESS )
-    {
-        WPRINT_RTOS_INFO(("Failed to create WICED_HARDWARE_IO_WORKER_THREAD\r\n"));
-        result = WICED_ERROR;
-    }
-
-    if ( wiced_rtos_create_worker_thread( WICED_NETWORKING_WORKER_THREAD,  NETWORKING_WORKER_THREAD_PRIORITY,  NETWORKING_WORKER_THREAD_STACK_SIZE,  NETWORKING_WORKER_THREAD_QUEUE_SIZE  ) != WICED_SUCCESS )
-    {
-        WPRINT_RTOS_INFO(("Failed to create WICED_NETWORKING_WORKER_THREAD\r\n"));
-        result = WICED_ERROR;
-    }
-
-    return result;
-}
-
-wiced_result_t wiced_rtos_deinit( void )
-{
-    wiced_rtos_delete_worker_thread(WICED_HARDWARE_IO_WORKER_THREAD);
-    wiced_rtos_delete_worker_thread(WICED_NETWORKING_WORKER_THREAD);
-
-    return WICED_SUCCESS;
 }
 
 
 wiced_result_t wiced_rtos_create_thread( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, uint32_t stack_size, void* arg )
 {
-    int temp = priority;
-
     /* Limit priority to default lib priority */
-    if( temp >= (int)configMAX_PRIORITIES )
+    if ( priority > RTOS_HIGHEST_PRIORITY )
     {
-        priority = priority%10;
+        priority = RTOS_HIGHEST_PRIORITY;
     }
 
-    if( pdPASS == xTaskCreate( (native_thread_t)function, (const signed char*)name, (unsigned short) (stack_size/sizeof( portSTACK_TYPE )), arg, WICED_PRIORITY_TO_NATIVE_PRIORITY(priority), thread ) )
-    {
-        return WICED_SUCCESS;
-    }
-    else
-    {
-        return WICED_ERROR;
-    }
+    return host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, NULL, stack_size, WICED_PRIORITY_TO_NATIVE_PRIORITY( priority ), (uint32_t) arg );
 }
 
 wiced_result_t wiced_rtos_delete_thread(wiced_thread_t* thread)
 {
-    if( xTaskIsTaskFinished( *thread ) != pdTRUE )
+    wiced_result_t result;
+
+    malloc_leak_check( &thread, LEAK_CHECK_THREAD );
+
+    result = host_rtos_finish_thread( WICED_GET_THREAD_HANDLE( thread ) );
+
+    if ( result != WICED_WWD_SUCCESS )
     {
-        vTaskDelete( thread );
+        return result;
     }
-    return WICED_SUCCESS;
+
+    return host_rtos_delete_terminated_thread( WICED_GET_THREAD_HANDLE( thread ) );
 }
 
-wiced_result_t wiced_rtos_thread_join(wiced_thread_t* thread)
-{
-    while ( xTaskIsTaskFinished( *thread ) != pdTRUE )
-    {
-        host_rtos_delay_milliseconds(10);
-    }
-    return WICED_SUCCESS;
-}
 
 wiced_result_t wiced_rtos_is_current_thread( wiced_thread_t* thread )
 {
@@ -239,7 +197,7 @@ wiced_result_t wiced_rtos_is_current_thread( wiced_thread_t* thread )
 
 wiced_result_t wiced_rtos_check_stack( void )
 {
-    // TODO: Add stack checking here.
+    /* TODO: Add stack checking here. */
 
     return WICED_SUCCESS;
 }
@@ -250,11 +208,6 @@ wiced_result_t wiced_rtos_thread_force_awake( wiced_thread_t* thread )
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_rtos_delay_milliseconds(uint32_t milliseconds)
-{
-    vTaskDelay(milliseconds);
-    return WICED_SUCCESS;
-}
 
 wiced_result_t wiced_time_get_time(wiced_time_t* time_ptr)
 {
@@ -262,66 +215,9 @@ wiced_result_t wiced_time_get_time(wiced_time_t* time_ptr)
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_time_set_time(wiced_time_t* time_ptr)
+wiced_result_t wiced_time_set_time( const wiced_time_t* time_ptr )
 {
     wiced_time_offset = *time_ptr - (wiced_time_t) ( xTaskGetTickCount( ) * ms_to_tick_ratio );
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_init_semaphore( wiced_semaphore_t* semaphore )
-{
-    *semaphore = xSemaphoreCreateCounting( (unsigned portBASE_TYPE) 0x7fffffff, (unsigned portBASE_TYPE) 0 );
-
-    return ( *semaphore != NULL ) ? WICED_SUCCESS : WICED_ERROR;
-}
-
-wiced_result_t wiced_rtos_get_semaphore( wiced_semaphore_t* semaphore, uint32_t timeout_ms )
-{
-    if ( pdTRUE == xSemaphoreTake( *semaphore, (portTickType) ( timeout_ms / ms_to_tick_ratio ) ) )
-    {
-        return WICED_SUCCESS;
-    }
-    else
-    {
-        return WICED_TIMEOUT;
-    }
-}
-
-wiced_result_t wiced_rtos_set_semaphore( wiced_semaphore_t* semaphore )
-{
-    signed portBASE_TYPE result;
-
-    if ( host_platform_is_in_interrupt_context( ) == WICED_TRUE )
-    {
-        signed portBASE_TYPE xHigherPriorityTaskWoken;
-        result = xSemaphoreGiveFromISR( *semaphore, &xHigherPriorityTaskWoken );
-
-        wiced_assert( "Unable to set semaphore", result == pdTRUE );
-
-        /* If xSemaphoreGiveFromISR() unblocked a task, and the unblocked task has
-         * a higher priority than the currently executing task, then
-         * xHigherPriorityTaskWoken will have been set to pdTRUE and this ISR should
-         * return directly to the higher priority unblocked task.
-         */
-        portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
-    }
-    else
-    {
-        result = xSemaphoreGive( *semaphore );
-        wiced_assert( "Unable to set semaphore", result == pdTRUE );
-    }
-
-    return ( result == pdPASS )? WICED_SUCCESS : WICED_ERROR;
-}
-
-
-wiced_result_t wiced_rtos_deinit_semaphore( wiced_semaphore_t* semaphore )
-{
-    if (semaphore != NULL)
-    {
-        vQueueDelete( *semaphore );
-        *semaphore = NULL;
-    }
     return WICED_SUCCESS;
 }
 
@@ -376,25 +272,11 @@ wiced_result_t wiced_rtos_deinit_mutex( wiced_mutex_t* mutex )
 
 wiced_result_t wiced_rtos_init_queue( wiced_queue_t* queue, const char* name, uint32_t message_size, uint32_t number_of_messages )
 {
-    UNUSED_PARAMETER(name);
+    UNUSED_PARAMETER( name );
 
-    if ( ( *queue = xQueueCreate( number_of_messages, message_size ) ) == NULL )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
+    return host_rtos_init_queue( WICED_GET_QUEUE_HANDLE( queue ), NULL, number_of_messages * message_size, message_size );
 }
 
-wiced_result_t wiced_rtos_push_to_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
-{
-    if ( xQueueSendToBack( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) ) != pdPASS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
 
 #if 0 /* Not yet implemented by other RTOSs */
 wiced_result_t wiced_rtos_push_to_queue_front( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
@@ -409,21 +291,9 @@ wiced_result_t wiced_rtos_push_to_queue_front( wiced_queue_t* queue, void* messa
 #endif
 
 
-
-wiced_result_t wiced_rtos_pop_from_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
-{
-    if ( xQueueReceive( *queue, message, ( timeout_ms / ms_to_tick_ratio ) ) != pdPASS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
 wiced_result_t wiced_rtos_deinit_queue( wiced_queue_t* queue )
 {
-    vQueueDelete( *queue );
-    return WICED_SUCCESS;
+    return host_rtos_deinit_queue( WICED_GET_QUEUE_HANDLE( queue ) );
 }
 
 wiced_result_t wiced_rtos_is_queue_empty( wiced_queue_t* queue )
@@ -477,6 +347,11 @@ wiced_result_t wiced_rtos_init_timer( wiced_timer_t* timer, uint32_t time_ms, ti
 
 wiced_result_t wiced_rtos_start_timer( wiced_timer_t* timer )
 {
+    if ( xTimerReset( timer->handle, WICED_WAIT_FOREVER ) != pdPASS )
+    {
+        return WICED_ERROR;
+    }
+
     if ( xTimerStart( timer->handle, WICED_WAIT_FOREVER ) != pdPASS )
     {
         return WICED_ERROR;
@@ -489,17 +364,6 @@ wiced_result_t wiced_rtos_start_timer( wiced_timer_t* timer )
 wiced_result_t wiced_rtos_stop_timer( wiced_timer_t* timer )
 {
     if ( xTimerStop( timer->handle, WICED_WAIT_FOREVER ) != pdPASS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_rtos_reload_timer( wiced_timer_t* timer )
-{
-    if ( xTimerReset( timer->handle, WICED_WAIT_FOREVER ) != pdPASS )
     {
         return WICED_ERROR;
     }
@@ -525,138 +389,10 @@ wiced_result_t wiced_rtos_is_timer_running( wiced_timer_t* timer )
 }
 
 
-static void worker_thread_main( uint32_t arg )
-{
-    wiced_worker_thread_t* worker_thread = (wiced_worker_thread_t*) arg;
-
-    while ( 1 )
-    {
-        wiced_event_message_t message;
-
-        if ( wiced_rtos_pop_from_queue( &worker_thread->event_queue, &message, WICED_WAIT_FOREVER ) == WICED_SUCCESS )
-        {
-            message.function( message.arg );
-        }
-    }
-}
-
-wiced_result_t wiced_rtos_create_worker_thread( wiced_worker_thread_t* worker_thread, uint8_t priority, uint32_t stack_size, uint32_t event_queue_size )
-{
-    memset( worker_thread, 0, sizeof( *worker_thread ) );
-
-    if ( wiced_rtos_init_queue( &worker_thread->event_queue, "worker queue", sizeof(wiced_event_message_t), event_queue_size ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    if ( wiced_rtos_create_thread( &worker_thread->thread, WICED_PRIORITY_TO_NATIVE_PRIORITY(priority), "worker thread", worker_thread_main, stack_size, (void*) worker_thread ) != WICED_SUCCESS )
-    {
-        wiced_rtos_deinit_queue( &worker_thread->event_queue );
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_delete_worker_thread( wiced_worker_thread_t* worker_thread )
-{
-    if ( wiced_rtos_deinit_queue( &worker_thread->event_queue ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    if ( wiced_rtos_delete_thread( &worker_thread->thread ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t init_timer_thread(void)
-{
-    xTaskCreate( timed_event_thread_main, (const signed char*)"timerThread", (unsigned short) (TIMER_THREAD_STACK_SIZE/sizeof( portSTACK_TYPE )), NULL, RTOS_DEFAULT_THREAD_PRIORITY, &timer_thread );
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_register_timed_event( wiced_timed_event_t* event_object, wiced_worker_thread_t* worker_thread, event_handler_t function, uint32_t time_ms, void* arg )
-{
-    if ( wiced_rtos_init_timer( &event_object->timer, time_ms, timed_event_handler, (void*) event_object ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    event_object->function = function;
-    event_object->thread   = worker_thread;
-    event_object->arg      = arg;
-
-    if ( wiced_rtos_start_timer( &event_object->timer ) != WICED_SUCCESS )
-    {
-        wiced_rtos_deinit_timer(&event_object->timer);
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_deregister_timed_event( wiced_timed_event_t* event_object )
-{
-    if ( wiced_rtos_deinit_timer( &event_object->timer ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-
-    memset( event_object, 0, sizeof( *event_object ) );
-
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_rtos_send_asynchronous_event( wiced_worker_thread_t* worker_thread, event_handler_t function, void* arg )
-{
-    wiced_event_message_t message;
-
-    message.function = function;
-    message.arg      = arg;
-
-    return wiced_rtos_push_to_queue( &worker_thread->event_queue, &message, WICED_NO_WAIT );
-}
-
-static void timed_event_handler( void* arg )
-{
-    wiced_timed_event_t*  event_object;
-    wiced_event_message_t message;
-
-    event_object = (wiced_timed_event_t*) arg;
-
-    message.function = event_object->function;
-    message.arg      = event_object->arg;
-
-    wiced_rtos_push_to_queue( &event_object->thread->event_queue, &message, WICED_NO_WAIT );
-}
-
-
-static void timed_event_thread_main( void* arg )
-{
-    UNUSED_PARAMETER(arg);
-
-    timer_thread_queue = xQueueCreate( TIMER_QUEUE_LENGTH, sizeof(timer_queue_message_t) );
-
-    while(1)
-    {
-        /* Wait for a message in the queue */
-        timer_queue_message_t message;
-        xQueueReceive( timer_thread_queue, &message, portMAX_DELAY );
-
-        /* Call function */
-        message.function(message.arg);
-    }
-}
-
 wiced_result_t wiced_rtos_init_event_flags( wiced_event_flags_t* event_flags )
 {
     UNUSED_PARAMETER( event_flags );
-    wiced_assert( "Unsupported\r\n", 0!=0 );
+    wiced_assert( "Unsupported\n", 0!=0 );
     return WICED_UNSUPPORTED;
 }
 
@@ -668,7 +404,7 @@ wiced_result_t wiced_rtos_wait_for_event_flags( wiced_event_flags_t* event_flags
     UNUSED_PARAMETER( clear_set_flags );
     UNUSED_PARAMETER( wait_option );
     UNUSED_PARAMETER( timeout_ms );
-    wiced_assert( "Unsupported\r\n", 0!=0 );
+    wiced_assert( "Unsupported\n", 0!=0 );
     return WICED_UNSUPPORTED;
 }
 
@@ -676,14 +412,14 @@ wiced_result_t wiced_rtos_set_event_flags( wiced_event_flags_t* event_flags, uin
 {
     UNUSED_PARAMETER( event_flags );
     UNUSED_PARAMETER( flags_to_set );
-    wiced_assert( "Unsupported\r\n", 0!=0 );
+    wiced_assert( "Unsupported\n", 0!=0 );
     return WICED_UNSUPPORTED;
 }
 
 wiced_result_t wiced_rtos_deinit_event_flags( wiced_event_flags_t* event_flags )
 {
     UNUSED_PARAMETER( event_flags );
-    wiced_assert( "Unsupported\r\n", 0!=0 );
+    wiced_assert( "Unsupported\n", 0!=0 );
     return WICED_UNSUPPORTED;
 }
 
@@ -693,7 +429,7 @@ xSemaphoreHandle malloc_mutex = 0;
 
 static wiced_result_t wiced_freertos_init_malloc_mutex ( void )
 {
-    malloc_mutex = xSemaphoreCreateMutex( );
+    malloc_mutex = xSemaphoreCreateRecursiveMutex( );
     if( malloc_mutex )
     {
         return WICED_SUCCESS;
@@ -710,7 +446,7 @@ void __malloc_lock(struct _reent *ptr)
     UNUSED_PARAMETER( ptr );
     if( malloc_mutex )
     {
-        xSemaphoreTake( malloc_mutex, WICED_WAIT_FOREVER );
+        xSemaphoreTakeRecursive( malloc_mutex, WICED_WAIT_FOREVER );
     }
     return;
 }
@@ -720,7 +456,7 @@ void __malloc_unlock(struct _reent *ptr)
     UNUSED_PARAMETER( ptr );
     if( malloc_mutex )
     {
-        xSemaphoreGive( malloc_mutex );
+        xSemaphoreGiveRecursive( malloc_mutex );
     }
 }
 #endif /* __GNUC__ */

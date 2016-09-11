@@ -14,10 +14,9 @@
 
 #pragma once
 
-#include "wiced_network.h"
 #include "wwd_network_interface.h"
-#include "wiced_rtos.h"
 #include "wiced_tcpip.h"
+#include "wiced_wifi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,10 +29,6 @@ extern "C" {
 /******************************************************
  *                    Constants
  ******************************************************/
-
-/** @cond !ADDTHIS*/
-#define WICED_FACTORY_RESET_MAGIC_VALUE       0xA6C5A54E
-/** @endcond */
 
 /******************************************************
  *                   Enumerations
@@ -125,34 +120,6 @@ typedef struct
  *  WICED Management Functions
  */
 /*****************************************************************************/
-
-/** Starts a process to perform an over-the-air (OTA) upgrade
- *
- * @warning The current application immediately terminates when this function is called.
- *  The function does not return, and ALL state for the current application is discarded
- *
- *  @return Does not return!
- */
-extern void wiced_start_ota_upgrade( void );
-
-
-/** Restores the default factory application image
- *
- * This function restores the default factory application and additionally resets
- * all values stored in the DCT to factory defaults. \n
- *
- * Accidental usage of this function is protected by a magic number. If the
- * magic number argument does not match WICED_FACTORY_RESET_MAGIC_VALUE,
- * the function fails and normal program execution continues
- *
- * @warning The current application immediately terminates when this function is called.
- *  The function does not return, and ALL state for the current application is discarded
- *
- * @param[in] magic_value A magic value that must match WICED_FACTORY_RESET_MAGIC_VALUE for the function to complete successfully
- *
- * @return Does not return!
- */
-extern void wiced_restore_factory_image( uint32_t magic_value );
 
 
 /*****************************************************************************/
@@ -368,6 +335,48 @@ extern wiced_result_t wiced_register_system_monitor(wiced_system_monitor_t* syst
  * @return @ref wiced_result_t
  */
 extern wiced_result_t wiced_update_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t permitted_delay);
+
+/** @} */
+
+/*****************************************************************************/
+/** @addtogroup sysmon       Advanced Init
+ *  @ingroup mgmt
+ *
+ * Functions to initialise WICED in a more modular way.
+ * wiced_init()    =  wiced_core_init()   + wiced_wlan_connectivity_init()
+ * wiced_deinit()  =  wiced_core_deinit() + wiced_wlan_connectivity_deinit()
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/** Initialises the core parts of WICED without starting any WLAN systems
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_core_init               ( void );
+
+/** De-initialises the core parts of WICED without touching any WLAN systems
+ *
+ * @note: WLAN should be already de-inited when this function is called
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_core_deinit             ( void );
+
+/** Initialises the WLAN parts of WICED
+ *
+ * @note: The WICED core should have already been initialised when this is called
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_wlan_connectivity_init  ( void );
+
+/** Initialises the WLAN parts of WICED
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_wlan_connectivity_deinit( void );
 
 /** @} */
 

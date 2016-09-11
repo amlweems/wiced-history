@@ -14,9 +14,18 @@
  *
  */
 
-#ifndef INCLUDED_WICED_FREERTOS_SYSTICK_H_
-#define INCLUDED_WICED_FREERTOS_SYSTICK_H_
+#ifndef INCLUDED_WWD_FREERTOS_SYSTICK_H_
+#define INCLUDED_WWD_FREERTOS_SYSTICK_H_
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 #define SYSTICK_FREQUENCY  (1000)
 
-#endif /* ifndef INCLUDED_WICED_FREERTOS_SYSTICK_H_ */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* ifndef INCLUDED_WWD_FREERTOS_SYSTICK_H_ */

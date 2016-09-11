@@ -15,8 +15,10 @@
 
 #pragma once
 
+#include "wiced_result.h"
 #include "wiced_utilities.h"
 #include "wwd_constants.h"
+#include "platform_peripheral.h"
 #include "platform.h" /* This file is unique for each platform */
 
 #ifdef __cplusplus
@@ -30,158 +32,78 @@ extern "C" {
 /******************************************************
  *                    Constants
  ******************************************************/
-/* SPI mode constants */
-#define SPI_CLOCK_RISING_EDGE  ( 1 << 0 )
-#define SPI_CLOCK_FALLING_EDGE ( 0 << 0 )
-#define SPI_CLOCK_IDLE_HIGH    ( 1 << 1 )
-#define SPI_CLOCK_IDLE_LOW     ( 0 << 1 )
-#define SPI_USE_DMA            ( 1 << 2 )
-#define SPI_NO_DMA             ( 0 << 2 )
-#define SPI_MSB_FIRST          ( 1 << 3 )
-#define SPI_LSB_FIRST          ( 0 << 3 )
-
-#define I2C_DEVICE_DMA_MASK_POSN 0
-#define I2C_DEVICE_NO_DMA    (0 << I2C_DEVICE_DMA_MASK_POSN)
-#define I2C_DEVICE_USE_DMA   (1 << I2C_DEVICE_DMA_MASK_POSN)
-
 
 /******************************************************
  *                   Enumerations
  ******************************************************/
 
-typedef enum
-{
-    INPUT_PULL_UP,                  /* Input with an internal pull-up resistor - use with devices that actively drive the signal low - e.g. button connected to ground */
-    INPUT_PULL_DOWN,                /* Input with an internal pull-down resistor - use with devices that actively drive the signal high - e.g. button connected to a power rail */
-    INPUT_HIGH_IMPEDANCE,           /* Input - must always be driven, either actively or by an external pullup resistor */
-    OUTPUT_PUSH_PULL,               /* Output actively driven high and actively driven low - must not be connected to other active outputs - e.g. LED output */
-    OUTPUT_OPEN_DRAIN_NO_PULL,      /* Output actively driven low but is high-impedance when set high - can be connected to other open-drain/open-collector outputs. Needs an external pull-up resistor */
-    OUTPUT_OPEN_DRAIN_PULL_UP,      /* Output actively driven low and is pulled high with an internal resistor when set high - can be connected to other open-drain/open-collector outputs. */
-} wiced_gpio_config_t;
-
-typedef enum
-{
-    DATA_WIDTH_5BIT,
-    DATA_WIDTH_6BIT,
-    DATA_WIDTH_7BIT,
-    DATA_WIDTH_8BIT,
-    DATA_WIDTH_9BIT
-} wiced_uart_data_width_t;
-
-typedef enum
-{
-    STOP_BITS_1,
-    STOP_BITS_2,
-} wiced_uart_stop_bits_t;
-
-typedef enum
-{
-    FLOW_CONTROL_DISABLED,
-    FLOW_CONTROL_CTS,
-    FLOW_CONTROL_RTS,
-    FLOW_CONTROL_CTS_RTS
-} wiced_uart_flow_control_t;
-
-typedef enum
-{
-    NO_PARITY,
-    ODD_PARITY,
-    EVEN_PARITY,
-} wiced_uart_parity_t;
-
-typedef enum
-{
-    IRQ_TRIGGER_RISING_EDGE  = 0x1, /* Interrupt triggered at input signal's rising edge  */
-    IRQ_TRIGGER_FALLING_EDGE = 0x2, /* Interrupt triggered at input signal's falling edge */
-    IRQ_TRIGGER_BOTH_EDGES   = IRQ_TRIGGER_RISING_EDGE | IRQ_TRIGGER_FALLING_EDGE,
-} wiced_gpio_irq_trigger_t;
-
-typedef enum
-{
-    I2C_ADDRESS_WIDTH_7BIT,
-    I2C_ADDRESS_WIDTH_10BIT,
-    I2C_ADDRESS_WIDTH_16BIT,
-} wiced_i2c_bus_address_width_t;
-
-typedef enum
-{
-    I2C_LOW_SPEED_MODE,         /* 10Khz devices */
-    I2C_STANDARD_SPEED_MODE,    /* 100Khz devices */
-    I2C_HIGH_SPEED_MODE         /* 400Khz devices */
-} wiced_i2c_speed_mode_t;
-
 /******************************************************
  *                 Type Definitions
  ******************************************************/
 
-typedef void (*wiced_gpio_irq_handler_t)( void* arg );
+typedef platform_pin_config_t                   wiced_gpio_config_t;
+
+typedef platform_gpio_irq_trigger_t             wiced_gpio_irq_trigger_t;
+
+typedef platform_gpio_irq_callback_t            wiced_gpio_irq_handler_t;
+
+typedef platform_uart_config_t                  wiced_uart_config_t;
+
+typedef platform_i2c_bus_address_width_t        wiced_i2c_bus_address_width_t;
+
+typedef platform_i2c_speed_mode_t               wiced_i2c_speed_mode_t;
+
+typedef platform_i2c_message_t                  wiced_i2c_message_t;
+
+typedef platform_spi_message_segment_t          wiced_spi_message_segment_t;
+
+typedef platform_rtc_time_t                     wiced_rtc_time_t;
+
+typedef platform_spi_slave_config_t             wiced_spi_slave_config_t;
+
+typedef platform_spi_slave_transfer_direction_t wiced_spi_slave_transfer_direction_t;
+
+typedef platform_spi_slave_transfer_status_t    wiced_spi_slave_transfer_status_t;
+
+typedef platform_spi_slave_command_t            wiced_spi_slave_command_t;
+
+typedef platform_spi_slave_data_buffer_t        wiced_spi_slave_data_buffer_t;
 
 /******************************************************
  *                    Structures
  ******************************************************/
 
+/**
+ * Specifies details of an external I2C slave device which is connected to the WICED system
+ */
 typedef struct
 {
-    wiced_spi_t  port;
-    wiced_gpio_t chip_select;
-    uint32_t     speed;
-    uint8_t      mode;
-    uint8_t      bits;
-} wiced_spi_device_t;
-
-typedef struct
-{
-    const void* tx_buffer;
-    void*       rx_buffer;
-    uint32_t    length;
-} wiced_spi_message_segment_t;
-
-typedef struct
-{
-    wiced_i2c_t                   port;
-    uint16_t                      address;       /* the address of the device on the i2c bus */
-    wiced_i2c_bus_address_width_t address_width;
-    uint8_t                       flags;
+    wiced_i2c_t                   port;          /** Which I2C peripheral of the platform to use for the I2C device being specified */
+    uint16_t                      address;       /** the address of the device on the I2C bus */
+    wiced_i2c_bus_address_width_t address_width; /** Indicates the number of bits that the slave device uses for addressing */
+    uint8_t                       flags;         /** Flags that change the mode of operation for the I2C port See WICED/platform/include/platform_peripheral.h  I2C flags constants */
     wiced_i2c_speed_mode_t        speed_mode;    /* speed mode the device operates in */
 } wiced_i2c_device_t;
 
-typedef struct
-{
-    const void*  tx_buffer;  /* A pointer to the data to be transmitted. If NULL, the message is an RX message when 'combined' is FALSE */
-    void*        rx_buffer;  /* A pointer to the data to be transmitted. If NULL, the message is an TX message when 'combined' is FALSE */
-    uint16_t     tx_length;
-    uint16_t     rx_length;
-    uint16_t     retries;    /* Number of times to retry the message */
-    wiced_bool_t combined;
-    uint8_t      flags;      /* MESSAGE_DISABLE_DMA : if set, this flag disables use of DMA for the message */
-} wiced_i2c_message_t;
 
+/**
+ * Specifies details of an external SPI slave device which is connected to the WICED system
+ */
 typedef struct
 {
-    uint32_t                  baud_rate;
-    wiced_uart_data_width_t   data_width;
-    wiced_uart_parity_t       parity;
-    wiced_uart_stop_bits_t    stop_bits;
-    wiced_uart_flow_control_t flow_control;
-} wiced_uart_config_t;
-
-typedef struct
-{
-    uint8_t sec;
-    uint8_t min;
-    uint8_t hr;
-    uint8_t weekday;/* 1-sunday... 7-saturday */
-    uint8_t date;
-    uint8_t month;
-    uint8_t year;
-}wiced_rtc_time_t;
+    wiced_spi_t                   port;          /** Which SPI peripheral of the platform to use for the SPI device being specified */
+    wiced_gpio_t                  chip_select;   /** Which hardware pin to use for Chip Select of the SPI device being specified */
+    uint32_t                      speed;         /** SPI device access speed in Hertz */
+    uint8_t                       mode;          /** Mode of operation for SPI port See WICED/platform/include/platform_peripheral.h  SPI mode constants */
+    uint8_t                       bits;          /** Number of data bits - usually 8, 16 or 32 */
+} wiced_spi_device_t;
 
 /******************************************************
  *                     Variables
  ******************************************************/
 
 #ifdef WICED_PLATFORM_INCLUDES_SPI_FLASH
-extern wiced_spi_device_t wiced_spi_flash;
+extern const wiced_spi_device_t wiced_spi_flash;
 #endif
 
 /******************************************************
@@ -254,7 +176,6 @@ wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, u
  */
 wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout );
 
-
 /** @} */
 /*****************************************************************************/
 /** @addtogroup spi       SPI
@@ -266,7 +187,6 @@ wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises the SPI interface for a given SPI device
  *
@@ -289,7 +209,7 @@ wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi );
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred
  */
-wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, wiced_spi_message_segment_t* segments, uint16_t number_of_segments );
+wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments );
 
 
 /** De-initialises a SPI interface
@@ -304,6 +224,68 @@ wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, wiced_spi_mess
 wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi );
 
 
+/** Initialises a SPI slave interface
+ *
+ * @param[in]  spi    : the SPI slave interface to be initialised
+ * @param[in]  config : SPI slave configuration
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_init( wiced_spi_t spi, const wiced_spi_slave_config_t* config );
+
+
+/** De-initialises a SPI slave interface
+ *
+ * @param[in]  spi : the SPI slave interface to be de-initialised
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_deinit( wiced_spi_t spi );
+
+
+/** Receive command from the remote SPI master
+ *
+ * @param[in]   spi         : the SPI slave interface
+ * @param[out]  command     : pointer to the variable which will contained the received command
+ * @param[in]   timeout_ms  : timeout in milliseconds
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_receive_command( wiced_spi_t spi, wiced_spi_slave_command_t* command, uint32_t timeout_ms );
+
+
+/** Transfer data to/from the remote SPI master
+ *
+ * @param[in]  spi         : the SPI slave interface
+ * @param[in]  direction   : transfer direction
+ * @param[in]  buffer      : the buffer which contain the data to transfer
+ * @param[in]  timeout_ms  : timeout in milliseconds
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_transfer_data( wiced_spi_t spi, wiced_spi_slave_transfer_direction_t direction, wiced_spi_slave_data_buffer_t* buffer, uint32_t timeout_ms );
+
+
+/** Send an error status over the SPI slave interface
+ *
+ * @param[in]  spi          : the SPI slave interface
+ * @param[in]  error_status : SPI slave error status
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_send_error_status( wiced_spi_t spi, wiced_spi_slave_transfer_status_t error_status );
+
+
+/** Generate an interrupt on the SPI slave interface
+ *
+ * @param[in]  spi               : the SPI slave interface
+ * @param[in]  pulse_duration_ms : interrupt pulse duration in milliseconds
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_spi_slave_generate_interrupt( wiced_spi_t spi, uint32_t pulse_duration_ms );
+
+
 /** @} */
 /*****************************************************************************/
 /** @addtogroup i2c       I2C
@@ -315,7 +297,6 @@ wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi );
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises an I2C interface
  *
@@ -354,7 +335,8 @@ wiced_bool_t wiced_i2c_probe_device( wiced_i2c_device_t* device, int retries );
  * @return    WICED_SUCCESS : message structure was initialised properly.
  * @return    WICED_BADARG: one of the arguments is given incorrectly
  */
-wiced_result_t wiced_i2c_init_tx_message(wiced_i2c_message_t* message, const void* tx_buffer, uint16_t  tx_buffer_length, uint16_t retries , wiced_bool_t disable_dma);
+wiced_result_t wiced_i2c_init_tx_message( wiced_i2c_message_t* message, const void* tx_buffer, uint16_t tx_buffer_length, uint16_t retries, wiced_bool_t disable_dma );
+
 
 /** Initialize the wiced_i2c_message_t structure for i2c rx transaction
  *
@@ -369,7 +351,7 @@ wiced_result_t wiced_i2c_init_tx_message(wiced_i2c_message_t* message, const voi
  * @return    WICED_SUCCESS : message structure was initialised properly.
  * @return    WICED_BADARG: one of the arguments is given incorrectly
  */
-wiced_result_t wiced_i2c_init_rx_message(wiced_i2c_message_t* message, void* rx_buffer, uint16_t rx_buffer_length, uint16_t retries , wiced_bool_t disable_dma);
+wiced_result_t wiced_i2c_init_rx_message( wiced_i2c_message_t* message, void* rx_buffer, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma );
 
 
 /** Initialize the wiced_i2c_message_t structure for i2c combined transaction
@@ -387,7 +369,7 @@ wiced_result_t wiced_i2c_init_rx_message(wiced_i2c_message_t* message, void* rx_
  * @return    WICED_SUCCESS : message structure was initialised properly.
  * @return    WICED_BADARG: one of the arguments is given incorrectly
  */
-wiced_result_t wiced_i2c_init_combined_message(wiced_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries , wiced_bool_t disable_dma);
+wiced_result_t wiced_i2c_init_combined_message( wiced_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma );
 
 
 /** Transmits and/or receives data over an I2C interface
@@ -411,8 +393,6 @@ wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message
  */
 wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device );
 
-
-
 /** @} */
 /*****************************************************************************/
 /** @addtogroup adc       ADC
@@ -424,7 +404,6 @@ wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device );
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises an ADC interface
  *
@@ -439,7 +418,6 @@ wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device );
  * @return    WICED_ERROR   : if an error occurred with any step
  */
 wiced_result_t wiced_adc_init( wiced_adc_t adc, uint32_t sampling_cycle );
-
 
 
 /** Takes a single sample from an ADC interface
@@ -494,7 +472,6 @@ wiced_result_t wiced_adc_deinit( wiced_adc_t adc );
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises a GPIO pin
  *
@@ -592,7 +569,6 @@ wiced_result_t wiced_gpio_input_irq_disable( wiced_gpio_t gpio );
  */
 /*****************************************************************************/
 
-
 /** Initialises a PWM pin
  *
  * Prepares a Pulse-Width Modulation pin for use.
@@ -605,7 +581,7 @@ wiced_result_t wiced_gpio_input_irq_disable( wiced_gpio_t gpio );
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_pwm_init(wiced_pwm_t pwm, uint32_t frequency, float duty_cycle);
+wiced_result_t wiced_pwm_init( wiced_pwm_t pwm, uint32_t frequency, float duty_cycle );
 
 
 /** Starts PWM output on a PWM interface
@@ -617,7 +593,7 @@ wiced_result_t wiced_pwm_init(wiced_pwm_t pwm, uint32_t frequency, float duty_cy
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_pwm_start(wiced_pwm_t pwm);
+wiced_result_t wiced_pwm_start( wiced_pwm_t pwm );
 
 
 /** Stops output on a PWM pin
@@ -629,7 +605,7 @@ wiced_result_t wiced_pwm_start(wiced_pwm_t pwm);
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_pwm_stop(wiced_pwm_t pwm);
+wiced_result_t wiced_pwm_stop( wiced_pwm_t pwm );
 
 /** @} */
 /*****************************************************************************/
@@ -642,7 +618,6 @@ wiced_result_t wiced_pwm_stop(wiced_pwm_t pwm);
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Kick the system watchdog.
  *
@@ -696,7 +671,8 @@ void wiced_platform_mcu_disable_powersave( void );
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_platform_get_rtc_time(wiced_rtc_time_t* time);
+wiced_result_t wiced_platform_get_rtc_time( wiced_rtc_time_t* time );
+
 
 /**
  * This function will set MCU RTC time to a new value. Time value must be given in the format of
@@ -707,8 +683,32 @@ wiced_result_t wiced_platform_get_rtc_time(wiced_rtc_time_t* time);
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-wiced_result_t wiced_platform_set_rtc_time(wiced_rtc_time_t* time);
+wiced_result_t wiced_platform_set_rtc_time( const wiced_rtc_time_t* time );
 
+
+/**
+ * This function will return the value of time read from the nanosecond clock.
+ * @return : number of nanoseconds passed since the function wiced_init_nanosecond_clock or wiced_reset_nanosecond_clock was called
+ */
+uint64_t wiced_get_nanosecond_clock_value( void );
+
+
+/**
+ * This function will deinitialize the nanosecond clock.
+ */
+void wiced_deinit_nanosecond_clock( void );
+
+
+/**
+ * This function will reset the nanosecond clock.
+ */
+void wiced_reset_nanosecond_clock( void );
+
+
+/**
+ * This function will init the nanosecond clock.
+*/
+void wiced_init_nanosecond_clock( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

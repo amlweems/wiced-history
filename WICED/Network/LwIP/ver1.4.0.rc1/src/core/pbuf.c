@@ -181,7 +181,7 @@ pbuf_pool_is_empty(void)
  * @return the allocated pbuf. If multiple pbufs where allocated, this
  * is the first pbuf of a pbuf chain.
  */
-struct pbuf *
+/*@only@*/ /*@null@*/  struct pbuf *
 pbuf_alloc(pbuf_layer layer, u16_t length, pbuf_type type)
 {
   struct pbuf *p, *q, *r;
@@ -608,7 +608,7 @@ pbuf_header(struct pbuf *p, s16_t header_size_increment)
  *
  */
 u8_t
-pbuf_free(struct pbuf *p)
+pbuf_free( /*@only@*/ struct pbuf *p)
 {
   u16_t type;
   struct pbuf *q;

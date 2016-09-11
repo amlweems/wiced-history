@@ -131,6 +131,12 @@ autoip_init(void)
   LWIP_DEBUGF(AUTOIP_DEBUG | LWIP_DBG_TRACE, ("autoip_init()\n"));
 }
 
+void
+autoip_deinit(void)
+{
+  LWIP_DEBUGF(AUTOIP_DEBUG | LWIP_DBG_TRACE, ("autoip_deinit()\n"));
+}
+
 /** Set a statically allocated struct autoip to work with.
  * Using this prevents autoip_start to allocate it using mem_malloc.
  *

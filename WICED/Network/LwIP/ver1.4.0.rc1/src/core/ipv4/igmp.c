@@ -162,6 +162,12 @@ igmp_init(void)
   IP4_ADDR(&allrouters, 224, 0, 0, 2);
 }
 
+void
+igmp_deinit(void)
+{
+  LWIP_DEBUGF(IGMP_DEBUG, ("igmp_deinit: deinitializing\n"));
+}
+
 #if 0
 
 static void igmp_dump_group_list( void );
@@ -317,7 +323,7 @@ igmp_lookfor_group(struct netif *ifp, ip_addr_t *addr)
 struct igmp_group *
 igmp_lookup_group(struct netif *ifp, ip_addr_t *addr)
 {
-  struct igmp_group *group = igmp_group_list;
+  struct igmp_group *group;
   
   /* Search if the group already exists */
   group = igmp_lookfor_group(ifp, addr);
@@ -705,7 +711,7 @@ igmp_start_timer(struct igmp_group *group, u8_t max_time)
     max_time = 1;
   }
   /* ensure the random value is > 0 */
-  group->timer = (LWIP_RAND() % (max_time - 1)) + 1;
+  group->timer = (LWIP_RAND() % max_time) + 1;
 }
 
 /**

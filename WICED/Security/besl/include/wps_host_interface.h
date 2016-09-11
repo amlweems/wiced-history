@@ -13,6 +13,10 @@
 #include "wps_host.h"
 #include "wps_structures.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -96,5 +100,11 @@ extern wps_result_t wps_process_event( wps_agent_t* workspace, wps_event_message
 extern void wps_init_workspace       ( wps_agent_t* workspace );
 extern void wps_deinit_workspace     ( wps_agent_t* workspace );
 extern void wps_reset_workspace      ( wps_agent_t* workspace );
+extern void wps_scan_result_handler  ( wl_escan_result_t* result, void* user_data );
 extern void wps_prepare_workspace_crypto   ( wps_agent_t* workspace );
 extern wps_result_t wps_advertise_registrar( wps_agent_t* workspace, uint8_t selected_registrar );
+
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

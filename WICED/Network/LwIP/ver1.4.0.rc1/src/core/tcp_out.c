@@ -933,6 +933,7 @@ tcp_output(struct tcp_pcb *pcb)
 
   /* useg should point to last segment on unacked queue */
   useg = pcb->unacked;
+
   if (useg != NULL) {
     for (; useg->next != NULL; useg = useg->next);
   }
@@ -1008,6 +1009,8 @@ tcp_output(struct tcp_pcb *pcb)
         useg = seg;
       /* unacked list is not empty? */
       } else {
+        LWIP_ASSERT("Unacked is null!", useg );
+        LWIP_ASSERT("tcp header is null!", useg->tcphdr );
         /* In the case of fast retransmit, the packet should not go to the tail
          * of the unacked queue, but rather somewhere before it. We need to check for
          * this case. -STJ Jul 27, 2004 */
@@ -1081,7 +1084,9 @@ tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
   opts = (u32_t *)(void *)(seg->tcphdr + 1);
   if (seg->flags & TF_SEG_OPTS_MSS) {
     TCP_BUILD_MSS_OPTION(*opts);
+#if LWIP_TCP_TIMESTAMPS
     opts += 1;
+#endif
   }
 #if LWIP_TCP_TIMESTAMPS
   pcb->ts_lastacksent = pcb->rcv_nxt;

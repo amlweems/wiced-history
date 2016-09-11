@@ -8,8 +8,8 @@
  * written permission of Broadcom Corporation.
  */
 
-#ifndef INCLUDED_WICED_NETWORK_H_
-#define INCLUDED_WICED_NETWORK_H_
+#ifndef INCLUDED_WWD_NETWORK_H_
+#define INCLUDED_WWD_NETWORK_H_
 
 #include "lwip/err.h"
 
@@ -43,4 +43,4 @@ extern err_t ethernetif_init( /*@partial@*/ struct netif *netif );
 }
 #endif
 
-#endif /* define INCLUDED_WICED_NETWORK_H_ */
+#endif /* define INCLUDED_WWD_NETWORK_H_ */

@@ -27,19 +27,19 @@
 #include "platform_dct.h"
 #include "internal/wiced_internal_api.h"
 #include "wwd_network_constants.h"
-#include "wiced_dct.h"
+#include "wiced_framework.h"
 #include "internal/wiced_internal_api.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
 
-#define IP_HANDLE(interface)          (wiced_ip_handle[(interface)&1])
-
-#define DHCP_CLIENT_INITIALISED(x)    ((x).nx_dhcp_name == DHCP_CLIENT_OBJECT_NAME)
-
-#define IP_NETWORK_IS_UP(interface)            (ip_networking_up[interface & 1] == WICED_TRUE)
-#define SET_IP_NETWORK_UP(interface, status)   (ip_networking_up[(interface)&1] = status)
+#define IF_UP( interface )            ( ip_networking_up[        (interface==WICED_STA_INTERFACE)? 0:1 ] )
+#define DRIVER_FOR_IF( interface )    ( wiced_ip_driver_entries[ (interface==WICED_STA_INTERFACE)? 0:1 ] )
+#define STACK_FOR_IF( interface )     ( wiced_ip_stack[          (interface==WICED_STA_INTERFACE)? 0:1 ] )
+#define DHCP_CLIENT_INITIALISED(ip)   ((ip).nx_dhcp_name == DHCP_CLIENT_OBJECT_NAME)
+#define IP_NETWORK_IS_UP( interface )            (ip_networking_up[(interface==WICED_STA_INTERFACE)? 0:1] == WICED_TRUE)
+#define SET_IP_NETWORK_UP( interface, status )   (ip_networking_up[(interface==WICED_STA_INTERFACE)? 0:1] = status)
 
 /******************************************************
  *                    Constants
@@ -101,8 +101,8 @@ static wiced_dhcp_server_t internal_dhcp_server;
 
 static void (* const wiced_ip_driver_entries[2])(struct NX_IP_DRIVER_STRUCT *) =
 {
-    [WICED_STA_INTERFACE] = wiced_sta_netx_duo_driver_entry,
-    [WICED_AP_INTERFACE]  = wiced_ap_netx_duo_driver_entry,
+    wiced_sta_netx_duo_driver_entry,
+    wiced_ap_netx_duo_driver_entry,
 };
 
 const wiced_ip_address_t INITIALISER_IPV4_ADDRESS( wiced_ip_broadcast, NX_IP_LIMITED_BROADCAST );
@@ -124,7 +124,7 @@ static uint32_t     network_suspend_end_time;
 static wiced_bool_t network_is_suspended = WICED_FALSE;
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 static void           ip_address_changed_handler( NX_IP* ip_handle, VOID* additional_info );
@@ -140,23 +140,23 @@ static wiced_bool_t   tcp_sockets_are_closed( void );
 wiced_result_t wiced_network_init( void )
 {
     /* Initialize the NetX system.  */
-    WPRINT_NETWORK_INFO(("Initialising NetX_Duo " NetX_Duo_VERSION "\r\n"));
+    WPRINT_NETWORK_INFO(("Initialising NetX " NetX_Duo_VERSION "\n"));
     nx_system_initialize( );
 
     ip_networking_up[0] = WICED_FALSE;
     ip_networking_up[1] = WICED_FALSE;
 
     /* Create packet pools for transmit and receive */
-    WPRINT_NETWORK_INFO(("Creating Packet pools\r\n"));
+    WPRINT_NETWORK_INFO(("Creating Packet pools\n"));
     if ( nx_packet_pool_create( &wiced_packet_pools[0], (char*)"", WICED_LINK_MTU, tx_buffer_pool_memory, APP_TX_BUFFER_POOL_SIZE ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR(("Couldn't create TX packet pool\r\n"));
+        WPRINT_NETWORK_ERROR(("Couldn't create TX packet pool\n"));
         return WICED_ERROR;
     }
 
     if ( nx_packet_pool_create( &wiced_packet_pools[1], (char*)"", WICED_LINK_MTU, rx_buffer_pool_memory, APP_RX_BUFFER_POOL_SIZE ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR(("Couldn't create RX packet pool\r\n"));
+        WPRINT_NETWORK_ERROR(("Couldn't create RX packet pool\n"));
         return WICED_ERROR;
     }
 
@@ -181,7 +181,7 @@ wiced_result_t wiced_network_deinit( void )
 
 wiced_bool_t wiced_network_is_up( wiced_interface_t interface )
 {
-    return (wiced_wifi_is_ready_to_transceive(interface) == WICED_SUCCESS) ? WICED_TRUE : WICED_FALSE;
+    return (wwd_wifi_is_ready_to_transceive( WICED_TO_WWD_INTERFACE(interface) ) == WWD_SUCCESS) ? WICED_TRUE : WICED_FALSE;
 }
 
 wiced_result_t wiced_network_up(wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings)
@@ -192,22 +192,39 @@ wiced_result_t wiced_network_up(wiced_interface_t interface, wiced_network_confi
     {
         if ( interface == WICED_CONFIG_INTERFACE )
         {
-            const wiced_config_soft_ap_t* config_ap = &wiced_dct_get_wifi_config_section()->config_ap_settings;
+            wiced_config_soft_ap_t* config_ap;
+            wiced_result_t retval = wiced_dct_read_lock( (void**) &config_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, config_ap_settings), sizeof(wiced_config_soft_ap_t) );
+            if ( retval != WICED_SUCCESS )
+            {
+                return retval;
+            }
 
-            // Check config DCT is valid
+            /* Check config DCT is valid */
             if ( config_ap->details_valid == CONFIG_VALIDITY_VALUE )
             {
-                result = wiced_start_ap( (char*) config_ap->SSID.val, config_ap->security, config_ap->security_key, config_ap->channel );
+                result = wiced_start_ap( &config_ap->SSID, config_ap->security, config_ap->security_key, config_ap->channel );
             }
             else
             {
-                result = wiced_start_ap( (char*) "Wiced Config", WICED_SECURITY_OPEN, "", 1 );
+                wiced_ssid_t ssid =
+                {
+                    .length =  sizeof("Wiced Config")-1,
+                    .value  = "Wiced Config",
+                };
+                result = wiced_start_ap( &ssid, WICED_SECURITY_OPEN, "", 1 );
             }
+            wiced_dct_read_unlock( config_ap, WICED_FALSE );
         }
         else if ( interface == WICED_AP_INTERFACE )
         {
-            const wiced_config_soft_ap_t* soft_ap = &wiced_dct_get_wifi_config_section()->soft_ap_settings;
-            result = wiced_wifi_start_ap( (char*) soft_ap->SSID.val, soft_ap->security, (uint8_t*) soft_ap->security_key, soft_ap->security_key_length, soft_ap->channel );
+            wiced_config_soft_ap_t* soft_ap;
+            result = wiced_dct_read_lock( (void**) &soft_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, soft_ap_settings), sizeof(wiced_config_soft_ap_t) );
+            if ( result != WICED_SUCCESS )
+            {
+                return result;
+            }
+            wwd_wifi_start_ap( &soft_ap->SSID, soft_ap->security, (uint8_t*) soft_ap->security_key, soft_ap->security_key_length, soft_ap->channel );
+            wiced_dct_read_unlock( soft_ap, WICED_FALSE );
         }
         else
         {
@@ -241,72 +258,72 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     /* Enable the network interface  */
     if ( ( config == WICED_USE_STATIC_IP || config == WICED_USE_INTERNAL_DHCP_SERVER ) && ip_settings != NULL )
     {
-        status = nx_ip_create( &IP_HANDLE(interface), (char*)"NetX IP", GET_IPV4_ADDRESS(ip_settings->ip_address), GET_IPV4_ADDRESS(ip_settings->netmask), &wiced_packet_pools[0], wiced_ip_driver_entries[(interface & 1)], wiced_ip_stack[(interface & 1)], IP_STACK_SIZE, 2 );
+        status = nx_ip_create( &IP_HANDLE(interface), (char*)"NetX IP", GET_IPV4_ADDRESS(ip_settings->ip_address), GET_IPV4_ADDRESS(ip_settings->netmask), &wiced_packet_pools[0], DRIVER_FOR_IF( interface ), STACK_FOR_IF( interface ), IP_STACK_SIZE, 2 );
         nx_ip_gateway_address_set( &IP_HANDLE(interface), GET_IPV4_ADDRESS(ip_settings->gateway) );
     }
     else
     {
-        status = nx_ip_create( &IP_HANDLE(interface), (char*)"NetX IP", IP_ADDRESS(0, 0, 0, 0), 0xFFFFF000UL, &wiced_packet_pools[0], wiced_ip_driver_entries[(interface & 1)], wiced_ip_stack[(interface & 1)], IP_STACK_SIZE, 2 );
+        status = nx_ip_create( &IP_HANDLE(interface), (char*)"NetX IP", IP_ADDRESS(0, 0, 0, 0), 0xFFFFF000UL, &wiced_packet_pools[0], DRIVER_FOR_IF( interface ), STACK_FOR_IF( interface ), IP_STACK_SIZE, 2 );
     }
 
     if ( status != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to create IP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to create IP\n" ) );
         return WICED_ERROR;
     }
 
     /* Enable IPv6 */
     status = nxd_ipv6_enable( &IP_HANDLE(interface));
 
-    // Enable ARP
+    /* Enable ARP */
     if ( nx_arp_enable( &IP_HANDLE(interface), (void *) wiced_arp_cache, ARP_CACHE_SIZE ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to enable ARP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to enable ARP\n" ) );
         goto leave_wifi_and_delete_ip;
     }
 
     if ( nx_tcp_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to enable TCP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to enable TCP\n" ) );
         goto leave_wifi_and_delete_ip;
 
     }
 
     if ( nx_udp_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to enable UDP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to enable UDP\n" ) );
         goto leave_wifi_and_delete_ip;
 
     }
 
     if ( nxd_icmp_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to enable ICMP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to enable ICMP\n" ) );
         goto leave_wifi_and_delete_ip;
 
     }
 
     if ( nx_igmp_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to enable IGMP\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to enable IGMP\n" ) );
         goto leave_wifi_and_delete_ip;
 
     }
 
     if ( nx_ip_fragment_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR(("Failed to enable IP fragmentation\r\n"));
+        WPRINT_NETWORK_ERROR(("Failed to enable IP fragmentation\n"));
         goto leave_wifi_and_delete_ip;
     }
 
     /* Obtain an IP address via DHCP if required */
     if ( config == WICED_USE_EXTERNAL_DHCP_SERVER )
     {
-        WPRINT_NETWORK_INFO( ("Obtaining IPv4 address via DHCP\r\n") );
+        WPRINT_NETWORK_INFO( ("Obtaining IPv4 address via DHCP\n") );
 
         if ( dhcp_client_init( &wiced_dhcp_handle, &wiced_packet_pools[0], &IP_HANDLE(interface) ) != WICED_SUCCESS )
         {
-            WPRINT_NETWORK_ERROR( ( "Failed to initialise DHCP client\r\n" ) );
+            WPRINT_NETWORK_ERROR( ( "Failed to initialise DHCP client\n" ) );
             goto leave_wifi_and_delete_ip;
         }
     }
@@ -320,12 +337,12 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     status = nx_ip_address_change_notify( &IP_HANDLE(interface), ip_address_changed_handler, NX_NULL );
     if ( status != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Unable to register for IPv4 address change callback\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Unable to register for IPv4 address change callback\n" ) );
         goto leave_wifi_and_delete_ip;
     }
 
     /* Set the IPv6 linklocal address using our MAC */
-    WPRINT_NETWORK_INFO( ("Setting IPv6 link-local address\r\n") );
+    WPRINT_NETWORK_INFO( ("Setting IPv6 link-local address\n") );
 
     nxd_ipv6_address_set( &IP_HANDLE(interface), 0, NX_NULL, 10, &ipv6_address_index );
 
@@ -336,14 +353,14 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     {
         ULONG ip_address, network_mask;
         nx_ip_address_get( &IP_HANDLE(interface), &ip_address, &network_mask );
-        WPRINT_NETWORK_INFO( ( "IPv4 network ready IP: %u.%u.%u.%u\r\n", (unsigned char) ( ( ip_address >> 24 ) & 0xff ), (unsigned char) ( ( ip_address >> 16 ) & 0xff ), (unsigned char) ( ( ip_address >> 8 ) & 0xff ), (unsigned char) ( ( ip_address >> 0 ) & 0xff ) ) );
+        WPRINT_NETWORK_INFO( ( "IPv4 network ready IP: %u.%u.%u.%u\n", (unsigned char) ( ( ip_address >> 24 ) & 0xff ), (unsigned char) ( ( ip_address >> 16 ) & 0xff ), (unsigned char) ( ( ip_address >> 8 ) & 0xff ), (unsigned char) ( ( ip_address >> 0 ) & 0xff ) ) );
 
         if ( IP_HANDLE(interface).nx_ipv6_address[ipv6_address_index].nxd_ipv6_address_state == NX_IPV6_ADDR_STATE_VALID )
         {
             nxd_ipv6_address_get( &IP_HANDLE(interface), ipv6_address_index, &ipv6_address, &ipv6_prefix, &ipv6_interface_index );
 #ifdef WPRINT_ENABLE_INFO
             uint16_t* ipv6 = (uint16_t*)ipv6_address.nxd_ip_address.v6;
-            WPRINT_NETWORK_INFO( ( "IPv6 network ready IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", (unsigned int) ( ( ipv6[1] ) ),
+            WPRINT_NETWORK_INFO( ( "IPv6 network ready IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\n", (unsigned int) ( ( ipv6[1] ) ),
                 (unsigned int) ( ( ipv6[0] ) ),
                 (unsigned int) ( ( ipv6[3] ) ),
                 (unsigned int) ( ( ipv6[2] ) ),
@@ -444,7 +461,7 @@ wiced_result_t wiced_ip_down( wiced_interface_t interface )
         /* Delete the network interface */
         if ( nx_ip_delete( &IP_HANDLE(interface) ) != NX_SUCCESS)
         {
-            WPRINT_NETWORK_ERROR( ( "Could not delete IP instance\r\n" ) );
+            WPRINT_NETWORK_ERROR( ( "Could not delete IP instance\n" ) );
         }
         memset( &IP_HANDLE(interface), 0, sizeof(NX_IP));
 
@@ -580,7 +597,6 @@ void wiced_network_notify_link_up( void )
 void wiced_network_notify_link_down( void )
 {
     IP_HANDLE(WICED_STA_INTERFACE).nx_ip_driver_link_up = NX_FALSE;
-//    tx_event_flags_set(&IP_HANDLE(WICED_STA_INTERFACE).nx_ip_events), NX_IP_DRIVER_DEFERRED_EVENT, TX_OR);
 }
 
 wiced_result_t wiced_network_link_down_handler( void* arg )
@@ -601,7 +617,7 @@ wiced_result_t wiced_network_link_down_handler( void* arg )
         }
     }
 
-    if ( nx_arp_dynamic_entries_invalidate( &wiced_ip_handle[WICED_STA_INTERFACE] ) != NX_SUCCESS )
+    if ( nx_arp_dynamic_entries_invalidate( &IP_HANDLE( WICED_STA_INTERFACE ) ) != NX_SUCCESS )
     {
         WPRINT_NETWORK_ERROR( ("Clearing ARP cache failed!\n\r") );
         result = WICED_ERROR;
@@ -632,13 +648,13 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
     {
         if ( nx_dhcp_reinitialize( &wiced_dhcp_handle ) != NX_SUCCESS )
         {
-            WPRINT_NETWORK_ERROR( ( "Failed to reinitalise DHCP client\r\n" ) );
+            WPRINT_NETWORK_ERROR( ( "Failed to reinitalise DHCP client\n" ) );
             result = WICED_ERROR;
         }
 
         if ( nx_dhcp_start( &wiced_dhcp_handle ) != NX_SUCCESS )
         {
-            WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\r\n" ) );
+            WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\n" ) );
             result = WICED_ERROR;
         }
     }
@@ -741,7 +757,7 @@ wiced_result_t wiced_ip_register_address_change_callback( wiced_ip_address_chang
         }
     }
 
-    WPRINT_NETWORK_ERROR( ( "Out of callback storage space\r\n" ) );
+    WPRINT_NETWORK_ERROR( ( "Out of callback storage space\n" ) );
 
     return WICED_ERROR;
 }
@@ -758,7 +774,7 @@ wiced_result_t wiced_ip_deregister_address_change_callback( wiced_ip_address_cha
         }
     }
 
-    WPRINT_NETWORK_ERROR( ( "Unable to find callback to deregister\r\n" ) );
+    WPRINT_NETWORK_ERROR( ( "Unable to find callback to deregister\n" ) );
 
     return WICED_ERROR;
 }
@@ -770,7 +786,7 @@ wiced_result_t dhcp_client_init( NX_DHCP* dhcp_handle, NX_PACKET_POOL* packet_po
     /* Create the DHCP instance. */
     if ( nx_dhcp_create( dhcp_handle, ip_handle, DHCP_CLIENT_OBJECT_NAME ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to Create DHCP thread\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to Create DHCP thread\n" ) );
         return WICED_ERROR;
     }
 
@@ -781,7 +797,7 @@ wiced_result_t dhcp_client_init( NX_DHCP* dhcp_handle, NX_PACKET_POOL* packet_po
     /* Start DHCP. */
     if ( nx_dhcp_start( dhcp_handle ) != NX_SUCCESS )
     {
-        WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\r\n" ) );
+        WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\n" ) );
         return WICED_ERROR;
     }
 

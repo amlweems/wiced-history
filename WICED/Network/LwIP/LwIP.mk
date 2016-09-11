@@ -12,13 +12,13 @@ NAME := LwIP
 
 VERSION := 1.4.0.rc1
 
-$(NAME)_COMPONENTS += Wiced/Network/LwIP/wwd
+$(NAME)_COMPONENTS += WICED/network/LwIP/WWD
 ifeq (,$(APP_WWD_ONLY)$(NS_WWD_ONLY)$(RTOS_WWD_ONLY))
-$(NAME)_COMPONENTS += Wiced/Network/LwIP/wiced
+$(NAME)_COMPONENTS += WICED/network/LwIP/WICED
 endif
 
 ifeq ($(BUILD_TYPE),debug)
-$(NAME)_DEFINES := WICED_LWIP_DEBUG
+GLOBAL_DEFINES := WICED_LWIP_DEBUG
 endif
 
 VALID_RTOS_LIST:= FreeRTOS
@@ -30,7 +30,7 @@ GLOBAL_DEFINES += $(NAME)_VERSION=$$(SLASH_QUOTE_START)v$(VERSION)$$(SLASH_QUOTE
 GLOBAL_INCLUDES := ver$(VERSION) \
                    ver$(VERSION)/src/include \
                    ver$(VERSION)/src/include/ipv4 \
-                   wiced
+                   WICED
 
 $(NAME)_SOURCES :=  ver$(VERSION)/src/api/api_lib.c \
                     ver$(VERSION)/src/api/api_msg.c \

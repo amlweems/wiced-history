@@ -84,9 +84,9 @@ extern "C"
  * @param stack_size     : the size of the thread stack in bytes
  * @param priority       : the priority of the thread
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority ) /*@modifies *thread@*/;
+extern wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority ) /*@modifies *thread@*/;
 
 
 /**
@@ -102,9 +102,9 @@ extern wiced_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thr
  * @param priority       : the priority of the thread
  * @param arg            : the argument to pass to the new thread
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD result code
  */
-extern wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg );
+extern wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg );
 
 /**
  * Exit a thread
@@ -118,9 +118,9 @@ extern wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_ty
  *
  * @param thread         : Pointer to the current thread handle
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread ) /*@modifies *thread@*/;
+extern wwd_result_t host_rtos_finish_thread( host_thread_type_t* thread ) /*@modifies *thread@*/;
 
 
 /**
@@ -133,9 +133,9 @@ extern wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread ) /*@m
  *
  * @param thread         : handle of the terminated thread to delete
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, Error code otherwise
  */
-extern wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread );
+extern wwd_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread );
 
 
 /**
@@ -146,9 +146,9 @@ extern wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* th
  *
  * @param thread         : handle of the thread to wait for
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, Error code otherwise
  */
-extern wiced_result_t host_rtos_join_thread( host_thread_type_t* thread );
+extern wwd_result_t host_rtos_join_thread( host_thread_type_t* thread );
 
 /* Semaphore management functions */
 
@@ -161,9 +161,9 @@ extern wiced_result_t host_rtos_join_thread( host_thread_type_t* thread );
  *
  * @param semaphore         : Pointer to the semaphore handle to be initialized
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaphore ) /*@defines *semaphore@*/;
+extern wwd_result_t host_rtos_init_semaphore(  /*@special@*/ /*@out@*/ host_semaphore_type_t* semaphore ) /*@allocates *semaphore@*/  /*@defines **semaphore@*/;
 
 /**
  * Get a semaphore
@@ -183,10 +183,10 @@ extern wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t*
  *                      the semaphore. Use the NEVER_TIMEOUT constant to wait forever.
  * @param will_set_in_isr : True if the semaphore will be set in an ISR. Currently only used for NoOS/NoNS
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully acquired
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully acquired
  *                     : WICED_TIMEOUT if semaphore was not acquired before timeout_ms period
  */
-extern wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr );
+extern wwd_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr ) /*@modifies internalState@*/;
 
 /**
  * Set a semaphore
@@ -204,11 +204,11 @@ extern wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore,
  * @param called_from_ISR : Value of WICED_TRUE indicates calling from interrupt context
  *                          Value of WICED_FALSE indicates calling from normal thread context
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully set
- *                        : WICED_ERROR if an error occurred
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully set
+ *                        : Error code if an error occurred
  *
  */
-extern wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR );
+extern wwd_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR );
 
 /**
  * Deletes a semaphore
@@ -219,10 +219,10 @@ extern wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore,
  *
  * @param semaphore         : Pointer to the semaphore handle
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully deleted
- *                        : WICED_ERROR if an error occurred
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully deleted
+ *                        : Error code if an error occurred
  */
-extern wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore ) /*@modifies *semaphore@*/;
+extern wwd_result_t host_rtos_deinit_semaphore( /*@special@*/ host_semaphore_type_t* semaphore ) /*@releases *semaphore@*/;
 
 
 /* Time management functions */
@@ -238,7 +238,7 @@ extern wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semapho
  *
  * @returns Time in milliseconds since the RTOS started.
  */
-extern wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/;
+extern wwd_time_t host_rtos_get_time( void )  /*@modifies internalState@*/;
 
 /**
  * Delay for a number of milliseconds
@@ -252,22 +252,22 @@ extern wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/;
  * is less than the delay required, then makes up the difference
  * with a tight loop
  *
- * @return wiced_result_t : WICED_SUCCESS if delay was successful
- *                        : WICED_ERROR if an error occurred
+ * @return wwd_result_t : WWD_SUCCESS if delay was successful
+ *                        : Error code if an error occurred
  *
  */
-extern wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms );
+extern wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms );
 
 
 /* Message queue management functions */
 
-extern wiced_result_t host_rtos_init_queue( host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size );
+extern wwd_result_t host_rtos_init_queue( /*@special@*/ /*@out@*/ host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size ) /*@allocates *queue@*/  /*@defines **queue@*/;
 
-extern wiced_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms );
+extern wwd_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms );
 
-extern wiced_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms );
+extern wwd_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms );
 
-extern wiced_result_t host_rtos_deinit_queue( host_queue_type_t* queue );
+extern wwd_result_t host_rtos_deinit_queue( /*@special@*/host_queue_type_t* queue ) /*@releases *queue@*/;
 
 /** @} */
 

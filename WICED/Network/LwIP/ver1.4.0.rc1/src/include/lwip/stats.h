@@ -149,6 +149,7 @@ struct stats_ {
 extern struct stats_ lwip_stats;
 
 void stats_init(void);
+void stats_deinit(void);
 
 #define STATS_INC(x) ++lwip_stats.x
 #define STATS_DEC(x) --lwip_stats.x
@@ -159,6 +160,7 @@ void stats_init(void);
                              } while(0)
 #else /* LWIP_STATS */
 #define stats_init()
+#define stats_deinit()
 #define STATS_INC(x)
 #define STATS_DEC(x)
 #define STATS_INC_USED(x)

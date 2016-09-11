@@ -67,6 +67,10 @@ void stats_init(void)
 #endif /* LWIP_DEBUG */
 }
 
+void stats_deinit(void)
+{
+}
+
 #if LWIP_STATS_DISPLAY
 void
 stats_display_proto(struct stats_proto *proto, char *name)

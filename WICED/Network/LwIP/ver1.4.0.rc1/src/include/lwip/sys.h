@@ -63,6 +63,7 @@ typedef u8_t sys_mbox_t;
 #define sys_mbox_free(m)
 
 #define sys_thread_new(n,t,a,s,p)
+#define sys_thread_exit( )
 
 #define sys_msleep(t)
 
@@ -130,7 +131,7 @@ void sys_mutex_set_invalid(sys_mutex_t *mutex);
  * @param sem pointer to the semaphore to create
  * @param count initial count of the semaphore
  * @return ERR_OK if successful, another err_t otherwise */
-err_t sys_sem_new(sys_sem_t *sem, u8_t count);
+err_t sys_sem_new( /*@special@*/ /*@out@*/ sys_sem_t *sem, u8_t count) /*@allocates *sem@*/;
 /** Signals a semaphore
  * @param sem the semaphore to signal */
 void sys_sem_signal(sys_sem_t *sem);
@@ -142,7 +143,7 @@ void sys_sem_signal(sys_sem_t *sem);
 u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout);
 /** Delete a semaphore
  * @param sem semaphore to delete */
-void sys_sem_free(sys_sem_t *sem);
+void sys_sem_free( /*@special@*/ sys_sem_t *sem ) /*@releases *sem@*/;
 /** Wait for a semaphore - forever/no timeout */
 #define sys_sem_wait(sem)                  sys_arch_sem_wait(sem, 0)
 #ifndef sys_sem_valid
@@ -165,7 +166,7 @@ void sys_msleep(u32_t ms); /* only has a (close to) 1 jiffy resolution. */
  * @param mbox pointer to the mbox to create
  * @param size (miminum) number of messages in this mbox
  * @return ERR_OK if successful, another err_t otherwise */
-err_t sys_mbox_new(sys_mbox_t *mbox, int size);
+err_t sys_mbox_new( /*@special@*/ /*@out@*/ sys_mbox_t *mbox, /*@unused@*/int size ) /*@allocates *mbox@*/  /*@defines **mbox@*/;
 /** Post a message to an mbox - may not fail
  * -> blocks if full, only used from tasks not from ISR
  * @param mbox mbox to posts the message
@@ -182,7 +183,7 @@ err_t sys_mbox_trypost(sys_mbox_t *mbox, void *msg);
  * @return time (in milliseconds) waited for a message, may be 0 if not waited
            or SYS_ARCH_TIMEOUT on timeout
  *         The returned time has to be accurate to prevent timer jitter! */
-u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout);
+u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32_t timeout);
 /* Allow port to override with a macro, e.g. special timout for sys_arch_mbox_fetch() */
 #ifndef sys_arch_mbox_tryfetch
 /** Wait for a new message to arrive in the mbox
@@ -197,7 +198,7 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg);
 #define sys_mbox_tryfetch(mbox, msg) sys_arch_mbox_tryfetch(mbox, msg)
 /** Delete an mbox
  * @param mbox mbox to delete */
-void sys_mbox_free(sys_mbox_t *mbox);
+void sys_mbox_free( /*@special@*/ sys_mbox_t *mbox ) /*@releases *mbox@*/;
 #define sys_mbox_fetch(mbox, msg) sys_arch_mbox_fetch(mbox, msg, 0)
 #ifndef sys_mbox_valid
 /** Check if an mbox is valid/allocated: return 1 for valid, 0 for invalid */
@@ -215,12 +216,17 @@ void sys_mbox_set_invalid(sys_mbox_t *mbox);
  * @param arg parameter passed to 'thread'
  * @param stacksize stack size in bytes for the new thread (may be ignored by ports)
  * @param prio priority of the new thread (may be ignored by ports) */
-sys_thread_t sys_thread_new(const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio);
+/*@null@*/ sys_thread_t sys_thread_new( const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio );
+
+void sys_thread_exit( void );
+
+void sys_thread_free( sys_thread_t task );
 
 #endif /* NO_SYS */
 
 /* sys_init() must be called before anthing else. */
 void sys_init(void);
+void sys_deinit(void);
 
 #ifndef sys_jiffies
 /** Ticks/jiffies since power up. */

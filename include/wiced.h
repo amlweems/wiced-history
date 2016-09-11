@@ -15,7 +15,7 @@
 #pragma once
 
 #include "wiced_utilities.h"
-#include "wiced_dct.h"
+#include "wiced_framework.h"
 #include "wiced_platform.h"
 #include "wiced_rtos.h"
 #include "wiced_tcpip.h"

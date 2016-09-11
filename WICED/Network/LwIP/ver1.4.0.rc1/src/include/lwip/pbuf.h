@@ -72,7 +72,7 @@ typedef enum {
 /** indicates this pbuf is UDP multicast to be looped back */
 #define PBUF_FLAG_MCASTLOOP 0x04U
 
-struct pbuf {
+/*@abstract@*/ struct pbuf {
   /** next pbuf in singly linked pbuf chain */
   struct pbuf *next;
 
@@ -120,8 +120,9 @@ struct pbuf_custom {
 
 /* Initializes the pbuf module. This call is empty for now, but may not be in future. */
 #define pbuf_init()
+#define pbuf_deinit()
 
-struct pbuf *pbuf_alloc(pbuf_layer l, u16_t length, pbuf_type type);
+/*@only@*/ /*@null@*/ struct pbuf *pbuf_alloc(pbuf_layer l, u16_t length, pbuf_type type);
 #if LWIP_SUPPORT_CUSTOM_PBUF
 struct pbuf *pbuf_alloced_custom(pbuf_layer l, u16_t length, pbuf_type type,
                                  struct pbuf_custom *p, void *payload_mem,
@@ -130,7 +131,7 @@ struct pbuf *pbuf_alloced_custom(pbuf_layer l, u16_t length, pbuf_type type,
 void pbuf_realloc(struct pbuf *p, u16_t size); 
 u8_t pbuf_header(struct pbuf *p, s16_t header_size);
 void pbuf_ref(struct pbuf *p);
-u8_t pbuf_free(struct pbuf *p);
+u8_t pbuf_free( /*@only@*/ struct pbuf *p);
 u8_t pbuf_clen(struct pbuf *p);  
 void pbuf_cat(struct pbuf *head, struct pbuf *tail);
 void pbuf_chain(struct pbuf *head, struct pbuf *tail);

@@ -45,7 +45,8 @@
 #include "lwip/sys.h"
 #include "lwip/mem.h"
 #include "lwip/stats.h"
-
+#include "wiced_utilities.h"
+#include "wwd_crypto.h"
 
 /* Message queue constants. */
 #define archMESG_QUEUE_LENGTH     ( (unsigned long) 6 )
@@ -71,7 +72,7 @@ static uint16_t next_thread = 0;
 /*-----------------------------------------------------------------------------------
  * Creates an empty mailbox.
  */
-err_t sys_mbox_new( sys_mbox_t *mbox, /*@unused@*/int size )
+err_t sys_mbox_new( /*@special@*/ /*@out@*/ sys_mbox_t *mbox, /*@unused@*/int size ) /*@allocates *mbox@*/  /*@defines **mbox@*/
 {
     /*@-noeffect@*/
     (void) size; /* unused parameter */
@@ -79,7 +80,9 @@ err_t sys_mbox_new( sys_mbox_t *mbox, /*@unused@*/int size )
 
     *mbox = xQueueCreate( archMESG_QUEUE_LENGTH, (unsigned long) sizeof(void *) );
 
-    return (err_t) ERR_OK;
+    /*@-compdef@*/ /* Lint doesnt realise allocation has occurred */
+    return ERR_OK;
+    /*@+compdef@*/
 }
 
 /*-----------------------------------------------------------------------------------
@@ -87,7 +90,7 @@ err_t sys_mbox_new( sys_mbox_t *mbox, /*@unused@*/int size )
  * mailbox when the mailbox is deallocated, it is an indication of a
  * programming error in lwIP and the developer should be notified.
  */
-void sys_mbox_free( sys_mbox_t *mbox )
+void sys_mbox_free( /*@special@*/ sys_mbox_t *mbox ) /*@releases *mbox@*/
 {
     if ( uxQueueMessagesWaiting( *mbox ) != 0 )
     {
@@ -187,27 +190,42 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, /*@null@*/ /*@out@*/ void **msg, u32
  * Creates and returns a new semaphore. The "count" argument specifies
  * the initial state of the semaphore. TBD finish and test
  */
-err_t sys_sem_new( /*@out@*/ sys_sem_t *sem, u8_t count)
+err_t sys_sem_new( /*@special@*/ /*@out@*/ sys_sem_t *sem, u8_t count) /*@allocates *sem@*/
 {
+    if ( sem == NULL )
+    {
+        /*@-mustdefine@*/ /*@-compdef@*/ /* do not need to allocate or set *sem */
+        return ERR_VAL;
+        /*@+mustdefine@*/ /*@+compdef@*/
+    }
+
     portENTER_CRITICAL();
     vSemaphoreCreateBinary( *sem )
     if ( *sem == NULL )
     {
         portEXIT_CRITICAL();
-        return (err_t) ERR_MEM;
+        /*@-mustdefine@*/ /*@-compdef@*/ /* allocation failed - dont allocate or set *sem */
+        return ERR_MEM;
+        /*@+mustdefine@*/ /*@+compdef@*/
     }
 
     if ( count == (u8_t) 0 ) /* Means it can't be taken */
     {
         if ( pdTRUE != xSemaphoreTake( *sem, (portTickType) 1 ) )
         {
+            vQueueDelete( *sem );
             portEXIT_CRITICAL();
+            /*@-compdef@*/ /* take failed - dont allocate or set *sem */
             return ERR_VAL;
+            /*@+compdef@*/
         }
     }
 
     portEXIT_CRITICAL();
-    return (err_t) ERR_OK;
+
+    /*@-compdef@*/ /* Lint doesnt realise allocation has occurred */
+    return ERR_OK;
+    /*@+compdef@*/
 }
 
 /*-----------------------------------------------------------------------------------
@@ -284,7 +302,7 @@ void sys_sem_signal( sys_sem_t *sem )
 /*-----------------------------------------------------------------------------------
  * Deallocates a semaphore
  */
-void sys_sem_free( sys_sem_t *sem )
+void sys_sem_free( /*@special@*/ sys_sem_t *sem ) /*@releases *sem@*/
 {
     vQueueDelete( *sem );
 }
@@ -307,6 +325,10 @@ void sys_init( void )
     /* keep track of how many threads have been created */
     next_thread = 0;
 #endif /* if LWIP_SYS_ARCH_TIMEOUTS */
+}
+
+void sys_deinit( void )
+{
 }
 
 #if LWIP_SYS_ARCH_TIMEOUTS
@@ -373,6 +395,19 @@ sys_arch_timeouts(void)
     {
         return NULL;
     }
+}
+
+void sys_thread_exit( void )
+{
+    malloc_leak_check(NULL, LEAK_CHECK_THREAD);
+    vTaskDelete(NULL);
+}
+
+void sys_thread_free( sys_thread_t task )
+{
+#if ( configFREE_TASKS_IN_IDLE == 0 )
+    vTaskFreeTerminated( task );
+#endif /* if ( configFREE_TASKS_IN_IDLE == 0 ) */
 }
 
 /*-----------------------------------------------------------------------------------
@@ -476,4 +511,13 @@ void sys_mbox_set_invalid( sys_mbox_t *mbox )
 void sys_sem_set_invalid( sys_sem_t *sem )
 {
     ( *(int*) sem ) = 0;
+}
+
+
+
+uint16_t sys_rand16( void )
+{
+    uint16_t output;
+    wwd_wifi_get_random( &output, 2 );
+    return output;
 }

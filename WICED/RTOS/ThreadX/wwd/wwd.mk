@@ -23,10 +23,11 @@ $(NAME)_LINK_FILES := interrupt_handlers_IAR.o
 
 else
 $(NAME)_SOURCES  := wwd_rtos.c \
-                    low_level_init.c \
-                    interrupt_handlers_GCC.s
+                    low_level_init.c
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
-$(NAME)_LINK_FILES := interrupt_handlers_GCC.o
 endif
+
+$(NAME)_CHECK_HEADERS := \
+                         wwd_rtos.h

@@ -22,7 +22,8 @@
  * - timed_event_handler_t
  */
 #include "rtos.h"
-#include "wwd_constants.h"
+#include "wiced_result.h"
+#include "platform/wwd_platform_interface.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,13 +69,12 @@ typedef void (*wiced_thread_function_t)( uint32_t arg );
  */
 /*****************************************************************************/
 
-
 /** Creates and starts a new thread
  *
  * Creates and starts a new thread
  *
  * @param thread     : Pointer to variable that will receive the thread handle
- * @param priority   : A priority number or WICED_APPLICATION_PRIORITY.
+ * @param priority   : A priority number or WICED_DEFAULT_APP_THREAD_PRIORITY.
  * @param name       : a text name for the thread (can be null)
  * @param function   : the main thread function
  * @param stack_size : stack size for this thread
@@ -84,6 +84,24 @@ typedef void (*wiced_thread_function_t)( uint32_t arg );
  * @return    WICED_ERROR   : if an error occurred
  */
 wiced_result_t wiced_rtos_create_thread( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, uint32_t stack_size, void* arg );
+
+
+/** Creates and starts a new thread with user provided stack
+ *
+ * Creates and starts a new thread with user provided stack
+ *
+ * @param thread     : Pointer to variable that will receive the thread handle
+ * @param priority   : A priority number or WICED_DEFAULT_APP_THREAD_PRIORITY.
+ * @param name       : a text name for the thread (can be null)
+ * @param function   : the main thread function
+ * @param stack      : the stack for this thread
+ * @param stack_size : stack size for this thread
+ * @param arg        : argument which will be passed to thread function
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred
+ */
+wiced_result_t wiced_rtos_create_thread_with_stack( wiced_thread_t* thread, uint8_t priority, const char* name, wiced_thread_function_t function, void* stack, uint32_t stack_size, void* arg );
 
 
 /** Deletes a terminated thread
@@ -116,9 +134,6 @@ wiced_result_t wiced_rtos_delay_milliseconds( uint32_t milliseconds );
  * has terminated. If the processor is heavily loaded
  * with higher priority tasks, this thread may not wake until significantly
  * after the thread termination.
- * Causes the specified thread to wake from suspension. This will usually
- * cause an error or timeout in that thread, since the task it was waiting on
- * is not complete.
  *
  * @param thread : the handle of the other thread which will terminate
  *
@@ -152,6 +167,7 @@ wiced_result_t wiced_rtos_thread_force_awake( wiced_thread_t* thread );
  * @return    WICED_ERROR   : specified thread is not currently running
  */
 wiced_result_t wiced_rtos_is_current_thread( wiced_thread_t* thread );
+
 
 /** Checks the stack of the current thread
  *
@@ -211,7 +227,6 @@ wiced_result_t wiced_rtos_set_semaphore( wiced_semaphore_t* semaphore );
 wiced_result_t wiced_rtos_get_semaphore( wiced_semaphore_t* semaphore, uint32_t timeout_ms );
 
 
-
 /** De-initialise a semaphore
  *
  * Deletes a semaphore created with @ref wiced_rtos_init_semaphore
@@ -222,7 +237,6 @@ wiced_result_t wiced_rtos_get_semaphore( wiced_semaphore_t* semaphore, uint32_t 
  * @return    WICED_ERROR   : if an error occurred
  */
 wiced_result_t wiced_rtos_deinit_semaphore( wiced_semaphore_t* semaphore );
-
 
 /** @} */
 /*****************************************************************************/
@@ -235,7 +249,6 @@ wiced_result_t wiced_rtos_deinit_semaphore( wiced_semaphore_t* semaphore );
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises a mutex
  *
@@ -302,7 +315,6 @@ wiced_result_t wiced_rtos_deinit_mutex( wiced_mutex_t* mutex );
  *  @{
  */
 /*****************************************************************************/
-
 
 /** Initialises a queue
  *
@@ -397,7 +409,6 @@ wiced_result_t wiced_rtos_is_queue_full( wiced_queue_t* queue );
  */
 /*****************************************************************************/
 
-
 /** Initialises a RTOS timer
  *
  * Initialises a RTOS timer
@@ -442,19 +453,6 @@ wiced_result_t wiced_rtos_start_timer( wiced_timer_t* timer );
 wiced_result_t wiced_rtos_stop_timer( wiced_timer_t* timer );
 
 
-/** Reloads a RTOS timer that has expired
- *
- * This is usually called in the timer callback handler, to
- * reschedule the timer for the next period.
- *
- * @param timer    : a pointer to the timer handle to reload
- *
- * @return    WICED_SUCCESS : on success.
- * @return    WICED_ERROR   : if an error occurred
- */
-wiced_result_t wiced_rtos_reload_timer( wiced_timer_t* timer );
-
-
 /** De-initialise a RTOS timer
  *
  * Deletes a RTOS timer created with @ref wiced_rtos_init_timer
@@ -475,7 +473,6 @@ wiced_result_t wiced_rtos_deinit_timer( wiced_timer_t* timer );
  * @return    WICED_ERROR   : if not running
  */
 wiced_result_t wiced_rtos_is_timer_running( wiced_timer_t* timer );
-
 
 /** @} */
 /*****************************************************************************/
@@ -633,6 +630,7 @@ wiced_result_t wiced_rtos_set_event_flags( wiced_event_flags_t* event_flags, uin
 wiced_result_t wiced_rtos_deinit_event_flags( wiced_event_flags_t* event_flags );
 
 /** @} */
+
 
 #ifdef __cplusplus
 } /*extern "C" */

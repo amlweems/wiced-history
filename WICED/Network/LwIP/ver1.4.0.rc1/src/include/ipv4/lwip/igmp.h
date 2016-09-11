@@ -88,6 +88,7 @@ struct igmp_group {
 
 /*  Prototypes */
 void   igmp_init(void);
+void   igmp_deinit(void);
 err_t  igmp_start(struct netif *netif);
 err_t  igmp_stop(struct netif *netif);
 void   igmp_report_groups(struct netif *netif);

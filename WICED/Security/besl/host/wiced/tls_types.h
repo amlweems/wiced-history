@@ -9,8 +9,14 @@
  */
 #pragma once
 
+#include "besl_structures.h"
 #include "crypto_structures.h"
 #include <time.h>
+#include "cipher_suites.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *                      Macros
@@ -24,20 +30,10 @@
 #define SIZEOF_SESSION_MASTER    48
 
 #define  TLS_WAIT_FOREVER        (0xFFFFFFFF)
+#define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS        (10000)
 
 
 /* Supported ciphersuites */
-#define SSL_RSA_RC4_128_MD5              4
-#define SSL_RSA_RC4_128_SHA              5
-#define SSL_RSA_DES_168_SHA             10
-#define SSL_EDH_RSA_DES_168_SHA         22
-#define SSL_RSA_AES_128_SHA             47
-#define SSL_RSA_AES_256_SHA             53
-#define SSL_EDH_RSA_AES_256_SHA         57
-
-#define SSL_RSA_CAMELLIA_128_SHA    0x41
-#define SSL_RSA_CAMELLIA_256_SHA    0x84
-#define SSL_EDH_RSA_CAMELLIA_256_SHA    0x88
 
 
 /******************************************************
@@ -86,94 +82,6 @@ typedef enum
     SSL_HANDSHAKE_OVER
 } tls_states_t;
 
-typedef enum
-{
-    TLS_SUCCESS = 0,
-    TLS_TIMEOUT,
-    TLS_RECEIVE_FAILED,
-    TLS_ALERT_NO_CERTIFICATE,
-    TLS_ERROR_OUT_OF_MEMORY,
-    TLS_ERROR_FEATURE_UNAVAILABLE,
-    TLS_ERROR_BAD_INPUT_DATA,
-    TLS_ERROR_INVALID_MAC,
-    TLS_ERROR_INVALID_RECORD,
-    TLS_ERROR_INVALID_MODULUS_SIZE,
-    TLS_ERROR_UNKNOWN_CIPHER,
-    TLS_ERROR_NO_CIPHER_CHOSEN,
-    TLS_ERROR_NO_SESSION_FOUND,
-    TLS_ERROR_NO_CLIENT_CERTIFICATE,
-    TLS_ERROR_CERTIFICATE_TOO_LARGE,
-    TLS_ERROR_CERTIFICATE_REQUIRED,
-    TLS_ERROR_PRIVATE_KEY_REQUIRED,
-    TLS_ERROR_CA_CHAIN_REQUIRED,
-    TLS_ERROR_UNEXPECTED_MESSAGE,
-    TLS_ERROR_FATAL_ALERT_MESSAGE,
-    TLS_ERROR_PEER_VERIFY_FAILED,
-    TLS_ERROR_PEER_CLOSE_NOTIFY,
-    TLS_ERROR_BAD_HS_CLIENT_HELLO,
-    TLS_ERROR_BAD_HS_SERVER_HELLO,
-    TLS_ERROR_BAD_HS_CERTIFICATE,
-    TLS_ERROR_BAD_HS_CERTIFICATE_REQUEST,
-    TLS_ERROR_BAD_HS_SERVER_KEY_EXCHANGE,
-    TLS_ERROR_BAD_HS_SERVER_HELLO_DONE,
-    TLS_ERROR_BAD_HS_CLIENT_KEY_EXCHANGE,
-    TLS_ERROR_BAD_HS_CERTIFICATE_VERIFY,
-    TLS_ERROR_BAD_HS_CHANGE_CIPHER_SPEC,
-    TLS_ERROR_BAD_HS_FINISHED,
-    TLS_ERROR_ASN1_OUT_OF_DATA             = -0x0014,
-    TLS_ERROR_ASN1_UNEXPECTED_TAG          = -0x0016,
-    TLS_ERROR_ASN1_INVALID_LENGTH          = -0x0018,
-    TLS_ERROR_ASN1_LENGTH_MISMATCH         = -0x001A,
-    TLS_ERROR_ASN1_INVALID_DATA            = -0x001C,
-    TLS_ERROR_X509_FEATURE_UNAVAILABLE     = -0x0020,
-    TLS_ERROR_X509_CERT_INVALID_PEM        = -0x0040,
-    TLS_ERROR_X509_CERT_INVALID_FORMAT     = -0x0060,
-    TLS_ERROR_X509_CERT_INVALID_VERSION    = -0x0080,
-    TLS_ERROR_X509_CERT_INVALID_SERIAL     = -0x00A0,
-    TLS_ERROR_X509_CERT_INVALID_ALG        = -0x00C0,
-    TLS_ERROR_X509_CERT_INVALID_NAME       = -0x00E0,
-    TLS_ERROR_X509_CERT_INVALID_DATE       = -0x0100,
-    TLS_ERROR_X509_CERT_INVALID_PUBKEY     = -0x0120,
-    TLS_ERROR_X509_CERT_INVALID_SIGNATURE  = -0x0140,
-    TLS_ERROR_X509_CERT_INVALID_EXTENSIONS = -0x0160,
-    TLS_ERROR_X509_CERT_UNKNOWN_VERSION    = -0x0180,
-    TLS_ERROR_X509_CERT_UNKNOWN_SIG_ALG    = -0x01A0,
-    TLS_ERROR_X509_CERT_UNKNOWN_PK_ALG     = -0x01C0,
-    TLS_ERROR_X509_CERT_SIG_MISMATCH       = -0x01E0,
-    TLS_ERROR_X509_CERT_VERIFY_FAILED      = -0x0200,
-    TLS_ERROR_X509_KEY_INVALID_PEM         = -0x0220,
-    TLS_ERROR_X509_KEY_INVALID_VERSION     = -0x0240,
-    TLS_ERROR_X509_KEY_INVALID_FORMAT      = -0x0260,
-    TLS_ERROR_X509_KEY_INVALID_ENC_IV      = -0x0280,
-    TLS_ERROR_X509_KEY_UNKNOWN_ENC_ALG     = -0x02A0,
-    TLS_ERROR_X509_KEY_PASSWORD_REQUIRED   = -0x02C0,
-    TLS_ERROR_X509_KEY_PASSWORD_MISMATCH   = -0x02E0,
-    TLS_ERROR_X509_POINT_ERROR             = -0x0300,
-    TLS_ERROR_X509_VALUE_TO_LENGTH         = -0x0320,
-    TLS_ERROR_BASE64_BUFFER_TOO_SMALL      = -0x0010,
-    TLS_ERROR_BASE64_INVALID_CHARACTER     = -0x0012,
-    TLS_ERROR_MPI_FILE_IO_ERROR            = -0x0002,
-    TLS_ERROR_MPI_BAD_INPUT_DATA           = -0x0004,
-    TLS_ERROR_MPI_INVALID_CHARACTER        = -0x0006,
-    TLS_ERROR_MPI_BUFFER_TOO_SMALL         = -0x0008,
-    TLS_ERROR_MPI_NEGATIVE_VALUE           = -0x000A,
-    TLS_ERROR_MPI_DIVISION_BY_ZERO         = -0x000C,
-    TLS_ERROR_MPI_NOT_ACCEPTABLE           = -0x000E,
-    TLS_ERROR_DHM_BAD_INPUT_DATA           = -0x0480,
-    TLS_ERROR_DHM_READ_PARAMS_FAILED       = -0x0490,
-    TLS_ERROR_DHM_MAKE_PARAMS_FAILED       = -0x04A0,
-    TLS_ERROR_DHM_READ_PUBLIC_FAILED       = -0x04B0,
-    TLS_ERROR_DHM_MAKE_PUBLIC_FAILED       = -0x04C0,
-    TLS_ERROR_DHM_CALC_SECRET_FAILED       = -0x04D0,
-    TLS_ERROR_RSA_BAD_INPUT_DATA           = -0x0400,
-    TLS_ERROR_RSA_INVALID_PADDING          = -0x0410,
-    TLS_ERROR_RSA_KEY_GEN_FAILED           = -0x0420,
-    TLS_ERROR_RSA_KEY_CHECK_FAILED         = -0x0430,
-    TLS_ERROR_RSA_PUBLIC_FAILED            = -0x0440,
-    TLS_ERROR_RSA_PRIVATE_FAILED           = -0x0450,
-    TLS_ERROR_RSA_VERIFY_FAILED            = -0x0460,
-    TLS_ERROR_RSA_OUTPUT_TO_LARGE          = -0x0470,
-} tls_result_t;
 
 /******************************************************
  *                 Type Definitions
@@ -185,9 +93,16 @@ typedef x509_cert            wiced_tls_certificate_t;
 typedef rsa_context          wiced_tls_key_t;
 typedef uint32_t             tls_packet_t;
 
+typedef enum
+{
+    TLS_RECEIVE_PACKET_IF_NEEDED,
+    TLS_AVOID_NEW_RECORD_PACKET_RECEIVE,
+} tls_packet_receive_option_t;
+
 #pragma pack(1)
 
 /* Helper structure to create TLS record */
+
 typedef struct
 {
     uint8_t  type;
@@ -249,14 +164,41 @@ typedef struct _ssl_context ssl_context;
 struct _ssl_session
 {
     time_t start;                                 /*!< starting time      */
-    int32_t cipher;                                   /*!< chosen cipher      */
-    int32_t length;                                   /*!< session id length  */
+    const cipher_suite_t* cipher;                 /*!< chosen cipher      */
+    int32_t length;                               /*!< session id length  */
     unsigned char id[SIZEOF_SESSION_ID];          /*!< session identifier */
     unsigned char master[SIZEOF_SESSION_MASTER];  /*!< the master secret  */
     ssl_session *next;                            /*!< next session entry */
     void *appdata;                                /*!< application extension */
     int32_t age;
 };
+
+typedef union
+{
+        arc4_context arc4;
+        des3_context des3;
+        aes_context_t aes;
+        camellia_context camellia;
+        chacha_context_t chacha;
+        seed_context_t seed;
+} tls_cipher_context;
+
+
+
+/*
+ * This structure is used for extensions
+ */
+#define MAX_EXTENSIONS       8
+#define MAX_EXTENSION_DATA  32
+struct _ssl_extension
+{
+    uint16_t id;
+    uint16_t used;
+    int sz;
+    uint8_t data[MAX_EXTENSION_DATA+1];
+};
+
+typedef struct _ssl_extension ssl_extension;
 
 struct _ssl_context
 {
@@ -301,7 +243,6 @@ struct _ssl_context
     uint16_t      defragmentation_buffer_bytes_received;
 
     tls_packet_t* received_packet;
-//    uint16_t      received_packet_bytes_processed;
     uint16_t      received_packet_length;
     uint16_t      received_packet_bytes_skipped;
     tls_record_t* current_record;
@@ -331,27 +272,29 @@ struct _ssl_context
     x509_cert *own_cert;                /*!<  own X.509 certificate   */
     x509_cert *ca_chain;                /*!<  own trusted CA chain    */
     x509_cert *peer_cert;               /*!<  peer X.509 cert chain   */
-    char *peer_cn;                      /*!<  expected peer CN        */
+    const char *peer_cn;                /*!<  expected peer CN        */
 
-    int32_t endpoint;                       /*!<  0: client, 1: server    */
-    int32_t authmode;                       /*!<  verification mode       */
-    int32_t client_auth;                    /*!<  flag for client auth.   */
-    int32_t verify_result;                  /*!<  verification result     */
+    int32_t endpoint;                   /*!<  0: client, 1: server    */
+    int32_t authmode;                   /*!<  verification mode       */
+    int32_t client_auth;                /*!<  flag for client auth.   */
+    int32_t verify_result;              /*!<  verification result     */
 
     /*
      * Crypto layer
      */
-    dhm_context dhm_ctx;               /*!<  DHM key exchange        */
-    md5_context fin_md5;               /*!<  Finished MD5 checksum   */
+    dhm_context dhm_ctx;                /*!<  DHM key exchange        */
+    md5_context fin_md5;                /*!<  Finished MD5 checksum   */
     sha1_context fin_sha1;              /*!<  Finished SHA-1 checksum */
+    sha2_context fin_sha2;              /*!<  Finished SHA-2 checksum */
 
-    int32_t do_crypt;                       /*!<  en(de)cryption flag     */
-    const int32_t* ciphers;                       /*!<  allowed ciphersuites    */
-    int32_t pmslen;                         /*!<  premaster length        */
-    int32_t keylen;                         /*!<  symmetric key length    */
-    int32_t minlen;                         /*!<  min. ciphertext length  */
-    int32_t ivlen;                          /*!<  IV length               */
-    int32_t maclen;                         /*!<  MAC length              */
+    int32_t do_crypt;                   /*!<  en(de)cryption flag     */
+    const cipher_suite_t** ciphers;     /*!<  allowed ciphersuites    */
+    int32_t pmslen;                     /*!<  premaster length        */
+    int32_t keylen;                     /*!<  symmetric key length    */
+    int32_t minlen;                     /*!<  min. ciphertext length  */
+    int32_t ivlen;                      /*!<  IV length               */
+    int32_t maclen;                     /*!<  MAC length              */
+    int verifylen;                      /*!<  verify data length      */
 
     unsigned char randbytes[64];        /*!<  random bytes            */
     unsigned char premaster[256];       /*!<  premaster secret        */
@@ -362,15 +305,21 @@ struct _ssl_context
     unsigned char mac_enc[32];          /*!<  MAC (encryption)        */
     unsigned char mac_dec[32];          /*!<  MAC (decryption)        */
 
-    uint32_t ctx_enc[128];         /*!<  encryption context      */
-    uint32_t ctx_dec[128];         /*!<  decryption context      */
+    tls_cipher_context  ctx_enc;              /*!<  encryption context      */
+    tls_cipher_context  ctx_dec;              /*!<  decryption context      */
 
     /*
      * TLS extensions
      */
-    unsigned char *hostname;
-    uint32_t  hostname_len;
+    int extension_count;
+    ssl_extension extensions[MAX_EXTENSIONS];
 };
+
+
+typedef enum
+{
+    TLS_RESULT_LIST     (  TLS_      )  /* 5000 - 5999 */
+} tls_result_t;
 
 /******************************************************
  *                    Structures
@@ -383,3 +332,7 @@ struct _ssl_context
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

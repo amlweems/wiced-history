@@ -16,7 +16,7 @@
 #ifndef INCLUDED_WWD_MANAGEMENT_H
 #define INCLUDED_WWD_MANAGEMENT_H
 
-#include "wwd_constants.h"  /* for wiced_result_t and country codes */
+#include "wwd_constants.h"  /* for wwd_result_t and country codes */
 #ifdef __cplusplus
 extern "C"
 {
@@ -50,10 +50,10 @@ extern "C"
  *                        Look in @ref host_buffer_init for details
  *                        of the argument required for your particular buffering system
  *
- * @return WICED_SUCCESS if initialization is successful, WICED_ERROR otherwise
+ * @return WWD_SUCCESS if initialization is successful, Error code otherwise
  */
 
-wiced_result_t wiced_management_init( wiced_country_code_t country, void* buffer_interface_arg );
+wwd_result_t wwd_management_init( wiced_country_code_t country, /*@null@*/ void* buffer_interface_arg );
 
 /**
  * Turn on the Wi-Fi device
@@ -65,9 +65,9 @@ wiced_result_t wiced_management_init( wiced_country_code_t country, void* buffer
  * - Initialises the Wiced thread which arbitrates access
  *   to the SDIO/SPI bus
  *
- * @return WICED_SUCCESS if initialization is successful, WICED_ERROR otherwise
+ * @return WWD_SUCCESS if initialization is successful, Error code otherwise
  */
-wiced_result_t wiced_management_wifi_on( void );
+wwd_result_t wwd_management_wifi_on( void );
 
 /**
  * Turn off the Wi-Fi device
@@ -79,9 +79,9 @@ wiced_result_t wiced_management_wifi_on( void );
  * - De-Initialises the Wiced thread which arbitrates access
  *   to the SDIO/SPI bus
  *
- * @return WICED_SUCCESS if deinitialization is successful, WICED_ERROR otherwise
+ * @return WWD_SUCCESS if deinitialization is successful, Error code otherwise
  */
-wiced_result_t wiced_management_wifi_off( void );
+wwd_result_t wwd_management_wifi_off( void );
 
 /*@+exportlocal@*/
 

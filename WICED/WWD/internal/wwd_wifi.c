@@ -15,23 +15,24 @@
  *  Wi-Fi networks, joining Wi-Fi networks, getting the MAC address, etc
  *
  */
-#include "Platform/wwd_platform_interface.h"
+
+#include <string.h> /* For strlen, stricmp, memcpy. memset */
+#include <stddef.h>
 #include "wwd_management.h"
 #include "wwd_wifi.h"
-#include "Network/wwd_buffer_interface.h"
-#include "Network/wwd_network_constants.h"
-#include "internal/SDPCM.h"
 #include "wwd_events.h"
 #include "wwd_assert.h"
 #include "wwd_wlioctl.h"
-#include "internal/wwd_internal.h"
-#include "RTOS/wwd_rtos_interface.h"
-#include "wwd_bus_protocol.h"
-#include <string.h> /* For strlen, stricmp, memcpy. memset */
-#include <stddef.h>
-#include "internal/bcmendian.h"
-#include "internal/wwd_ap.h"
 #include "wwd_debug.h"
+#include "platform/wwd_platform_interface.h"
+#include "network/wwd_buffer_interface.h"
+#include "network/wwd_network_constants.h"
+#include "RTOS/wwd_rtos_interface.h"
+#include "internal/wwd_sdpcm.h"
+#include "internal/wwd_bcmendian.h"
+#include "internal/wwd_ap.h"
+#include "internal/wwd_internal.h"
+#include "wwd_bus_protocol.h"
 
 /******************************************************
  * @cond       Constants
@@ -49,17 +50,6 @@
 #define DOT11_MNG_DS_ID                        (3)
 #define WL_CHANSPEC_CHAN_MASK             (0x00ff)
 #define LEGACY_WL_BSS_INFO_VERSION           (107)   /** older version of wl_bss_info struct */
-#define WL_CHANSPEC_BAND_MASK             (0xf000)
-#define WL_CHANSPEC_BAND_5G               (0x1000)
-#define WL_CHANSPEC_BAND_2G               (0x2000)
-#define WL_CHANSPEC_CTL_SB_MASK           (0x0300)
-#define WL_CHANSPEC_CTL_SB_LOWER          (0x0100)
-#define WL_CHANSPEC_CTL_SB_UPPER          (0x0200)
-#define WL_CHANSPEC_CTL_SB_NONE           (0x0300)
-#define WL_CHANSPEC_BW_MASK               (0x0C00)
-#define WL_CHANSPEC_BW_10                 (0x0400)
-#define WL_CHANSPEC_BW_20                 (0x0800)
-#define WL_CHANSPEC_BW_40                 (0x0C00)
 
 #define WICED_CREDENTIAL_TEST_TIMEOUT     (1500)
 
@@ -89,7 +79,10 @@
 
 #define VALID_SECURITY_MASK    0x00FFFFFF
 
-#define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) { return WICED_ERROR; }
+#define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) {  wiced_assert("Allocation failed\n", 0 == 1); return WWD_BUFFER_ALLOC_FAIL; }
+#define CHECK_RETURN( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1); return check_res; } }
+#define RETURN_WITH_ASSERT( expr )  { wwd_result_t check_res = (expr); wiced_assert("Command failed\n", check_res == WWD_SUCCESS ); return check_res; }
+
 
 #define PACKET_FILTER_LIST_BUFFER_MAX_LEN ( WICED_LINK_MTU - sizeof(IOVAR_STR_PKT_FILTER_LIST) - IOCTL_OFFSET )
 
@@ -154,6 +147,7 @@ typedef struct
     wiced_mac_t mac_address;
 } client_rssi_t;
 
+
 #pragma pack()
 
 /******************************************************
@@ -163,12 +157,12 @@ typedef struct
 static wiced_scan_result_callback_t   scan_result_callback;
 static wiced_scan_result_t**          scan_result_ptr;
 
-uint32_t wiced_join_status;
-const wiced_event_num_t join_events[]  = { WLC_E_SET_SSID, WLC_E_LINK, WLC_E_AUTH, WLC_E_DEAUTH_IND, WLC_E_PSK_SUP, WLC_E_ROAM, WLC_E_NONE };
-static const wiced_event_num_t scan_events[]  = { WLC_E_ESCAN_RESULT, WLC_E_NONE };
+static uint32_t              wiced_join_status;
+const wwd_event_num_t        join_events[]  = { WLC_E_SET_SSID, WLC_E_LINK, WLC_E_AUTH, WLC_E_DEAUTH_IND, WLC_E_PSK_SUP, WLC_E_ROAM, WLC_E_NONE };
+static const wwd_event_num_t scan_events[]  = { WLC_E_ESCAN_RESULT, WLC_E_NONE };
 
 /* Note: monitor_mode_enabled variable is accessed by SDPCM */
-wiced_bool_t monitor_mode_enabled = WICED_FALSE;
+static wiced_bool_t wwd_sdpcm_monitor_mode_enabled = WICED_FALSE;
 
 /* Values are in 100's of Kbit/sec (1 = 100Kbit/s). Arranged as:
  * [Bit index]
@@ -215,19 +209,18 @@ static const uint16_t mcs_data_rate_lookup_table[32][2][2] =
     [31] = { {  2600,   2888},  {   5400,   6000} },
 };
 
-//static edcf_acparam_t ac_params[AC_COUNT];
-/* Note that the qos_map is accessed by SDPCM */
 uint8_t wwd_tos_map[8] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
 
 /******************************************************
  *             Static Function prototypes
  ******************************************************/
 
-static /*@null@*/ uint8_t*        wlu_parse_tlvs           ( /*@returned@*/ uint8_t* tlv_buf, uint32_t buflen, uint32_t key );
-static            wiced_bool_t    wlu_is_wpa_ie            ( uint8_t** wpaie, uint8_t** tlvs, uint32_t* tlvs_len );
-static /*@null@*/ void*           wiced_join_events_handler( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data );
-static            void*           scan_result_handler      ( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data );
-static            wiced_result_t  wiced_wifi_prepare_join  ( wiced_security_t security, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
+static /*@null@*/ uint8_t*        wlu_parse_tlvs                    ( /*@returned@*/ uint8_t* tlv_buf, uint32_t buflen, uint32_t key );
+static            wiced_bool_t    wlu_is_wpa_ie                     ( uint8_t** wpaie, uint8_t** tlvs, uint32_t* tlvs_len );
+static /*@null@*/ void*           wiced_join_events_handler         ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+static            void*           scan_result_handler               ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+static            wwd_result_t    wwd_wifi_prepare_join             ( wwd_interface_t interface, wiced_security_t security, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
+static            wwd_result_t    wwd_wifi_get_packet_filters_inner ( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list, wiced_bool_t enabled_list, uint32_t* count_out );
 
 /******************************************************
  *             Function definitions
@@ -237,20 +230,21 @@ static            wiced_result_t  wiced_wifi_prepare_join  ( wiced_security_t se
  * NOTE: search references of function wlu_get in wl/exe/wlu.c to find what format the returned IOCTL data is.
  */
 
-wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
-                                wiced_bss_type_t                     bss_type,
-                                const wiced_ssid_t*                  optional_ssid,
-                                const wiced_mac_t*                   optional_mac,
-                                /*@unique@*/ const uint16_t*         optional_channel_list,
-                                const wiced_scan_extended_params_t*  optional_extended_params,
-                                wiced_scan_result_callback_t         callback,
-                                wiced_scan_result_t**                result_ptr,
-                                void*                                user_data
-                              )
+wwd_result_t wwd_wifi_scan( wiced_scan_type_t                              scan_type,
+                            wiced_bss_type_t                               bss_type,
+                            /*@null@*/ const wiced_ssid_t*                 optional_ssid,
+                            /*@null@*/ const wiced_mac_t*                  optional_mac,
+                            /*@null@*/ /*@unique@*/ const uint16_t*        optional_channel_list,
+                            /*@null@*/ const wiced_scan_extended_params_t* optional_extended_params,
+                            wiced_scan_result_callback_t                   callback,
+                            wiced_scan_result_t**                          result_ptr,
+                            /*@null@*/ void*                               user_data,
+                            wwd_interface_t                                interface
+                          )
 {
     wiced_buffer_t     buffer;
     wl_escan_params_t* scan_params;
-    wiced_result_t     retval;
+    wwd_result_t     retval;
     uint16_t           param_size        = offsetof( wl_escan_params_t, params ) + WL_SCAN_PARAMS_FIXED_SIZE;
     uint16_t           channel_list_size = 0;
 
@@ -265,29 +259,26 @@ wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
         param_size = (uint16_t) ( param_size + channel_list_size * sizeof(uint16_t) );
     }
 
-    if ( WICED_SUCCESS != ( retval = wiced_management_set_event_handler( scan_events, scan_result_handler, user_data ) ) )
-    {
-        return retval;
-    }
+    CHECK_RETURN( wwd_management_set_event_handler( scan_events, scan_result_handler, user_data, interface ) );
 
     /* Allocate a buffer for the IOCTL message */
-    scan_params = (wl_escan_params_t*) wiced_get_iovar_buffer( &buffer, param_size, IOVAR_STR_ESCAN );
+    scan_params = (wl_escan_params_t*) wwd_sdpcm_get_iovar_buffer( &buffer, param_size, IOVAR_STR_ESCAN );
     CHECK_IOCTL_BUFFER( scan_params );
 
     /* Clear the scan parameters structure */
     memset( scan_params, 0, sizeof(wl_escan_params_t) );
 
     /* Fill in the appropriate details of the scan parameters structure */
-    scan_params->version = htod32(ESCAN_REQ_VERSION);
-    scan_params->action = htod16(WL_SCAN_ACTION_START);
+    scan_params->version          = htod32(ESCAN_REQ_VERSION);
+    scan_params->action           = htod16(WL_SCAN_ACTION_START);
     scan_params->params.scan_type = (int8_t) scan_type;
-    scan_params->params.bss_type = (int8_t) bss_type;
+    scan_params->params.bss_type  = (int8_t) bss_type;
 
     /* Fill out the SSID parameter if provided */
     if ( optional_ssid != NULL )
     {
-        scan_params->params.ssid.SSID_len = optional_ssid->len;
-        memcpy( scan_params->params.ssid.SSID, optional_ssid->val, scan_params->params.ssid.SSID_len );
+        scan_params->params.ssid.SSID_len = optional_ssid->length;
+        memcpy( scan_params->params.ssid.SSID, optional_ssid->value, scan_params->params.ssid.SSID_len );
     }
 
     /* Fill out the BSSID parameter if provided */
@@ -303,17 +294,17 @@ wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
     /* Fill out the extended parameters if provided */
     if ( optional_extended_params != NULL )
     {
-        scan_params->params.nprobes = optional_extended_params->number_of_probes_per_channel;
-        scan_params->params.active_time = optional_extended_params->scan_active_dwell_time_per_channel_ms;
+        scan_params->params.nprobes      = optional_extended_params->number_of_probes_per_channel;
+        scan_params->params.active_time  = optional_extended_params->scan_active_dwell_time_per_channel_ms;
         scan_params->params.passive_time = optional_extended_params->scan_passive_dwell_time_per_channel_ms;
-        scan_params->params.home_time = optional_extended_params->scan_home_channel_dwell_time_between_channels_ms;
+        scan_params->params.home_time    = optional_extended_params->scan_home_channel_dwell_time_between_channels_ms;
     }
     else
     {
-        scan_params->params.nprobes = (int32_t) -1;
-        scan_params->params.active_time = (int32_t) -1;
+        scan_params->params.nprobes      = (int32_t) -1;
+        scan_params->params.active_time  = (int32_t) -1;
         scan_params->params.passive_time = (int32_t) -1;
-        scan_params->params.home_time = (int32_t) -1;
+        scan_params->params.home_time    = (int32_t) -1;
     }
 
     /* Copy the channel list parameter if provided */
@@ -327,12 +318,35 @@ wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
     scan_result_ptr = result_ptr;
 
     /* Send the Incremental Scan IOVAR message - blocks until the response is received */
-    retval = wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
+    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface );
 
     /* Return the success of the IOCTL */
     return retval;
 }
 
+
+wwd_result_t wwd_wifi_abort_scan( void )
+{
+    wiced_buffer_t     buffer;
+    wl_escan_params_t* scan_params;
+    wwd_result_t       result;
+
+    /* Allocate a buffer for the IOCTL message */
+    scan_params = (wl_escan_params_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_escan_params_t), IOVAR_STR_ESCAN );
+    CHECK_IOCTL_BUFFER( scan_params );
+
+    /* Clear the scan parameters structure */
+    memset( scan_params, 0, sizeof(wl_escan_params_t) );
+
+    /* Fill in the appropriate details of the scan parameters structure */
+    scan_params->version = ESCAN_REQ_VERSION;
+    scan_params->action  = WL_SCAN_ACTION_ABORT;
+
+    /* Send the Scan IOVAR message to abort scan*/
+    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
+
+    return result;
+}
 
 /** Handles scan result events
  *
@@ -346,25 +360,32 @@ wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
  * @returns : handler_user_data parameter
  *
  */
-static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data )
+static void* scan_result_handler( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data )
 {
-    wiced_scan_result_t* record;
-    wl_escan_result_t*   eresult;
-    wl_bss_info_t*       bss_info;
-    uint16_t             chanspec;
-    uint8_t*             cp;
-    uint32_t             len;
-    uint8_t*             rsnie;
-    uint8_t*             wpaie;
-    uint8_t              rate_num;
-    uint8_t*             dsie;
-    uint8_t*             parse;
-    uint32_t             parse_len;
+    wiced_scan_result_t*  record;
+    wl_escan_result_t*    eresult;
+    wl_bss_info_t*        bss_info;
+    uint16_t              chanspec;
+    uint8_t*              cp;
+    uint32_t              len;
+    uint8_t*              rsnie;
+    uint8_t*              wpaie;
+    uint8_t               rate_num;
+    uint8_t*              dsie;
+    uint8_t*              parse;
+    uint32_t              parse_len;
     ht_capabilities_ie_t* ht_capabilities_ie;
 
     if ( event_header->status == WLC_E_STATUS_SUCCESS )
     {
-        scan_result_callback( NULL, handler_user_data );
+        scan_result_callback( NULL, handler_user_data, WICED_SCAN_COMPLETED_SUCCESSFULLY );
+        return handler_user_data;
+    }
+    else if ( ( event_header->status == WLC_E_STATUS_ABORT    ) ||
+              ( event_header->status == WLC_E_STATUS_NEWASSOC ) ||
+              ( event_header->status == WLC_E_STATUS_NEWSCAN  ) )
+    {
+        scan_result_callback( NULL, handler_user_data, WICED_SCAN_ABORTED );
         return handler_user_data;
     }
 
@@ -373,9 +394,9 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
         return handler_user_data;
     }
 
-    if (scan_result_ptr == NULL)
+    if ( scan_result_ptr == NULL )
     {
-        scan_result_callback( (wiced_scan_result_t**)event_data, handler_user_data );
+        scan_result_callback( (wiced_scan_result_t**)event_data, handler_user_data, WICED_SCAN_INCOMPLETE );
         return handler_user_data;
     }
 
@@ -383,12 +404,12 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
     eresult = (wl_escan_result_t*) event_data;
     bss_info = &eresult->bss_info[0];
 
-    wiced_assert( "More than one result returned by firmware", eresult->bss_count == 1 )
+    wiced_assert( "More than one result returned by firmware", eresult->bss_count == 1 );
 
     /* Copy the SSID into the output record structure */
-    record->SSID.len = bss_info->SSID_len;
-    memset( record->SSID.val, 0, (size_t) SSID_MAX_LEN );
-    memcpy( record->SSID.val, bss_info->SSID, record->SSID.len );
+    record->SSID.length = bss_info->SSID_len;
+    memset( record->SSID.value, 0, (size_t) SSID_MAX_LEN );
+    memcpy( record->SSID.value, bss_info->SSID, record->SSID.length );
 
     /* Copy the BSSID into the output record structure */
     memcpy( (void*) record->BSSID.octet, (const void*) bss_info->BSSID.octet, sizeof(wiced_mac_t) );
@@ -416,7 +437,7 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
     /* Determine the network security.
      * Some of this section has been copied from the standard broadcom host driver file wl/exe/wlu.c function wl_dump_wpa_rsn_ies
      */
-    cp = (uint8_t*) ( ( (uint8_t*) bss_info ) + dtoh16(bss_info->ie_offset) );
+    cp  = (uint8_t*) ( ( (uint8_t*) bss_info ) + dtoh16(bss_info->ie_offset) );
     len = dtoh32(bss_info->ie_length);
 
     /* Find an RSN IE (Robust-Security-Network Information-Element) */
@@ -425,7 +446,7 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
     /* Find a WPA IE */
     if (rsnie == NULL)
     {
-        parse = cp;
+        parse     = cp;
         parse_len = len;
         while ( ( wpaie = wlu_parse_tlvs( parse, parse_len, (uint32_t) DOT11_MNG_WPA_ID ) ) != 0 )
         {
@@ -474,6 +495,7 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
     else if ( wpaie != NULL)
     {
         uint16_t a;
+
         /* Check if it's AES or TKIP */
         record->security = WICED_SECURITY_WPA_TKIP_PSK;
         for ( a = 0; a < ( (wpa_ie_t*) wpaie )->unicast_count; ++a )
@@ -484,8 +506,8 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
             }
         }
     }
-    /* Check if AP is configured for WEP */
-    else if ( ( bss_info->capability & DOT11_CAP_PRIVACY ) != 0 ) /* else if the capabilities field indicates privacy, then security supports WEP */
+    /* Check if AP is configured for WEP, that is, if the capabilities field indicates privacy, then security supports WEP */
+    else if ( ( bss_info->capability & DOT11_CAP_PRIVACY ) != 0 )
     {
         record->security = WICED_SECURITY_WEP_PSK;
     }
@@ -519,23 +541,19 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
     }
 
     /* Get the channel */
-    chanspec = dtoh16( bss_info->chanspec );
+    chanspec        = dtoh16( bss_info->chanspec );
     record->channel = ( (uint8_t) ( chanspec & WL_CHANSPEC_CHAN_MASK ) );
 
     /* Old WLAN firmware reported off channel probe responses - parse the response to check the channel */
     dsie =  wlu_parse_tlvs( cp, len, (uint32_t) DOT11_MNG_DS_ID );
     if ( ( dsie != NULL ) && ( record->channel != dsie[2] ) )
     {
-        /* Received an off channel report - the RSSI will be
-         * wrong, so just set it to a magic value
-         */
-        record->channel = dsie[2];
+        /* Received an off channel report */
+        record->channel    = dsie[2];
         record->on_channel = WICED_FALSE;
     }
 
     /* Copy the band into the output record structure */
-    chanspec = dtoh16( bss_info->chanspec );
-
     if ( ( dtoh32(bss_info->version) != (uint32_t) LEGACY_WL_BSS_INFO_VERSION ) &&
          ( bss_info->n_cap != 0 ) )
     {
@@ -546,11 +564,11 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
         record->band = WICED_802_11_BAND_2_4GHZ;
     }
 
-    scan_result_callback( scan_result_ptr, handler_user_data );
+    scan_result_callback( scan_result_ptr, handler_user_data, WICED_SCAN_INCOMPLETE );
     if ( *scan_result_ptr == NULL )
     {
 #if 0
-        wiced_management_set_event_handler( scan_events, NULL, NULL );
+        wwd_management_set_event_handler( scan_events, NULL, NULL );
 #endif /* if 0 */
     }
 
@@ -558,136 +576,152 @@ static void* scan_result_handler( wiced_event_header_t* event_header, uint8_t* e
 }
 
 
-wiced_result_t wiced_wifi_join( const char* ssid, wiced_security_t auth_type, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore )
+wwd_result_t wwd_wifi_join( const wiced_ssid_t* ssid, wiced_security_t auth_type, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore )
 {
-    wiced_buffer_t buffer;
+    wiced_buffer_t        buffer;
     host_semaphore_type_t join_sema;
-    wiced_result_t result;
-    wlc_ssid_t* ssid_params;
+    wwd_result_t          result;
+    wlc_ssid_t*           ssid_params;
 
-    if ( strlen( ssid ) > (size_t) SSID_MAX_LEN )
+    if ( ssid->length > (size_t) SSID_MAX_LEN )
     {
-        WPRINT_WWD_DEBUG(("wiced_wifi_join: SSID too long\r\n"));
-        return WICED_BADSSIDLEN;
+        WPRINT_WWD_DEBUG(("wiced_wifi_join: SSID too long\n"));
+        return WWD_WLAN_BADSSIDLEN;
     }
+
+    /* Keep WLAN awake while joining */
+    WWD_WLAN_KEEP_AWAKE( );
+
+    if ( wwd_wifi_set_block_ack_window_size( WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    {
+        return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
+    }
+
     if ( semaphore == NULL )
     {
-        if ( WICED_SUCCESS != ( result = host_rtos_init_semaphore( &join_sema ) ) )
-        {
-            return result;
-        }
-        result = wiced_wifi_prepare_join( auth_type, security_key, key_length, &join_sema );
+        CHECK_RETURN( host_rtos_init_semaphore( &join_sema ) );
+
+        result = wwd_wifi_prepare_join( WWD_STA_INTERFACE, auth_type, security_key, key_length, &join_sema );
     }
     else
     {
-        result = wiced_wifi_prepare_join( auth_type, security_key, key_length, semaphore );
+        result = wwd_wifi_prepare_join( WWD_STA_INTERFACE, auth_type, security_key, key_length, semaphore );
     }
-    if ( result == WICED_SUCCESS )
+    if ( result == WWD_SUCCESS )
     {
         /* Join network */
-        ssid_params = (struct wlc_ssid *) wiced_get_ioctl_buffer( &buffer, sizeof(wlc_ssid_t) );
+        ssid_params = (struct wlc_ssid *) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wlc_ssid_t) );
         CHECK_IOCTL_BUFFER( ssid_params );
         memset( ssid_params, 0, sizeof(wlc_ssid_t) );
-        ssid_params->SSID_len = strlen( ssid );
-        memcpy( ssid_params->SSID, ssid, ssid_params->SSID_len );
-        result = wiced_send_ioctl( SDPCM_SET, WLC_SET_SSID, buffer, 0, SDPCM_STA_INTERFACE );
+        ssid_params->SSID_len = ssid->length;
+        memcpy( ssid_params->SSID, ssid->value, ssid_params->SSID_len );
+        result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_SSID, buffer, 0, WWD_STA_INTERFACE );
 
-        if ( result == WICED_SUCCESS && semaphore == NULL )
+        if ( result == WWD_SUCCESS && semaphore == NULL )
         {
             result = host_rtos_get_semaphore( &join_sema, DEFAULT_JOIN_TIMEOUT, WICED_FALSE );
-            wiced_assert( "Get semaphore failed", ( result == WICED_SUCCESS ) || ( result == WICED_TIMEOUT ) );
-            host_rtos_deinit_semaphore( &join_sema );
-            if ( wiced_wifi_is_ready_to_transceive( WICED_STA_INTERFACE ) != WICED_SUCCESS )
+            wiced_assert( "Get semaphore failed", ( result == WWD_SUCCESS ) || ( result == WWD_TIMEOUT ) );
+            if ( wwd_wifi_is_ready_to_transceive( WWD_STA_INTERFACE ) != WWD_SUCCESS )
             {
-                result = wiced_wifi_leave( );
-                wiced_assert( "Leave network failed", result == WICED_SUCCESS );
+                result = wwd_wifi_leave( WWD_STA_INTERFACE );
+                wiced_assert( "Leave network failed", result == WWD_SUCCESS );
             }
-            return wiced_wifi_is_ready_to_transceive( WICED_STA_INTERFACE );
+            result = wwd_wifi_is_ready_to_transceive( WWD_STA_INTERFACE );
         }
     }
     if ( semaphore == NULL )
     {
         host_rtos_deinit_semaphore( &join_sema );
     }
+
+    WWD_WLAN_LET_SLEEP( );
     return result;
 }
 
 
-wiced_result_t wiced_wifi_join_specific( const wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore )
+wwd_result_t wwd_wifi_join_specific( const wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore, wwd_interface_t interface )
 {
     wiced_buffer_t        buffer;
     host_semaphore_type_t join_semaphore;
-    wiced_result_t        result;
+    wwd_result_t          result;
     wl_join_params_t*     join_params;
+
+    /* Keep WLAN awake while joining */
+    WWD_WLAN_KEEP_AWAKE( );
+
+    if ( wwd_wifi_set_block_ack_window_size( WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    {
+        return WWD_SET_BLOCK_ACK_WINDOW_FAIL;
+    }
 
     if ( semaphore == NULL )
     {
-        result = host_rtos_init_semaphore( &join_semaphore );
-        if ( result != WICED_SUCCESS )
-        {
-            return result;
-        }
-        result = wiced_wifi_prepare_join( ap->security, security_key, key_length, &join_semaphore );
+        CHECK_RETURN( host_rtos_init_semaphore( &join_semaphore ) );
+
+        result = wwd_wifi_prepare_join( interface, ap->security, security_key, key_length, &join_semaphore );
     }
     else
     {
-        result = wiced_wifi_prepare_join( ap->security, security_key, key_length, semaphore );
+        result = wwd_wifi_prepare_join( interface, ap->security, security_key, key_length, semaphore );
     }
-    if ( result == WICED_SUCCESS )
+    if ( result == WWD_SUCCESS )
     {
         /* Check if soft AP is running, if so, move its current channel to the the destination AP */
-        if ( wiced_wifi_is_ready_to_transceive( WICED_AP_INTERFACE ) == WICED_SUCCESS )
+        if ( wwd_wifi_is_ready_to_transceive( WWD_AP_INTERFACE ) == WWD_SUCCESS )
         {
             uint32_t current_softap_channel = 0;
-            wwd_wifi_get_channel( WICED_AP_INTERFACE, &current_softap_channel );
+            wwd_wifi_get_channel( WWD_AP_INTERFACE, &current_softap_channel );
             if ( current_softap_channel != ap->channel )
             {
-                wwd_wifi_set_channel( WICED_AP_INTERFACE, ap->channel );
+                wwd_wifi_set_channel( WWD_AP_INTERFACE, ap->channel );
                 host_rtos_delay_milliseconds( 100 );
             }
         }
 
         /* Join network */
-        join_params = (wl_join_params_t*) wiced_get_ioctl_buffer( &buffer, sizeof(wl_join_params_t) );
+        join_params = (wl_join_params_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wl_join_params_t) );
         CHECK_IOCTL_BUFFER( join_params );
         memset( join_params, 0, sizeof(wl_join_params_t) );
 
-        join_params->ssid.SSID_len = ap->SSID.len;
-        memcpy( join_params->ssid.SSID, ap->SSID.val, join_params->ssid.SSID_len );
+        join_params->ssid.SSID_len = ap->SSID.length;
+        memcpy( join_params->ssid.SSID, ap->SSID.value, join_params->ssid.SSID_len );
         memcpy( &join_params->params.bssid, &ap->BSSID, sizeof(wiced_mac_t) );
+#ifdef CHIP_HAS_BSSID_CNT_IN_ASSOC_PARAMS
         join_params->params.bssid_cnt = 0;
+#endif /* ifdef CHIP_HAS_BSSID_CNT_IN_ASSOC_PARAMS */
         join_params->params.chanspec_num = (uint32_t) 1;
         join_params->params.chanspec_list[0] = (wl_chanspec_t) htod16((ap->channel | WL_CHANSPEC_BAND_2G | WL_CHANSPEC_BW_20 | WL_CHANSPEC_CTL_SB_NONE));
-        result = wiced_send_ioctl( SDPCM_SET, WLC_SET_SSID, buffer, 0, SDPCM_STA_INTERFACE );
+        result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_SSID, buffer, 0, interface );
 
-        if ( result == WICED_SUCCESS && semaphore == NULL )
+        if ( result == WWD_SUCCESS && semaphore == NULL )
         {
             host_rtos_get_semaphore( &join_semaphore, (uint32_t) DEFAULT_JOIN_TIMEOUT, WICED_FALSE );
-            host_rtos_deinit_semaphore( &join_semaphore );
-            if ( wiced_wifi_is_ready_to_transceive( WICED_STA_INTERFACE ) != WICED_SUCCESS )
+            if ( wwd_wifi_is_ready_to_transceive( interface ) != WWD_SUCCESS )
             {
-                wiced_wifi_leave( );
+                wwd_wifi_leave( WWD_STA_INTERFACE );
             }
-            return wiced_wifi_is_ready_to_transceive( WICED_STA_INTERFACE );
+            result = wwd_wifi_is_ready_to_transceive( interface );
         }
     }
     if ( semaphore == NULL )
     {
         host_rtos_deinit_semaphore( &join_semaphore );
     }
+
+    WWD_WLAN_LET_SLEEP( );
     return result;
 }
 
-static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore )
+static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_security_t auth_type, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore )
 {
     wiced_buffer_t buffer;
-    wiced_result_t retval;
-    uint16_t a;
-    uint32_t* wsec_setting;
-    uint32_t* data;
-    uint32_t* infra;
-    uint32_t* wpa_auth;
-    uint32_t* auth;
+    wwd_result_t   retval;
+    uint16_t       a;
+    uint32_t*      wsec_setting;
+    uint32_t*      data;
+    uint32_t*      infra;
+    uint32_t*      wpa_auth;
+    uint32_t*      auth;
 
     if ( ( ( ( key_length > (uint8_t) WSEC_MAX_PSK_LEN ) ||
              ( key_length < (uint8_t) WSEC_MIN_PSK_LEN ) ) &&
@@ -698,38 +732,37 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
              ( auth_type == WICED_SECURITY_WPA2_MIXED_PSK ) ) ) )
     {
 #if 0
-        WPRINT_WWD_DEBUG(("wiced_wifi_prepare_join: Security key invalid\r\n"));
+        WPRINT_WWD_DEBUG(("wiced_wifi_prepare_join: Security key invalid\n"));
 #endif /* if 0 */
-        return WICED_INVALID_KEY;
+        return WWD_INVALID_KEY;
+    }
+
+    if ( interface != WWD_STA_INTERFACE )
+    {
+        return WWD_INVALID_INTERFACE;
     }
 
     /* Clear the current join status */
     wiced_join_status = 0;
 
     /* Set Wireless Security Type */
-    wsec_setting = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    wsec_setting = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( wsec_setting );
     *wsec_setting = (uint32_t) ((auth_type&0xFF) & ~WPS_ENABLED);
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_WSEC, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set security type failed\r\n", retval == WICED_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC, buffer, 0, interface ) );
 
     /* Set supplicant variable */
-    data = wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA );
     CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) ( ( ( auth_type == WICED_SECURITY_WPA_TKIP_PSK ) ||
-                           ( auth_type == WICED_SECURITY_WPA_AES_PSK ) ||
-                           ( auth_type == WICED_SECURITY_WPA2_AES_PSK ) ||
-                           ( auth_type == WICED_SECURITY_WPA2_TKIP_PSK ) ||
-                           ( auth_type == WICED_SECURITY_WPA2_MIXED_PSK ) ) ? 1 : 0 );
-    retval = wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set supplicant failed\r\n", retval == WICED_SUCCESS );
+    *data = (uint32_t) ( ( ( ( auth_type & WPA_SECURITY )  != 0 ) ||
+                           ( ( auth_type & WPA2_SECURITY ) != 0 ) ) ? 1 : 0 );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
 
     /* Set the EAPOL version to whatever the AP is using (-1) */
-    data = wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA2_EAPVER );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA2_EAPVER );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)-1;
-    retval = wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set WPA2 EAP version failed\r\n", retval == WICED_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
 
     /* Send WPA Key */
     switch ( auth_type )
@@ -744,15 +777,14 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
         case WICED_SECURITY_WPA2_TKIP_PSK:
         case WICED_SECURITY_WPA2_MIXED_PSK:
         {
-            wsec_pmk_t* psk = wiced_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
+            wsec_pmk_t* psk = wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
             CHECK_IOCTL_BUFFER( psk );
             memset( psk, 0, sizeof(wsec_pmk_t) );
             memcpy( psk->key, security_key, key_length );
             psk->key_len = key_length;
             psk->flags = (uint16_t) WSEC_PASSPHRASE;
             host_rtos_delay_milliseconds(1); /* Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure */
-            retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_WSEC_PMK, buffer, 0, SDPCM_STA_INTERFACE );
-            wiced_assert("wiced_wifi_prepare_join: set WPA key failed\r\n", retval == WICED_SUCCESS );
+            CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC_PMK, buffer, 0, interface ) );
         }
             break;
 
@@ -761,7 +793,7 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
             for ( a = 0; a < key_length; a = (uint16_t) ( a + 2 + security_key[1] ) )
             {
                 const wiced_wep_key_t* in_key = (const wiced_wep_key_t*) &security_key[a];
-                wl_wsec_key_t* out_key = (wl_wsec_key_t*) wiced_get_ioctl_buffer( &buffer, sizeof(wl_wsec_key_t) );
+                wl_wsec_key_t* out_key = (wl_wsec_key_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wl_wsec_key_t) );
                 CHECK_IOCTL_BUFFER( out_key );
                 memset( out_key, 0, sizeof(wl_wsec_key_t) );
                 out_key->index = in_key->index;
@@ -783,8 +815,8 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
                         out_key->algo = (uint32_t) CRYPTO_ALGO_TKIP;
                         break;
                     default:
-                        host_buffer_release(buffer, WICED_NETWORK_TX);
-                        return WICED_INVALID_KEY;
+                        host_buffer_release(buffer, WWD_NETWORK_TX);
+                        return WWD_INVALID_KEY;
                 }
                 /* Set the first entry as primary key by default */
                 if ( a == 0 )
@@ -795,26 +827,24 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
                 out_key->len   = htod32(out_key->len);
                 out_key->algo  = htod32(out_key->algo);
                 out_key->flags = htod32(out_key->flags);
-                retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_KEY, buffer, NULL, SDPCM_STA_INTERFACE );
-                wiced_assert("wiced_wifi_prepare_join: set WEP key failed\r\n", retval == WICED_SUCCESS );
+                CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_KEY, buffer, NULL, interface ) );
             }
             break;
         case WICED_SECURITY_FORCE_32_BIT:
         case WICED_SECURITY_UNKNOWN:
         default:
-            wiced_assert("wiced_wifi_prepare_join: Unknown security type\r\n", 0 != 0 );
+            wiced_assert("wiced_wifi_prepare_join: Unknown security type\n", 0 != 0 );
             break;
     }
 
     /* Set infrastructure mode */
-    infra = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    infra = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( infra );
     *infra = (uint32_t) 1;
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_INFRA, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set infrastructure mode failed\r\n", retval == WICED_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_INFRA, buffer, 0, interface ) );
 
     /* Set authentication type */
-    auth = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    auth = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( auth );
     if ( auth_type == WICED_SECURITY_WEP_SHARED )
     {
@@ -824,11 +854,10 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
     {
         *auth = 0; /*  0 = Open System authentication */
     }
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_AUTH, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set auth type failed\r\n", retval == WICED_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_AUTH, buffer, 0, interface ) );
 
     /* Set WPA authentication mode */
-    wpa_auth = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    wpa_auth = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( wpa_auth );
 
     switch ( auth_type )
@@ -856,55 +885,47 @@ static wiced_result_t wiced_wifi_prepare_join( wiced_security_t auth_type, /*@un
         case WICED_SECURITY_UNKNOWN:
         case WICED_SECURITY_FORCE_32_BIT:
         default:
-            WPRINT_WWD_DEBUG(("Bad Security type\r\n"));
+            WPRINT_WWD_DEBUG(("Bad Security type\n"));
             *wpa_auth = WPA_AUTH_DISABLED;
             break;
     }
 
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_WPA_AUTH, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("wiced_wifi_prepare_join: set WPA auth mode failed\r\n", retval == WICED_SUCCESS );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WPA_AUTH, buffer, 0, interface ) );
 
-    retval = wiced_management_set_event_handler( join_events, wiced_join_events_handler, (void*) semaphore );
+    retval = wwd_management_set_event_handler( join_events, wiced_join_events_handler, (void*) semaphore, interface );
+    wiced_assert("Set Event handler failed\n", retval == WWD_SUCCESS );
 
     return retval;
 }
 
 
-wiced_result_t wiced_wifi_leave( void )
+wwd_result_t wwd_wifi_leave( wwd_interface_t interface )
 {
     wiced_buffer_t buffer;
-    wiced_result_t result;
 
-    if ( WICED_SUCCESS != ( result = wiced_management_set_event_handler( join_events, NULL, NULL ) ) )
-    {
-        return result;
-    }
+    CHECK_RETURN( wwd_management_set_event_handler( join_events, NULL, NULL, interface ) );
 
     /* Disassociate from AP */
-    if ( NULL == wiced_get_ioctl_buffer( &buffer, 0 ) )
-    {
-        return WICED_ERROR;
-    }
-    result = wiced_send_ioctl( SDPCM_SET, WLC_DISASSOC, buffer, 0, SDPCM_STA_INTERFACE );
-    if (result == WICED_SUCCESS)
-    {
-        wiced_join_status = 0;
-    }
-    return result;
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, 0 ) )
+
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_DISASSOC, buffer, 0, interface ) );
+
+    wiced_join_status = 0;
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_deauth_sta( const wiced_mac_t* mac, wiced_dot11_reason_code_t reason )
+wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reason_code_t reason )
 {
     wiced_buffer_t buffer;
-    wiced_result_t result;
+    wwd_result_t result;
     scb_val_t* scb_val;
 
-    scb_val = (scb_val_t *) wiced_get_ioctl_buffer( &buffer, sizeof(scb_val_t) );
+    scb_val = (scb_val_t *) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(scb_val_t) );
     CHECK_IOCTL_BUFFER( scb_val );
     memset((char *)scb_val, 0, sizeof(scb_val_t));
     memcpy((char *)&scb_val->ea, (char *) mac, sizeof(wiced_mac_t));
     scb_val->val = (uint32_t)reason;
-    result = wiced_send_ioctl( SDPCM_SET, WLC_SCB_DEAUTHENTICATE_FOR_REASON, buffer, 0, SDPCM_AP_INTERFACE );
+    result = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SCB_DEAUTHENTICATE_FOR_REASON, buffer, 0, WWD_AP_INTERFACE );
 
     return result;
 }
@@ -914,15 +935,14 @@ wiced_result_t wiced_wifi_deauth_sta( const wiced_mac_t* mac, wiced_dot11_reason
  *  indicating that the system has joined successfully.
  *  Wakes the thread which was doing the join, allowing it to resume.
  */
-static /*@null@*/ void* wiced_join_events_handler( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data )
+static /*@null@*/ void* wiced_join_events_handler( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data )
 {
     host_semaphore_type_t* semaphore = (host_semaphore_type_t*) handler_user_data;
     wiced_bool_t join_complete = WICED_FALSE;
-    /*@-noeffect@*/
-    UNUSED_PARAMETER(event_data);
-    /*@+noeffect@*/
 
-    if ( event_header->interface != (uint8_t) WICED_STA_INTERFACE )
+    UNUSED_PARAMETER(event_data);
+
+    if ( event_header->interface != (uint8_t) WWD_STA_INTERFACE )
     {
         return handler_user_data;
     }
@@ -957,8 +977,8 @@ static /*@null@*/ void* wiced_join_events_handler( wiced_event_header_t* event_h
             }
             else if ( event_header->status == WLC_E_STATUS_NO_NETWORKS )
             {
-//                wiced_join_status = JOIN_NO_NETWORKS;
-//                join_complete = WICED_TRUE;
+                /* wiced_join_status = JOIN_NO_NETWORKS; */
+                /* join_complete = WICED_TRUE; */
             }
             else
             {
@@ -975,7 +995,7 @@ static /*@null@*/ void* wiced_join_events_handler( wiced_event_header_t* event_h
             {
                 wiced_join_status &= ~JOIN_LINK_READY;
 #if 0
-                WPRINT_WWD_INFO(("%s link is down\r\n", (event_header->interface == WICED_STA_INTERFACE) ? "STA" : "AP"));
+                WPRINT_WWD_INFO(("%s link is down\n", (event_header->interface == WWD_STA_INTERFACE) ? "STA" : "AP"));
 #endif /* if 0 */
             }
             break;
@@ -996,12 +1016,139 @@ static /*@null@*/ void* wiced_join_events_handler( wiced_event_header_t* event_h
             }
             break;
 
+        /* Note - These are listed to keep gcc pedantic checking happy */
+        case WLC_E_NONE:
+        case WLC_E_JOIN:
+        case WLC_E_START:
+        case WLC_E_AUTH_IND:
+        case WLC_E_DEAUTH:
+        case WLC_E_ASSOC:
+        case WLC_E_ASSOC_IND:
+        case WLC_E_REASSOC:
+        case WLC_E_REASSOC_IND:
+        case WLC_E_DISASSOC:
+        case WLC_E_DISASSOC_IND:
+        case WLC_E_QUIET_START:
+        case WLC_E_QUIET_END:
+        case WLC_E_BEACON_RX:
+        case WLC_E_MIC_ERROR:
+        case WLC_E_NDIS_LINK:
+        case WLC_E_TXFAIL:
+        case WLC_E_PMKID_CACHE:
+        case WLC_E_RETROGRADE_TSF:
+        case WLC_E_PRUNE:
+        case WLC_E_AUTOAUTH:
+        case WLC_E_EAPOL_MSG:
+        case WLC_E_SCAN_COMPLETE:
+        case WLC_E_ADDTS_IND:
+        case WLC_E_DELTS_IND:
+        case WLC_E_BCNSENT_IND:
+        case WLC_E_BCNRX_MSG:
+        case WLC_E_BCNLOST_MSG:
+        case WLC_E_ROAM_PREP:
+        case WLC_E_PFN_NET_FOUND:
+        case WLC_E_PFN_NET_LOST:
+        case WLC_E_RESET_COMPLETE:
+        case WLC_E_JOIN_START:
+        case WLC_E_ROAM_START:
+        case WLC_E_ASSOC_START:
+        case WLC_E_IBSS_ASSOC:
+        case WLC_E_RADIO:
+        case WLC_E_PSM_WATCHDOG:
+        case WLC_E_CCX_ASSOC_START:
+        case WLC_E_CCX_ASSOC_ABORT:
+        case WLC_E_PROBREQ_MSG:
+        case WLC_E_SCAN_CONFIRM_IND:
+        case WLC_E_COUNTRY_CODE_CHANGED:
+        case WLC_E_EXCEEDED_MEDIUM_TIME:
+        case WLC_E_ICV_ERROR:
+        case WLC_E_UNICAST_DECODE_ERROR:
+        case WLC_E_MULTICAST_DECODE_ERROR:
+        case WLC_E_TRACE:
+        case WLC_E_BTA_HCI_EVENT:
+        case WLC_E_IF:
+        case WLC_E_P2P_DISC_LISTEN_COMPLETE:
+        case WLC_E_RSSI:
+        case WLC_E_PFN_SCAN_COMPLETE:
+        case WLC_E_EXTLOG_MSG:
+        case WLC_E_ACTION_FRAME:
+        case WLC_E_ACTION_FRAME_COMPLETE:
+        case WLC_E_PRE_ASSOC_IND:
+        case WLC_E_PRE_REASSOC_IND:
+        case WLC_E_CHANNEL_ADOPTED:
+        case WLC_E_AP_STARTED:
+        case WLC_E_DFS_AP_STOP:
+        case WLC_E_DFS_AP_RESUME:
+        case WLC_E_WAI_STA_EVENT:
+        case WLC_E_WAI_MSG:
+        case WLC_E_ESCAN_RESULT:
+        case WLC_E_ACTION_FRAME_OFF_CHAN_COMPLETE:
+        case WLC_E_PROBRESP_MSG:
+        case WLC_E_P2P_PROBREQ_MSG:
+        case WLC_E_DCS_REQUEST:
+        case WLC_E_FIFO_CREDIT_MAP:
+        case WLC_E_ACTION_FRAME_RX:
+        case WLC_E_WAKE_EVENT:
+        case WLC_E_RM_COMPLETE:
+        case WLC_E_HTSFSYNC:
+        case WLC_E_OVERLAY_REQ:
+        case WLC_E_CSA_COMPLETE_IND:
+        case WLC_E_EXCESS_PM_WAKE_EVENT:
+        case WLC_E_PFN_SCAN_NONE:
+        case WLC_E_PFN_SCAN_ALLGONE:
+        case WLC_E_GTK_PLUMBED:
+        case WLC_E_ASSOC_IND_NDIS:
+        case WLC_E_REASSOC_IND_NDIS:
+        case WLC_E_ASSOC_REQ_IE:
+        case WLC_E_ASSOC_RESP_IE:
+        case WLC_E_ASSOC_RECREATED:
+        case WLC_E_ACTION_FRAME_RX_NDIS:
+        case WLC_E_AUTH_REQ:
+        case WLC_E_TDLS_PEER_EVENT:
+        case WLC_E_SPEEDY_RECREATE_FAIL:
+        case WLC_E_NATIVE:
+        case WLC_E_PKTDELAY_IND:
+        case WLC_E_AWDL_AW:
+        case WLC_E_AWDL_ROLE:
+        case WLC_E_AWDL_EVENT:
+        case WLC_E_NIC_AF_TXS:
+        case WLC_E_NIC_NIC_REPORT:
+        case WLC_E_BEACON_FRAME_RX:
+        case WLC_E_SERVICE_FOUND:
+        case WLC_E_GAS_FRAGMENT_RX:
+        case WLC_E_GAS_COMPLETE:
+        case WLC_E_P2PO_ADD_DEVICE:
+        case WLC_E_P2PO_DEL_DEVICE:
+        case WLC_E_WNM_STA_SLEEP:
+        case WLC_E_TXFAIL_THRESH:
+        case WLC_E_PROXD:
+        case WLC_E_IBSS_COALESCE:
+        case WLC_E_AWDL_RX_PRB_RESP:
+        case WLC_E_AWDL_RX_ACT_FRAME:
+        case WLC_E_AWDL_WOWL_NULLPKT:
+        case WLC_E_AWDL_PHYCAL_STATUS:
+        case WLC_E_AWDL_OOB_AF_STATUS:
+        case WLC_E_AWDL_SCAN_STATUS:
+        case WLC_E_AWDL_AW_START:
+        case WLC_E_AWDL_AW_END:
+        case WLC_E_AWDL_AW_EXT:
+        case WLC_E_AWDL_PEER_CACHE_CONTROL:
+        case WLC_E_CSA_START_IND:
+        case WLC_E_CSA_DONE_IND:
+        case WLC_E_CSA_FAILURE_IND:
+        case WLC_E_CCA_CHAN_QUAL:
+        case WLC_E_BSSID:
+        case WLC_E_TX_STAT_ERROR:
+        case WLC_E_BCMC_CREDIT_SUPPORT:
+        case WLC_E_PSTA_PRIMARY_INTF_IND:
+        case WLC_E_LAST:
+        case WLC_E_FORCE_32_BIT:
         default:
-            wiced_assert( "Received event which was not registered\r\n", 0 != 0 );
+            wiced_assert( "Received event which was not registered\n", 0 != 0 );
             break;
     }
 
-    if ( wiced_wifi_is_ready_to_transceive( WICED_STA_INTERFACE ) == WICED_SUCCESS )
+    if ( wwd_wifi_is_ready_to_transceive( WWD_STA_INTERFACE ) == WWD_SUCCESS )
     {
         join_complete = WICED_TRUE;
     }
@@ -1021,159 +1168,151 @@ static /*@null@*/ void* wiced_join_events_handler( wiced_event_header_t* event_h
 }
 
 
-wiced_result_t wiced_wifi_get_mac_address( wiced_mac_t* mac )
+wwd_result_t wwd_wifi_get_mac_address( wiced_mac_t* mac, wwd_interface_t interface )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t result;
 
-    if ( NULL == wiced_get_iovar_buffer( &buffer, sizeof(wiced_mac_t), IOVAR_STR_CUR_ETHERADDR ) )
-    {
-        return WICED_ERROR;
-    }
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result == WICED_SUCCESS )
-    {
-        memcpy( mac, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
-    return result;
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t), IOVAR_STR_CUR_ETHERADDR ) );
+
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, interface ) );
+
+    memcpy( mac, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_set_mac_address( wiced_mac_t mac )
+wwd_result_t wwd_wifi_set_mac_address( wiced_mac_t mac )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, sizeof(wiced_mac_t), IOVAR_STR_CUR_ETHERADDR );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t), IOVAR_STR_CUR_ETHERADDR );
     CHECK_IOCTL_BUFFER( data );
     memcpy( data, &mac, sizeof(wiced_mac_t) );
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_is_ready_to_transceive( wiced_interface_t interface )
+wwd_result_t wwd_wifi_is_ready_to_transceive( wwd_interface_t interface )
 {
-    /* Handle Splint bug */ /*@-noeffect@*/ (void) wiced_wifi_ap_is_up; /*@+noeffect@*/
+#if 0
+    /* Handle Splint bug */ /*@-noeffect@*/ (void) wwd_wifi_ap_is_up; /*@+noeffect@*/
+#endif
 
     switch ( interface )
     {
-        case WICED_CONFIG_INTERFACE:
-        case WICED_AP_INTERFACE:
-            return ( wiced_wifi_ap_is_up == WICED_TRUE ) ? WICED_SUCCESS : WICED_ERROR;
+        case WWD_AP_INTERFACE:
+            return ( wwd_wifi_ap_is_up == WICED_TRUE ) ? WWD_SUCCESS : WWD_INTERFACE_NOT_UP;
 
-        case WICED_STA_INTERFACE:
+        case WWD_STA_INTERFACE:
             switch ( wiced_join_status )
             {
                 case JOIN_NO_NETWORKS:
-                    return WICED_NOTFOUND;
+                    return WWD_NETWORK_NOT_FOUND;
 
                 case JOIN_AUTHENTICATED | JOIN_LINK_READY | JOIN_SECURITY_COMPLETE | JOIN_COMPLETE:
-                    return WICED_SUCCESS;
+                    return WWD_SUCCESS;
 
                 case 0:
                 case JOIN_SECURITY_COMPLETE: /* For open/WEP */
-                    return WICED_NOT_AUTHENTICATED;
+                    return WWD_NOT_AUTHENTICATED;
 
                 case JOIN_AUTHENTICATED | JOIN_LINK_READY | JOIN_SECURITY_COMPLETE:
-                    return WICED_UNFINISHED;
+                    return WWD_JOIN_IN_PROGRESS;
 
                 case JOIN_AUTHENTICATED | JOIN_LINK_READY:
                 case JOIN_AUTHENTICATED | JOIN_LINK_READY | JOIN_COMPLETE:
-                    return WICED_NOT_KEYED;
+                    return WWD_NOT_KEYED;
 
                 default:
-                    return WICED_ERROR;
+                    return WWD_INVALID_JOIN_STATUS;
             }
             /* Disables Eclipse static analysis warning */
             /* No break needed due to returns in all case paths */
             /* no break */
         default:
-            return WICED_ERROR;
+            return WWD_UNKNOWN_INTERFACE;
     }
 }
 
 
-wiced_result_t wiced_wifi_enable_powersave_with_throughput( uint8_t return_to_sleep_delay_ms )
+wwd_result_t wwd_wifi_enable_powersave_with_throughput( uint8_t return_to_sleep_delay_ms )
 {
     wiced_buffer_t buffer;
     uint32_t* data;
 
     if( return_to_sleep_delay_ms > 100 )
     {
-        return WICED_BADARG;
+        return WWD_DELAY_TOO_LONG;
     }
 
     /* Set the maximum time to wait before going back to sleep */
-    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_PM2_SLEEP_RET );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_PM2_SLEEP_RET );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) ( return_to_sleep_delay_ms / 10 )* 10;
-    (void) wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
-    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, "pm_limit" );
+#ifdef CHIP_FIRMWARE_SUPPORTS_PM_LIMIT_IOVAR
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_PM_LIMIT );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) NULL_FRAMES_WITH_PM_SET_LIMIT;
-    (void) wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
+#endif /* ifdef CHIP_FIRMWARE_SUPPORTS_PM_LIMIT_IOVAR */
 
     /* set PM2 fast return to sleep powersave mode */
-    data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) PM2_POWERSAVE_MODE;
-    return wiced_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_enable_powersave( void )
+wwd_result_t wwd_wifi_enable_powersave( void )
 {
     wiced_buffer_t buffer;
     uint32_t* data;
 
     /* Set legacy powersave mode - PM1 */
-    data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) PM1_POWERSAVE_MODE;
-    return wiced_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_disable_powersave( void )
+wwd_result_t wwd_wifi_disable_powersave( void )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = NO_POWERSAVE_MODE;
-    return wiced_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, SDPCM_STA_INTERFACE );
+    return wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_PM, buffer, NULL, WWD_STA_INTERFACE );
 }
 
 
-wiced_result_t wiced_wifi_get_tx_power( uint8_t* dbm )
+wwd_result_t wwd_wifi_get_tx_power( uint8_t* dbm )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t     result;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_QTXPOWER );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_QTXPOWER );
     CHECK_IOCTL_BUFFER( data );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     *dbm = (uint8_t) ( *data / 4 );
-    host_buffer_release( response, WICED_NETWORK_RX );
-    return WICED_SUCCESS;
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_set_tx_power( uint8_t dbm )
+wwd_result_t wwd_wifi_set_tx_power( uint8_t dbm )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_QTXPOWER );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_QTXPOWER );
     CHECK_IOCTL_BUFFER( data );
     if ( dbm == (uint8_t) 0xFF )
     {
@@ -1183,233 +1322,193 @@ wiced_result_t wiced_wifi_set_tx_power( uint8_t dbm )
     {
         *data = (uint32_t) ( 4 * dbm );
     }
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit )
+wwd_result_t wwd_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit )
 {
-	uint32_t* data;
+    uint32_t* data;
     wiced_buffer_t buffer;
     uint8_t listen_interval_dtim;
-    wiced_result_t result;
 
     if (time_unit == WICED_LISTEN_INTERVAL_TIME_UNIT_DTIM)
     {
-    	listen_interval_dtim = listen_interval;
+        listen_interval_dtim = listen_interval;
     }
     else
     {
         /* If the wake interval measured in DTIMs is set to 0, the wake interval is measured in beacon periods */
-    	listen_interval_dtim = 0;
+        listen_interval_dtim = 0;
 
-    	/* The wake period is measured in beacon periods, set the value as required */
-		data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_BEACON );
-		CHECK_IOCTL_BUFFER( data );
-		*data = (uint32_t) listen_interval;
-		result = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
-		wiced_assert("Failed to set listen interval beacon\r\n", result == WICED_SUCCESS);
+        /* The wake period is measured in beacon periods, set the value as required */
+        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_BEACON );
+        CHECK_IOCTL_BUFFER( data );
+        *data = (uint32_t) listen_interval;
+        CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
     }
 
-	data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_DTIM );
-	CHECK_IOCTL_BUFFER( data );
-	*data = (uint32_t) listen_interval_dtim;
-    result = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
-    wiced_assert("Failed to set set listen interval dtim\r\n", result == WICED_SUCCESS);
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_DTIM );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) listen_interval_dtim;
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
-    result = wiced_wifi_set_listen_interval_assoc( (uint16_t)listen_interval );
+    return wwd_wifi_set_listen_interval_assoc( (uint16_t)listen_interval );
 
-    return result;
 }
 
 
-wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t listen_interval )
+wwd_result_t wwd_wifi_set_listen_interval_assoc( uint16_t listen_interval )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_ASSOC );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_LISTEN_INTERVAL_ASSOC );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) listen_interval;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* li )
+wwd_result_t wwd_wifi_get_listen_interval( wiced_listen_interval_t* li )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
     int*           data;
-    wiced_result_t ret;
 
-    data = (int*)wiced_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_BEACON );
+    data = (int*)wwd_sdpcm_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_BEACON );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 1 );
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if (ret == WICED_SUCCESS)
-    {
-        memcpy( (uint8_t *) &(li->beacon), (char *)host_buffer_get_current_piece_data_pointer( response ), 1 );
-        host_buffer_release(response, WICED_NETWORK_RX);
-    }
-    else
-    {
-        goto exit;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    data = (int*)wiced_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_DTIM );
+    memcpy( (uint8_t *) &(li->beacon), (char *)host_buffer_get_current_piece_data_pointer( response ), 1 );
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    data = (int*)wwd_sdpcm_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_DTIM );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 1 );
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if (ret == WICED_SUCCESS)
-    {
-        memcpy( (uint8_t *) &(li->dtim), (char *)host_buffer_get_current_piece_data_pointer( response ), 1 );
-        host_buffer_release(response, WICED_NETWORK_RX);
-    }
-    else
-    {
-        goto exit;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    data = (int*)wiced_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_ASSOC );
+    memcpy( (uint8_t *) &(li->dtim), (char *)host_buffer_get_current_piece_data_pointer( response ), 1 );
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    data = (int*)wwd_sdpcm_get_iovar_buffer( &buffer, 4, IOVAR_STR_LISTEN_INTERVAL_ASSOC );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 4 );
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if (ret == WICED_SUCCESS)
-    {
-        memcpy( (uint16_t *) &(li->assoc), (char *)host_buffer_get_current_piece_data_pointer( response ), 2 );
-        host_buffer_release(response, WICED_NETWORK_RX);
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    exit:
-        return ret;
+    memcpy( (uint16_t *) &(li->assoc), (char *)host_buffer_get_current_piece_data_pointer( response ), 2 );
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_set_ofdm_dutycycle( uint8_t duty_cycle_val )
+wwd_result_t wwd_wifi_set_ofdm_dutycycle( uint8_t duty_cycle_val )
+{
+    wiced_buffer_t buffer;
+    uint32_t*      data;
+    if( duty_cycle_val > 100 )
+    {
+        return WWD_INVALID_DUTY_CYCLE;
+    }
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_OFDM );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t)duty_cycle_val;
+
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
+}
+
+
+wwd_result_t wwd_wifi_set_cck_dutycycle( uint8_t duty_cycle_val )
 {
     wiced_buffer_t buffer;
     uint32_t* data;
     if( duty_cycle_val > 100 )
     {
-        return WICED_BADARG;
+        return WWD_INVALID_DUTY_CYCLE;
     }
-    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_OFDM );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_CCK );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)duty_cycle_val;
 
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_set_cck_dutycycle( uint8_t duty_cycle_val )
-{
-    wiced_buffer_t buffer;
-    uint32_t* data;
-    if( duty_cycle_val > 100 )
-    {
-        return WICED_BADARG;
-    }
-    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_CCK );
-    CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t)duty_cycle_val;
-
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
-}
-
-
-wiced_result_t wiced_wifi_get_ofdm_dutycycle( uint8_t* duty_cycle_value )
+wwd_result_t wwd_wifi_get_ofdm_dutycycle( uint8_t* duty_cycle_value )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t     result;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_OFDM );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_OFDM );
     CHECK_IOCTL_BUFFER( data );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     *duty_cycle_value = (uint8_t)*data;
-    host_buffer_release( response, WICED_NETWORK_RX );
+    host_buffer_release( response, WWD_NETWORK_RX );
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_get_cck_dutycycle( uint8_t* duty_cycle_value )
+wwd_result_t wwd_wifi_get_cck_dutycycle( uint8_t* duty_cycle_value )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t     result;
 
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_CCK );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_DUTY_CYCLE_CCK );
     CHECK_IOCTL_BUFFER( data );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
     *duty_cycle_value = (uint8_t)*data;
-    host_buffer_release( response, WICED_NETWORK_RX );
+    host_buffer_release( response, WWD_NETWORK_RX );
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_get_pmk( char* psk, uint8_t psk_length, char* pmk )
+wwd_result_t wwd_wifi_get_pmk( const char* psk, uint8_t psk_length, char* pmk )
 {
     wsec_pmk_t*    psk_ioctl;
     wiced_buffer_t buffer;
     wiced_buffer_t response;
+    wsec_pmk_t*    psk_info;
 
-    psk_ioctl = ( wsec_pmk_t* )wiced_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
+    psk_ioctl = ( wsec_pmk_t* )wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
+    CHECK_IOCTL_BUFFER( psk_ioctl );
+
     memcpy( psk_ioctl->key, psk, psk_length );
     psk_ioctl->key[psk_length] = 0;
     psk_ioctl->key_len      = psk_length;
     psk_ioctl->flags        = 0;
 
-    if ( wiced_send_ioctl( SDPCM_GET, WLC_GET_WSEC_PMK, buffer, &response, SDPCM_STA_INTERFACE ) == WICED_SUCCESS )
-    {
-        wsec_pmk_t* psk_info = (wsec_pmk_t*) host_buffer_get_current_piece_data_pointer( response );
-        if ( psk_info->key_len == WSEC_MAX_PSK_LEN )
-        {
-            memcpy( pmk, psk_info->key, psk_info->key_len );
-            host_buffer_release( response, WICED_NETWORK_RX );
-            return WICED_SUCCESS;
-        }
-        else
-        {
-            host_buffer_release( response, WICED_NETWORK_RX );
-            return WICED_ERROR;
-        }
-    }
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_WSEC_PMK, buffer, &response, WWD_STA_INTERFACE ) );
 
-    return WICED_ERROR;
+    psk_info = (wsec_pmk_t*) host_buffer_get_current_piece_data_pointer( response );
+    if ( psk_info->key_len != WSEC_MAX_PSK_LEN )
+    {
+        host_buffer_release( response, WWD_NETWORK_RX );
+        return WWD_PMK_WRONG_LENGTH;
+    }
+    memcpy( pmk, psk_info->key, psk_info->key_len );
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_register_multicast_address( wiced_mac_t* mac )
+wwd_result_t wwd_wifi_register_multicast_address( const wiced_mac_t* mac )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
     uint16_t a;
-    wiced_result_t result;
     mcast_list_t* orig_mcast_list;
     mcast_list_t* new_mcast_list;
 
     /* Get the current multicast list */
-    CHECK_IOCTL_BUFFER( wiced_get_iovar_buffer( &buffer, sizeof(uint32_t) + MAX_SUPPORTED_MCAST_ENTRIES * sizeof(wiced_mac_t), IOVAR_STR_MCAST_LIST ) );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t) + MAX_SUPPORTED_MCAST_ENTRIES * sizeof(wiced_mac_t), IOVAR_STR_MCAST_LIST ) );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
     /* Verify address is not currently registered */
     orig_mcast_list = (mcast_list_t*) host_buffer_get_current_piece_data_pointer( response );
@@ -1419,44 +1518,39 @@ wiced_result_t wiced_wifi_register_multicast_address( wiced_mac_t* mac )
         if ( 0 == memcmp( mac, &orig_mcast_list->macs[a], sizeof(wiced_mac_t) ) )
         {
             /* A matching address has been found so we can stop now. */
-            host_buffer_release( response, WICED_NETWORK_RX );
-            return WICED_SUCCESS;
+            host_buffer_release( response, WWD_NETWORK_RX );
+            return WWD_SUCCESS;
         }
     }
 
     /* Add the provided address to the list and write the new multicast list */
-    new_mcast_list = (mcast_list_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) ( sizeof(uint32_t) + ( orig_mcast_list->entry_count + 1 ) * sizeof(wiced_mac_t) ), IOVAR_STR_MCAST_LIST );
+    new_mcast_list = (mcast_list_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) ( sizeof(uint32_t) + ( orig_mcast_list->entry_count + 1 ) * sizeof(wiced_mac_t) ), IOVAR_STR_MCAST_LIST );
     CHECK_IOCTL_BUFFER( new_mcast_list );
     new_mcast_list->entry_count = orig_mcast_list->entry_count;
     memcpy( new_mcast_list->macs, orig_mcast_list->macs, orig_mcast_list->entry_count * sizeof(wiced_mac_t) );
-    host_buffer_release( response, WICED_NETWORK_RX );
+    host_buffer_release( response, WWD_NETWORK_RX );
     memcpy( &new_mcast_list->macs[new_mcast_list->entry_count], mac, sizeof(wiced_mac_t) );
     ++new_mcast_list->entry_count;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_unregister_multicast_address( wiced_mac_t* mac )
+wwd_result_t wwd_wifi_unregister_multicast_address( const wiced_mac_t* mac )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
     uint16_t a;
-    wiced_result_t result;
     mcast_list_t* orig_mcast_list;
 
     /* Get the current multicast list */
-    CHECK_IOCTL_BUFFER( wiced_get_iovar_buffer( &buffer, sizeof(uint32_t) + MAX_SUPPORTED_MCAST_ENTRIES * sizeof(wiced_mac_t), IOVAR_STR_MCAST_LIST ) );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t) + MAX_SUPPORTED_MCAST_ENTRIES * sizeof(wiced_mac_t), IOVAR_STR_MCAST_LIST ) );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
     /* Find the address, assuming it is part of the list */
     orig_mcast_list = (mcast_list_t*) host_buffer_get_current_piece_data_pointer( response );
     if ( orig_mcast_list->entry_count != 0 )
     {
-        mcast_list_t* new_mcast_list = (mcast_list_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) ( sizeof(uint32_t) + ( orig_mcast_list->entry_count - 1 ) * sizeof(wiced_mac_t) ), IOVAR_STR_MCAST_LIST );
+        mcast_list_t* new_mcast_list = (mcast_list_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) ( sizeof(uint32_t) + ( orig_mcast_list->entry_count - 1 ) * sizeof(wiced_mac_t) ), IOVAR_STR_MCAST_LIST );
         CHECK_IOCTL_BUFFER( new_mcast_list );
         for ( a = 0; a < orig_mcast_list->entry_count; ++a )
         {
@@ -1469,176 +1563,171 @@ wiced_result_t wiced_wifi_unregister_multicast_address( wiced_mac_t* mac )
                 memcpy( &new_mcast_list->macs[a], &orig_mcast_list->macs[a + 1], ( size_t )( orig_mcast_list->entry_count - a - 1 ) * sizeof(wiced_mac_t) );
 
                 new_mcast_list->entry_count = orig_mcast_list->entry_count - 1;
-                host_buffer_release( response, WICED_NETWORK_RX );
-                return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+                host_buffer_release( response, WWD_NETWORK_RX );
+                RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
             }
         }
         /* There was something in the list, but the request MAC wasn't there */
-        host_buffer_release( buffer, WICED_NETWORK_TX );
+        host_buffer_release( buffer, WWD_NETWORK_TX );
     }
     /* If we get here than the address wasn't in the list or the list was empty */
-    host_buffer_release( response, WICED_NETWORK_RX );
-    return WICED_SUCCESS;
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_get_rssi( int32_t* rssi )
+wwd_result_t wwd_wifi_get_rssi( int32_t* rssi )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t result;
 
-    CHECK_IOCTL_BUFFER( wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 ) );
-    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_RSSI, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result == WICED_SUCCESS )
-    {
-        memcpy( rssi, host_buffer_get_current_piece_data_pointer( response ), sizeof(int32_t) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
-    return result;
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 ) );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RSSI, buffer, &response, WWD_STA_INTERFACE ) );
+
+    memcpy( rssi, host_buffer_get_current_piece_data_pointer( response ), sizeof(int32_t) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_get_ap_client_rssi( int32_t* rssi, wiced_mac_t* client_mac_addr  )
+wwd_result_t wwd_wifi_get_ap_client_rssi( int32_t* rssi, const wiced_mac_t* client_mac_addr  )
 {
-    wiced_result_t result;
     client_rssi_t* client_rssi;
     wiced_buffer_t buffer;
     wiced_buffer_t response;
 
     /* WLAN expects buffer size to be 4-byte aligned */
-    client_rssi = (client_rssi_t*) wiced_get_ioctl_buffer( &buffer, ROUND_UP( sizeof(client_rssi_t), sizeof(uint32_t)) );
-	CHECK_IOCTL_BUFFER( client_rssi );
+    client_rssi = (client_rssi_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, ROUND_UP( sizeof(client_rssi_t), sizeof(uint32_t)) );
+    CHECK_IOCTL_BUFFER( client_rssi );
 
-	memcpy(&client_rssi->mac_address, client_mac_addr, sizeof(wiced_mac_t));
+    memcpy(&client_rssi->mac_address, client_mac_addr, sizeof(wiced_mac_t));
     client_rssi->value = 0;
 
-    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_RSSI, buffer, &response, SDPCM_AP_INTERFACE );
-    if ( result == WICED_SUCCESS )
-    {
-        memcpy( rssi, host_buffer_get_current_piece_data_pointer( response ), sizeof(int32_t) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-        return WICED_SUCCESS;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RSSI, buffer, &response, WWD_AP_INTERFACE ) );
 
-    return result;
+    memcpy( rssi, host_buffer_get_current_piece_data_pointer( response ), sizeof(int32_t) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t wiced_wifi_select_antenna( wiced_antenna_t antenna )
+wwd_result_t wwd_wifi_select_antenna( wiced_antenna_t antenna )
 {
     wiced_buffer_t buffer;
-    wiced_result_t retval;
     uint32_t* data;
 
-    data = wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) antenna;
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_TXANT, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("Failed to set TX antenna\r\n", retval == WICED_SUCCESS);
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_TXANT, buffer, 0, WWD_STA_INTERFACE ) );
 
-    data = wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) antenna;
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_ANTDIV, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("Failed to set RX antenna\r\n", retval == WICED_SUCCESS);
-
-    return retval;
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_ANTDIV, buffer, 0, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_set_roam_trigger( int32_t trigger_level )
+wwd_result_t wwd_wifi_set_roam_trigger( int32_t trigger_level )
 {
-    wiced_result_t retval;
     wiced_buffer_t buffer;
-    uint32_t* data = wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    uint32_t* data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)trigger_level;
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_ROAM_TRIGGER, buffer, 0, SDPCM_STA_INTERFACE );
-    wiced_assert("Failed to set roam trigger\r\n", retval == WICED_SUCCESS);
-    return retval;
+
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_ROAM_TRIGGER, buffer, 0, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_send_action_frame(wl_action_frame_t* action_frame)
+wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable )
 {
     wiced_buffer_t buffer;
-    wl_action_frame_t* frame;
-    uint32_t* a = (uint32_t*)wiced_get_iovar_buffer(&buffer, sizeof(wl_action_frame_t)+4, "bsscfg:"IOVAR_STR_ACTION_FRAME);
-    CHECK_IOCTL_BUFFER( a );
-    *a = 1;
-    frame = (wl_action_frame_t*)(a+1);
-    memcpy(frame, action_frame, sizeof(wl_action_frame_t));
-    return wiced_send_iovar(SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE);
+
+    uint32_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_ROAM_OFF );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t)disable;
+    RETURN_WITH_ASSERT(  wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-wiced_result_t wiced_wifi_get_acparams_sta( edcf_acparam_t *acp )
+wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame )
+{
+    wiced_buffer_t buffer;
+    wiced_action_frame_t* frame;
+    uint32_t* a = (uint32_t*)wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_action_frame_t)+4, IOVAR_STR_BSSCFG_ACTION_FRAME );
+    CHECK_IOCTL_BUFFER( a );
+    *a = 1;
+    frame = (wiced_action_frame_t*)(a+1);
+    memcpy(frame, action_frame, sizeof(wiced_action_frame_t));
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
+}
+
+
+wwd_result_t wwd_wifi_get_acparams_sta( edcf_acparam_t *acp )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t ret;
 
-    int* data = (int*)wiced_get_iovar_buffer( &buffer, 64, IOVAR_STR_AC_PARAMS_STA );
+    int* data = (int*)wwd_sdpcm_get_iovar_buffer( &buffer, 64, IOVAR_STR_AC_PARAMS_STA );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 64 );
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if (ret == WICED_SUCCESS)
-    {
-        memcpy( (char *)acp, (char *)host_buffer_get_current_piece_data_pointer( response ), ( sizeof( edcf_acparam_t ) * 4 ) );
-        host_buffer_release(response, WICED_NETWORK_RX);
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    return ret;
+    memcpy( (char *)acp, (char *)host_buffer_get_current_piece_data_pointer( response ), ( sizeof( edcf_acparam_t ) * 4 ) );
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_enable_monitor_mode( void )
+wwd_result_t wwd_wifi_enable_monitor_mode( void )
 {
     wiced_buffer_t buffer;
     uint32_t*      data;
 
     /* Enable allmulti mode */
-    data = wiced_get_iovar_buffer(&buffer, 4, "allmulti");
+    data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
+    CHECK_IOCTL_BUFFER( data );
     *data = 1;
-    if (wiced_send_iovar(SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE) != WICED_SUCCESS)
-    {
-        return WICED_ERROR;
-    }
+
+    CHECK_RETURN( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Enable monitor mode */
-    data = wiced_get_ioctl_buffer(&buffer, 4);
+    data = wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
+    CHECK_IOCTL_BUFFER( data );
     *data = 1;
-    if (wiced_send_ioctl(SDPCM_SET, WLC_SET_MONITOR, buffer, NULL, SDPCM_STA_INTERFACE) != WICED_SUCCESS)
-    {
-        return WICED_ERROR;
-    }
 
-    monitor_mode_enabled = WICED_TRUE;
-    return WICED_SUCCESS;
+    CHECK_RETURN( wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_SET_MONITOR, buffer, NULL, WWD_STA_INTERFACE) );
+
+    wwd_sdpcm_monitor_mode_enabled = WICED_TRUE;
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_disable_monitor_mode( void )
+wwd_result_t wwd_wifi_disable_monitor_mode( void )
 {
     wiced_buffer_t buffer;
     uint32_t*      data;
 
     /* Disable allmulti mode */
-    data = wiced_get_iovar_buffer(&buffer, 4, "allmulti");
+    data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
+    CHECK_IOCTL_BUFFER( data );
     *data = 0;
-    if (wiced_send_iovar(SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE) != WICED_SUCCESS)
-    {
-        return WICED_ERROR;
-    }
+
+    CHECK_RETURN( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Disable monitor mode */
-    data = wiced_get_ioctl_buffer(&buffer, 4);
+    data = wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
+    CHECK_IOCTL_BUFFER( data );
     *data = 0;
-    if (wiced_send_ioctl(SDPCM_SET, WLC_SET_MONITOR, buffer, NULL, SDPCM_STA_INTERFACE) != WICED_SUCCESS)
-    {
-        return WICED_ERROR;
-    }
 
-    monitor_mode_enabled = WICED_FALSE;
-    return WICED_SUCCESS;
+    CHECK_RETURN( wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_SET_MONITOR, buffer, NULL, WWD_STA_INTERFACE) );
+
+    wwd_sdpcm_monitor_mode_enabled = WICED_FALSE;
+    return WWD_SUCCESS;
+}
+
+wiced_bool_t wwd_wifi_monitor_mode_is_enabled( void )
+{
+    return wwd_sdpcm_monitor_mode_enabled;
 }
 
 /******************************************************
@@ -1650,25 +1739,22 @@ wiced_result_t wiced_wifi_disable_monitor_mode( void )
  * @param interface
  * @return
  */
-wiced_result_t wiced_wifi_set_down(wiced_interface_t interface)
+wwd_result_t wwd_wifi_set_down( wwd_interface_t interface )
 {
     wiced_buffer_t buffer;
-    wiced_result_t retval;
-    /*@-noeffect@*/
+
     UNUSED_PARAMETER( interface );
-    /*@+noeffect@*/
 
     /* Send DOWN command */
-    (void) wiced_get_ioctl_buffer( &buffer, 0 );
-    retval = wiced_send_ioctl( SDPCM_SET, WLC_DOWN, buffer, 0, SDPCM_STA_INTERFACE );
-    return retval;
+    CHECK_IOCTL_BUFFER(  wwd_sdpcm_get_ioctl_buffer( &buffer, 0 ) )
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_DOWN, buffer, 0, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_manage_custom_ie( wiced_interface_t interface, wiced_custom_ie_action_t action, /*@unique@*/ uint8_t* oui, uint8_t subtype, void* data, uint16_t length, uint16_t which_packets)
+wwd_result_t wwd_wifi_manage_custom_ie( wwd_interface_t interface, wiced_custom_ie_action_t action, /*@unique@*/ const uint8_t* oui, uint8_t subtype, const void* data, uint16_t length, uint16_t which_packets)
 {
     wiced_buffer_t buffer;
     vndr_ie_setbuf_t* ie_setbuf;
-    uint32_t* a = (uint32_t*)wiced_get_iovar_buffer(&buffer, (uint16_t)(sizeof(vndr_ie_setbuf_t) + length + 4), "bsscfg:" IOVAR_STR_VENDOR_IE);
+    uint32_t* a = (uint32_t*)wwd_sdpcm_get_iovar_buffer(&buffer, (uint16_t)(sizeof(vndr_ie_setbuf_t) + length + 4), IOVAR_STR_BSSCFG_VENDOR_IE );
     CHECK_IOCTL_BUFFER( a );
     *a = interface;
     ie_setbuf = (vndr_ie_setbuf_t*)(a+1);
@@ -1699,11 +1785,11 @@ wiced_result_t wiced_wifi_manage_custom_ie( wiced_interface_t interface, wiced_c
 
     memcpy(&ie_setbuf->vndr_ie_buffer.vndr_ie_list[0].vndr_ie_data.data[1], data, length);
 
-    return wiced_send_iovar(SDPCM_SET, buffer, NULL, (sdpcm_interface_t) WICED_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
 
-void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority )
+void wwd_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority )
 {
     int aci;
     int aifsn;
@@ -1719,21 +1805,21 @@ void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority )
         aifsn  = acp->ACI & EDCF_AIFSN_MASK;
         ecwmin = acp->ECW & EDCF_ECWMIN_MASK;
         ecwmax = (acp->ECW & EDCF_ECWMAX_MASK) >> EDCF_ECWMAX_SHIFT;
-        ranking_basis[aci] = aifsn + ecwmin + ecwmax; // Default AC_VO will be the littlest ranking value
-        *p = 1; // Initialise priority starting at 1
+        ranking_basis[aci] = aifsn + ecwmin + ecwmax; /* Default AC_VO will be the littlest ranking value */
+        *p = 1; /* Initialise priority starting at 1 */
     }
 
     p = priority;
 
-    // Primitive ranking method which works for AC priority swapping when values for cwmin, cwmax and aifsn are varied
-    for (aci = 0; aci < AC_COUNT; aci++, p++) // Compare each ACI against each other ACI
+    /* Primitive ranking method which works for AC priority swapping when values for cwmin, cwmax and aifsn are varied */
+    for (aci = 0; aci < AC_COUNT; aci++, p++) /* Compare each ACI against each other ACI */
     {
         int i = 0;
         for (i = 0; i < AC_COUNT; i++)
         {
             if ( i != aci )
             {
-                // Smaller ranking value has higher priority, so increment priority for each ACI which has a higher ranking value
+                /* Smaller ranking value has higher priority, so increment priority for each ACI which has a higher ranking value */
                 if (ranking_basis[aci] < ranking_basis[i])
                 {
                     *p = *p + 1;
@@ -1744,85 +1830,36 @@ void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority )
 }
 
 
-wiced_result_t wiced_wifi_update_tos_map( void )
+int wwd_wifi_get_available_tos( wiced_qos_access_category_t ac, const edcf_acparam_t *acp )
 {
-    edcf_acparam_t ac_params[AC_COUNT];
-    const wiced_qos_access_category_t tos_to_ac_map[8] = { WMM_AC_BE, WMM_AC_BK, WMM_AC_BK, WMM_AC_BE, WMM_AC_VI, WMM_AC_VI, WMM_AC_VO, WMM_AC_VO };
-    wiced_qos_access_category_t ac;
-    wiced_bool_t admission_control_mandatory[AC_COUNT];
-    int i, j;
+    int tos = -1;
+    static const wiced_qos_access_category_t ac_values[] = { WMM_AC_VO, WMM_AC_VI, WMM_AC_BE, WMM_AC_BK }; /* Highest to lowest priority */
+    static const int start_idx[] = { 2, 3, 1, 0 }; /* Starting index in the order the AC parameters come in: WMM_AC_BE, WMM_AC_BK, WMM_AC_VI, WMM_AC_VO */
+    static const wiced_ip_header_tos_t tos_values[] = { TOS_VO7, TOS_VI, TOS_BE, TOS_BK }; /* Highest to lowest priority */
+    int i;
 
-    if ( wiced_wifi_get_acparams_sta( ac_params ) != WICED_SUCCESS )
+    if ( acp != NULL )
     {
-        return WICED_ERROR;
-    }
-
-    /* For each access category, record whether admission control is necessary or not */
-    for (i = 0; i < AC_COUNT; i++)
-    {
-        j = (ac_params[i].ACI & EDCF_ACI_MASK) >> EDCF_ACI_SHIFT; // Determine which access category (in case they're out of order)
-        if ( ( ac_params[i].ACI & EDCF_ACM_MASK ) == 0 )
+        /* For the given AC look up the highest AC available which does not require admission control and map it to a TOS value */
+        for ( i = start_idx[ac]; i < AC_COUNT; i++ )
         {
-            admission_control_mandatory[j] = WICED_FALSE;
-        }
-        else
-        {
-            admission_control_mandatory[j] = WICED_TRUE;
-        }
-    }
-
-    /* For each type of service value look up the Access Category that is mapped to this type of service and update the TOS map
-     * with what the AP actually allows, if necessary */
-    for (i = 0; i < 8; i++ )
-    {
-        ac = tos_to_ac_map[i];
-        if ( admission_control_mandatory[ac] == WICED_FALSE ) /* No need to re-map to lower priority */
-        {
-            wwd_tos_map[i] = (uint8_t)i;
-        }
-        else
-        {
-            if ( ac == WMM_AC_VO )
+            if ( ( acp[ac_values[i]].ACI & EDCF_ACM_MASK ) == 0 )
             {
-                if ( admission_control_mandatory[WMM_AC_VI] == WICED_FALSE )
-                {
-                    wwd_tos_map[i] = WMM_AC_VI;
-                }
-                else if ( admission_control_mandatory[WMM_AC_BE] == WICED_FALSE )
-                {
-                    wwd_tos_map[i] = WMM_AC_BE;
-                }
-                else
-                {
-                    wwd_tos_map[i] = WMM_AC_BK;
-                }
-            }
-            else if ( ac == WMM_AC_VI )
-            {
-                if ( admission_control_mandatory[WMM_AC_BE] == WICED_FALSE )
-                {
-                    wwd_tos_map[i] = WMM_AC_BE;
-                }
-                else
-                {
-                    wwd_tos_map[i] = WMM_AC_BK;
-                }
-            }
-            else /* Case for best effort and background is the same since we are going to send at lowest priority anyway */
-            {
-                wwd_tos_map[i] = WMM_AC_BK;
+                tos = tos_values[i];
+                break;
             }
         }
     }
 
-    return WICED_SUCCESS;
+    return tos;
 }
 
 
-void print_ac_params( const edcf_acparam_t *acp, int *priority )
+void wwd_wifi_edcf_ac_params_print( const wiced_edcf_ac_param_t *acp, const int *priority )
 {
-    int acm;
-    int aci, aifsn, ecwmin, ecwmax, txop;
+#ifdef WPRINT_ENABLE_WWD_DEBUG
+    int aci;
+    int acm, aifsn, ecwmin, ecwmax, txop;
     static const char ac_names[AC_COUNT][6] = {"AC_BE", "AC_BK", "AC_VI", "AC_VO"};
 
     if ( acp != NULL )
@@ -1831,19 +1868,19 @@ void print_ac_params( const edcf_acparam_t *acp, int *priority )
         {
             if (((acp->ACI & EDCF_ACI_MASK) >> EDCF_ACI_SHIFT) != aci)
             {
-                printf("Warning: AC params out of order\n");
+                WPRINT_WWD_ERROR(("Warning: AC params out of order\n"));
             }
             acm = (acp->ACI & EDCF_ACM_MASK) ? 1 : 0;
             aifsn = acp->ACI & EDCF_AIFSN_MASK;
             ecwmin = acp->ECW & EDCF_ECWMIN_MASK;
             ecwmax = (acp->ECW & EDCF_ECWMAX_MASK) >> EDCF_ECWMAX_SHIFT;
             txop = (uint16_t)acp->TXOP;
-            printf("%s: raw: ACI 0x%x ECW 0x%x TXOP 0x%x\r\n", ac_names[aci], acp->ACI, acp->ECW, txop);
-            printf("       dec: aci %d acm %d aifsn %d " "ecwmin %d ecwmax %d txop 0x%x\r\n", aci, acm, aifsn, ecwmin, ecwmax, txop);
+            WPRINT_WWD_DEBUG(("%s: raw: ACI 0x%x ECW 0x%x TXOP 0x%x\n", ac_names[aci], acp->ACI, acp->ECW, txop));
+            WPRINT_WWD_DEBUG(("       dec: aci %d acm %d aifsn %d " "ecwmin %d ecwmax %d txop 0x%x\n", aci, acm, aifsn, ecwmin, ecwmax, txop) );
                 /* CWmin = 2^(ECWmin) - 1 */
                 /* CWmax = 2^(ECWmax) - 1 */
                 /* TXOP = number of 32 us units */
-            printf("       eff: CWmin %d CWmax %d TXop %dusec\r\n", EDCF_ECW2CW(ecwmin), EDCF_ECW2CW(ecwmax), EDCF_TXOP2USEC(txop));
+            WPRINT_WWD_DEBUG(("       eff: CWmin %d CWmax %d TXop %dusec\n", EDCF_ECW2CW(ecwmin), EDCF_ECW2CW(ecwmax), EDCF_TXOP2USEC(txop)));
         }
     }
 
@@ -1851,248 +1888,293 @@ void print_ac_params( const edcf_acparam_t *acp, int *priority )
     {
         for (aci = 0; aci < AC_COUNT; aci++, priority++)
         {
-            printf("%s: ACI %d Priority %d\r\n", ac_names[aci], aci, *priority);
+            WPRINT_WWD_DEBUG(("%s: ACI %d Priority %d\n", ac_names[aci], aci, *priority));
         }
     }
+#else /* ifdef WPRINT_ENABLE_WWD_DEBUG */
+    UNUSED_PARAMETER( acp );
+    UNUSED_PARAMETER( priority );
+#endif /* ifdef WPRINT_ENABLE_WWD_DEBUG */
 }
 
 
-wiced_result_t wiced_wifi_get_channel( uint32_t* channel)
+wwd_result_t wwd_wifi_get_channel( wwd_interface_t interface, uint32_t* channel )
 {
-    return wwd_wifi_get_channel(WICED_STA_INTERFACE, channel);
+    wiced_buffer_t  buffer;
+    wiced_buffer_t  response;
+    channel_info_t* channel_info;
+
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(channel_info_t) ) );
+
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_CHANNEL, buffer, &response, interface ) );
+
+    channel_info = (channel_info_t*) host_buffer_get_current_piece_data_pointer( response );
+    *channel = (uint32_t)channel_info->hw_channel;
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wwd_wifi_get_channel( wiced_interface_t interface, uint32_t* channel )
-{
-    wiced_buffer_t buffer;
-    wiced_buffer_t response;
-    wiced_result_t result;
-
-    wiced_get_ioctl_buffer( &buffer, sizeof(channel_info_t) );
-    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_CHANNEL, buffer, &response, (sdpcm_interface_t)interface );
-    if ( result == WICED_SUCCESS )
-    {
-        channel_info_t* channel_info = (channel_info_t*) host_buffer_get_current_piece_data_pointer( response );
-        *channel = (uint32_t) channel_info->hw_channel;
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
-    return result;
-}
-
-wiced_result_t wiced_wifi_set_channel( uint32_t channel)
-{
-    return wwd_wifi_set_channel(WICED_STA_INTERFACE, channel);
-}
-
-wiced_result_t wwd_wifi_set_channel( wiced_interface_t interface, uint32_t channel )
+wwd_result_t wwd_wifi_set_channel( wwd_interface_t interface, uint32_t channel )
 {
     wiced_buffer_t    buffer;
-    wiced_result_t    result;
     uint32_t*         data;
     wl_chan_switch_t* chan_switch;
 
     switch ( interface )
     {
-        case WICED_STA_INTERFACE:
-            data = wiced_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+        case WWD_STA_INTERFACE:
+            data = wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+            CHECK_IOCTL_BUFFER( data );
             *data = channel;
-            result = wiced_send_ioctl( SDPCM_GET, WLC_SET_CHANNEL, buffer, NULL, SDPCM_STA_INTERFACE );
+            CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_SET_CHANNEL, buffer, NULL, WWD_STA_INTERFACE ) );
             break;
 
-        case WICED_AP_INTERFACE:
-        case WICED_CONFIG_INTERFACE:
-            chan_switch = (wl_chan_switch_t*)wiced_get_iovar_buffer( &buffer, sizeof(wl_chan_switch_t), "csa" );
+        case WWD_AP_INTERFACE:
+            chan_switch = (wl_chan_switch_t*)wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_chan_switch_t), IOVAR_STR_CSA );
+            CHECK_IOCTL_BUFFER( chan_switch );
             chan_switch->chspec = (wl_chanspec_t)(WL_CHANSPEC_BAND_2G | WL_CHANSPEC_BW_20 | WL_CHANSPEC_CTL_SB_NONE | channel);
             chan_switch->count  = 1;
             chan_switch->mode   = 1;
             chan_switch->reg    = 0;
-            result = wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_AP_INTERFACE );
+            CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_AP_INTERFACE ) );
             break;
 
         default:
-            result = WICED_BADARG;
+            return WWD_UNKNOWN_INTERFACE;
     }
 
-    return result;
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_get_counters( wiced_interface_t interface, wl_cnt_v6_t* counters )
+wwd_result_t wwd_wifi_get_counters( wwd_interface_t interface, wiced_counters_t* counters )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
+    wiced_counters_t* received_counters;
 
-    wiced_get_iovar_buffer( &buffer, sizeof(wl_cnt_v6_t), IOVAR_STR_COUNTERS );
-    if ( wiced_send_iovar( SDPCM_GET, buffer, &response, (sdpcm_interface_t)interface ) == WICED_SUCCESS )
-    {
-        wl_cnt_v6_t* received_counters = (wl_cnt_v6_t*) host_buffer_get_current_piece_data_pointer( response );
-        memcpy(counters, received_counters, sizeof(wl_cnt_v6_t));
-        host_buffer_release( response, WICED_NETWORK_RX );
-        return WICED_SUCCESS;
-    }
-    else
-    {
-        return WICED_ERROR;
-    }
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_counters_t), IOVAR_STR_COUNTERS ) );
 
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, interface ) );
+
+    received_counters = (wiced_counters_t*) host_buffer_get_current_piece_data_pointer( response );
+    memcpy(counters, received_counters, sizeof(wiced_counters_t));
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode )
+wwd_result_t wwd_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*)wiced_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_MODE );
+    uint32_t* data = (uint32_t*)wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_MODE );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)mode;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_add_packet_filter( uint8_t filter_id, const wiced_packet_filter_settings_t* settings )
+wwd_result_t wwd_wifi_add_packet_filter( const wiced_packet_filter_t* settings )
 {
     wl_pkt_filter_t* packet_filter;
     wiced_buffer_t   buffer;
-    uint32_t         buffer_length = ( 2 * (uint32_t)settings->pattern_list[0].mask_size ) + WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN;
+    uint32_t         buffer_length = ( 2 * (uint32_t)settings->mask_size ) + WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN;
 
-    /* Pattern list currently isn't supported */
-    if ( settings->pattern_count > 1 )
-    {
-        return WICED_UNSUPPORTED;
-    }
-
-    packet_filter = (wl_pkt_filter_t*) wiced_get_iovar_buffer( &buffer, (uint16_t)buffer_length , IOVAR_STR_PKT_FILTER_ADD );
+    packet_filter = (wl_pkt_filter_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t)buffer_length , IOVAR_STR_PKT_FILTER_ADD );
     CHECK_IOCTL_BUFFER( packet_filter );
 
     /* Copy filter entries */
-    packet_filter->id                   = filter_id;
+    packet_filter->id                   = settings->id;
     packet_filter->type                 = 0;
     packet_filter->negate_match         = settings->rule;
-    packet_filter->u.pattern.offset     = (uint32_t)settings->pattern_list[0].offset;
-    packet_filter->u.pattern.size_bytes = settings->pattern_list[0].mask_size;
+    packet_filter->u.pattern.offset     = (uint32_t)settings->offset;
+    packet_filter->u.pattern.size_bytes = settings->mask_size;
 
     /* Copy mask */
-    memcpy( packet_filter->u.pattern.mask_and_pattern, settings->pattern_list[0].mask, settings->pattern_list[0].mask_size );
+    memcpy( packet_filter->u.pattern.mask_and_pattern, settings->mask, settings->mask_size );
 
     /* Copy filter pattern */
-    memcpy( packet_filter->u.pattern.mask_and_pattern + settings->pattern_list[0].mask_size, settings->pattern_list[0].pattern, settings->pattern_list[0].mask_size );
+    memcpy( packet_filter->u.pattern.mask_and_pattern + settings->mask_size, settings->pattern, settings->mask_size );
 
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_remove_packet_filter( uint8_t filter_id )
+wwd_result_t wwd_wifi_remove_packet_filter( uint8_t filter_id )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = (uint32_t*)wiced_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_DELETE );
+    uint32_t* data = (uint32_t*)wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_DELETE );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)filter_id;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_enable_packet_filter( uint8_t filter_id )
+wwd_result_t wwd_wifi_enable_packet_filter( uint8_t filter_id )
 {
-    return wiced_wifi_toggle_packet_filter( filter_id, WICED_TRUE );
+    return wwd_wifi_toggle_packet_filter( filter_id, WICED_TRUE );
 }
 
-wiced_result_t wiced_wifi_disable_packet_filter( uint8_t filter_id )
+wwd_result_t wwd_wifi_disable_packet_filter( uint8_t filter_id )
 {
-    return wiced_wifi_toggle_packet_filter( filter_id, WICED_FALSE );
+    return wwd_wifi_toggle_packet_filter( filter_id, WICED_FALSE );
 }
 
-wiced_result_t wiced_wifi_toggle_packet_filter( uint8_t filter_id, wiced_bool_t enable )
+wwd_result_t wwd_wifi_toggle_packet_filter( uint8_t filter_id, wiced_bool_t enable )
 {
     wiced_buffer_t buffer;
 
-    wl_pkt_filter_enable_t* data = wiced_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_PKT_FILTER_ENABLE );
+    wl_pkt_filter_enable_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_PKT_FILTER_ENABLE );
     CHECK_IOCTL_BUFFER( data );
     data->id     = (uint32_t)filter_id;
     data->enable = (uint32_t)enable;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_get_packet_filter_stats( uint8_t filter_id, wiced_packet_filter_stats_t* stats )
+wwd_result_t wwd_wifi_get_packet_filter_stats( uint8_t filter_id, wiced_packet_filter_stats_t* stats )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t ret;
 
-    uint32_t* data = (uint32_t*)wiced_get_iovar_buffer( &buffer, sizeof(uint32_t) + sizeof(wiced_packet_filter_stats_t), IOVAR_STR_PKT_FILTER_STATS );
+    uint32_t* data = (uint32_t*)wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t) + sizeof(wiced_packet_filter_stats_t), IOVAR_STR_PKT_FILTER_STATS );
     CHECK_IOCTL_BUFFER( data );
 
     memset( data, 0, sizeof(uint32_t) + sizeof(wiced_packet_filter_stats_t) );
     *data = (uint32_t)filter_id;
 
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    if ( ret == WICED_SUCCESS )
-    {
-        memcpy( (char *)stats, (char *)host_buffer_get_current_piece_data_pointer( response ), ( sizeof(wiced_packet_filter_stats_t) ) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
+    memcpy( (char *)stats, (char *)host_buffer_get_current_piece_data_pointer( response ), ( sizeof(wiced_packet_filter_stats_t) ) );
+    host_buffer_release( response, WWD_NETWORK_RX );
 
-    return ret;
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_clear_packet_filter_stats( uint32_t filter_id )
+wwd_result_t wwd_wifi_clear_packet_filter_stats( uint32_t filter_id )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = wiced_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_CLEAR_STATS );
+    uint32_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_CLEAR_STATS );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)filter_id;
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_get_enabled_packet_filter_list( uint32_t* count, wiced_packet_filter_t** list )
+
+wwd_result_t wwd_wifi_get_packet_filters( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list,  uint32_t* count_out )
 {
-    return wiced_wifi_get_packet_filter_list( count, list, WICED_TRUE );
+    wiced_bool_t          enabled_list;
+
+    *count_out = 0;
+
+    for ( enabled_list = WICED_FALSE; enabled_list <= WICED_TRUE; enabled_list++ )
+    {
+        uint32_t num_returned = 0;
+        wwd_result_t retval;
+        retval = wwd_wifi_get_packet_filters_inner(  max_count, offset, list, enabled_list, &num_returned );
+        list += num_returned;
+        offset = MAX( offset - num_returned, 0 );
+        max_count = MAX( max_count - num_returned, 0 );
+        *count_out += num_returned;
+        CHECK_RETURN( retval );
+    }
+
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_get_disabled_packet_filter_list( uint32_t* count, wiced_packet_filter_t** list )
-{
-    return wiced_wifi_get_packet_filter_list( count, list, WICED_FALSE );
-}
 
-wiced_result_t wiced_wifi_get_packet_filter_list( uint32_t* count, wiced_packet_filter_t** list, wiced_bool_t enabled_list )
+static wwd_result_t wwd_wifi_get_packet_filters_inner( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list, wiced_bool_t enabled_list, uint32_t* count_out )
 {
-    wiced_buffer_t buffer;
-    wiced_buffer_t response;
-    wiced_result_t result;
-    uint32_t*      data;
+    wiced_buffer_t        buffer;
+    wiced_buffer_t        response;
+    uint32_t*             data;
+    wl_pkt_filter_list_t* filter_list;
+    uint32_t              filter_ptr;
+    uint32_t              i;
 
-    data = wiced_get_iovar_buffer( &buffer, PACKET_FILTER_LIST_BUFFER_MAX_LEN, IOVAR_STR_PKT_FILTER_LIST );
+    wwd_result_t retval = WWD_SUCCESS;
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, PACKET_FILTER_LIST_BUFFER_MAX_LEN, IOVAR_STR_PKT_FILTER_LIST );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)enabled_list;
 
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    if ( result == WICED_SUCCESS )
+    filter_list  = (wl_pkt_filter_list_t*)host_buffer_get_current_piece_data_pointer( response );
+    filter_ptr   = (uint32_t)filter_list->filter;
+
+    *count_out = 0;
+
+    for ( i = offset; i < filter_list->num; i++ )
     {
-        wl_pkt_filter_list_t* filter_list  = (wl_pkt_filter_list_t*)host_buffer_get_current_piece_data_pointer( response );
-        uint32_t              filter_ptr   = (uint32_t)filter_list->filter;
-        uint32_t              i;
+        wl_pkt_filter_t*       in_filter  = (wl_pkt_filter_t*)filter_ptr;
+        wiced_packet_filter_t* out_filter = &list[i-offset];
 
-        *list  = (wiced_packet_filter_t*)malloc_named( "pkt_filter", sizeof( wiced_packet_filter_t ) * filter_list->num );
-        *count = filter_list->num;
+        if ( i >= offset + max_count )
+        {
+            retval = WWD_PARTIAL_RESULTS;
+            break;
+        }
+
+        out_filter->id        = in_filter->id;
+        out_filter->rule      = ( in_filter->negate_match == 0 ) ? WICED_PACKET_FILTER_RULE_POSITIVE_MATCHING : WICED_PACKET_FILTER_RULE_NEGATIVE_MATCHING;
+        out_filter->offset    = (uint16_t)in_filter->u.pattern.offset;
+        out_filter->mask_size = (uint16_t)in_filter->u.pattern.size_bytes;
+        out_filter->enabled_status = enabled_list;
+
+        out_filter->mask      = NULL;
+        out_filter->pattern   = NULL;
+
+        /* Update WL filter pointer */
+        filter_ptr += (WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN + 2 * in_filter->u.pattern.size_bytes);
+
+        /* WLAN returns word-aligned filter list */
+        filter_ptr = ROUND_UP( filter_ptr, 4 );
+
+        (*count_out)++;
+    }
+
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return retval;
+}
+
+
+wwd_result_t wwd_wifi_get_packet_filter_mask_and_pattern( uint32_t filter_id, uint32_t max_size, uint8_t* mask, uint8_t* pattern, uint32_t* size_out )
+{
+    wiced_bool_t          enabled_list;
+
+    for ( enabled_list = WICED_FALSE; enabled_list <= WICED_TRUE; enabled_list++ )
+    {
+
+        wiced_buffer_t        buffer;
+        wiced_buffer_t        response;
+        uint32_t*             data;
+        wl_pkt_filter_list_t* filter_list;
+        uint32_t              filter_ptr;
+        uint32_t              i;
+        wl_pkt_filter_t*      in_filter;
+
+        data = wwd_sdpcm_get_iovar_buffer( &buffer, PACKET_FILTER_LIST_BUFFER_MAX_LEN, IOVAR_STR_PKT_FILTER_LIST );
+        CHECK_IOCTL_BUFFER( data );
+        *data = (uint32_t)enabled_list;
+
+        CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
+
+        filter_list  = (wl_pkt_filter_list_t*)host_buffer_get_current_piece_data_pointer( response );
+        filter_ptr   = (uint32_t)filter_list->filter;
 
         for ( i = 0; i < filter_list->num; i++ )
         {
-            wl_pkt_filter_t*       in_filter  = (wl_pkt_filter_t*)filter_ptr;
-            wiced_packet_filter_t* out_filter = (wiced_packet_filter_t*)&(*list)[i];
+            in_filter  = (wl_pkt_filter_t*)filter_ptr;
 
-            out_filter->id                               = in_filter->id;
-            out_filter->settings.pattern_count           = 1;
-            out_filter->settings.rule                    = ( in_filter->negate_match == 0 ) ? WICED_PACKET_FILTER_RULE_POSITIVE_MATCHING : WICED_PACKET_FILTER_RULE_NEGATIVE_MATCHING;
-            out_filter->settings.pattern_list            = (wiced_packet_filter_pattern_t*)malloc_named( "pkt_filter", sizeof( wiced_packet_filter_pattern_t ) + in_filter->u.pattern.size_bytes * 2 );
-            out_filter->settings.pattern_list->offset    = (uint16_t)in_filter->u.pattern.offset;
-            out_filter->settings.pattern_list->mask_size = (uint16_t)in_filter->u.pattern.size_bytes;
-            out_filter->next                             = &(*list)[i + 1];
-
-            /* Copy mask */
-            out_filter->settings.pattern_list->mask = (uint8_t*)out_filter->settings.pattern_list + sizeof( wiced_packet_filter_pattern_t );
-            memcpy( out_filter->settings.pattern_list->mask, in_filter->u.pattern.mask_and_pattern, in_filter->u.pattern.size_bytes );
-
-            /* Copy pattern  */
-            out_filter->settings.pattern_list->pattern = (uint8_t*)out_filter->settings.pattern_list + sizeof(wiced_packet_filter_pattern_t) + in_filter->u.pattern.size_bytes;
-            memcpy( out_filter->settings.pattern_list->pattern, in_filter->u.pattern.mask_and_pattern + in_filter->u.pattern.size_bytes, in_filter->u.pattern.size_bytes );
+            if ( in_filter->id == filter_id )
+            {
+                *size_out = MIN( in_filter->u.pattern.size_bytes, max_size );
+                memcpy ( mask,    in_filter->u.pattern.mask_and_pattern, *size_out );
+                memcpy ( pattern, in_filter->u.pattern.mask_and_pattern + in_filter->u.pattern.size_bytes, *size_out );
+                host_buffer_release( response, WWD_NETWORK_RX );
+                if ( *size_out < in_filter->u.pattern.size_bytes )
+                {
+                    return WWD_PARTIAL_RESULTS;
+                }
+                return WWD_SUCCESS;
+            }
 
             /* Update WL filter pointer */
             filter_ptr += (WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN + 2 * in_filter->u.pattern.size_bytes);
@@ -2100,38 +2182,18 @@ wiced_result_t wiced_wifi_get_packet_filter_list( uint32_t* count, wiced_packet_
             /* WLAN returns word-aligned filter list */
             filter_ptr = ROUND_UP( filter_ptr, 4 );
         }
-
-        (*list)[i-1].next = NULL;
-
-        host_buffer_release( response, WICED_NETWORK_RX );
     }
-
-    return result;
+    return WWD_FILTER_NOT_FOUND;
 }
 
-wiced_result_t wiced_wifi_delete_packet_filter_list( wiced_packet_filter_t* list )
-{
-    wiced_packet_filter_t* filter = list;
 
-    while ( filter != NULL )
-    {
-        wiced_packet_filter_t* next = filter->next;
-        malloc_transfer_to_curr_thread( filter->settings.pattern_list );
-        free( filter->settings.pattern_list );
-        filter = next;
-    }
 
-    malloc_transfer_to_curr_thread( list );
-    free( list );
-    return WICED_SUCCESS;
-}
-
-wiced_result_t wiced_wifi_add_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
+wwd_result_t wwd_wifi_add_keep_alive( const wiced_keep_alive_packet_t* keep_alive_packet_info )
 {
     wiced_buffer_t buffer;
 
     uint16_t length = (uint16_t)(keep_alive_packet_info->packet_length + WL_MKEEP_ALIVE_FIXED_LEN);
-    wl_mkeep_alive_pkt_t* packet_info = (wl_mkeep_alive_pkt_t*) wiced_get_iovar_buffer( &buffer, length, IOVAR_STR_MKEEP_ALIVE );
+    wl_mkeep_alive_pkt_t* packet_info = (wl_mkeep_alive_pkt_t*) wwd_sdpcm_get_iovar_buffer( &buffer, length, IOVAR_STR_MKEEP_ALIVE );
     CHECK_IOCTL_BUFFER( packet_info );
 
     packet_info->version       = htod16(WL_MKEEP_ALIVE_VERSION);
@@ -2141,114 +2203,87 @@ wiced_result_t wiced_wifi_add_keep_alive( wiced_keep_alive_packet_t* keep_alive_
     packet_info->len_bytes     = htod16(keep_alive_packet_info->packet_length);
     memcpy(packet_info->data, keep_alive_packet_info->packet, keep_alive_packet_info->packet_length);
 
-    return wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 }
 
-wiced_result_t wiced_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
+wwd_result_t wwd_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
 {
-	wl_mkeep_alive_pkt_t* packet_info;
+    wl_mkeep_alive_pkt_t* packet_info;
     wiced_buffer_t        buffer;
     wiced_buffer_t        response;
-    wiced_result_t        retval;
     uint32_t*             data;
     uint16_t              max_info_length = (uint16_t)(WL_MKEEP_ALIVE_FIXED_LEN + keep_alive_packet_info->packet_length);
 
     wiced_assert("Bad args", (keep_alive_packet_info != NULL) && (keep_alive_packet_info->packet_length > 4) && (keep_alive_packet_info->keep_alive_id <= 3));
 
-    data = wiced_get_iovar_buffer( &buffer, max_info_length, IOVAR_STR_MKEEP_ALIVE );  /* get a buffer to store the keep_alive info into */
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, max_info_length, IOVAR_STR_MKEEP_ALIVE );  /* get a buffer to store the keep_alive info into */
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, max_info_length );
     data[0] = keep_alive_packet_info->keep_alive_id;
 
-    retval = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if (retval == WICED_SUCCESS)
-    {
-    	packet_info = (wl_mkeep_alive_pkt_t*)host_buffer_get_current_piece_data_pointer( response );
-    	keep_alive_packet_info->packet_length = packet_info->len_bytes;
-    	keep_alive_packet_info->period_msec = packet_info->period_msec;
-        memcpy( keep_alive_packet_info->packet, packet_info->data, (size_t)MIN(keep_alive_packet_info->packet_length, (host_buffer_get_current_piece_size(response)-WL_MKEEP_ALIVE_FIXED_LEN)) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
+    CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
 
-    return retval;
+    packet_info = (wl_mkeep_alive_pkt_t*)host_buffer_get_current_piece_data_pointer( response );
+    keep_alive_packet_info->packet_length = packet_info->len_bytes;
+    keep_alive_packet_info->period_msec = packet_info->period_msec;
+    memcpy( keep_alive_packet_info->packet, packet_info->data, (size_t)MIN(keep_alive_packet_info->packet_length, (host_buffer_get_current_piece_size(response)-WL_MKEEP_ALIVE_FIXED_LEN)) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_disable_keep_alive( uint8_t id )
+wwd_result_t wwd_wifi_disable_keep_alive( uint8_t id )
 {
     wiced_keep_alive_packet_t packet_info;
     packet_info.keep_alive_id = id;
     packet_info.period_msec   = 0;
     packet_info.packet_length = 0;
     packet_info.packet        = NULL;
-    return wiced_wifi_add_keep_alive( &packet_info );
+    return wwd_wifi_add_keep_alive( &packet_info );
 }
 
-wiced_result_t wiced_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length )
+wwd_result_t wwd_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t result;
 
-    wiced_maclist_t* data = (wiced_maclist_t*)wiced_get_ioctl_buffer( &buffer, buffer_length );
+    wiced_maclist_t* data = (wiced_maclist_t*)wwd_sdpcm_get_ioctl_buffer( &buffer, buffer_length );
     CHECK_IOCTL_BUFFER( data );
+    memset(data, 0, buffer_length);
     data->count = ((wiced_maclist_t*)client_list_buffer)->count;
-    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_ASSOCLIST, buffer, &response, SDPCM_AP_INTERFACE );
-    if ( result == WICED_SUCCESS )
-    {
-        memcpy( client_list_buffer, (void*) host_buffer_get_current_piece_data_pointer( response ), (size_t)MIN(host_buffer_get_current_piece_size(response), buffer_length) );
-        host_buffer_release( response, WICED_NETWORK_RX );
-    }
-    return result;
+
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_ASSOCLIST, buffer, &response, WWD_AP_INTERFACE ) );
+
+    memcpy( client_list_buffer, (void*) host_buffer_get_current_piece_data_pointer( response ), (size_t)MIN(host_buffer_get_current_piece_size(response), buffer_length) );
+    host_buffer_release( response, WWD_NETWORK_RX );
+    return WWD_SUCCESS;
 }
 
-wiced_result_t wiced_wifi_get_max_associations( uint32_t* max_assoc )
-{
-    wiced_buffer_t buffer;
-    wiced_buffer_t response;
-    wiced_result_t     result;
-
-    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_MAX_ASSOC );
-    CHECK_IOCTL_BUFFER( data );
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
-
-    data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
-    *max_assoc = (uint8_t)*data;
-    host_buffer_release( response, WICED_NETWORK_RX );
-
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length )
+wwd_result_t wwd_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length )
 {
     host_semaphore_type_t semaphore;
-    wiced_result_t        result;
+    wwd_result_t        result;
     uint32_t              previous_softap_channel = 0;
 
     host_rtos_init_semaphore( &semaphore );
 
     /* Check if soft AP interface is up, if so, record its current channel */
-    if ( wiced_wifi_is_ready_to_transceive( WICED_AP_INTERFACE ) == WICED_SUCCESS )
+    if ( wwd_wifi_is_ready_to_transceive( WWD_AP_INTERFACE ) == WWD_SUCCESS )
     {
-        wwd_wifi_get_channel( WICED_AP_INTERFACE, &previous_softap_channel );
+        wwd_wifi_get_channel( WWD_AP_INTERFACE, &previous_softap_channel );
     }
 
     /* Try and join the AP with the credentials provided, but only wait for a short time */
-    wiced_wifi_join_specific( ap, security_key, key_length, &semaphore );
+    wwd_wifi_join_specific( ap, security_key, key_length, &semaphore, WWD_STA_INTERFACE );
     result = host_rtos_get_semaphore( &semaphore, WICED_CREDENTIAL_TEST_TIMEOUT, WICED_FALSE );
 
     /* Immediately leave so we can go back to the original soft AP channel */
-    wiced_wifi_leave();
+    wwd_wifi_leave( WWD_STA_INTERFACE );
 
     /* If applicable, move the soft AP back to its original channel */
     if ( ( previous_softap_channel != 0 ) && ( previous_softap_channel != ap->channel ) )
     {
-        wwd_wifi_set_channel( WICED_AP_INTERFACE, previous_softap_channel );
+        wwd_wifi_set_channel( WWD_AP_INTERFACE, previous_softap_channel );
     }
 
     host_rtos_deinit_semaphore( &semaphore );
@@ -2256,57 +2291,72 @@ wiced_result_t wiced_wifi_test_credentials( wiced_scan_result_t* ap, const uint8
     return result;
 }
 
-wiced_result_t wiced_wifi_get_ap_info( wl_bss_info_t* ap_info, wiced_security_t* security )
+wwd_result_t wwd_wifi_get_ap_info( wl_bss_info_t* ap_info, wiced_security_t* security )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    uint32_t* data;
+    uint32_t*      data;
+    wwd_result_t   result = WWD_SUCCESS;
 
     /* Read the BSS info */
-    data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, sizeof(wl_bss_info_t) + 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wl_bss_info_t) + 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = sizeof(wl_bss_info_t) + 4;
-    if ( wiced_send_ioctl( SDPCM_GET, WLC_GET_BSS_INFO, buffer, &response, SDPCM_STA_INTERFACE ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_BSS_INFO, buffer, &response, WWD_STA_INTERFACE ) );
+
     memcpy( ap_info, (void*) (host_buffer_get_current_piece_data_pointer( response ) + 4), sizeof(wl_bss_info_t) );
-    host_buffer_release( response, WICED_NETWORK_RX );
+    host_buffer_release( response, WWD_NETWORK_RX );
 
     /* Read the WSEC setting */
-    data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
     CHECK_IOCTL_BUFFER( data );
-    if ( wiced_send_ioctl( SDPCM_GET, WLC_GET_WSEC, buffer, &response, SDPCM_STA_INTERFACE ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-    memcpy( security, (void*) host_buffer_get_current_piece_data_pointer( response ), sizeof(uint32_t) );
-    host_buffer_release( response, WICED_NETWORK_RX );
+    CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_WSEC, buffer, &response, WWD_STA_INTERFACE ) );
 
-    /* Read the WPA auth setting */
-    data = (uint32_t*) wiced_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
-    CHECK_IOCTL_BUFFER( data );
-    if ( wiced_send_ioctl( SDPCM_GET, WLC_GET_WPA_AUTH, buffer, &response, SDPCM_STA_INTERFACE ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
-    data = (uint32_t*)host_buffer_get_current_piece_data_pointer( response );
-    if (*data == WPA2_AUTH_PSK)
-    {
-        *security |= WPA2_SECURITY;
-    }
-    else if (*data == WPA_AUTH_PSK)
-    {
-        *security |= WPA_SECURITY;
-    }
-    else
-    {
-        host_buffer_release( response, WICED_NETWORK_RX );
-        return WICED_ERROR;
-    }
-    host_buffer_release( response, WICED_NETWORK_RX );
+    data     = (uint32_t*)host_buffer_get_current_piece_data_pointer( response );
+    *security = (wiced_security_t)(*data);
+    host_buffer_release( response, WWD_NETWORK_RX );
 
-    return WICED_SUCCESS;
+    if ( *security == WICED_SECURITY_WEP_PSK )
+    {
+        /* Read the WEP auth setting */
+        data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+        CHECK_IOCTL_BUFFER( data );
+        CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_AUTH, buffer, &response, WWD_STA_INTERFACE ) );
+
+        data = (uint32_t*)host_buffer_get_current_piece_data_pointer( response );
+
+        if ( *data == SHARED_AUTH )
+        {
+            *security |= SHARED_ENABLED;
+        }
+        host_buffer_release( response, WWD_NETWORK_RX );
+    }
+    else if ( (*security & (TKIP_ENABLED | AES_ENABLED) ) != 0 )
+    {
+        /* Read the WPA auth setting */
+        data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+        CHECK_IOCTL_BUFFER( data );
+        CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_WPA_AUTH, buffer, &response, WWD_STA_INTERFACE ) );
+
+        data = (uint32_t*)host_buffer_get_current_piece_data_pointer( response );
+
+        if ( *data == WPA2_AUTH_PSK )
+        {
+            *security |= WPA2_SECURITY;
+        }
+        else if ( *data == WPA_AUTH_PSK )
+        {
+            *security |= WPA_SECURITY;
+        }
+        host_buffer_release( response, WWD_NETWORK_RX );
+    }
+    else if ( *security != WICED_SECURITY_OPEN )
+    {
+        *security = WICED_SECURITY_UNKNOWN;
+        result    = WWD_UNKNOWN_SECURITY_TYPE;
+    }
+
+    return result;
 }
 
 /******************************************************
@@ -2393,18 +2443,18 @@ static wiced_bool_t wlu_is_wpa_ie( uint8_t** wpaie, uint8_t** tlvs, uint32_t* tl
 }
 
 
-wiced_result_t wiced_wifi_get_wifi_version( char* version, uint8_t length )
+wwd_result_t wwd_wifi_get_wifi_version( char* version, uint8_t length )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t result;
+    wwd_result_t   result;
+    uint32_t*      data;
 
-    if ( NULL == wiced_get_iovar_buffer( &buffer, length, IOVAR_STR_VERSION ) )
-    {
-        return WICED_ERROR;
-    }
-    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( result == WICED_SUCCESS )
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, length, IOVAR_STR_VERSION );
+    CHECK_IOCTL_BUFFER( data );
+
+    result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
+    if ( result == WWD_SUCCESS )
     {
         char* wlan_firmware_version = (char*)host_buffer_get_current_piece_data_pointer( response );
 
@@ -2421,7 +2471,21 @@ wiced_result_t wiced_wifi_get_wifi_version( char* version, uint8_t length )
             }
         }
 
-        host_buffer_release( response, WICED_NETWORK_RX );
+        host_buffer_release( response, WWD_NETWORK_RX );
     }
+    return result;
+}
+
+wwd_result_t wwd_wifi_enable_minimum_power_consumption( void )
+{
+    wiced_buffer_t buffer;
+    uint32_t*      data;
+    wwd_result_t   result;
+
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "mpc" );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) 1;
+    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
+    wiced_assert("mpc 1 failed", result == WWD_SUCCESS );
     return result;
 }

@@ -17,10 +17,10 @@
 #include "wiced.h"
 #include "http_server.h"
 #include "dns_redirect.h"
-#include "bootloader_app.h"
 #include <wiced_utilities.h>
 #include "wiced_network.h"
 #include <resources.h>
+#include "wiced_framework.h"
 
 /******************************************************
  *                      Macros
@@ -59,11 +59,11 @@ static const wiced_wps_device_detail_t wps_details =
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 static const wiced_ip_setting_t device_init_ip_settings =
@@ -74,6 +74,7 @@ static const wiced_ip_setting_t device_init_ip_settings =
 };
 
 extern const wiced_http_page_t config_http_page_database[];
+extern const wiced_http_page_t config_https_page_database[];
 
 /* These are accessed by config_http_content.c */
 const configuration_entry_t* app_configuration = NULL;
@@ -87,78 +88,20 @@ char                         config_wps_pin[9];
  *               Function Definitions
  ******************************************************/
 
-void const* wiced_dct_get_app_section( void )
-{
-    return ( bootloader_api->get_app_config_dct( ) );
-}
-
-
-platform_dct_mfg_info_t const* wiced_dct_get_mfg_info_section( void )
-{
-    return (platform_dct_mfg_info_t const*)bootloader_api->get_mfg_info_dct( );
-}
-
-
-platform_dct_security_t const* wiced_dct_get_security_section( void )
-{
-    return (platform_dct_security_t const*)bootloader_api->get_security_credentials_dct( );
-}
-
-
-platform_dct_wifi_config_t const* wiced_dct_get_wifi_config_section( void )
-{
-    return (platform_dct_wifi_config_t*)bootloader_api->get_wifi_config_dct( );
-}
-
-
-wiced_result_t wiced_dct_read_security_section( platform_dct_security_t* security_dct )
-{
-    memcpy( security_dct, wiced_dct_get_security_section( ), sizeof( *security_dct ) );
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_dct_write_security_section( const platform_dct_security_t* security_dct )
-{
-    int result = bootloader_api->write_certificate_dct( 0, (void*)security_dct, sizeof( *security_dct ) );
-    return ( result == 0 ) ? WICED_SUCCESS : WICED_ERROR;
-}
-
-
-wiced_result_t wiced_dct_read_wifi_config_section( platform_dct_wifi_config_t* wifi_config_dct )
-{
-    memcpy( wifi_config_dct, wiced_dct_get_wifi_config_section( ), sizeof( *wifi_config_dct ) );
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_dct_write_wifi_config_section( const platform_dct_wifi_config_t* wifi_config_dct )
-{
-    int result = bootloader_api->write_wifi_config_dct( 0, (void*)wifi_config_dct, sizeof( *wifi_config_dct ) );
-    return ( result == 0 ) ? WICED_SUCCESS : WICED_ERROR;
-}
-
-
-wiced_result_t wiced_dct_read_app_section( void* app_dct, uint32_t size )
-{
-    memcpy( app_dct, wiced_dct_get_app_section( ), size );
-    return WICED_SUCCESS;
-}
-
-
-wiced_result_t wiced_dct_write_app_section( const void* app_dct, uint32_t size )
-{
-    int result = bootloader_api ->write_app_config_dct( 0, (void*)app_dct, size );
-    return ( result == 0 ) ? WICED_SUCCESS : WICED_ERROR;
-}
-
-
 wiced_result_t wiced_configure_device(const configuration_entry_t* config)
 {
-    platform_dct_wifi_config_t* dct_wifi_config = (platform_dct_wifi_config_t*) bootloader_api->get_wifi_config_dct( );
+    wiced_bool_t* device_configured;
 
-    if ( dct_wifi_config->device_configured != WICED_TRUE )
+    if ( WICED_SUCCESS != wiced_dct_read_lock( (void**) &device_configured, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, device_configured), sizeof(wiced_bool_t) ) )
     {
+        return WICED_ERROR;
+    }
+
+
+    if ( *device_configured != WICED_TRUE )
+    {
+        dns_redirector_t dns_redirector;
+
         wiced_init( );
 
         /* Configure variables */
@@ -173,7 +116,6 @@ wiced_result_t wiced_configure_device(const configuration_entry_t* config)
         wiced_network_up( WICED_CONFIG_INTERFACE, WICED_USE_INTERNAL_DHCP_SERVER, &device_init_ip_settings );
 
         /* Start the DNS redirect server */
-        dns_redirector_t dns_redirector;
         wiced_dns_redirector_start( &dns_redirector, WICED_CONFIG_INTERFACE );
 
         /* Start the HTTP server */
@@ -185,6 +127,7 @@ wiced_result_t wiced_configure_device(const configuration_entry_t* config)
         /* Cleanup HTTP server */
         wiced_http_server_stop(http_server);
         free( http_server );
+
 
         /* Cleanup DNS server */
         wiced_dns_redirector_stop(&dns_redirector);
@@ -221,7 +164,7 @@ wiced_result_t wiced_configure_device(const configuration_entry_t* config)
                 memcpy(temp_config.ap_entry.security_key,       wps_credentials->passphrase, wps_credentials->passphrase_length);
                 temp_config.ap_entry.security_key_length = wps_credentials->passphrase_length;
                 temp_config.device_configured = WICED_TRUE;
-                bootloader_api->write_wifi_config_dct(0, &temp_config, sizeof(temp_config));
+                wiced_dct_write( &temp_config, DCT_WIFI_CONFIG_SECTION, 0, sizeof(temp_config) );
             }
             else
             {
@@ -233,14 +176,8 @@ wiced_result_t wiced_configure_device(const configuration_entry_t* config)
 
         app_configuration = NULL;
     }
+    wiced_dct_read_unlock( device_configured, WICED_FALSE );
 
     return WICED_SUCCESS;
 }
 
-
-wiced_result_t wiced_dct_write_certificate_store ( uint8_t* certificate_store, uint32_t length )
-{
-    bootloader_api->write_certificate_dct(0, certificate_store, length);
-
-    return WICED_SUCCESS;
-}

@@ -45,9 +45,10 @@ extern "C" {
  *                 Type Definitions
  ******************************************************/
 
-/**< UTC Time */
-typedef uint32_t  wiced_utc_time_t;
-typedef uint64_t  wiced_utc_time_ms_t;
+
+typedef uint32_t  wiced_time_t;        /**< Time value in milliseconds */
+typedef uint32_t  wiced_utc_time_t;    /**< UTC Time in seconds        */
+typedef uint64_t  wiced_utc_time_ms_t; /**< UTC Time in milliseconds   */
 
 /******************************************************
  *                    Structures
@@ -79,7 +80,6 @@ typedef struct
 
 /******************************************************
  *               Function Declarations
- *
  ******************************************************/
 
 /*****************************************************************************/
@@ -110,7 +110,7 @@ wiced_result_t wiced_time_get_time( wiced_time_t* time );
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_time_set_time( wiced_time_t* time );
+wiced_result_t wiced_time_set_time( const wiced_time_t* time );
 
 
 /** Get the current UTC time in seconds
@@ -141,7 +141,7 @@ wiced_result_t wiced_time_get_utc_time_ms( wiced_utc_time_ms_t* utc_time_ms );
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_time_set_utc_time_ms( wiced_utc_time_ms_t* utc_time_ms );
+wiced_result_t wiced_time_set_utc_time_ms( const wiced_utc_time_ms_t* utc_time_ms );
 
 
 /** Get the current UTC time in iso 8601 format e.g. "2012-07-02T17:12:34.567890Z"

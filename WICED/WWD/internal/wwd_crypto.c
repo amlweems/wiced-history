@@ -14,13 +14,13 @@
  *  Provides cryptographic functions for use in applications
  */
 
-#include "internal/SDPCM.h"
+#include <string.h> /* For memcpy */
 #include "wwd_wlioctl.h"
-#include "internal/wwd_internal.h"
-#include "string.h" /* For memcpy */
-#include "Network/wwd_buffer_interface.h"
 #include "wwd_crypto.h"
+#include "network/wwd_buffer_interface.h"
 #include "RTOS/wwd_rtos_interface.h"
+#include "internal/wwd_sdpcm.h"
+#include "internal/wwd_internal.h"
 
 /**
  * Gets a 16 bit random number from the 802.11 device
@@ -32,33 +32,49 @@
  * @param val : pointer to a variable which will receive the
  *              generated random number
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or error code
  */
 
-wiced_result_t wiced_wifi_get_random( uint16_t* val )
+wwd_result_t wwd_wifi_get_random( void* data_buffer, uint16_t buffer_length )
 {
     wiced_buffer_t buffer;
     wiced_buffer_t response;
-    wiced_result_t ret;
+    wwd_result_t ret;
     static uint16_t pseudo_random = 0;
 
-    (void) wiced_get_iovar_buffer( &buffer, (uint16_t) 2, IOVAR_STR_RAND ); /* Do not need to put anything in buffer hence void cast */
-    ret = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
-    if ( ret == WICED_SUCCESS )
+    (void) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) buffer_length ); /* Do not need to put anything in buffer hence void cast */
+    ret = wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RANDOM_BYTES, buffer, &response, WWD_STA_INTERFACE );
+    if ( ret == WWD_SUCCESS )
     {
         uint8_t* data = (uint8_t*) host_buffer_get_current_piece_data_pointer( response );
-        memcpy( val, data, (size_t) 2 );
-        host_buffer_release( response, WICED_NETWORK_RX );
+        memcpy( data_buffer, data, (size_t) buffer_length );
+        host_buffer_release( response, WWD_NETWORK_RX );
     }
-    else
+    else    /*@-branchstate@*/ /* Lint: response does not need to be released since call failed */
     {
-        // Use a pseudo random number
-        if (pseudo_random == 0)
+        /* Use a pseudo random number */
+        uint8_t* tmp_buffer_ptr = (uint8_t*) data_buffer;
+        while( buffer_length != 0 )
         {
-            pseudo_random = (uint16_t)host_rtos_get_time();
+            if ( pseudo_random == 0 )
+            {
+                pseudo_random = (uint16_t)host_rtos_get_time();
+            }
+            pseudo_random = (uint16_t)((pseudo_random * 32719 + 3) % 32749);
+
+            *tmp_buffer_ptr = ((uint8_t*)&pseudo_random)[0];
+            buffer_length--;
+            tmp_buffer_ptr++;
+
+            if ( buffer_length > 0 )
+            {
+                *tmp_buffer_ptr = ((uint8_t*)&pseudo_random)[1];
+                buffer_length--;
+                tmp_buffer_ptr++;
+            }
         }
-        pseudo_random = (uint16_t)((pseudo_random * 32719 + 3) % 32749);
-        *val = pseudo_random;
+
     }
-    return WICED_SUCCESS;
+    /*@+branchstate@*/
+    return WWD_SUCCESS;
 }

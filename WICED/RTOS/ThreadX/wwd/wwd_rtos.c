@@ -27,8 +27,8 @@
 #include <reent.h>
 #endif /* #ifdef __GNUC__ */
 #include <tx_api.h>
-#include <tx_thread.h>
-#include "Platform/wwd_platform_interface.h"
+#include "platform/wwd_platform_interface.h"
+#include "platform_config.h"
 
 extern unsigned long host_rtos_get_tickrate( void );
 
@@ -64,20 +64,20 @@ static VOID wiced_threadx_stack_error_handler( TX_THREAD * thread );
  * @param entry_function : main thread function
  * @param name           : a string thread name used for a debugger
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
+wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
 {
     return host_rtos_create_thread_with_arg( thread, entry_function, name, stack, stack_size, priority, 0 );
 }
 
-wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
+wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
 {
     UINT status;
     if ( stack == NULL )
     {
-        wiced_assert("host_rtos_create_thread: stack is null\r\n", 0 != 0 );
-        return WICED_ERROR;
+        wiced_assert("host_rtos_create_thread: stack is null\n", 0 != 0 );
+        return WWD_THREAD_STACK_NULL;
     }
 
 #ifdef DEBUG
@@ -85,7 +85,7 @@ wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* t
 #endif /* ifdef DEBUG */
 
     status = tx_thread_create( thread, (char*) name, (void(*)( ULONG )) entry_function, arg, stack, (ULONG) stack_size, (UINT) priority, 0, TX_NO_TIME_SLICE, (UINT) TX_AUTO_START );
-    return ( status == TX_SUCCESS ) ? WICED_SUCCESS : WICED_ERROR;
+    return ( status == TX_SUCCESS ) ? WWD_SUCCESS : WWD_THREAD_CREATE_FAILED;
 }
 
 /**
@@ -95,14 +95,13 @@ wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* t
  *
  * @param thread         : handle of the thread to terminate
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_finish_thread( host_thread_type_t* thread )
 {
-    /*@-noeffect@*/
-    UNUSED_PARAMETER(thread);
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+    UINT status;
+    status = tx_thread_terminate( thread );
+    return ( status == TX_SUCCESS ) ? WWD_SUCCESS : WWD_THREAD_FINISH_FAIL;
 }
 
 /**
@@ -112,33 +111,29 @@ wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
  *
  * @param thread         : handle of the terminated thread to delete
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
 {
     UINT status;
     status = tx_thread_delete( thread );
-    return ( status == TX_SUCCESS )? WICED_SUCCESS : WICED_ERROR;
+    return ( status == TX_SUCCESS )? WWD_SUCCESS : WWD_THREAD_DELETE_FAIL;
 }
-
 
 /**
  * Blocks the current thread until the indicated thread is complete
  *
  * @param thread         : handle of the thread to terminate
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_join_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_join_thread( host_thread_type_t* thread )
 {
-    if ( thread->tx_thread_id == TX_THREAD_ID )
+    while ( ( thread->tx_thread_state != TX_COMPLETED ) && ( thread->tx_thread_state != TX_TERMINATED ) )
     {
-        while ( thread->tx_thread_state != TX_COMPLETED )
-        {
-            host_rtos_delay_milliseconds( 10 );
-        }
+        host_rtos_delay_milliseconds( 10 );
     }
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 /**
@@ -146,11 +141,11 @@ wiced_result_t host_rtos_join_thread( host_thread_type_t* thread )
  *
  * @param semaphore         : pointer to variable which will receive handle of created semaphore
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaphore ) /*@modifies *semaphore@*/
+wwd_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaphore ) /*@modifies *semaphore@*/
 {
-    return ( tx_semaphore_create( semaphore, (char*) "", 0 ) == TX_SUCCESS ) ? WICED_SUCCESS : WICED_ERROR;
+    return ( tx_semaphore_create( semaphore, (char*) "", 0 ) == TX_SUCCESS ) ? WWD_SUCCESS : WWD_SEMAPHORE_ERROR;
 }
 
 /**
@@ -168,22 +163,29 @@ wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaph
  * @param will_set_in_isr : True if the semaphore will be set in an ISR. Currently only used for NoOS/NoNS
  *
  */
-
-wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr )
+wwd_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr )
 {
     UINT result;
-    /*@-noeffect@*/
-    UNUSED_PARAMETER( will_set_in_isr );
-    /*@+noeffect@*/
 
-    if ( ( result = tx_semaphore_get( semaphore, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG)( timeout_ms * SYSTICK_FREQUENCY / 1000 ) ) ) == TX_SUCCESS )
+    UNUSED_PARAMETER( will_set_in_isr );
+
+    result = tx_semaphore_get( semaphore, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG) ( timeout_ms * SYSTICK_FREQUENCY / 1000 ) );
+    if ( result == TX_SUCCESS )
     {
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
+    }
+    else if ( result == TX_NO_INSTANCE )
+    {
+        return WWD_TIMEOUT;
+    }
+    else if ( result == TX_WAIT_ABORTED )
+    {
+        return WWD_WAIT_ABORTED;
     }
     else
     {
-        wiced_assert( "semaphore error ", result ==  TX_NO_INSTANCE );
-        return ( result ==  TX_NO_INSTANCE )? WICED_TIMEOUT : WICED_ERROR;
+        wiced_assert( "semaphore error ", 0 );
+        return WWD_SEMAPHORE_ERROR;
     }
 }
 
@@ -200,18 +202,15 @@ wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32
  * @param called_from_ISR : Value of WICED_TRUE indicates calling from interrupt context
  *                          Value of WICED_FALSE indicates calling from normal thread context
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully set
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully set
  *                        : WICED_ERROR if an error occurred
  *
  */
-
-wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
+wwd_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( called_from_ISR );
-    /*@+noeffect@*/
 
-    return ( tx_semaphore_put( semaphore ) == TX_SUCCESS )? WICED_SUCCESS : WICED_ERROR;
+    return ( tx_semaphore_put( semaphore ) == TX_SUCCESS )? WWD_SUCCESS : WWD_SEMAPHORE_ERROR;
 }
 
 /**
@@ -221,16 +220,14 @@ wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_
  *
  * @param semaphore         : Pointer to the semaphore handle
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully deleted
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully deleted
  *                        : WICED_ERROR if an error occurred
  *
  */
-
-wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
+wwd_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
 {
-    return ( tx_semaphore_delete( semaphore ) == TX_SUCCESS )? WICED_SUCCESS : WICED_ERROR;
+    return ( tx_semaphore_delete( semaphore ) == TX_SUCCESS )? WWD_SUCCESS : WWD_SEMAPHORE_ERROR;
 }
-
 
 /**
  * Gets time in milliseconds since RTOS start
@@ -239,9 +236,9 @@ wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
  *
  * @returns Time in milliseconds since RTOS started.
  */
-wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
+wwd_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
 {
-    return (wiced_time_t) ( tx_time_get( ) * ( 1000 / SYSTICK_FREQUENCY ) );
+    return (wwd_time_t) ( tx_time_get( ) * ( 1000 / SYSTICK_FREQUENCY ) );
 }
 
 /**
@@ -253,17 +250,17 @@ wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
  * is less than the delay required, then makes up the difference
  * with a tight loop
  *
- * @return wiced_result_t : WICED_SUCCESS if delay was successful
+ * @return wwd_result_t : WWD_SUCCESS if delay was successful
  *                        : WICED_ERROR if an error occurred
  *
  */
-wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
+wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
 {
     if ( ( num_ms * SYSTICK_FREQUENCY / 1000 ) != 0 )
     {
         if ( ( tx_thread_sleep( (ULONG) ( num_ms * SYSTICK_FREQUENCY / 1000 ) ) ) != TX_SUCCESS )
         {
-            return WICED_ERROR;
+            return WWD_SLEEP_ERROR;
         }
     }
     else
@@ -278,72 +275,81 @@ wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
         }
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
-
 
 unsigned long host_rtos_get_tickrate( void )
 {
-	return SYSTICK_FREQUENCY;
+    return SYSTICK_FREQUENCY;
 }
 
-
-
-wiced_result_t host_rtos_init_queue( host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size )
+wwd_result_t host_rtos_init_queue( host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size )
 {
-    wiced_assert("Bad args\r\n", ( message_size % 4 ) == 0);
+    if ( ( message_size % 4 ) > 0 )
+    {
+        wiced_assert("Unaligned message size\n", 0);
+        return WWD_QUEUE_ERROR;
+    }
+
 
     if ( tx_queue_create( queue, (CHAR*) "queue", (UINT) ( message_size / 4 ), (VOID *) buffer, (ULONG) buffer_size ) != TX_SUCCESS )
     {
-        return WICED_ERROR;
+        return WWD_QUEUE_ERROR;
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
-
-wiced_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
+wwd_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    if ( tx_queue_send( queue, (VOID*)message, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG)( timeout_ms * SYSTICK_FREQUENCY / 1000 ) ) != TX_SUCCESS )
+    if ( tx_queue_send( queue, (VOID*) message, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG) ( timeout_ms * SYSTICK_FREQUENCY / 1000 ) ) != TX_SUCCESS )
     {
-        return WICED_ERROR;
+        return WWD_QUEUE_ERROR;
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
-
-wiced_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
+wwd_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    if ( tx_queue_receive( queue, (VOID*)message, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG)( timeout_ms * SYSTICK_FREQUENCY / 1000 ) ) != TX_SUCCESS )
+    UINT result = tx_queue_receive( queue, (VOID*)message, ( timeout_ms == NEVER_TIMEOUT ) ? TX_WAIT_FOREVER : (ULONG)( timeout_ms * SYSTICK_FREQUENCY / 1000 ) );
+    if ( result == TX_SUCCESS )
     {
-        return WICED_ERROR;
+        return WWD_SUCCESS;
     }
-
-    return WICED_SUCCESS;
+    else if ( result == TX_QUEUE_EMPTY )
+    {
+        return WWD_TIMEOUT;
+    }
+    else if ( result == TX_WAIT_ABORTED )
+    {
+        return WWD_WAIT_ABORTED;
+    }
+    else
+    {
+        wiced_assert( "queue error ", 0 );
+        return WWD_QUEUE_ERROR;
+    }
 }
 
-wiced_result_t host_rtos_deinit_queue( host_queue_type_t* queue )
+wwd_result_t host_rtos_deinit_queue( host_queue_type_t* queue )
 {
     if ( tx_queue_delete( queue ) != TX_SUCCESS )
     {
-        return WICED_ERROR;
+        return WWD_QUEUE_ERROR;
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
-
 
 #ifdef DEBUG
 static VOID wiced_threadx_stack_error_handler( TX_THREAD * thread )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( thread );
-    /*@+noeffect@*/
+
     wiced_assert( "ThreadX stack overflow", 0 != 0 );
 }
 #endif /* ifdef DEBUG */
-
 
 #ifdef __GNUC__
 void __malloc_lock(struct _reent *ptr)

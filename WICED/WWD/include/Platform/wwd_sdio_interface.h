@@ -7,6 +7,7 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
+#pragma once
 
 /** @file
  *  Defines the SDIO part of the WICED Platform Interface.
@@ -14,9 +15,6 @@
  *  Provides constants and prototypes for functions that
  *  enable Wiced to use an SDIO bus on a particular hardware platform.
  */
-
-#ifndef INCLUDED_WWD_SDIO_INTERFACE_H_
-#define INCLUDED_WWD_SDIO_INTERFACE_H_
 
 #include <stdint.h>
 #include "wwd_constants.h"
@@ -124,9 +122,9 @@ typedef enum
  * @param response  : A pointer to a variable which will receive the SDIO response.
  *                    Can be null if the caller does not care about the response value.
  *
- * @return WICED_SUCCESS if successful, otherwise an error code
+ * @return WWD_SUCCESS if successful, otherwise an error code
  */
-extern wiced_result_t host_platform_sdio_transfer( bus_transfer_direction_t direction, sdio_command_t command, sdio_transfer_mode_t mode, sdio_block_size_t block_size, uint32_t argument, /*@null@*/ uint32_t* data, uint16_t data_size, sdio_response_needed_t response_expected, /*@out@*/ /*@null@*/ uint32_t* response );
+extern wwd_result_t host_platform_sdio_transfer( wwd_bus_transfer_direction_t direction, sdio_command_t command, sdio_transfer_mode_t mode, sdio_block_size_t block_size, uint32_t argument, /*@null@*/ uint32_t* data, uint16_t data_size, sdio_response_needed_t response_expected, /*@out@*/ /*@null@*/ uint32_t* response );
 
 
 /**
@@ -135,7 +133,7 @@ extern wiced_result_t host_platform_sdio_transfer( bus_transfer_direction_t dire
  * This needs to be called if the WLAN chip is reset
  *
  */
-extern wiced_result_t host_platform_sdio_enumerate( void );
+extern wwd_result_t host_platform_sdio_enumerate( void );
 
 /**
  * Switch SDIO bus to high speed mode
@@ -155,15 +153,18 @@ extern void host_platform_enable_high_speed_sdio( void );
  */
 extern void sdio_irq( void );
 
-/**
- * Out-of-band SDIO interrupt handler
- *
- * This function is implemented by Wiced and must be called
- * from the interrupt vector
- *
- */
-extern void sdio_oob_irq( void );
 
+/**
+ * Unmasks the bus interrupt
+ *
+ * This function is called by WICED to unmask the bus interrupt
+ * on host platforms that must mask off the bus interrupt to
+ * allow processing of the existing interrupt.
+ */
+extern wwd_result_t host_platform_unmask_sdio_interrupt( void );
+
+
+#ifndef  WICED_DISABLE_MCU_POWERSAVE
 
 /**
  * SDIO Out-of-band interrupt handler
@@ -172,17 +173,17 @@ extern void sdio_oob_irq( void );
  * from the GPIO0 pin of the WLAN chip.
  *
  */
-extern wiced_result_t host_enable_oob_interrupt( void );
+extern wwd_result_t host_enable_oob_interrupt( void );
 
 /**
  * Get OOB interrupt pin (WLAN GPIO0 or GPIO1)
  */
 extern uint8_t host_platform_get_oob_interrupt_pin( void );
 
+#endif /* ifndef  WICED_DISABLE_MCU_POWERSAVE */
 /** @} */
 /** @} */
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* ifndef INCLUDED_WWD_SDIO_INTERFACE_H_ */

@@ -41,11 +41,15 @@
 #ifndef __LWIPOPTS_H__
 #define __LWIPOPTS_H__
 
-#include "Network/wwd_network_constants.h"
+#include "network/wwd_network_constants.h"
 
 #ifdef CUSTOM_LWIPOPTS
 #include "custom_lwipopts.h"
 #else /* ifdef CUSTOM_LWIPOPTS */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * MEM_ALIGNMENT: should be set to the alignment of the CPU
@@ -237,6 +241,9 @@
 /* ARP before DHCP causes multi-second delay  - turn it off */
 #define DHCP_DOES_ARP_CHECK            (0)
 
+/* ARP Queue size needs to be reduced to avoid using up all PBUFs when SoftAP is in use under load in busy environments */
+#define MEMP_NUM_ARP_QUEUE              5
+
 /**
  * LWIP_NETIF_LOOPBACK==1: Support sending packets with a destination IP
  * address equal to the netif IP address, looping them back up the stack.
@@ -298,6 +305,12 @@
 #endif /* ifdef WICED_LWIP_DEBUG */
 
 /**
+ * Use a random number generator to assign local TCP ports for
+ * outgoing connections
+ */
+#define LWIP_RANDOM_INITIAL_TCP_PORT
+
+/**
  * Debug printing
  * By default enable debug printing for debug build, but set level to off
  * This allows user to change any desired debug level to on.
@@ -347,6 +360,10 @@
 #define LWIP_DBG_TYPES_ON              (LWIP_DBG_OFF)   /* (LWIP_DBG_ON|LWIP_DBG_TRACE|LWIP_DBG_STATE|LWIP_DBG_FRESH|LWIP_DBG_HALT) */
 #endif
 
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif
 
 #endif /* ifdef CUSTOM_LWIPOPTS */
 

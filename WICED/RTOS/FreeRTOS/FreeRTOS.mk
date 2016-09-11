@@ -10,11 +10,11 @@
 
 NAME := FreeRTOS
 
-VERSION := 7.1.0
+VERSION := 7.5.2
 
-$(NAME)_COMPONENTS := Wiced/RTOS/FreeRTOS/wwd
+$(NAME)_COMPONENTS := WICED/RTOS/FreeRTOS/WWD
 ifeq (,$(APP_WWD_ONLY)$(NS_WWD_ONLY)$(RTOS_WWD_ONLY))
-$(NAME)_COMPONENTS += Wiced/RTOS/FreeRTOS/wiced
+$(NAME)_COMPONENTS += WICED/RTOS/FreeRTOS/WICED
 endif
 
 # Define some macros to allow for some network-specific checks
@@ -34,23 +34,23 @@ $(NAME)_SOURCES :=  ver$(VERSION)/Source/croutine.c \
                     ver$(VERSION)/Source/portable/MemMang/heap_3.c
 
 # Win32_x86 specific sources and includes
-Win32_x86_SOURCES  := ver$(VERSION)/Source/portable/MSVC-MingW/port.c
-Win32_x86_INCLUDES := ver$(VERSION)/Source/portable/MSVC-MingW
+$(NAME)_Win32_x86_SOURCES  := ver$(VERSION)/Source/portable/MSVC-MingW/port.c
+$(NAME)_Win32_x86_INCLUDES := ver$(VERSION)/Source/portable/MSVC-MingW
 
 # ARM Cortex M3/4 specific sources and includes
 ifeq ($(TOOLCHAIN_NAME),IAR)
-ARM_Cortex_M3_SOURCES  := ver$(VERSION)/Source/portable/IAR/ARM_CM3/port.c \
+$(NAME)_ARM_CM3_SOURCES  := ver$(VERSION)/Source/portable/IAR/ARM_CM3/port.c \
                           ver$(VERSION)/Source/portable/IAR/ARM_CM3/portasm.S
-ARM_Cortex_M3_INCLUDES := ver$(VERSION)/Source/portable/IAR/ARM_CM3 \
-                          wwd/ARM_CM3  
+$(NAME)_ARM_CM3_INCLUDES := ver$(VERSION)/Source/portable/IAR/ARM_CM3 \
+                    WWD/ARM_CM3
 else
-ARM_Cortex_M3_SOURCES  := ver$(VERSION)/Source/portable/GCC/ARM_CM3/port.c 
-ARM_Cortex_M3_INCLUDES := ver$(VERSION)/Source/portable/GCC/ARM_CM3
+$(NAME)_ARM_CM3_SOURCES  := ver$(VERSION)/Source/portable/GCC/ARM_CM3/port.c
+$(NAME)_ARM_CM3_INCLUDES := ver$(VERSION)/Source/portable/GCC/ARM_CM3
 endif
-ARM_Cortex_M4_SOURCES  := $(ARM_Cortex_M3_SOURCES)
-ARM_Cortex_M4_INCLUDES := $(ARM_Cortex_M3_INCLUDES)
+$(NAME)_ARM_CM4_SOURCES  := $($(NAME)_ARM_CM3_SOURCES)
+$(NAME)_ARM_CM4_INCLUDES := $($(NAME)_ARM_CM3_INCLUDES)
 
-$(NAME)_SOURCES += $($(HOST_ARCH)_SOURCES)
-GLOBAL_INCLUDES += $($(HOST_ARCH)_INCLUDES)
+$(NAME)_SOURCES += $($(NAME)_$(HOST_ARCH)_SOURCES)
+GLOBAL_INCLUDES += $($(NAME)_$(HOST_ARCH)_INCLUDES)
 
 

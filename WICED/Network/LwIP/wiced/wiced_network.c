@@ -26,7 +26,7 @@
 #include "dhcp_server.h"
 #include "dns.h"
 #include "internal/wiced_internal_api.h"
-#include "bootloader_app.h"
+#include "lwip/dns.h"
 #include "lwip/dns.h"
 
 /******************************************************
@@ -68,10 +68,12 @@ const wiced_ip_address_t INITIALISER_IPV4_ADDRESS( wiced_ip_broadcast, 0xFFFFFFF
 static wiced_network_link_callback_t link_up_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
 static wiced_network_link_callback_t link_down_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
 
+#define IF_UP( interface )    ( ip_networking_up[ (interface==WICED_STA_INTERFACE)? 0:1 ] )
+
 static wiced_bool_t ip_networking_up[2];
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 static void tcpip_init_done( void* arg );
@@ -85,7 +87,7 @@ wiced_result_t wiced_network_init( void )
     xSemaphoreHandle lwip_done_sema;
 
     /* Initialize the LwIP system.  */
-    WPRINT_NETWORK_INFO(("Initialising LwIP " "\r\n"));
+    WPRINT_NETWORK_INFO(("Initialising LwIP " LwIP_VERSION "\n"));
 
     ip_networking_up[0] = WICED_FALSE;
     ip_networking_up[1] = WICED_FALSE;
@@ -137,13 +139,15 @@ static void tcpip_init_done( void* arg )
 
 wiced_result_t wiced_network_deinit( void )
 {
-    wiced_assert("LwIP cannot be shut down", 0!=0 );
+    tcpip_deinit( );
+    vSemaphoreDelete( link_subscribe_mutex );
+    vSemaphoreDelete( send_interface_mutex );
     return WICED_ERROR;
 }
 
 wiced_bool_t wiced_network_is_up( wiced_interface_t interface )
 {
-    return (wiced_wifi_is_ready_to_transceive(interface) == WICED_SUCCESS) ? WICED_TRUE : WICED_FALSE;
+    return (wwd_wifi_is_ready_to_transceive( WICED_TO_WWD_INTERFACE( interface ) ) == WWD_SUCCESS) ? WICED_TRUE : WICED_FALSE;
 }
 
 wiced_result_t wiced_network_suspend(void)
@@ -167,30 +171,47 @@ wiced_result_t wiced_network_resume(void)
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_network_up(wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings)
+wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings )
 {
     wiced_result_t result = WICED_SUCCESS;
 
-    if ( wiced_network_is_up( interface ) == WICED_FALSE )
+    if ( wiced_network_is_up( WICED_TO_WWD_INTERFACE( interface ) ) == WICED_FALSE )
     {
         if ( interface == WICED_CONFIG_INTERFACE )
         {
-            const wiced_config_soft_ap_t* config_ap = &wiced_dct_get_wifi_config_section( )->config_ap_settings;
+            wiced_config_soft_ap_t* config_ap;
+            wiced_result_t retval = wiced_dct_read_lock( (void**) &config_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, config_ap_settings), sizeof(wiced_config_soft_ap_t) );
+            if ( retval != WICED_SUCCESS )
+            {
+                return retval;
+            }
 
-            // Check config DCT is valid
+            /* Check config DCT is valid */
             if ( config_ap->details_valid == CONFIG_VALIDITY_VALUE )
             {
-                result = wiced_start_ap( (char*) config_ap->SSID.val, config_ap->security, config_ap->security_key, config_ap->channel );
+                result = wiced_start_ap( &config_ap->SSID, config_ap->security, config_ap->security_key, config_ap->channel );
             }
             else
             {
-                result = wiced_start_ap( (char*)"Wiced Config", WICED_SECURITY_OPEN, "", 1 );
+                wiced_ssid_t ssid =
+                {
+                    .length =  sizeof("Wiced Config")-1,
+                    .value  = "Wiced Config",
+                };
+                result = wiced_start_ap( &ssid, WICED_SECURITY_OPEN, "", 1 );
             }
+            wiced_dct_read_unlock( config_ap, WICED_FALSE );
         }
         else if ( interface == WICED_AP_INTERFACE )
         {
-            const wiced_config_soft_ap_t* soft_ap = &wiced_dct_get_wifi_config_section( )->soft_ap_settings;
-            result = wiced_wifi_start_ap( (char*) soft_ap->SSID.val, soft_ap->security, (uint8_t*) soft_ap->security_key, soft_ap->security_key_length, soft_ap->channel );
+            wiced_config_soft_ap_t* soft_ap;
+            result = wiced_dct_read_lock( (void**) &soft_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, soft_ap_settings), sizeof(wiced_config_soft_ap_t) );
+            if ( result != WICED_SUCCESS )
+            {
+                return result;
+            }
+            result = (wiced_result_t) wwd_wifi_start_ap( &soft_ap->SSID, soft_ap->security, (uint8_t*) soft_ap->security_key, soft_ap->security_key_length, soft_ap->channel );
+            wiced_dct_read_unlock( soft_ap, WICED_FALSE );
         }
         else
         {
@@ -226,7 +247,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     struct ip_addr gw;
     wiced_bool_t static_ip;
 
-    if ( ip_networking_up[interface & 1] == WICED_TRUE )
+    if ( IF_UP( interface ) == WICED_TRUE )
     {
         return WICED_SUCCESS;
     }
@@ -248,9 +269,9 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         ip_addr_set_zero( &netmask );
     }
 
-    if ( NULL == netif_add( &IP_HANDLE(interface), &ipaddr, &netmask, &gw, (void*) (interface&1), ethernetif_init, ethernet_input ) )
+    if ( NULL == netif_add( &IP_HANDLE(interface), &ipaddr, &netmask, &gw, (void*) WICED_TO_WWD_INTERFACE( interface ), ethernetif_init, ethernet_input ) )
     {
-        WPRINT_NETWORK_ERROR(( "Could not add network interface\r\n" ));
+        WPRINT_NETWORK_ERROR(( "Could not add network interface\n" ));
         return WICED_ERROR;
     }
 
@@ -264,9 +285,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         netif_set_up( &IP_HANDLE(interface) );
         netif_set_default( &IP_HANDLE(interface) );
 
-        //igmp_start(&IP_HANDLE(interface));
-
-        WPRINT_NETWORK_INFO(("Obtaining IP address via DHCP\r\n"));
+        WPRINT_NETWORK_INFO(("Obtaining IP address via DHCP\n"));
         dhcp_set_struct( &IP_HANDLE(interface), &wiced_dhcp_handle );
         dhcp_start( &IP_HANDLE(interface) );
         while ( wiced_dhcp_handle.state != DHCP_BOUND  && timeout_occured == WICED_FALSE )
@@ -316,6 +335,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
             wiced_ip_get_gateway_address( interface, &dns_server_address );
             dns_client_add_server_address( dns_server_address );
 
+
             /* Google DNS server is 8.8.8.8 */
             memset( &dns_server_address.ip.v4, 8, sizeof( dns_server_address.ip.v4 ) );
             dns_client_add_server_address( dns_server_address );
@@ -339,7 +359,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
 
     ip_networking_up[interface&1] = WICED_TRUE;
 
-    WPRINT_NETWORK_INFO( ( "Network ready IP: %u.%u.%u.%u\r\n", (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 24 ) & 0xff ),
+    WPRINT_NETWORK_INFO( ( "Network ready IP: %u.%u.%u.%u\n", (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 24 ) & 0xff ),
         (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 16 ) & 0xff ),
         (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >>  8 ) & 0xff ),
         (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >>  0 ) & 0xff ) ) );
@@ -458,7 +478,7 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
         /* Restart DHCP */
         if ( dhcp_start( &IP_HANDLE(WICED_STA_INTERFACE)) != ERR_OK )
         {
-            WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\r\n" ) );
+            WPRINT_NETWORK_ERROR( ( "Failed to initiate DHCP transaction\n" ) );
             return WICED_ERROR;
         }
     }

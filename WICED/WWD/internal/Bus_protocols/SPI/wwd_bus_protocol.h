@@ -8,10 +8,14 @@
  * written permission of Broadcom Corporation.
  */
 
-#ifndef INCLUDED_GSPI_H
-#define INCLUDED_GSPI_H
+#ifndef INCLUDED_SPI_WWD_BUS_PROTOCOL_H
+#define INCLUDED_SPI_WWD_BUS_PROTOCOL_H
 
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *             Constants
@@ -21,23 +25,25 @@
  *             Structures
  ******************************************************/
 
-typedef uint32_t gspi_header_t;
+typedef uint32_t wwd_bus_gspi_header_t;
 
 
 #pragma pack(1)
 
 typedef struct
 {
-    gspi_header_t gspi_header;
-} wiced_bus_header_t;
+    wwd_bus_gspi_header_t gspi_header;
+} wwd_bus_header_t;
 
 #pragma pack()
 
-#define WICED_BUS_HAS_HEADER                (1)
-#define WICED_BUS_HEADER_SIZE               (sizeof(wiced_bus_header_t))
+#define WWD_BUS_HAS_HEADER
 
-#define WICED_BUS_PACKET_AVAILABLE_TO_READ(intstatus)    ((intstatus) & (F2_PACKET_AVAILABLE))
-#define WICED_BUS_USE_STATUS_REPORT_SCHEME               (1)
+#define WWD_BUS_HEADER_SIZE                              (sizeof(wwd_bus_header_t))
+
+#define WWD_BUS_USE_STATUS_REPORT_SCHEME                 (1==1)
+
+#define WWD_SPDCM_HEADER_LENGTH                          (18)
 
 /******************************************************
  *             Function declarations
@@ -47,4 +53,8 @@ typedef struct
  *             Global variables
  ******************************************************/
 
-#endif /* ifndef _GSPI_H */
+#ifdef __cplusplus
+} /*extern "C" */
+#endif
+
+#endif /* ifndef INCLUDED_SPI_WWD_BUS_PROTOCOL_H */

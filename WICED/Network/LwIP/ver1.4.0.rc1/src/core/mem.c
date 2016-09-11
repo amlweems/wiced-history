@@ -298,6 +298,14 @@ mem_init(void)
   }
 }
 
+
+void
+mem_deinit(void)
+{
+    sys_mutex_free( &mem_mutex );
+}
+
+
 /**
  * Put a struct mem back on the heap
  *

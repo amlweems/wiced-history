@@ -282,16 +282,29 @@ memp_overflow_check_all(void)
   u16_t i, j;
   struct memp *p;
 
+#if !MEMP_SEPARATE_POOLS
   p = (struct memp *)LWIP_MEM_ALIGN(memp_memory);
+#endif /* !MEMP_SEPARATE_POOLS */
+
   for (i = 0; i < MEMP_MAX; ++i) {
+#if MEMP_SEPARATE_POOLS
+    p = (struct memp*)memp_bases[i];
+#endif /* MEMP_SEPARATE_POOLS */
     p = p;
     for (j = 0; j < memp_num[i]; ++j) {
       memp_overflow_check_element_overflow(p, i);
       p = (struct memp*)((u8_t*)p + MEMP_SIZE + memp_sizes[i] + MEMP_SANITY_REGION_AFTER_ALIGNED);
     }
   }
+
+#if !MEMP_SEPARATE_POOLS
   p = (struct memp *)LWIP_MEM_ALIGN(memp_memory);
+#endif /* !MEMP_SEPARATE_POOLS */
+
   for (i = 0; i < MEMP_MAX; ++i) {
+#if MEMP_SEPARATE_POOLS
+    p = (struct memp*)memp_bases[i];
+#endif /* MEMP_SEPARATE_POOLS */
     p = p;
     for (j = 0; j < memp_num[i]; ++j) {
       memp_overflow_check_element_underflow(p, i);
@@ -310,8 +323,14 @@ memp_overflow_init(void)
   struct memp *p;
   u8_t *m;
 
+#if !MEMP_SEPARATE_POOLS
   p = (struct memp *)LWIP_MEM_ALIGN(memp_memory);
+#endif /* !MEMP_SEPARATE_POOLS */
+
   for (i = 0; i < MEMP_MAX; ++i) {
+#if MEMP_SEPARATE_POOLS
+    p = (struct memp*)memp_bases[i];
+#endif /* MEMP_SEPARATE_POOLS */
     p = p;
     for (j = 0; j < memp_num[i]; ++j) {
 #if MEMP_SANITY_REGION_BEFORE_ALIGNED > 0
@@ -373,6 +392,11 @@ memp_init(void)
 #endif /* MEMP_OVERFLOW_CHECK */
 }
 
+void
+memp_deinit(void)
+{
+}
+
 /**
  * Get an element from a specific pool.
  *
@@ -419,6 +443,10 @@ memp_malloc_fn(memp_t type, const char* file, const int line)
     MEMP_STATS_INC(err, type);
   }
 
+#if MEMP_SANITY_CHECK
+  LWIP_ASSERT("memp sanity", memp_sanity());
+#endif /* MEMP_SANITY_CHECK */
+
   SYS_ARCH_UNPROTECT(old_level);
 
   return memp;
@@ -434,6 +462,10 @@ void
 memp_free(memp_t type, void *mem)
 {
   struct memp *memp;
+#if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) )
+  static int memp_free_checker = 0;
+#endif /* if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) ) */
+
   SYS_ARCH_DECL_PROTECT(old_level);
 
   if (mem == NULL) {
@@ -444,7 +476,24 @@ memp_free(memp_t type, void *mem)
 
   memp = (struct memp *)(void *)((u8_t*)mem - MEMP_SIZE);
 
+#if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) )
+  {
+      /* Check if the buffer is already in the free list */
+      struct memp * tmp_memp = memp_tab[type];
+      while ( tmp_memp != NULL )
+      {
+          LWIP_ASSERT( "Freeing a buffer that is already freed", tmp_memp != memp );
+          tmp_memp = tmp_memp->next;
+      }
+  }
+#endif /* if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) ) */
+
   SYS_ARCH_PROTECT(old_level);
+#if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) )
+  memp_free_checker++;
+  LWIP_ASSERT( "SYS_ARCH_PROTECT is not protecting critical sections properly", memp_free_checker < 2 );
+#endif /* if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) ) */
+
 #if MEMP_OVERFLOW_CHECK
 #if MEMP_OVERFLOW_CHECK >= 2
   memp_overflow_check_all();
@@ -463,7 +512,14 @@ memp_free(memp_t type, void *mem)
   LWIP_ASSERT("memp sanity", memp_sanity());
 #endif /* MEMP_SANITY_CHECK */
 
+#if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) )
+  memp_free_checker--;
+#endif /* if defined( LWIP_DEBUG ) && (! defined( LWIP_NOASSERT ) ) */
   SYS_ARCH_UNPROTECT(old_level);
+
+#ifdef MEMP_FREE_NOTIFY
+  memp_free_notify (type);
+#endif /* MEMP_FREE_NOTIFY */
 }
 
 

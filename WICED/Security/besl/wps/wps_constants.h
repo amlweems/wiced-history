@@ -9,6 +9,12 @@
  */
 #pragma once
 
+#include "besl_structures.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -364,35 +370,10 @@ typedef enum
     WPS_PIN_MODE,
 } wps_mode_t;
 
+
 typedef enum
 {
-    WPS_SUCCESS,
-    WPS_UNPROCESSED,
-    WPS_IN_PROGRESS,
-    WPS_COMPLETE,
-    WPS_PBC_OVERLAP,
-    WPS_ABORTED,
-    WPS_TIMED_OUT,
-    WPS_NOT_STARTED,
-    WPS_REGISTRAR_NOT_READY,
-    WPS_ATTEMPTED_EXTERNAL_REGISTRAR_DISCOVERY,
-    WPS_ERROR,
-    WPS_ERROR_ENCRYPTED_TLV_HMAC_FAIL,
-    WPS_ERROR_SECRET_NONCE_MISMATCH,
-    WPS_ERROR_MESSAGE_HMAC_FAIL,
-    WPS_ERROR_MESSAGE_TLV_MASK_MISMATCH,
-    WPS_ERROR_ENCRYPTION_TYPE_ERROR,
-    WPS_ERROR_AUTHENTICATION_TYPE_ERROR,
-    WPS_ERROR_REGISTRAR_NONCE_MISMATCH,
-    WPS_ERROR_ENROLLEE_NONCE_MISMATCH,
-    WPS_ERROR_VERSION_MISMATCH,
-    WPS_ERROR_CRYPTO_ERROR,
-    WPS_ERROR_MESSAGE_MISSING_TLV,
-    WPS_ERROR_INCORRECT_MESSAGE,
-    WPS_ERROR_NO_RESPONSE,
-    WPS_ERROR_RECEIVED_EAP_FAIL,
-    WPS_ERROR_RECEIVED_WEP_CREDENTIALS,
-    WPS_ERROR_OUT_OF_MEMORY,
+    WPS_BESL_RESULT_LIST(      WPS_     )
 } wps_result_t;
 
 typedef enum
@@ -562,4 +543,6 @@ typedef enum
     WPS_SENDING_CREDENTIALS = WPS_SENDING_SECRET_NONCE2,
 } wps_state_machine_stage_t;
 
-
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

@@ -12,6 +12,10 @@
 #include "wps_host.h"
 #include "wps_structures.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -40,11 +44,17 @@
  *               Function Declarations
  ******************************************************/
 
-extern wiced_result_t besl_wps_init                        ( wps_agent_t* workspace, const besl_wps_device_detail_t* details, wps_agent_type_t type, wiced_interface_t interface );
-extern wiced_result_t besl_wps_get_result                  ( wps_agent_t* workspace );
-extern wiced_result_t besl_wps_deinit                      ( wps_agent_t* workspace );
-extern wiced_result_t besl_wps_start                       ( wps_agent_t* workspace, besl_wps_mode_t mode, char* password, besl_wps_credential_t* credentials, uint16_t credential_length );
-extern wiced_result_t besl_wps_restart                     ( wps_agent_t* workspace );
-extern wiced_result_t besl_wps_wait_till_complete          ( wps_agent_t* workspace );
-extern wiced_result_t besl_wps_abort                       ( wps_agent_t* workspace );
-extern wiced_result_t besl_wps_management_set_event_handler( wps_agent_t* workspace, wiced_bool_t enable );
+extern besl_result_t besl_wps_init                        ( wps_agent_t* workspace, const besl_wps_device_detail_t* details, wps_agent_type_t type, wwd_interface_t interface );
+extern besl_result_t besl_wps_get_result                  ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_deinit                      ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_start                       ( wps_agent_t* workspace, besl_wps_mode_t mode, const char* password, besl_wps_credential_t* credentials, uint16_t credential_length );
+extern besl_result_t besl_wps_restart                     ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_wait_till_complete          ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_abort                       ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_management_set_event_handler( wps_agent_t* workspace, wiced_bool_t enable );
+extern besl_result_t besl_wps_scan                        ( wps_agent_t* workspace, wps_ap_t** ap_array, uint16_t* ap_array_size );
+extern besl_result_t besl_wps_set_directed_wps_target     ( wps_agent_t* workspace, wps_ap_t* ap, uint32_t maximum_join_attempts );
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

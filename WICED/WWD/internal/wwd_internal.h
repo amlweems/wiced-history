@@ -12,8 +12,13 @@
 #define INCLUDED_WWD_INTERNAL_H
 
 #include <stdint.h>
-#include "wwd_constants.h" /* for wiced_result_t */
-#include "Network/wwd_network_interface.h"
+#include "wwd_constants.h" /* for wwd_result_t */
+#include "network/wwd_network_interface.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /******************************************************
  *             Constants
@@ -21,7 +26,7 @@
 
 typedef enum
 {
-    // Note : If changing this, core_base_address must be changed also
+    /* Note : If changing this, core_base_address must be changed also */
     ARM_CORE    = 0,
     SOCRAM_CORE = 1,
     SDIOD_CORE  = 2
@@ -42,27 +47,34 @@ typedef struct
     wlan_state_t         state;
     wiced_country_code_t country_code;
     uint32_t             keep_wlan_awake;
-} wiced_wlan_status_t;
+} wwd_wlan_status_t;
+
+#define WWD_WLAN_KEEP_AWAKE( )  do { wwd_wlan_status.keep_wlan_awake++; } while (0)
+#define WWD_WLAN_LET_SLEEP( )   do { wwd_wlan_status.keep_wlan_awake--; } while (0)
 
 /******************************************************
  *             Function declarations
  ******************************************************/
 
-extern wiced_result_t wiced_set_backplane_window ( uint32_t addr );
+extern wiced_bool_t wwd_wifi_ap_is_up;
+extern uint8_t      wwd_tos_map[8];
+
 
 /* Device core control functions */
-extern wiced_result_t wiced_disable_device_core  ( device_core_t core_id );
-extern wiced_result_t wiced_reset_device_core    ( device_core_t core_id );
-extern wiced_result_t wiced_device_core_is_up    ( device_core_t core_id );
-
-extern wiced_result_t wiced_wifi_set_down(wiced_interface_t interface);
-
-extern void wiced_set_country(wiced_country_code_t code);
+extern wwd_result_t wwd_disable_device_core    ( device_core_t core_id );
+extern wwd_result_t wwd_reset_device_core      ( device_core_t core_id );
+extern wwd_result_t wwd_device_core_is_up      ( device_core_t core_id );
+extern wwd_result_t wwd_wifi_set_down          ( wwd_interface_t interface );
+extern void         wwd_set_country            ( wiced_country_code_t code );
 
 /******************************************************
  *             Global variables
  ******************************************************/
 
-extern wiced_wlan_status_t wiced_wlan_status;
+extern wwd_wlan_status_t wwd_wlan_status;
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* ifndef INCLUDED_WWD_INTERNAL_H */

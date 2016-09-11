@@ -19,6 +19,7 @@
 #define HEADER_WWD_NETWORK_INTERFACE_H_INCLUDED
 
 #include "wwd_buffer.h"
+#include "wwd_constants.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -69,7 +70,7 @@ extern "C"
  * @param interface : The interface (AP or STA) on which the packet was received.
  *
  */
-/*@external@*/ extern void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced_interface_t interface ); /* Network stack assumes responsibility for freeing buffer */
+/*@external@*/ extern void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface ); /* Network stack assumes responsibility for freeing buffer */
 
 /* Functions provided by WICED that may be called by Network Stack */
 
@@ -97,7 +98,7 @@ extern "C"
  * @param interface : the interface over which to send the packet (AP or STA)
  *
  */
-extern void wiced_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced_interface_t interface ); /* Returns immediately - Wiced_buffer_tx_completed will be called once the transmission has finished */
+extern void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface ); /* Returns immediately - Wiced_buffer_tx_completed will be called once the transmission has finished */
 
 /*  @} */
 

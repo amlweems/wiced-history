@@ -11,6 +11,11 @@
 #ifndef INCLUDED_CHIP_CONSTANTS_H_
 #define INCLUDED_CHIP_CONSTANTS_H_
 
+#include "wwd_wlioctl.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *             Architecture Constants
@@ -323,6 +328,64 @@
 #define SMB_DEV_INT                ( (uint32_t) (1 << 3) ) /* To SB Mailbox Miscellaneous Interrupt */
 
 
+#define WL_CHANSPEC_BAND_MASK             (0xf000)
+#define WL_CHANSPEC_BAND_5G               (0x1000)
+#define WL_CHANSPEC_BAND_2G               (0x2000)
+#define WL_CHANSPEC_CTL_SB_MASK           (0x0300)
+#define WL_CHANSPEC_CTL_SB_LOWER          (0x0100)
+#define WL_CHANSPEC_CTL_SB_UPPER          (0x0200)
+#define WL_CHANSPEC_CTL_SB_NONE           (0x0300)
+#define WL_CHANSPEC_BW_MASK               (0x0C00)
+#define WL_CHANSPEC_BW_10                 (0x0400)
+#define WL_CHANSPEC_BW_20                 (0x0800)
+#define WL_CHANSPEC_BW_40                 (0x0C00)
+
+
 /* CIS accesses require backpane clock */
+
+
+#define CHIP_HAS_BSSID_CNT_IN_ASSOC_PARAMS
+#define CHIP_FIRMWARE_SUPPORTS_PM_LIMIT_IOVAR
+
+struct ether_addr;
+struct wl_join_scan_params;
+
+typedef struct wl_assoc_params
+{
+    struct ether_addr bssid;
+#ifdef CHIP_HAS_BSSID_CNT_IN_ASSOC_PARAMS
+    uint16_t    bssid_cnt;
+#endif /* ifdef CHIP_HAS_BSSID_CNT_IN_ASSOC_PARAMS */
+    uint32_t     chanspec_num;
+    chanspec_t  chanspec_list[1];
+} wl_assoc_params_t;
+#define WL_ASSOC_PARAMS_FIXED_SIZE     (sizeof(wl_assoc_params_t) - sizeof(wl_chanspec_t))
+typedef wl_assoc_params_t wl_reassoc_params_t;
+#define WL_REASSOC_PARAMS_FIXED_SIZE    WL_ASSOC_PARAMS_FIXED_SIZE
+typedef wl_assoc_params_t wl_join_assoc_params_t;
+#define WL_JOIN_ASSOC_PARAMS_FIXED_SIZE        WL_ASSOC_PARAMS_FIXED_SIZE
+typedef struct wl_join_params
+{
+    wlc_ssid_t         ssid;
+    struct wl_assoc_params  params;
+} wl_join_params_t;
+#define WL_JOIN_PARAMS_FIXED_SIZE     (sizeof(wl_join_params_t) - sizeof(wl_chanspec_t))
+
+/* extended join params */
+typedef struct wl_extjoin_params {
+    wlc_ssid_t ssid;                /* {0, ""}: wildcard scan */
+    struct wl_join_scan_params scan;
+    wl_join_assoc_params_t assoc;   /* optional field, but it must include the fixed portion
+                     * of the wl_join_assoc_params_t struct when it does
+                     * present.
+                     */
+} wl_extjoin_params_t;
+#define WL_EXTJOIN_PARAMS_FIXED_SIZE    (sizeof(wl_extjoin_params_t) - sizeof(chanspec_t))
+
+typedef wl_cnt_ver_six_t  wiced_counters_t;
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* ifndef INCLUDED_CHIP_CONSTANTS_H_ */

@@ -301,3 +301,51 @@ lwip_init(void)
   sys_timeouts_init();
 #endif /* LWIP_TIMERS */
 }
+
+
+void
+lwip_deinit(void)
+{
+#if LWIP_TIMERS
+  sys_timeouts_deinit();
+#endif /* LWIP_TIMERS */
+#if LWIP_DNS
+  dns_deinit();
+#endif /* LWIP_DNS */
+#if LWIP_IGMP
+  igmp_deinit();
+#endif /* LWIP_IGMP */
+#if LWIP_AUTOIP
+  autoip_deinit();
+#endif /* LWIP_AUTOIP */
+#if LWIP_SNMP
+  snmp_deinit();
+#endif /* LWIP_SNMP */
+#if LWIP_TCP
+  tcp_deinit();
+#endif /* LWIP_TCP */
+#if LWIP_UDP
+  udp_deinit();
+#endif /* LWIP_UDP */
+#if LWIP_RAW
+  raw_deinit();
+#endif /* LWIP_RAW */
+#if LWIP_ARP
+  etharp_deinit();
+#endif /* LWIP_ARP */
+
+  ip_deinit();
+#if LWIP_SOCKET
+  lwip_socket_deinit();
+#endif /* LWIP_SOCKET */
+  netif_deinit();
+  pbuf_deinit();
+  memp_deinit();
+  mem_deinit();
+#if !NO_SYS
+  sys_deinit();
+#endif /* !NO_SYS */
+  stats_deinit();
+
+}
+

@@ -119,6 +119,15 @@ netif_init(void)
 #endif /* LWIP_HAVE_LOOPIF */
 }
 
+void
+netif_deinit(void)
+{
+#if LWIP_HAVE_LOOPIF
+    netif_set_down( &loop_netif );
+    netif_remove( &loop_netif );
+#endif /* LWIP_HAVE_LOOPIF */
+}
+
 /**
  * Add a network interface to the list of lwIP netifs.
  *

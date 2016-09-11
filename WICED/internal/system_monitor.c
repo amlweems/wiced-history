@@ -49,11 +49,13 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
+void system_monitor_thread_main( void* arg );
+
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 static wiced_system_monitor_t* system_monitors[MAXIMUM_NUMBER_OF_SYSTEM_MONITORS];
@@ -101,7 +103,7 @@ void system_monitor_thread_main( void* arg )
         wiced_rtos_delay_milliseconds(DEFAULT_SYSTEM_MONITOR_PERIOD);
     }
 
-    WICED_END_OF_THREAD(NULL);
+    WICED_END_OF_CURRENT_THREAD( );
 }
 
 wiced_result_t wiced_register_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t initial_permitted_delay)

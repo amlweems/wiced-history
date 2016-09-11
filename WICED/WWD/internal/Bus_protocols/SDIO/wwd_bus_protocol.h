@@ -7,11 +7,15 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-#ifndef INCLUDED_WICED_BUS_PROTOCOL_H
-#define INCLUDED_WICED_BUS_PROTOCOL_H
+#ifndef INCLUDED_SDIO_WWD_BUS_PROTOCOL_H
+#define INCLUDED_SDIO_WWD_BUS_PROTOCOL_H
 
-#include "Platform/wwd_sdio_interface.h"
 #include "wwd_buffer.h"
+#include "platform/wwd_sdio_interface.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *             Constants
@@ -21,12 +25,13 @@
  *             Structures
  ******************************************************/
 
-#undef WICED_BUS_HAS_HEADER
+#undef WWD_BUS_HAS_HEADER
 
-#define WICED_BUS_HEADER_SIZE (0)
+#define WWD_BUS_HEADER_SIZE                               (0)
 
-#define WICED_BUS_PACKET_AVAILABLE_TO_READ(intstatus)     ((intstatus) & (FRAME_AVAILABLE_MASK))
-#define WICED_BUS_USE_STATUS_REPORT_SCHEME                (0)
+#define WWD_BUS_USE_STATUS_REPORT_SCHEME                  (1==0)
+
+#define WWD_SPDCM_HEADER_LENGTH                           (18)
 
 /******************************************************
  *             Function declarations
@@ -37,4 +42,8 @@
  *             Global variables
  ******************************************************/
 
-#endif /* ifndef INCLUDED_WICED_BUS_PROTOCOL_H */
+#ifdef __cplusplus
+} /*extern "C" */
+#endif
+
+#endif /* ifndef INCLUDED_SDIO_WWD_BUS_PROTOCOL_H */

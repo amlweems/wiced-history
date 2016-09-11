@@ -24,15 +24,16 @@
 #include "wwd_assert.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "StackMacros.h"
+#include "wiced_utilities.h"
 
 /******************************************************
  *             Constants
  ******************************************************/
 
-#define     WICED_THREAD_PRIORITY           ((unsigned long)configMAX_PRIORITIES-1)  /** in FreeRTOS, a higher number is a higher priority */
+#define     WWD_THREAD_PRIORITY           ((unsigned long)configMAX_PRIORITIES-1)  /** in FreeRTOS, a higher number is a higher priority */
 
 
-const uint32_t  ms_to_tick_ratio = 1000 / configTICK_RATE_HZ;
+const uint32_t  ms_to_tick_ratio = (uint32_t)( 1000 / configTICK_RATE_HZ );
 
 extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTaskName );
 
@@ -47,25 +48,26 @@ extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR 
  * @param entry_function : main thread function
  * @param name           : a string thread name used for a debugger
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
+wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
 {
     return host_rtos_create_thread_with_arg( thread, entry_function, name, stack, stack_size, priority, 0 );
 }
 
-wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
+wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
 {
     signed portBASE_TYPE result;
-    /*@-noeffect@*/
-    UNUSED_PARAMETER( stack );   /* Unused in release mode */
-    /*@+noeffect@*/
 
-    wiced_assert( "Warning: FreeRTOS does not utilize pre-allocated thread stacks. allocated space is wasted\r\n", stack == NULL );
+    UNUSED_PARAMETER( stack );   /* Unused in release mode */
+
+    wiced_assert( "Warning: FreeRTOS does not utilize pre-allocated thread stacks. allocated space is wasted\n", stack == NULL );
 
     result = xTaskCreate( (pdTASK_CODE)entry_function, (const signed char * )name, (unsigned short)(stack_size / sizeof( portSTACK_TYPE )), (void*)arg, (unsigned portBASE_TYPE) priority, thread );
 
-    return ( result == (signed portBASE_TYPE) pdPASS ) ? WICED_SUCCESS : WICED_ERROR;
+    taskYIELD();
+
+    return ( result == (signed portBASE_TYPE) pdPASS ) ? WWD_SUCCESS : WWD_THREAD_CREATE_FAILED;
 }
 
 /**
@@ -73,13 +75,14 @@ wiced_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* t
  *
  * @param thread         : handle of the thread to terminate
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_finish_thread( host_thread_type_t* thread )
 {
+    malloc_leak_check(*thread, LEAK_CHECK_THREAD);
     vTaskDelete( *thread );
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
@@ -88,15 +91,17 @@ wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
  *
  * @param thread         : handle of the thread to terminate
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_join_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_join_thread( host_thread_type_t* thread )
 {
+    /*@-infloopsuncon@*/ /* Not an infinite loop - signalled by other thread */
     while ( xTaskIsTaskFinished( *thread ) != pdTRUE )
     {
-        host_rtos_delay_milliseconds( 10 );
+        (void) host_rtos_delay_milliseconds( (uint32_t) 10 );
     }
-    return WICED_SUCCESS;
+    /*@+infloopsuncon@*/
+    return WWD_SUCCESS;
 }
 
 /**
@@ -106,14 +111,13 @@ wiced_result_t host_rtos_join_thread( host_thread_type_t* thread )
  *
  * @param thread         : handle of the terminated thread to delete
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( thread );
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+
+    return ( vTaskFreeTerminated( *thread ) == pdTRUE ) ? WWD_SUCCESS: WWD_THREAD_DELETE_FAIL;
 }
 
 
@@ -124,13 +128,15 @@ wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
  *
  * @param semaphore         : pointer to variable which will receive handle of created semaphore
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaphore )
+wwd_result_t host_rtos_init_semaphore(  /*@special@*/ /*@out@*/ host_semaphore_type_t* semaphore ) /*@allocates *semaphore@*/  /*@defines **semaphore@*/
 {
     *semaphore = xSemaphoreCreateCounting( (unsigned portBASE_TYPE) 0x7fffffff, (unsigned portBASE_TYPE) 0 );
 
-    return ( *semaphore != NULL ) ? WICED_SUCCESS : WICED_ERROR;
+    /*@-compdef@*/ /* Lint doesnt realise allocation has occurred */
+    return ( *semaphore != NULL ) ? WWD_SUCCESS : WWD_SEMAPHORE_ERROR;
+    /*@+compdef@*/
 }
 
 
@@ -150,19 +156,17 @@ wiced_result_t host_rtos_init_semaphore( /*@out@*/ host_semaphore_type_t* semaph
  *
  */
 
-wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, /*@unused@*/ wiced_bool_t will_set_in_isr )
+wwd_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, /*@unused@*/ wiced_bool_t will_set_in_isr ) /*@modifies internalState@*/
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( will_set_in_isr );
-    /*@+noeffect@*/
 
     if ( pdTRUE == xSemaphoreTake( *semaphore, (portTickType) ( timeout_ms * ( 1000/configTICK_RATE_HZ ) ) ) )
     {
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
     }
     else
     {
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
 }
 
@@ -180,12 +184,12 @@ wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32
  * @param called_from_ISR : Value of WICED_TRUE indicates calling from interrupt context
  *                          Value of WICED_FALSE indicates calling from normal thread context
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully set
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully set
  *                        : WICED_ERROR if an error occurred
  *
  */
 
-wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
+wwd_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
 {
     signed portBASE_TYPE result;
 
@@ -209,7 +213,7 @@ wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_
         wiced_assert( "Unable to set semaphore", result == pdTRUE );
     }
 
-    return ( result == pdPASS )? WICED_SUCCESS : WICED_ERROR;
+    return ( result == pdPASS )? WWD_SUCCESS : WWD_SEMAPHORE_ERROR;
 }
 
 
@@ -220,19 +224,18 @@ wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_
  *
  * @param semaphore         : Pointer to the semaphore handle
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully deleted
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully deleted
  *                        : WICED_ERROR if an error occurred
  *
  */
-
-wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
+wwd_result_t host_rtos_deinit_semaphore( /*@special@*/ host_semaphore_type_t* semaphore ) /*@releases *semaphore@*/
 {
     if (semaphore != NULL)
     {
         vQueueDelete( *semaphore );
         *semaphore = NULL;
     }
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
@@ -243,9 +246,9 @@ wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
  *
  * @returns Time in milliseconds since RTOS started.
  */
-wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
+wwd_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
 {
-    return (wiced_time_t) ( xTaskGetTickCount( ) * ( 1000 / configTICK_RATE_HZ ) );
+    return (wwd_time_t) ( xTaskGetTickCount( ) * ( 1000 / configTICK_RATE_HZ ) );
 }
 
 
@@ -258,11 +261,11 @@ wiced_time_t host_rtos_get_time( void )  /*@modifies internalState@*/
  * is less than the delay required, then makes up the difference
  * with a tight loop
  *
- * @return wiced_result_t : WICED_SUCCESS if delay was successful
+ * @return wwd_result_t : WWD_SUCCESS if delay was successful
  *                        : WICED_ERROR if an error occurred
  *
  */
-wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
+wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
 {
     uint32_t remainder;
 
@@ -285,61 +288,68 @@ wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
             }
         }
     }
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 
 }
 
 void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTaskName )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( pxTask );
     UNUSED_PARAMETER( pcTaskName ); /* unused parameter in release build */
-    /*@+noeffect@*/
 
-    WPRINT_RTOS_DEBUG(("Stack Overflow Detected in task %s\r\n",pcTaskName));
+    wiced_assert("Stack Overflow Detected", 0 != 0);
 }
 
 void vApplicationMallocFailedHook( void )
 {
-    WPRINT_RTOS_DEBUG(("Heap is out of memory during malloc\r\n"));
+    WPRINT_RTOS_DEBUG(("Heap is out of memory during malloc\n"));
 }
 
 
-wiced_result_t host_rtos_init_queue( host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size )
+wwd_result_t host_rtos_init_queue( /*@special@*/ /*@out@*/ host_queue_type_t* queue, void* buffer, uint32_t buffer_size, uint32_t message_size ) /*@allocates *queue@*/  /*@defines **queue@*/
 {
     UNUSED_PARAMETER(buffer);
-    if ( ( *queue = xQueueCreate( buffer_size / message_size, message_size ) ) == NULL )
+    if ( ( *queue = xQueueCreate( (unsigned portBASE_TYPE) ( buffer_size / message_size ), (unsigned portBASE_TYPE) message_size ) ) == NULL )
     {
-        return WICED_ERROR;
+        /*@-compdef@*/ /* Creation failed - no allocation needed*/
+        return WWD_QUEUE_ERROR;
+        /*@+compdef@*/
     }
 
-    return WICED_SUCCESS;
+    /*@-compdef@*/ /* Lint doesnt realise allocation has occurred */
+    return WWD_SUCCESS;
+    /*@+compdef@*/
 }
 
 
-wiced_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
+wwd_result_t host_rtos_push_to_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    if ( xQueueSendToBack( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) ) != pdPASS )
+    signed portBASE_TYPE retval = xQueueSendToBack( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) );
+    if ( retval != pdPASS )
     {
-        return WICED_ERROR;
+        return WWD_QUEUE_ERROR;
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
-wiced_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
+wwd_result_t host_rtos_pop_from_queue( host_queue_type_t* queue, void* message, uint32_t timeout_ms )
 {
-    if ( xQueueReceive( *queue, message, ( timeout_ms / ms_to_tick_ratio ) ) != pdPASS )
+    signed portBASE_TYPE retval = xQueueReceive( *queue, message, (portTickType) ( timeout_ms / ms_to_tick_ratio ) );
+    if ( retval == errQUEUE_EMPTY )
     {
-        return WICED_ERROR;
+        return WWD_TIMEOUT;
     }
-
-    return WICED_SUCCESS;
+    else if ( retval != pdPASS )
+    {
+        return WWD_QUEUE_ERROR;
+    }
+    return WWD_SUCCESS;
 }
 
-wiced_result_t host_rtos_deinit_queue( host_queue_type_t* queue )
+wwd_result_t host_rtos_deinit_queue( /*@special@*/host_queue_type_t* queue ) /*@releases *queue@*/
 {
     vQueueDelete( *queue );
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }

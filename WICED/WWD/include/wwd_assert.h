@@ -12,16 +12,10 @@
  *  Defines macro for assertions
  *
  */
-
-#ifndef INCLUDED_WWD_ASSERT_H_
-#define INCLUDED_WWD_ASSERT_H_
+#pragma once
 
 #include "wwd_debug.h"
-#include "wiced_defaults.h"
-
-#ifdef DEBUG
 #include "platform_assert.h"
-#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -32,14 +26,13 @@ extern "C"
  * @cond       Macros
  ******************************************************/
 
-
 #ifdef DEBUG
     #ifdef WPRINT_ENABLE_ERROR
-        #define WPRINT_ERROR(args)                      { WPRINT_MACRO(args); WICED_ASSERTION_FAIL_ACTION(); }
-        #define wiced_assert( error_string, assertion ) { if (!(assertion)) { WICED_ASSERTION_FAIL_ACTION(); } }
+        #define WPRINT_ERROR(args)                      do { WPRINT_MACRO(args); WICED_ASSERTION_FAIL_ACTION(); } while(0)
+        #define wiced_assert( error_string, assertion ) do { if (!(assertion)) { WICED_ASSERTION_FAIL_ACTION(); } } while(0)
     #else
-        #define WPRINT_ERROR(args)                      { WICED_ASSERTION_FAIL_ACTION();}
-        #define wiced_assert( error_string, assertion ) { if (!(assertion)) { WICED_ASSERTION_FAIL_ACTION();} }
+        #define WPRINT_ERROR(args)                      do { WICED_ASSERTION_FAIL_ACTION();} while(0)
+        #define wiced_assert( error_string, assertion ) do { if (!(assertion)) { WICED_ASSERTION_FAIL_ACTION();} } while(0)
     #endif
 #else
     #define wiced_assert( error_string, assertion )
@@ -51,4 +44,3 @@ extern "C"
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* ifndef INCLUDED_WWD_ASSERT_H_ */

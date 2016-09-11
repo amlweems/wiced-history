@@ -15,10 +15,11 @@
 
 #include "nx_api.h"
 #include "wwd_wifi.h"
-#include "Network/wwd_network_interface.h"
+#include "network/wwd_network_interface.h"
 #include "wwd_network.h"
-#include "Network/wwd_network_constants.h"
+#include "network/wwd_network_constants.h"
 #include "wwd_assert.h"
+#include "wwd_crypto.h"
 
 #if ( NX_PHYSICAL_HEADER != WICED_PHYSICAL_HEADER )
 #error ERROR PHYSICAL HEADER SIZE CHANGED - PREBUILT NETX-DUO LIBRARY WILL NOT WORK
@@ -32,11 +33,15 @@
  *                      Macros
  ******************************************************/
 
-#define IP_HANDLE(x)    (ip_ptr[(x)&1])
+#define IF_TO_IP( inteface )   ( ip_ptr[ ((interface==WWD_STA_INTERFACE)?0:1) ] )     /* STA = 0,  AP = 1 */
 
 /******************************************************
  *                    Constants
  ******************************************************/
+
+#ifndef WICED_TCP_RX_DEPTH_QUEUE
+#define WICED_TCP_RX_DEPTH_QUEUE    WICED_DEFAULT_TCP_RX_DEPTH_QUEUE
+#endif
 
 /******************************************************
  *                   Enumerations
@@ -51,22 +56,25 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
-static void nx_wiced_add_ethernet_header( NX_IP* ip_ptr, NX_PACKET* packet_ptr, ULONG destination_mac_msw, ULONG destination_mac_lsw, USHORT ethertype );
-static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t interface );
+static void nx_wiced_add_ethernet_header( NX_IP* ip_ptr_in, NX_PACKET* packet_ptr, ULONG destination_mac_msw, ULONG destination_mac_lsw, USHORT ethertype );
+static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface );
 
 #ifdef ADD_NETX_EAPOL_SUPPORT
-/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wiced_interface_t interface );
+/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wwd_interface_t interface );
 #endif
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 /* Saves pointers to the IP instances so that the receive function knows where to send data */
 static NX_IP* ip_ptr[2] = { NULL, NULL };
+
+/* WICED specific NetX variable used to control the TCP RX queue depth when NetX is released as a library */
+const ULONG nx_tcp_max_out_of_order_packets = WICED_TCP_RX_DEPTH_QUEUE;
 
 /******************************************************
  *               Function Definitions
@@ -74,56 +82,66 @@ static NX_IP* ip_ptr[2] = { NULL, NULL };
 
 VOID wiced_sta_netx_driver_entry( NX_IP_DRIVER* driver )
 {
-    wiced_netx_driver_entry( driver, WICED_STA_INTERFACE );
+    wiced_netx_driver_entry( driver, WWD_STA_INTERFACE );
 }
 
 VOID wiced_ap_netx_driver_entry( NX_IP_DRIVER* driver )
 {
-    wiced_netx_driver_entry( driver, WICED_AP_INTERFACE );
+    wiced_netx_driver_entry( driver, WWD_AP_INTERFACE );
 }
 
-static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t interface )
+static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface )
 {
     NX_PACKET*  packet_ptr;
     wiced_mac_t mac;
+    NX_IP*      ip;
 
-    wiced_assert("Bad args", driver != NULL);
+    wiced_assert( "Bad args", driver != NULL );
 
     packet_ptr = driver->nx_ip_driver_packet;
 
-    /* Save the IP instance pointer so that the receive function will know where to send data */
     driver->nx_ip_driver_status = NX_NOT_SUCCESSFUL;
+
+    if ( ( interface != WWD_STA_INTERFACE ) &&
+         ( interface != WWD_AP_INTERFACE ) )
+    {
+        wiced_assert( "Bad interface", 0 != 0 );
+        return;
+    }
+
+    /* Save the IP instance pointer so that the receive function will know where to send data */
+    IF_TO_IP(interface) = driver->nx_ip_driver_ptr;
+    ip = IF_TO_IP(interface);
 
     /* Process commands which are valid independent of the link state */
     switch ( driver->nx_ip_driver_command )
     {
         case NX_LINK_INITIALIZE:
-            IP_HANDLE(interface) = driver->nx_ip_driver_ptr;
-            IP_HANDLE(interface)->nx_ip_driver_mtu            = (ULONG) ( WICED_LINK_MTU - NX_PHYSICAL_HEADER - NX_PHYSICAL_TRAILER );
-            IP_HANDLE(interface)->nx_ip_driver_mapping_needed = (UINT) NX_TRUE;
-            driver->nx_ip_driver_status                       = (UINT) NX_SUCCESS;
+            ip->nx_ip_driver_mtu            = (ULONG) ( WICED_LINK_MTU - NX_PHYSICAL_HEADER - NX_PHYSICAL_TRAILER );
+            ip->nx_ip_driver_mapping_needed = (UINT) NX_TRUE;
+            driver->nx_ip_driver_status     = (UINT) NX_SUCCESS;
             break;
 
         case NX_LINK_UNINITIALIZE:
-            IP_HANDLE(interface) = NULL;
+            IF_TO_IP(interface) = NULL;
             break;
 
         case NX_LINK_ENABLE:
-            if ( wiced_wifi_get_mac_address( &mac ) != WICED_SUCCESS )
+            if ( wwd_wifi_get_mac_address( &mac, WWD_STA_INTERFACE ) != WWD_SUCCESS )
             {
-                IP_HANDLE(interface)->nx_ip_driver_link_up = NX_FALSE;
+                ip->nx_ip_driver_link_up = NX_FALSE;
                 break;
             }
 
-            IP_HANDLE(interface)->nx_ip_arp_physical_address_msw = (ULONG) ( ( mac.octet[0] << 8 ) + mac.octet[1] );
-            IP_HANDLE(interface)->nx_ip_arp_physical_address_lsw = (ULONG) ( ( mac.octet[2] << 24 ) + ( mac.octet[3] << 16 ) + ( mac.octet[4] << 8 ) + mac.octet[5] );
+            ip->nx_ip_arp_physical_address_msw = (ULONG) ( ( mac.octet[0] << 8 ) + mac.octet[1] );
+            ip->nx_ip_arp_physical_address_lsw = (ULONG) ( ( mac.octet[2] << 24 ) + ( mac.octet[3] << 16 ) + ( mac.octet[4] << 8 ) + mac.octet[5] );
 
-            IP_HANDLE(interface)->nx_ip_driver_link_up = (UINT) NX_TRUE;
+            ip->nx_ip_driver_link_up = (UINT) NX_TRUE;
             driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
             break;
 
         case NX_LINK_DISABLE:
-            IP_HANDLE(interface)->nx_ip_driver_link_up = NX_FALSE;
+            ip->nx_ip_driver_link_up = NX_FALSE;
             driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
             break;
 
@@ -135,7 +153,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t int
             mac.octet[4] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x0000ff00 ) >> 8 );
             mac.octet[5] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x000000ff ) >> 0 );
 
-            if ( wiced_wifi_register_multicast_address( &mac ) != WICED_SUCCESS )
+            if ( wwd_wifi_register_multicast_address( &mac ) != WWD_SUCCESS )
             {
                 driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
             }
@@ -150,7 +168,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t int
             mac.octet[4] = 0;
             mac.octet[5] = 0;
 
-            if ( wiced_wifi_unregister_multicast_address( &mac ) != WICED_SUCCESS )
+            if ( wwd_wifi_unregister_multicast_address( &mac ) != WWD_SUCCESS )
             {
                 driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
             }
@@ -159,7 +177,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t int
 
         case NX_LINK_GET_STATUS:
             /* Signal status through return pointer */
-            *(driver -> nx_ip_driver_return_ptr) = (ULONG) IP_HANDLE(interface)->nx_ip_driver_link_up;
+            *(driver -> nx_ip_driver_return_ptr) = (ULONG) ip->nx_ip_driver_link_up;
             driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
             break;
 
@@ -179,37 +197,37 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t int
     }
 
     /* Check if the link is up */
-    if ( ( IP_HANDLE(interface)->nx_ip_driver_link_up == NX_TRUE ) && ( wiced_wifi_is_ready_to_transceive( interface ) == WICED_SUCCESS ) )
+    if ( ( ip->nx_ip_driver_link_up == NX_TRUE ) && ( wwd_wifi_is_ready_to_transceive( interface ) == WWD_SUCCESS ) )
     {
         switch ( driver->nx_ip_driver_command )
         {
             case NX_LINK_PACKET_SEND:
-                nx_wiced_add_ethernet_header( IP_HANDLE(interface), packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, (USHORT) WICED_ETHERTYPE_IPv4 );
-                wiced_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                nx_wiced_add_ethernet_header( ip, packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, (USHORT) WICED_ETHERTYPE_IPv4 );
+                wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
 
             case NX_LINK_ARP_RESPONSE_SEND:
-                nx_wiced_add_ethernet_header( IP_HANDLE(interface), packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, (USHORT) WICED_ETHERTYPE_ARP );
-                wiced_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                nx_wiced_add_ethernet_header( ip, packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, (USHORT) WICED_ETHERTYPE_ARP );
+                wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
 
             case NX_LINK_ARP_SEND:
-                nx_wiced_add_ethernet_header( IP_HANDLE(interface), packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_ARP );
-                wiced_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                nx_wiced_add_ethernet_header( ip, packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_ARP );
+                wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
 
             case NX_LINK_RARP_SEND:
-                nx_wiced_add_ethernet_header( IP_HANDLE(interface), packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_RARP );
-                wiced_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                nx_wiced_add_ethernet_header( ip, packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_RARP );
+                wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
 
             case NX_LINK_PACKET_BROADCAST:
-                nx_wiced_add_ethernet_header( IP_HANDLE(interface), packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_IPv4 );
-                wiced_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                nx_wiced_add_ethernet_header( ip, packet_ptr, (ULONG) 0xFFFF, (ULONG) 0xFFFFFFFF, (USHORT) WICED_ETHERTYPE_IPv4 );
+                wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
 
@@ -247,7 +265,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wiced_interface_t int
     }
 }
 
-void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_t interface )
+void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t interface )
 {
     USHORT         ethertype;
     NX_PACKET*     packet_ptr = (NX_PACKET*) buffer;
@@ -255,6 +273,14 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_
 
     if ( buff == NULL )
     {
+        return;
+    }
+
+    /* Check if interface is valid, if not, drop frame */
+    if ( ( interface != WWD_STA_INTERFACE ) &&
+         ( interface != WWD_AP_INTERFACE ) )
+    {
+        nx_packet_release(packet_ptr);
         return;
     }
 
@@ -285,8 +311,12 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_
     else
 #endif
     {
+        NX_IP* ip;
+
+        ip = IF_TO_IP(interface);
+
         /* Check if interface is not attached to IP instance, if so drop frame */
-        if ( IP_HANDLE(interface) == NULL )
+        if ( ip == NULL )
         {
             nx_packet_release(packet_ptr);
             return;
@@ -299,18 +329,18 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_
         if ( ( ethertype == WICED_ETHERTYPE_IPv4 ) || ethertype == WICED_ETHERTYPE_IPv6 )
         {
 #ifdef NX_DIRECT_ISR_CALL
-            _nx_ip_packet_receive(ip_ptr, packet_ptr);
+            _nx_ip_packet_receive(ip, packet_ptr);
 #else
-            _nx_ip_packet_deferred_receive( ip_ptr[(int)interface], packet_ptr );
+            _nx_ip_packet_deferred_receive( ip, packet_ptr );
 #endif
         }
         else if ( ethertype == WICED_ETHERTYPE_ARP )
         {
-            _nx_arp_packet_deferred_receive( ip_ptr[(int)interface], packet_ptr );
+            _nx_arp_packet_deferred_receive( ip, packet_ptr );
         }
         else if ( ethertype == WICED_ETHERTYPE_RARP )
         {
-            _nx_rarp_packet_deferred_receive( ip_ptr[(int)interface], packet_ptr );
+            _nx_rarp_packet_deferred_receive( ip, packet_ptr );
         }
         else
         {
@@ -319,6 +349,15 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_
         }
     }
 }
+
+
+UINT nx_rand16( void )
+{
+    uint16_t output;
+    wwd_wifi_get_random( &output, 2 );
+    return output;
+}
+
 
 /******************************************************************************
  Static functions

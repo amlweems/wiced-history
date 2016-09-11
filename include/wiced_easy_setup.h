@@ -29,6 +29,9 @@ extern "C" {
  *                   Enumerations
  ******************************************************/
 
+/**
+ * WICED Cooee Element Type
+ */
 typedef enum
 {
     WICED_COOEE_SSID       = 0,
@@ -41,8 +44,8 @@ typedef enum
  *                 Type Definitions
  ******************************************************/
 
-typedef void (*wiced_easy_setup_cooee_callback_t)(uint8_t* cooee_data, uint16_t data_length);
-typedef void (*wiced_easy_setup_wps_callback_t)(wiced_wps_credential_t* malloced_credentials, uint16_t credential_count);
+typedef void (*wiced_easy_setup_cooee_callback_t)( uint8_t* cooee_data, uint16_t data_length );
+typedef void (*wiced_easy_setup_wps_callback_t)( wiced_wps_credential_t* malloced_credentials, uint16_t credential_count );
 
 /******************************************************
  *                    Structures

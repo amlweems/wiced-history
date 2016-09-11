@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#ifdef WICED_LOGGING_BUFFER_ENABLE
+#ifdef WWD_LOGGING_BUFFER_ENABLE
 
 #define LOGGING_BUFFER_SIZE ((unsigned long)4096)
 
@@ -20,7 +20,7 @@ static unsigned long logging_buffer_position = 0;
 static char          logging_buffer[LOGGING_BUFFER_SIZE];
 
 
-int wiced_logging_printf(const char *format, ...)
+int wwd_logging_printf(const char *format, ...)
 {
     int potential_num_written = 0;
     va_list args;
@@ -43,5 +43,5 @@ int wiced_logging_printf(const char *format, ...)
     return potential_num_written;
 }
 
-#endif /* ifdef WICED_LOGGING_BUFFER_ENABLE */
+#endif /* ifdef WWD_LOGGING_BUFFER_ENABLE */
 

@@ -16,6 +16,10 @@ $(NAME)_SOURCES := wiced_network.c \
                    tcpip.c \
                    wiced_ping.c
 
-$(NAME)_COMPONENTS := daemons/dhcp_server
+$(NAME)_COMPONENTS := daemons/DHCP_server
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+
+$(NAME)_CHECK_HEADERS := \
+                         wiced_ping.h \
+                         wiced_network.h

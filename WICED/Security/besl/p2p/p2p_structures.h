@@ -14,6 +14,10 @@
 #include "p2p_constants.h"
 #include "wps_structures.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -231,7 +235,7 @@ typedef struct
 typedef struct
 {
     p2p_capability_tlv_t  capability;
-    p2p_device_info_tlv_t device_info;
+    p2p_device_id_tlv_t device_info;
     /* device name goes here */
 } p2p_probe_response_ie_t;
 
@@ -289,11 +293,10 @@ typedef struct
 
 typedef struct
 {
-    besl_mac_t  bssid;
-    uint32_t    group_id;
-    uint8_t     channel;
-    uint8_t     ssid_length;
-    char        ssid[32];
+    besl_mac_t   bssid;
+    uint32_t     group_id;
+    uint8_t      channel;
+    wiced_ssid_t ssid;
 } p2p_group_details_t;
 
 typedef struct
@@ -380,7 +383,7 @@ typedef struct
     uint32_t p2p_association_request_ie_length;
     uint8_t* p2p_probe_response_ie;
     uint32_t p2p_probe_response_ie_length;
-    uint8_t* p2p_beacon_ie;
+    p2p_beacon_ie_t* p2p_beacon_ie;
     uint32_t p2p_beacon_ie_length;
 
     /* This IE applies to both request and response */
@@ -397,3 +400,7 @@ typedef uint8_t* (*p2p_action_frame_writer_t)(p2p_workspace_t* workspace, p2p_di
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

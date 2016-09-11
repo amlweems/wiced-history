@@ -9,21 +9,21 @@
  */
 
 /** @file
- *  Allows thread safe access to the Wiced hardware bus
+ *  Allows thread safe access to the WICED WiFi Driver (WWD) hardware bus
  *
- *  This file provides functions which allow multiple threads to use the Wiced hardware bus (SDIO or SPI)
- *  This is achieved by having a single thread (the "Wiced Thread") which queues messages to be sent, sending
+ *  This file provides functions which allow multiple threads to use the WWD hardware bus (SDIO or SPI)
+ *  This is achieved by having a single thread (the "WWD Thread") which queues messages to be sent, sending
  *  them sequentially, as well as receiving messages as they arrive.
  *
- *  Messages to be sent come from the wiced_send_sdpcm_common function in SDPCM.c .  The messages already
- *  contain SDPCM headers, but not any bus headers (GSPI), and are passed to the wiced_thread_send_data function.
+ *  Messages to be sent come from the @ref wwd_sdpcm_send_common function in wwd_sdpcm.c .  The messages already
+ *  contain SDPCM headers, but not any bus headers (GSPI), and are passed to the wwd_thread_send_data function.
  *  This function can be called from any thread.
  *
- *  Messages are received by way of a callback supplied by in SDPCM.c - wiced_process_sdpcm
- *  Received messages are delivered in the context of the Wiced Thread, so the callback function needs to avoid blocking.
+ *  Messages are received by way of a callback supplied by in SDPCM.c - wwd_sdpcm_process_rx_packet
+ *  Received messages are delivered in the context of the WWD Thread, so the callback function needs to avoid blocking.
  *
- *  It is also possible to use these functions without any operating system, by periodically calling the wiced_send_one_packet,
- *  wiced_receive_one_packet or wiced_poll_all functions
+ *  It is also possible to use these functions without any operating system, by periodically calling the wwd_thread_send_one_packet,
+ *  @ref wwd_thread_receive_one_packet or @ref wwd_thread_poll_all functions
  *
  */
 
@@ -31,24 +31,24 @@
 #include "wwd_assert.h"
 #include "wwd_logging.h"
 #include "wwd_poll.h"
-#include "RTOS/wwd_rtos_interface.h"
-#include "Network/wwd_buffer_interface.h"
-#include "Network/wwd_network_interface.h"
-#include "Platform/wwd_bus_interface.h"
-#include "internal/wwd_thread.h"
-#include "internal/SDPCM.h"
-#include "internal/wwd_internal.h"
-#include "internal/Bus_protocols/wwd_bus_protocol_interface.h"
 #include "wwd_rtos.h"
+#include "RTOS/wwd_rtos_interface.h"
+#include "network/wwd_buffer_interface.h"
+#include "network/wwd_network_interface.h"
+#include "platform/wwd_bus_interface.h"
+#include "internal/wwd_thread.h"
+#include "internal/wwd_sdpcm.h"
+#include "internal/wwd_internal.h"
+#include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 
-#define WICED_THREAD_POLL_TIMEOUT      (NEVER_TIMEOUT)
+#define WWD_THREAD_POLL_TIMEOUT      (NEVER_TIMEOUT)
 
 #ifdef RTOS_USE_STATIC_THREAD_STACK
-static uint8_t wiced_thread_stack[WICED_THREAD_STACK_SIZE];
-#define WICED_THREAD_STACK     wiced_thread_stack
+static uint8_t wwd_thread_stack[WWD_THREAD_STACK_SIZE];
+#define WWD_THREAD_STACK     wwd_thread_stack
 #else
 #ifdef RTOS_USE_DYNAMIC_THREAD_STACK
-#define WICED_THREAD_STACK     NULL
+#define WWD_THREAD_STACK     NULL
 #else
 #error RTOS_USE_STATIC_THREAD_STACK or RTOS_USE_DYNAMIC_THREAD_STACK must be defined
 #endif
@@ -59,60 +59,67 @@ static uint8_t wiced_thread_stack[WICED_THREAD_STACK_SIZE];
  *             Static Variables
  ******************************************************/
 
-static char                  wiced_thread_quit_flag = (char) 0;
-static char                  wiced_inited           = (char) 0;
-static host_thread_type_t    wiced_thread;
-static host_semaphore_type_t wiced_transceive_semaphore;
-
-static wiced_bool_t wiced_bus_interrupt;
+static wiced_bool_t          wwd_thread_quit_flag = WICED_FALSE;
+static wiced_bool_t          wwd_inited           = WICED_FALSE;
+static host_thread_type_t    wwd_thread;
+static host_semaphore_type_t wwd_transceive_semaphore;
+static wiced_bool_t          wwd_bus_interrupt = WICED_FALSE;
 
 /******************************************************
  *             Static Function Prototypes
  ******************************************************/
 
-static void wiced_thread_func( /*@unused@*/ uint32_t thread_input )   /*@globals wiced_thread, wiced_packet_send_queue_mutex, wiced_transceive_semaphore@*/ /*@modifies wiced_thread_quit_flag, wiced_inited@*/;
+static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag@*/;
 
 /******************************************************
  *             Global Functions
  ******************************************************/
 
 
-/** Initialises the Wiced Thread
+/** Initialises the WWD Thread
  *
- * Initialises the Wiced thread, and its flags/semaphores,
+ * Initialises the WWD thread, and its flags/semaphores,
  * then starts it running
  *
- * @return    WICED_SUCCESS : if initialisation succeeds
- *            WICED_ERROR   : otherwise
+ * @return    WWD_SUCCESS : if initialisation succeeds
+ *            otherwise, a result code
  */
-wiced_result_t wiced_thread_init( void ) /*@globals undef wiced_thread, undef wiced_packet_send_queue_mutex, undef wiced_transceive_semaphore@*/ /*@modifies wiced_inited@*/
+wwd_result_t wwd_thread_init( void ) /*@globals undef wwd_thread, undef wwd_transceive_semaphore@*/ /*@modifies wwd_inited@*/
 {
-    if ( wiced_init_sdpcm( ) != WICED_SUCCESS )
+    wwd_result_t retval;
+
+    retval = wwd_sdpcm_init( );
+
+    if ( retval != WWD_SUCCESS )
     {
-        WPRINT_WWD_ERROR(("Could not initialize SDPCM codec\r\n"));
-        /*@-globstate@*/
-        return WICED_ERROR;
-        /*@+globstate@*/
+        WPRINT_WWD_ERROR(("Could not initialize SDPCM codec\n"));
+        /*@-unreachable@*/ /*@-globstate@*/ /* Lint: Reachable after hitting assert & globals not defined due to error */
+        return retval;
+        /*@+unreachable@*/ /*@+globstate@*/
     }
 
-    /* Create the event flag which signals the Wiced thread needs to wake up */
-    if ( host_rtos_init_semaphore( &wiced_transceive_semaphore ) != WICED_SUCCESS )
+    /* Create the event flag which signals the WWD thread needs to wake up */
+    retval = host_rtos_init_semaphore( &wwd_transceive_semaphore );
+    if ( retval != WWD_SUCCESS )
     {
-        WPRINT_WWD_ERROR(("Could not initialize WICED thread semaphore\r\n"));
-        /*@-globstate@*/
-        return WICED_ERROR;
-        /*@+globstate@*/
+        WPRINT_WWD_ERROR(("Could not initialize WWD thread semaphore\n"));
+        /*@-unreachable@*/ /*@-globstate@*/ /* Lint: Reachable after hitting assert & globals not defined due to error */
+        return retval;
+        /*@+unreachable@*/ /*@+globstate@*/
     }
 
-    if ( WICED_SUCCESS != host_rtos_create_thread( &wiced_thread, wiced_thread_func, "WICED", WICED_THREAD_STACK, (uint32_t) WICED_THREAD_STACK_SIZE, (uint32_t) WICED_THREAD_PRIORITY ) )
+    retval = host_rtos_create_thread( &wwd_thread, wwd_thread_func, "WWD", WWD_THREAD_STACK, (uint32_t) WWD_THREAD_STACK_SIZE, (uint32_t) WWD_THREAD_PRIORITY );
+    if ( retval != WWD_SUCCESS )
     {
-        /* could not start wiced main thread */
-        WPRINT_WWD_ERROR(("Could not start WICED thread\r\n"));
-        return WICED_ERROR;
+        /* Could not start WWD main thread */
+        WPRINT_WWD_ERROR(("Could not start WWD thread\n"));
+        /*@-unreachable@*/ /* Reachable after hitting assert */
+        return retval;
+        /*@+unreachable@*/
     }
 
-    wiced_inited = (char) 1;
-    return WICED_SUCCESS;
+    wwd_inited = WICED_TRUE;
+    return WWD_SUCCESS;
 }
 
 /** Sends the first queued packet
@@ -120,136 +127,141 @@ wiced_result_t wiced_thread_init( void ) /*@globals undef wiced_thread, undef wi
  * Checks the queue to determine if there is any packets waiting
  * to be sent. If there are, then it sends the first one.
  *
- * This function is normally used by the Wiced Thread, but can be
+ * This function is normally used by the WWD Thread, but can be
  * called periodically by systems which have no RTOS to ensure
  * packets get sent.
  *
  * @return    1 : packet was sent
  *            0 : no packet sent
  */
-int8_t wiced_send_one_packet( void ) /*@modifies internalState, wiced_packet_send_queue_head, wiced_packet_send_queue_tail@*/
+int8_t wwd_thread_send_one_packet( void ) /*@modifies internalState @*/
 {
     wiced_buffer_t tmp_buf_hnd = NULL;
-    int8_t ret = 0;
 
-    if (wiced_get_packet_to_send(&tmp_buf_hnd) == WICED_SUCCESS )
+    if ( wwd_sdpcm_get_packet_to_send( &tmp_buf_hnd ) != WWD_SUCCESS )
     {
-        /* Ensure the wlan backplane bus is up */
-        if ( WICED_SUCCESS == wiced_bus_ensure_wlan_bus_is_up() )
-        {
-            WPRINT_WWD_DEBUG(("Wcd:> Sending pkt 0x%08X\n\r", (unsigned int)tmp_buf_hnd ));
-            if ( WICED_SUCCESS == wiced_bus_transfer_buffer( BUS_WRITE, WLAN_FUNCTION, 0, tmp_buf_hnd ) )
-            {
-                ret = (int8_t) 1;
-            }
-        }
-        else
-        {
-            wiced_assert("Could not bring bus back up", 0 != 0 );
-        }
-
-        host_buffer_release( tmp_buf_hnd, WICED_NETWORK_TX );
+        /*@-mustfreeonly@*/ /* Failed to get a packet */
+        return 0;
+        /*@+mustfreeonly@*/
     }
 
-    return ret;
+    /* Ensure the wlan backplane bus is up */
+    if ( wwd_bus_ensure_is_up() != WWD_SUCCESS )
+    {
+        wiced_assert("Could not bring bus back up", 0 != 0 );
+        host_buffer_release( tmp_buf_hnd, WWD_NETWORK_TX );
+        return 0;
+    }
+
+    WPRINT_WWD_DEBUG(("Wcd:> Sending pkt 0x%08X\n\r", (unsigned int)tmp_buf_hnd ));
+    if ( wwd_bus_send_buffer( tmp_buf_hnd ) != WWD_SUCCESS )
+    {
+        return 0;
+    }
+    return (int8_t) 1;
 }
 
 /** Receives a packet if one is waiting
  *
  * Checks the wifi chip fifo to determine if there is any packets waiting
  * to be received. If there are, then it receives the first one, and calls
- * the callback wiced_process_sdpcm (in SDPCM.c).
+ * the callback @ref wwd_sdpcm_process_rx_packet (in wwd_sdpcm.c).
  *
- * This function is normally used by the Wiced Thread, but can be
+ * This function is normally used by the WWD Thread, but can be
  * called periodically by systems which have no RTOS to ensure
  * packets get received properly.
  *
  * @return    1 : packet was received
  *            0 : no packet waiting
  */
-int8_t wiced_receive_one_packet( void )
+int8_t wwd_thread_receive_one_packet( void )
 {
     /* Check if there is a packet ready to be received */
     wiced_buffer_t recv_buffer;
-    if ( wiced_read_frame( &recv_buffer ) == WICED_SUCCESS)
+    if ( wwd_bus_read_frame( &recv_buffer ) != WWD_SUCCESS)
     {
-        if ( recv_buffer != NULL )
-        {
-            WICED_LOG(("Wcd:< Rcvd pkt 0x%08X\n", (unsigned int)recv_buffer ));
-            /* Send received buffer up to SDPCM layer */
-            wiced_process_sdpcm( recv_buffer );
-        }
-        return (int8_t) 1;
+        /*@-mustfreeonly@*/ /* Failed to read a packet */
+        return 0;
+        /*@+mustfreeonly@*/
     }
-    return 0;
+
+    if ( recv_buffer != NULL )  /* Could be null if it was only a credit update */
+    {
+
+        WWD_LOG(("Wcd:< Rcvd pkt 0x%08X\n", (unsigned int)recv_buffer ));
+
+        /* Send received buffer up to SDPCM layer */
+        wwd_sdpcm_process_rx_packet( recv_buffer );
+    }
+    return (int8_t) 1;
 }
 
 /** Sends and Receives all waiting packets
  *
- * Repeatedly calls wiced_send_one_packet and wiced_receive_one_packet
+ * Repeatedly calls wwd_thread_send_one_packet and wwd_thread_receive_one_packet
  * to send and receive packets, until there are no more packets waiting to
  * be transferred.
  *
- * This function is normally used by the Wiced Thread, but can be
+ * This function is normally used by the WWD Thread, but can be
  * called periodically by systems which have no RTOS to ensure
  * packets get send and received properly.
  *
  */
-void wiced_poll_all( void ) /*@modifies internalState@*/
+int8_t wwd_thread_poll_all( void ) /*@modifies internalState@*/
 {
-    do
-    {
-        /* Send queued outgoing packets */
-        while ( wiced_send_one_packet( ) != 0 )
-        {
-            /* loop whist packets still queued */
-        }
-    } while ( wiced_receive_one_packet( ) != 0 );
+    int8_t result = 0;
+    result |= wwd_thread_send_one_packet( ) ;
+    result |= wwd_thread_receive_one_packet( );
+    return result;
 }
 
-/** Terminates the Wiced Thread
+/** Terminates the WWD Thread
  *
- * Sets a flag then wakes the Wiced Thread to force it to terminate.
+ * Sets a flag then wakes the WWD Thread to force it to terminate.
  *
  */
-void wiced_thread_quit( void )
+void wwd_thread_quit( void )
 {
-    /* signal main thread and wake it */
-    wiced_thread_quit_flag = (char) 1;
-    host_rtos_set_semaphore( &wiced_transceive_semaphore, WICED_FALSE );
+    wwd_result_t result;
 
-    /* Wait for the Wiced thread to end */
-    while ( wiced_inited != 0 )
+    /* signal main thread and wake it */
+    wwd_thread_quit_flag = WICED_TRUE;
+    result = host_rtos_set_semaphore( &wwd_transceive_semaphore, WICED_FALSE );
+
+    if ( result == WWD_SUCCESS )
     {
-        host_rtos_delay_milliseconds( 1 );
+        /* Wait for the WWD thread to end */
+        host_rtos_join_thread( &wwd_thread );
+
+        (void) host_rtos_delete_terminated_thread( &wwd_thread ); /* Ignore return - not much can be done about failure */
     }
-    host_rtos_delete_terminated_thread( &wiced_thread );
 }
 
 /**
- * Informs Wiced of an interrupt
+ * Informs WWD of an interrupt
  *
  * This function should be called from the SDIO/SPI interrupt function
  * and usually indicates newly received data is available.
- * It wakes the Wiced Thread, forcing it to check the send/receive
+ * It wakes the WWD Thread, forcing it to check the send/receive
  *
  */
-void wiced_platform_notify_irq( void )
+void wwd_thread_notify_irq( void )
 {
+    wwd_bus_interrupt = WICED_TRUE;
+
     /* just wake up the main thread and let it deal with the data */
-    if ( wiced_inited == (char) 1 )
+    if ( wwd_inited == WICED_TRUE )
     {
-        wiced_bus_interrupt = WICED_TRUE;
-        host_rtos_set_semaphore( &wiced_transceive_semaphore, WICED_TRUE );
+        (void) host_rtos_set_semaphore( &wwd_transceive_semaphore, WICED_TRUE ); /* ignore failure since there is nothing that can be done about it in a ISR */
     }
 }
 
-void wiced_thread_notify( void )
+void wwd_thread_notify( void )
 {
     /* just wake up the main thread and let it deal with the data */
-    if ( wiced_inited == (char) 1 )
+    if ( wwd_inited == WICED_TRUE )
     {
-        host_rtos_set_semaphore( &wiced_transceive_semaphore, WICED_FALSE );
+        (void) host_rtos_set_semaphore( &wwd_transceive_semaphore, WICED_FALSE ); /* Ignore return - not much can be done about failure */
     }
 }
 
@@ -257,10 +269,10 @@ void wiced_thread_notify( void )
  *             Static Functions
  ******************************************************/
 
-/** The Wiced Thread function
+/** The WWD Thread function
  *
- *  This is the main loop of the Wiced Thread.
- *  It simply calls wiced_poll_all to send/receive all waiting packets, then goes
+ *  This is the main loop of the WWD Thread.
+ *  It simply calls @ref wwd_thread_poll_all to send/receive all waiting packets, then goes
  *  to sleep.  The sleep has a 100ms timeout, causing the send/receive queues to be
  *  checked 10 times per second in case an interrupt is missed.
  *  Once the quit flag has been set, flags/mutexes are cleaned up, and the function exits.
@@ -268,35 +280,29 @@ void wiced_thread_notify( void )
  * @param thread_input  : unused parameter needed to match thread prototype.
  *
  */
-static void wiced_thread_func( uint32_t /*@unused@*/thread_input )   /*@globals wiced_thread, wiced_packet_send_queue_mutex, wiced_transceive_semaphore, wiced_wlan_status@*/ /*@modifies wiced_thread_quit_flag, wiced_inited@*/
+static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag, wwd_inited, wwd_thread@*/
 {
-    uint32_t       int_status;
-    int8_t         rx_status;
-    int8_t         tx_status;
+    int8_t       rx_status;
+    int8_t       tx_status;
+    wwd_result_t result;
 
-    wiced_result_t result;
-
-    /*@-noeffect@*/
     UNUSED_PARAMETER(thread_input);
-    /*@+noeffect@*/
 
-    wiced_bus_interrupt = WICED_FALSE;
-
-    while ( wiced_thread_quit_flag != (char) 1 )
+    while ( wwd_thread_quit_flag != WICED_TRUE )
     {
         /* Check if we were woken by interrupt */
-        if ( ( wiced_bus_interrupt == WICED_TRUE ) || WICED_BUS_USE_STATUS_REPORT_SCHEME )
+        if ( ( wwd_bus_interrupt == WICED_TRUE ) ||
+             ( WWD_BUS_USE_STATUS_REPORT_SCHEME ) )
         {
-            wiced_bus_interrupt = WICED_FALSE;
-            int_status = wiced_bus_process_interrupt();
+            wwd_bus_interrupt = WICED_FALSE;
 
             /* Check if the interrupt indicated there is a packet to read */
-            if ( WICED_BUS_PACKET_AVAILABLE_TO_READ(int_status) != 0)
+            if ( wwd_bus_packet_available_to_read( ) != 0)
             {
                 /* Receive all available packets */
                 do
                 {
-                    rx_status = wiced_receive_one_packet( );
+                    rx_status = wwd_thread_receive_one_packet( );
                 } while ( rx_status != 0 );
             }
         }
@@ -304,45 +310,45 @@ static void wiced_thread_func( uint32_t /*@unused@*/thread_input )   /*@globals 
         /* Send all queued packets */
         do
         {
-            tx_status = wiced_send_one_packet( );
+            tx_status = wwd_thread_send_one_packet( );
         }
         while (tx_status != 0);
 
         /* Check if we have run out of bus credits */
-        if ( wiced_get_available_bus_credits( ) == 0 )
+        if ( wWd_sdpcm_get_available_credits( ) == 0 )
         {
             /* Keep poking the WLAN until it gives us more credits */
-            wiced_bus_poke_wlan( );
-            result = host_rtos_get_semaphore( &wiced_transceive_semaphore, (uint32_t) 100, WICED_FALSE );
+            result = wwd_bus_poke_wlan( );
+            wiced_assert( "Poking failed!", result == WWD_SUCCESS );
+            result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) 100, WICED_FALSE );
         }
         else
         {
             /* Put the bus to sleep and wait for something else to do */
-            if ( wiced_wlan_status.keep_wlan_awake == 0 )
+            if ( wwd_wlan_status.keep_wlan_awake == 0 )
             {
-                result = wiced_bus_allow_wlan_bus_to_sleep( );
-                wiced_assert( "Error setting wlan sleep", result == WICED_SUCCESS );
+                result = wwd_bus_allow_wlan_bus_to_sleep( );
+                wiced_assert( "Error setting wlan sleep", result == WWD_SUCCESS );
             }
 
-            result = host_rtos_get_semaphore( &wiced_transceive_semaphore, (uint32_t) WICED_THREAD_POLL_TIMEOUT, WICED_FALSE );
-            REFERENCE_DEBUG_ONLY_VARIABLE(result);
-        } wiced_assert("Could not get wiced sleep semaphore\r\n", (result == WICED_SUCCESS)||(result == WICED_TIMEOUT) );
+            result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) WWD_THREAD_POLL_TIMEOUT, WICED_FALSE );
+        }
+        REFERENCE_DEBUG_ONLY_VARIABLE(result);
+        wiced_assert("Could not get wwd sleep semaphore\n", (result == WWD_SUCCESS)||(result == WWD_TIMEOUT) );
     }
 
     /* Reset the quit flag */
-    wiced_thread_quit_flag = (char) 0;
+    wwd_thread_quit_flag = WICED_FALSE;
 
     /* Delete the semaphore */
-    host_rtos_deinit_semaphore( &wiced_transceive_semaphore );
+    (void) host_rtos_deinit_semaphore( &wwd_transceive_semaphore );  /* Ignore return - not much can be done about failure */
 
-    wiced_quit_sdpcm( );
-    wiced_inited = (char) 0;
+    wwd_sdpcm_quit( );
+    wwd_inited = WICED_FALSE;
 
-    if ( WICED_SUCCESS != host_rtos_finish_thread( &wiced_thread ) )
+    if ( WWD_SUCCESS != host_rtos_finish_thread( &wwd_thread ) )
     {
-        WPRINT_WWD_DEBUG(("Could not close WICED thread\r\n"));
+        WPRINT_WWD_DEBUG(("Could not close WWD thread\n"));
     }
-
-    WICED_END_OF_THREAD(NULL);
 }
 

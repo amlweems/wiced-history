@@ -21,9 +21,10 @@
 #define INCLUDED_WWD_WIFI_H
 
 #include <stdint.h>
-#include "wwd_constants.h"                  /* For wiced_result_t */
+#include "wwd_constants.h"                  /* For wwd_result_t */
+#include "chip_constants.h"
 #include "RTOS/wwd_rtos_interface.h"        /* For semaphores */
-#include "Network/wwd_network_interface.h"  /* For interface definitions */
+#include "network/wwd_network_interface.h"  /* For interface definitions */
 
 #ifdef __cplusplus
 extern "C"
@@ -92,17 +93,20 @@ extern "C"
  *             Structures
  ******************************************************/
 
+typedef void (*wwd_wifi_raw_packet_processor_t)( wiced_buffer_t buffer, wwd_interface_t interface );
 
 /******************************************************
  *             Function declarations
  ******************************************************/
+
+/*@-exportlocal@*/ /* Lint: These are API functions it is ok if they are not all used externally - they will be garbage collected by the linker if needed */
 
 /** Scan result callback function pointer type
  *
  * @param result_ptr  : A pointer to the pointer that indicates where to put the next scan result
  * @param user_data   : User provided data
  */
-typedef void (*wiced_scan_result_callback_t)( wiced_scan_result_t** result_ptr, void* user_data );
+typedef void (*wiced_scan_result_callback_t)( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status );
 
 /** Initiates a scan to search for 802.11 networks.
  *
@@ -127,22 +131,29 @@ typedef void (*wiced_scan_result_callback_t)( wiced_scan_result_t** result_ptr, 
  *
  * @note : When scanning specific channels, devices with a strong signal strength on nearby channels may be detected
  * @note : Callback must not use blocking functions, nor use WICED functions, since it is called from the context of the
- *         WICED thread.
+ *         WWD thread.
  * @note : The callback, result_ptr and user_data variables will be referenced after the function returns.
  *         Those variables must remain valid until the scan is complete.
  *
+ * @return    WWD_SUCCESS or Error code
+ */
+extern wwd_result_t wwd_wifi_scan( wiced_scan_type_t                              scan_type,
+                                   wiced_bss_type_t                               bss_type,
+                                   /*@null@*/ const wiced_ssid_t*                 optional_ssid,
+                                   /*@null@*/ const wiced_mac_t*                  optional_mac,
+                                   /*@null@*/ /*@unique@*/ const uint16_t*        optional_channel_list,
+                                   /*@null@*/ const wiced_scan_extended_params_t* optional_extended_params,
+                                   wiced_scan_result_callback_t                   callback,
+                                   wiced_scan_result_t**                          result_ptr,
+                                   /*@null@*/ void*                               user_data,
+                                   wwd_interface_t                                interface );
+
+
+/** Abort a previously issued scan
+ *
  * @return    WICED_SUCCESS or WICED_ERROR
  */
-extern wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan_type,
-                                       wiced_bss_type_t                     bss_type,
-                                       const wiced_ssid_t*                  optional_ssid,
-                                       const wiced_mac_t*                   optional_mac,
-                                       /*@unique@*/ const uint16_t*         optional_channel_list,
-                                       const wiced_scan_extended_params_t*  optional_extended_params,
-                                       wiced_scan_result_callback_t         callback,
-                                       wiced_scan_result_t**                result_ptr,
-                                       void*                                user_data );
-
+extern wwd_result_t wwd_wifi_abort_scan( void );
 
 /** Joins a Wi-Fi network
  *
@@ -164,10 +175,10 @@ extern wiced_result_t wiced_wifi_scan( wiced_scan_type_t                    scan
  * @param[in] key_length  : The length of the security_key in bytes.
  * @param[in] semaphore   : A user provided semaphore that is flagged when the join is complete
  *
- * @return    WICED_SUCCESS : when the system is joined and ready to send data packets
- *            WICED_ERROR   : if an error occurred
+ * @return    WWD_SUCCESS : when the system is joined and ready to send data packets
+ *            Error code   : if an error occurred
  */
-extern wiced_result_t wiced_wifi_join( const char* ssid, wiced_security_t auth_type, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
+extern wwd_result_t wwd_wifi_join( const wiced_ssid_t* ssid, wiced_security_t auth_type, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
 
 
 /** Joins a specific Wi-Fi network
@@ -182,35 +193,35 @@ extern wiced_result_t wiced_wifi_join( const char* ssid, wiced_security_t auth_t
  * @param[in] key_length   : The length of the security_key in bytes.
  * @param[in] semaphore    : A user provided semaphore that is flagged when the join is complete
  *
- * @return    WICED_SUCCESS : when the system is joined and ready to send data packets
- *            WICED_ERROR   : if an error occurred
+ * @return    WWD_SUCCESS : when the system is joined and ready to send data packets
+ *            Error code   : if an error occurred
  */
-extern wiced_result_t wiced_wifi_join_specific( const wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
+extern wwd_result_t wwd_wifi_join_specific( const wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore, wwd_interface_t interface );
 
 /** Disassociates from a Wi-Fi network.
  *
- * @return    WICED_SUCCESS : On successful disassociation from the AP
- *            WICED_ERROR   : If an error occurred
+ * @return    WWD_SUCCESS : On successful disassociation from the AP
+ *            Error code   : If an error occurred
  */
-extern wiced_result_t wiced_wifi_leave( void );
+extern wwd_result_t wwd_wifi_leave( wwd_interface_t interface );
 
 /** Deauthenticates a STA which may or may not be associated to SoftAP.
  *
  * @param[in] mac    : Pointer to a variable containing the MAC address to which the deauthentication will be sent
  * @param[in] reason : Deauthentication reason code
 
- * @return    WICED_SUCCESS : On successful deauthentication of the other STA
- *            WICED_ERROR   : If an error occurred
+ * @return    WWD_SUCCESS : On successful deauthentication of the other STA
+ *            WWD_ERROR   : If an error occurred
  */
-extern wiced_result_t wiced_wifi_deauth_sta( const wiced_mac_t* mac, wiced_dot11_reason_code_t reason );
+extern wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reason_code_t reason );
 
 /** Retrieves the current Media Access Control (MAC) address
  *  (or Ethernet hardware address) of the 802.11 device
  *
  * @param mac Pointer to a variable that the current MAC address will be written to
- * @return    WICED_SUCCESS or WICED_ERROR
+ * @return    WWD_SUCCESS or Error code
  */
-extern wiced_result_t wiced_wifi_get_mac_address( wiced_mac_t* mac );
+extern wwd_result_t wwd_wifi_get_mac_address( wiced_mac_t* mac, wwd_interface_t interface );
 
 /** ----------------------------------------------------------------------
  *  WARNING : This function is for internal use only!
@@ -228,9 +239,9 @@ extern wiced_result_t wiced_wifi_get_mac_address( wiced_mac_t* mac );
  *  <WICED-SDK>/generated_mac_address.txt
  *
  * @param[in] mac Wi-Fi MAC address
- * @return    WICED_SUCCESS or WICED_ERROR
+ * @return    WWD_SUCCESS or Error code
  */
-extern wiced_result_t wiced_wifi_set_mac_address( wiced_mac_t mac );
+extern wwd_result_t wwd_wifi_set_mac_address( wiced_mac_t mac );
 
 /** Starts an infrastructure WiFi network
  *
@@ -248,30 +259,30 @@ extern wiced_result_t wiced_wifi_set_mac_address( wiced_mac_t mac );
  * @param[in] key_length   : The length of the security_key in bytes.
  * @param[in] channel      : 802.11 channel number
  *
- * @return    WICED_SUCCESS : if successfully creates an AP
- *            WICED_ERROR   : if an error occurred
+ * @return    WWD_SUCCESS : if successfully creates an AP
+ *            Error code   : if an error occurred
  */
-extern wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, /*@unique@*/ uint8_t* security_key, uint8_t key_length, uint8_t channel );
+extern wwd_result_t wwd_wifi_start_ap( wiced_ssid_t* ssid, wiced_security_t auth_type, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, uint8_t channel );
 
 /** Stops an existing infrastructure WiFi network
  *
- * @return    WICED_SUCCESS : if the AP is successfully stopped
- *            WICED_ERROR   : if an error occurred
+ * @return    WWD_SUCCESS : if the AP is successfully stopped
+ *            Error code   : if an error occurred
  */
-extern wiced_result_t wiced_wifi_stop_ap( void );
+extern wwd_result_t wwd_wifi_stop_ap( void );
 
 /** Determines if a particular interface is ready to transceive ethernet packets
  *
  * @param     Radio interface to check, options are WICED_STA_INTERFACE, WICED_AP_INTERFACE
- * @return    WICED_SUCCESS  : if the interface is ready to transceive ethernet packets
+ * @return    WWD_SUCCESS  : if the interface is ready to transceive ethernet packets
  * @return    WICED_NOTFOUND : no AP with a matching SSID was found
  * @return    WICED_NOT_AUTHENTICATED: a matching AP was found but it won't let you authenticate.
  *                                     This can occur if this device is in the block list on the AP.
  * @return    WICED_NOT_KEYED: the device has authenticated and associated but has not completed the
  *                             key exchange. This can occur if the passphrase is incorrect.
- * @return    WICED_ERROR    : if the interface is not ready to transceive ethernet packets
+ * @return    Error code    : if the interface is not ready to transceive ethernet packets
  */
-extern wiced_result_t wiced_wifi_is_ready_to_transceive( wiced_interface_t interface );
+extern wwd_result_t wwd_wifi_is_ready_to_transceive( wwd_interface_t interface );
 
 /** Enables powersave mode without regard for throughput reduction
  *
@@ -279,9 +290,9 @@ extern wiced_result_t wiced_wifi_is_ready_to_transceive( wiced_interface_t inter
  *  to achieve the lowest power consumption possible when the Wi-Fi device
  *  is primarily passively listening to the network
  *
- * @return @ref wiced_result_t
+ * @return @ref wwd_result_t
  */
-extern wiced_result_t wiced_wifi_enable_powersave( void );
+extern wwd_result_t wwd_wifi_enable_powersave( void );
 
 /* Enables powersave mode while attempting to maximise throughput
  *
@@ -292,41 +303,40 @@ extern wiced_result_t wiced_wifi_enable_powersave( void );
  * after receiving or sending a packet, the WLAN chip waits for a timeout period before
  * returning to sleep.
  *
- * @return  WICED_SUCCESS : if power save mode was successfully enabled
- *          WICED_ERROR   : if power save mode was not successfully enabled
+ * @return  WWD_SUCCESS : if power save mode was successfully enabled
+ *          Error code   : if power save mode was not successfully enabled
  *
  * @param[in] return_to_sleep_delay : The variable to set return to sleep delay.*
  *
- * return to sleep delay must be set to a multiple of 10. When it is zero, the return to sleep
- * delay will be equal to 2 beacon intervals( approx 204ms ).
+ * return to sleep delay must be set to a multiple of 10 and not equal to zero.
  */
-extern wiced_result_t wiced_wifi_enable_powersave_with_throughput( uint8_t return_to_sleep_delay );
+extern wwd_result_t wwd_wifi_enable_powersave_with_throughput( uint8_t return_to_sleep_delay );
 
 
 /** Disables 802.11 power save mode
  *
- * @return  WICED_SUCCESS : if power save mode was successfully disabled
- *          WICED_ERROR   : if power save mode was not successfully disabled
+ * @return  WWD_SUCCESS : if power save mode was successfully disabled
+ *          Error code   : if power save mode was not successfully disabled
  */
-extern wiced_result_t wiced_wifi_disable_powersave( void );
+extern wwd_result_t wwd_wifi_disable_powersave( void );
 
 /** Gets the tx power in dBm units
  *
  * @param dbm : The variable to receive the tx power in dbm.
  *
- * @return  WICED_SUCCESS : if successful
- *          WICED_ERROR   : if not successful
+ * @return  WWD_SUCCESS : if successful
+ *          Error code   : if not successful
  */
-extern wiced_result_t wiced_wifi_get_tx_power( uint8_t* dbm );
+extern wwd_result_t wwd_wifi_get_tx_power( uint8_t* dbm );
 
 /** Sets the tx power in dBm units
  *
  * @param dbm : The desired tx power in dbm. If set to -1 (0xFF) the default value is restored.
  *
- * @return  WICED_SUCCESS : if tx power was successfully set
- *          WICED_ERROR   : if tx power was not successfully set
+ * @return  WWD_SUCCESS : if tx power was successfully set
+ *          Error code   : if tx power was not successfully set
  */
-extern wiced_result_t wiced_wifi_set_tx_power( uint8_t dbm );
+extern wwd_result_t wwd_wifi_set_tx_power( uint8_t dbm );
 
 /** Sets the 802.11 powersave listen interval for a Wi-Fi client, and communicates
  *  the listen interval to the Access Point. The listen interval will be set to
@@ -340,7 +350,7 @@ extern wiced_result_t wiced_wifi_set_tx_power( uint8_t dbm );
  *
  *  If it is necessary to set the listen interval sent to the AP to a value other
  *  than the value set by this function, use the additional association listen
- *  interval API : wiced_wifi_set_listen_interval_assoc()
+ *  interval API : wwd_wifi_set_listen_interval_assoc()
  *
  *  NOTE: This function applies to 802.11 powersave operation. Please read the
  *  WICED powersave application note for further information about the
@@ -349,10 +359,10 @@ extern wiced_result_t wiced_wifi_set_tx_power( uint8_t dbm );
  * @param listen_interval : The desired beacon listen interval
  * @param time_unit       : The listen interval time unit; options are beacon period or DTIM period.
  *
- * @return  WICED_SUCCESS : If the listen interval was successfully set.
- *          WICED_ERROR   : If the listen interval was not successfully set.
+ * @return  WWD_SUCCESS : If the listen interval was successfully set.
+ *          Error code   : If the listen interval was not successfully set.
  */
-extern wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit );
+extern wwd_result_t wwd_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit );
 
 /** Sets the 802.11 powersave beacon listen interval communicated to Wi-Fi Access Points
  *
@@ -360,7 +370,7 @@ extern wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, w
  *  listen interval sent to the AP (in the association request frame) during
  *  the association process.
  *
- *  To set the client listen interval as well, use the wiced_wifi_set_listen_interval() API
+ *  To set the client listen interval as well, use the wwd_wifi_set_listen_interval() API
  *
  *  This function applies to 802.11 powersave operation. Please read the
  *  WICED powersave application note for further information about the
@@ -369,10 +379,10 @@ extern wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, w
  * @param listen_interval : The beacon listen interval sent to the AP during association.
  *                          The time unit is specified in multiples of beacon periods.
  *
- * @return  WICED_SUCCESS : if listen interval was successfully set
- *          WICED_ERROR   : if listen interval was not successfully set
+ * @return  WWD_SUCCESS : if listen interval was successfully set
+ *          Error code   : if listen interval was not successfully set
  */
-extern wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t listen_interval );
+extern wwd_result_t wwd_wifi_set_listen_interval_assoc( uint16_t listen_interval );
 
 /** Gets the current value of all beacon listen interval variables
  *
@@ -380,10 +390,10 @@ extern wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t listen_inte
  * @param listen_interval_dtim   : The current value of the listen interval set as a multiple of the DTIM period
  * @param listen_interval_assoc  : The current value of the listen interval sent to access points in an association request frame
  *
- * @return  WICED_SUCCESS : If all listen interval values are read successfully
- *          WICED_ERROR   : If at least one of the listen interval values are NOT read successfully
+ * @return  WWD_SUCCESS : If all listen interval values are read successfully
+ *          Error code   : If at least one of the listen interval values are NOT read successfully
  */
-extern wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* li );
+extern wwd_result_t wwd_wifi_get_listen_interval( wiced_listen_interval_t* li );
 
 /** Registers interest in a multicast address
  * Once a multicast address has been registered, all packets detected on the
@@ -392,10 +402,10 @@ extern wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* l
  *
  * @param mac: Ethernet MAC address
  *
- * @return  WICED_SUCCESS : if the address was registered successfully
- *          WICED_ERROR   : if the address was not registered
+ * @return  WWD_SUCCESS : if the address was registered successfully
+ *          Error code   : if the address was not registered
  */
-extern wiced_result_t wiced_wifi_register_multicast_address( wiced_mac_t* mac );
+extern wwd_result_t wwd_wifi_register_multicast_address( const wiced_mac_t* mac );
 
 /** Unregisters interest in a multicast address
  * Once a multicast address has been unregistered, all packets detected on the
@@ -403,19 +413,19 @@ extern wiced_result_t wiced_wifi_register_multicast_address( wiced_mac_t* mac );
  *
  * @param mac: Ethernet MAC address
  *
- * @return  WICED_SUCCESS : if the address was unregistered successfully
- *          WICED_ERROR   : if the address was not unregistered
+ * @return  WWD_SUCCESS : if the address was unregistered successfully
+ *          Error code   : if the address was not unregistered
  */
-extern wiced_result_t wiced_wifi_unregister_multicast_address( wiced_mac_t* mac );
+extern wwd_result_t wwd_wifi_unregister_multicast_address( const wiced_mac_t* mac );
 
 /** Retrieve the latest RSSI value
  *
  * @param rssi: The location where the RSSI value will be stored
  *
- * @return  WICED_SUCCESS : if the RSSI was succesfully retrieved
- *          WICED_ERROR   : if the RSSI was not retrieved
+ * @return  WWD_SUCCESS : if the RSSI was succesfully retrieved
+ *          Error code   : if the RSSI was not retrieved
  */
-extern wiced_result_t wiced_wifi_get_rssi( int32_t* rssi );
+extern wwd_result_t wwd_wifi_get_rssi( int32_t* rssi );
 
 /** Retrieve the latest RSSI value of the AP client
  *
@@ -423,12 +433,12 @@ extern wiced_result_t wiced_wifi_get_rssi( int32_t* rssi );
  * @param client_mac_addr: Mac address of the AP client
  *                         Please note that you can get the full list of AP clients
  *                         currently connected to Wiced AP by calling a function
- *                         wiced_wifi_get_associated_client_list
+ *                         wwd_wifi_get_associated_client_list
  *
- * @return  WICED_SUCCESS : if the RSSI was succesfully retrieved
- *          WICED_ERROR   : if the RSSI was not retrieved
+ * @return  WWD_SUCCESS : if the RSSI was succesfully retrieved
+ *          Error code   : if the RSSI was not retrieved
  */
-extern wiced_result_t wiced_wifi_get_ap_client_rssi( int32_t* rssi, wiced_mac_t* client_mac_addr );
+extern wwd_result_t wwd_wifi_get_ap_client_rssi( int32_t* rssi, const wiced_mac_t* client_mac_addr );
 
 /** Select the Wi-Fi antenna
  *    antenna = 0 -> select antenna 0
@@ -437,10 +447,10 @@ extern wiced_result_t wiced_wifi_get_ap_client_rssi( int32_t* rssi, wiced_mac_t*
  *
  * @param antenna: The antenna configuration to use
  *
- * @return  WICED_SUCCESS : if the antenna selection was successfully set
- *          WICED_ERROR   : if the antenna selection was not set
+ * @return  WWD_SUCCESS : if the antenna selection was successfully set
+ *          Error code   : if the antenna selection was not set
  */
-extern wiced_result_t wiced_wifi_select_antenna( wiced_antenna_t antenna );
+extern wwd_result_t wwd_wifi_select_antenna( wiced_antenna_t antenna );
 
 /** Manage the addition and removal of custom IEs
  *
@@ -451,37 +461,49 @@ extern wiced_result_t wiced_wifi_select_antenna( wiced_antenna_t antenna );
  * @param length       : the length of the buffer pointed to by 'data'
  * @param which_packets: a mask of which packets this IE should be included in. See wiced_ie_packet_flag_t
  *
- * @return WICED_SUCCESS : if the custom IE action was successful
- *         WICED_ERROR   : if the custom IE action failed
+ * @return WWD_SUCCESS : if the custom IE action was successful
+ *         Error code   : if the custom IE action failed
  */
-extern wiced_result_t wiced_wifi_manage_custom_ie( wiced_interface_t interface, wiced_custom_ie_action_t action, /*@unique@*/ uint8_t* oui, uint8_t subtype, void* data, uint16_t length, uint16_t which_packets );
+extern wwd_result_t wwd_wifi_manage_custom_ie( wwd_interface_t interface, wiced_custom_ie_action_t action, /*@unique@*/ const uint8_t* oui, uint8_t subtype, const void* data, uint16_t length, uint16_t which_packets );
 
 /** Set roam trigger level
  *
  * @param trigger_level   : Trigger level in dBm. The Wi-Fi device will search for a new AP to connect to once the
  *                          signal from the AP (it is currently associated with) drops below the roam trigger level
  *
- * @return  WICED_SUCCESS : if the roam trigger was successfully set
- *          WICED_ERROR   : if the roam trigger was not successfully set
+ * @return  WWD_SUCCESS : if the roam trigger was successfully set
+ *          Error code   : if the roam trigger was not successfully set
  */
-extern wiced_result_t wiced_wifi_set_roam_trigger( int32_t trigger_level );
+extern wwd_result_t wwd_wifi_set_roam_trigger( int32_t trigger_level );
+
+/** Turn off roaming
+ *
+ * @param disable         : Boolean value which if TRUE will turn roaming off and if FALSE will turn roaming on
+ *
+ * @return  WICED_SUCCESS : if the roaming was successfully turned off
+ *          WICED_ERROR   : if the roaming was not successfully turned off
+ */
+extern wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable );
 
 /** Send a pre-prepared action frame
  *
  * @param action_frame   : A pointer to a pre-prepared action frame structure
  *
- * @return WICED_SUCCESS or WICED_ERROR
+ * @return WWD_SUCCESS or Error code
  */
-extern wiced_result_t wiced_wifi_send_action_frame(wl_action_frame_t* action_frame);
+extern wwd_result_t wwd_wifi_send_action_frame( const wiced_action_frame_t* action_frame );
 
 /** Retrieve the latest STA EDCF AC parameters
  *
+ * Retrieve the latest Station (STA) interface enahance distributed
+ * coordination function Access Category parameters
+ *
  * @param acp: The location where the array of AC parameters will be stored
  *
- * @return  WICED_SUCCESS : if the AC Parameters were successfully retrieved
- *          WICED_ERROR   : if the AC Parameters were not retrieved
+ * @return  WWD_SUCCESS : if the AC Parameters were successfully retrieved
+ *          Error code   : if the AC Parameters were not retrieved
  */
-extern wiced_result_t wiced_wifi_get_acparams_sta( edcf_acparam_t *acp );
+extern wwd_result_t wwd_wifi_get_acparams_sta( wiced_edcf_ac_param_t *acp );
 
 /** Prioritize access category parameters as a function of min and max contention windows and backoff slots
  *
@@ -490,15 +512,16 @@ extern wiced_result_t wiced_wifi_get_acparams_sta( edcf_acparam_t *acp );
  *
  * @return
  */
-extern void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority );
+extern void wwd_wifi_prioritize_acparams( const wiced_edcf_ac_param_t *acp, int *priority );
 
-/** For each traffic priority (0..7) look up the 802.11 Access Category that is mapped to this type
- *  of service and update the TOS map with the priority that the AP actually allows
+/** Find the highest available access category (AC), which is equal to or less than the given AC,
+ *  which does not require admission control and map it to a type of service (TOS) value.
  *
- * @return  WICED_SUCCESS : if the
- *          WICED_ERROR   : if the AC Parameters were not retrieved
+ * @param ac:        Access Category which is to be mapped to a TOS value
+ * @param acp:       Pointer to an array of AC parameters
+ * @return tos:      Highest available type of service that the selected AC maps to
  */
-extern wiced_result_t wiced_wifi_update_tos_map( void );
+extern int wwd_wifi_get_available_tos( wiced_qos_access_category_t ac, const wiced_edcf_ac_param_t *acp );
 
 /** Print access category parameters with their priority (1-4, where 4 is highest priority)
  *
@@ -507,113 +530,122 @@ extern wiced_result_t wiced_wifi_update_tos_map( void );
  *
  * @return
  */
-extern void print_ac_params( const edcf_acparam_t *acp, int *priority );
+extern void wwd_wifi_edcf_ac_params_print( const wiced_edcf_ac_param_t *acp, const int *priority );
 
 
-/** Get the current channel on STA interface
+/** Get the current channel on the WLAN radio
  *
- * @param channel   : A pointer to the variable where the channel value will be written
+ * NOTE: on most WLAN devices this will get the channel for both AP *AND* STA
+ *       (since there is only one radio - it cannot be on two channels simulaneously)
  *
- * @return  WICED_SUCCESS : if the channel was successfully read
- *          WICED_ERROR   : if the channel was not successfully read
+ * @param interface : The interface to set
+ * @param channel   : pointer which receives the current channel
+ *
+ * @return  WWD_SUCCESS : if the channel was successfully retrieved
+ *          Error code   : if the channel was not successfully retrieved
  */
-extern wiced_result_t wiced_wifi_get_channel( uint32_t* channel);
+extern wwd_result_t wwd_wifi_get_channel( wwd_interface_t interface, uint32_t* channel );
 
-/** Set the current channel on STA interface
+/** Set the current channel on the WLAN radio
  *
+ * NOTE: on most WLAN devices this will set the channel for both AP *AND* STA
+ *       (since there is only one radio - it cannot be on two channels simulaneously)
+ *
+ * @param interface : The interface to set
  * @param channel   : The desired channel
  *
- * @return  WICED_SUCCESS : if the channel was successfully set
- *          WICED_ERROR   : if the channel was not successfully set
+ * @return  WWD_SUCCESS : if the channel was successfully set
+ *          Error code   : if the channel was not successfully set
  */
-extern wiced_result_t wiced_wifi_set_channel( uint32_t channel);
+extern wwd_result_t wwd_wifi_set_channel( wwd_interface_t interface, uint32_t channel );
 
 /** Get the counters for the provided interface
  *
  * @param interface  : The interface from which the counters are requested
  *        counters   : A pointer to the structure where the counter data will be written
  *
- * @return  WICED_SUCCESS : if the counters were successfully read
- *          WICED_ERROR   : if the counters were not successfully read
+ * @return  WWD_SUCCESS : if the counters were successfully read
+ *          Error code   : if the counters were not successfully read
  */
-extern wiced_result_t wiced_wifi_get_counters(wiced_interface_t interface, wl_cnt_v6_t* counters);
+extern wwd_result_t wwd_wifi_get_counters( wwd_interface_t interface, wiced_counters_t* counters );
 
-/** Get the maximum number of associations supported by all interfaces (STA and Soft AP)
+/** Set the AMPDU parameters for both Soft AP and STA
  *
- * @param max_assoc  : The maximum number of associations supported by the STA and Soft AP interfaces. For example
- *                     if the STA interface is associated then the Soft AP can support (max_assoc - 1)
- *                     associated clients.
- *
- * @return  WICED_SUCCESS : if the maximum number of associated clients was successfully read
- *          WICED_ERROR   : if the maximum number of associated clients was not successfully read
- */
-extern wiced_result_t wiced_wifi_get_max_associations( uint32_t* max_assoc );
-
-/** Set the AMPDU parameters for both AP and STA
- *
- * Sets various AMPDU parameters for AP and STA to ensure that the number of buffers dedicated to AMPDUs does
- * not exceed the resources of the chip.
+ * Sets various AMPDU parameters for Soft AP and STA to ensure that the number of buffers dedicated to AMPDUs does
+ * not exceed the resources of the chip. Both Soft AP and STA interfaces must be down.
  *
  * @return  WICED_SUCCESS : if the AMPDU parameters were successfully set
  *          WICED_ERROR   : if the AMPDU parameters were not successfully set
  */
-extern wiced_result_t wiced_wifi_set_ampdu_parameters( void );
+extern wwd_result_t wwd_wifi_set_ampdu_parameters( void );
+
+/** Set the AMPDU Block Ack window size for both Soft AP and STA
+ *
+ * Sets the AMPDU Block Ack window size for Soft AP and STA. Soft AP and STA interfaces may be up.
+ *
+ * @param interface  : STA or Soft AP interface.
+ *
+ * @return  WICED_SUCCESS : if the Block Ack window size was successfully set
+ *          WICED_ERROR   : if the Block Ack window size was not successfully set
+ */
+extern wwd_result_t wwd_wifi_set_block_ack_window_size( wwd_interface_t interface );
 
 /*@+exportlocal@*/
 /** @} */
 
 /* AP & STA info API */
-extern wiced_result_t wiced_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length );
-extern wiced_result_t wiced_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security );
+extern wwd_result_t wwd_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length );
+extern wwd_result_t wwd_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security );
 
 /* Monitor Mode API */
-extern wiced_result_t wiced_wifi_enable_monitor_mode( void );
-extern wiced_result_t wiced_wifi_disable_monitor_mode( void );
+extern wwd_result_t wwd_wifi_enable_monitor_mode     ( void );
+extern wwd_result_t wwd_wifi_disable_monitor_mode    ( void );
+extern wiced_bool_t wwd_wifi_monitor_mode_is_enabled ( void );
+extern wwd_result_t wwd_wifi_set_raw_packet_processor( wwd_wifi_raw_packet_processor_t function );
 
 /* Duty cycle control API */
-extern wiced_result_t wiced_wifi_set_ofdm_dutycycle( uint8_t duty_cycle_val );
-extern wiced_result_t wiced_wifi_set_cck_dutycycle( uint8_t duty_cycle_val );
-extern wiced_result_t wiced_wifi_get_ofdm_dutycycle( uint8_t* duty_cycle_val );
-extern wiced_result_t wiced_wifi_get_cck_dutycycle( uint8_t* duty_cycle_val );
+extern wwd_result_t wwd_wifi_set_ofdm_dutycycle( uint8_t  duty_cycle_val );
+extern wwd_result_t wwd_wifi_set_cck_dutycycle ( uint8_t  duty_cycle_val );
+extern wwd_result_t wwd_wifi_get_ofdm_dutycycle( uint8_t* duty_cycle_val );
+extern wwd_result_t wwd_wifi_get_cck_dutycycle ( uint8_t* duty_cycle_val );
 
 /* PMK retrieval API */
-extern wiced_result_t wiced_wifi_get_pmk( char* psk, uint8_t psk_length, char* pmk );
+extern wwd_result_t wwd_wifi_get_pmk( const char* psk, uint8_t psk_length, char* pmk );
 
 /* Packet filter API */
-extern wiced_result_t wiced_wifi_add_packet_filter( uint8_t filter_id, const wiced_packet_filter_settings_t* settings );
-extern wiced_result_t wiced_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode );
-extern wiced_result_t wiced_wifi_remove_packet_filter( uint8_t filter_id );
-extern wiced_result_t wiced_wifi_enable_packet_filter( uint8_t filter_id );
-extern wiced_result_t wiced_wifi_disable_packet_filter( uint8_t filter_id );
-extern wiced_result_t wiced_wifi_get_packet_filter_stats( uint8_t filter_id, wiced_packet_filter_stats_t* stats );
-extern wiced_result_t wiced_wifi_clear_packet_filter_stats( uint32_t filter_id );
-extern wiced_result_t wiced_wifi_get_enabled_packet_filter_list( uint32_t* count, wiced_packet_filter_t** list );
-extern wiced_result_t wiced_wifi_get_disabled_packet_filter_list( uint32_t* count, wiced_packet_filter_t** list );
-extern wiced_result_t wiced_wifi_delete_packet_filter_list( wiced_packet_filter_t* list );
+extern wwd_result_t wwd_wifi_add_packet_filter                 ( const wiced_packet_filter_t* filter_settings );
+extern wwd_result_t wwd_wifi_set_packet_filter_mode            ( wiced_packet_filter_mode_t mode );
+extern wwd_result_t wwd_wifi_remove_packet_filter              ( uint8_t filter_id );
+extern wwd_result_t wwd_wifi_enable_packet_filter              ( uint8_t filter_id );
+extern wwd_result_t wwd_wifi_disable_packet_filter             ( uint8_t filter_id );
+extern wwd_result_t wwd_wifi_get_packet_filter_stats           ( uint8_t filter_id, wiced_packet_filter_stats_t* stats );
+extern wwd_result_t wwd_wifi_clear_packet_filter_stats         ( uint32_t filter_id );
+extern wwd_result_t wwd_wifi_get_packet_filters                ( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list,  uint32_t* count_out );
+extern wwd_result_t wwd_wifi_get_packet_filter_mask_and_pattern( uint32_t filter_id, uint32_t max_size, uint8_t* mask, uint8_t* pattern, uint32_t* size_out );
+
 
 /* These functions are not exposed to the external WICED API */
-extern wiced_result_t wiced_wifi_get_packet_filter_list ( uint32_t* count, wiced_packet_filter_t** list, wiced_bool_t enabled_list );
-extern wiced_result_t wiced_wifi_toggle_packet_filter   ( uint8_t filter_id, wiced_bool_t enable );
+extern wwd_result_t wwd_wifi_toggle_packet_filter( uint8_t filter_id, wiced_bool_t enable );
 
 /* Network Keep Alive API */
-extern wiced_result_t wiced_wifi_add_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info );
-extern wiced_result_t wiced_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info );
-extern wiced_result_t wiced_wifi_disable_keep_alive( uint8_t id );
+extern wwd_result_t wwd_wifi_add_keep_alive    ( const wiced_keep_alive_packet_t* keep_alive_packet_info );
+extern wwd_result_t wwd_wifi_get_keep_alive    ( wiced_keep_alive_packet_t* keep_alive_packet_info );
+extern wwd_result_t wwd_wifi_disable_keep_alive( uint8_t id );
 /** @endcond */
 
 /** Retrieves the WLAN firmware version
  *
  * @param[out] Pointer to a buffer that version information will be written to
  * @param[in]  Length of the buffer
- * @return     @ref wiced_result_t
+ * @return     @ref wwd_result_t
  */
-extern wiced_result_t wiced_wifi_get_wifi_version( char* version, uint8_t length );
+extern wwd_result_t wwd_wifi_get_wifi_version( char* version, uint8_t length );
 
-extern wiced_result_t wwd_wifi_set_channel( wiced_interface_t interface, uint32_t channel );
+extern wwd_result_t wwd_wifi_enable_minimum_power_consumption( void );
 
-extern wiced_result_t wwd_wifi_get_channel( wiced_interface_t interface, uint32_t* channel );
+extern wwd_result_t wwd_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length );
 
-extern wiced_result_t wiced_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length );
+/*@+exportlocal@*/
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -13,6 +13,10 @@
 #include "wwd_debug.h"
 #include "wiced_utilities.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *            Constants
  ******************************************************/
@@ -65,7 +69,7 @@ typedef struct
 
 typedef struct
 {
-    wiced_ssid_t     ssid;
+    wiced_ssid_t       ssid;
     wiced_security_t security;
     uint8_t          passphrase[64];
     uint16_t         passphrase_length;
@@ -89,8 +93,12 @@ typedef enum
 } besl_wps_configuration_method_t;
 
 typedef void*                  wps_eapol_packet_t;
-typedef wiced_scan_result_t    wps_ap_t;
+typedef wiced_scan_result_t      wps_ap_t;
 
 /******************************************************
  *             Function declarations
  ******************************************************/
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif

@@ -8,14 +8,14 @@
  * written permission of Broadcom Corporation.
  */
 
-#include "internal/wwd_internal.h"
-#include "internal/Bus_protocols/wwd_bus_protocol_interface.h"
-#include "internal/SDPCM.h"
-#include "wwd_management.h"
 #include <string.h>
+#include "wwd_management.h"
 #include "RTOS/wwd_rtos_interface.h"
+#include "internal/wwd_internal.h"
+#include "internal/bus_protocols/wwd_bus_protocol_interface.h"
+#include "internal/wwd_sdpcm.h"
 #include "chip_constants.h"
-#include "bcmendian.h"
+#include "wwd_bcmendian.h"
 
 /******************************************************
  *             Constants
@@ -45,7 +45,7 @@ static const uint32_t core_base_address[] =
     (uint32_t) ( SDIO_BASE_ADDRESS )
 };
 
-wiced_wlan_status_t wiced_wlan_status =
+wwd_wlan_status_t wwd_wlan_status =
 {
     .state             = WLAN_DOWN,
     .country_code      = WICED_COUNTRY_AUSTRALIA,
@@ -53,76 +53,37 @@ wiced_wlan_status_t wiced_wlan_status =
 };
 
 /******************************************************
- *             Function declarations
+ *             Static Function Declarations
  ******************************************************/
 
-static uint32_t wiced_get_core_address( device_core_t core_id );
+static uint32_t wwd_get_core_address( device_core_t core_id );
 
 /******************************************************
  *             Function definitions
  ******************************************************/
 
 /*
- * Update the backplane window registers
- */
-wiced_result_t wiced_set_backplane_window( uint32_t addr )
-{
-    wiced_result_t result = WICED_ERROR;
-    static uint32_t current_base_address;
-    uint32_t base = addr & ( (uint32_t) ~BACKPLANE_ADDRESS_MASK );
-
-    if ( base == current_base_address )
-    {
-        return WICED_SUCCESS;
-    }
-    if ( ( base & 0xFF000000 ) != ( current_base_address & 0xFF000000 ) )
-    {
-        if ( WICED_SUCCESS != ( result = wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_BACKPLANE_ADDRESS_HIGH, (uint8_t) 1, ( base >> 24 ) ) ) )
-        {
-            return result;
-        }
-    }
-    if ( ( base & 0x0FF0000 ) != ( current_base_address & 0x00FF0000 ) )
-    {
-        if ( WICED_SUCCESS != ( result = wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_BACKPLANE_ADDRESS_MID, (uint8_t) 1, ( base >> 16 ) ) ) )
-        {
-            return result;
-        }
-    }
-    if ( ( base & 0x0000FF00 ) != ( current_base_address & 0x0000FF00 ) )
-    {
-        if ( WICED_SUCCESS != ( result = wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_BACKPLANE_ADDRESS_LOW, (uint8_t) 1, ( base >> 8 ) ) ) )
-        {
-            return result;
-        }
-    }
-
-    current_base_address = base;
-    return WICED_SUCCESS;
-}
-
-/*
  * Returns the base address of the core identified by the provided coreId
  */
-uint32_t wiced_get_core_address( device_core_t core_id )
+uint32_t wwd_get_core_address( device_core_t core_id )
 {
     return core_base_address[(int) core_id];
 }
 
 /*
- * Returns WICED_SUCCESS is the core identified by the provided coreId is up, otherwise WICED_ERROR
+ * Returns WWD_SUCCESS is the core identified by the provided coreId is up, otherwise WWD result code
  */
-wiced_result_t wiced_device_core_is_up( device_core_t core_id )
+wwd_result_t wwd_device_core_is_up( device_core_t core_id )
 {
     uint8_t regdata;
     uint32_t base;
-    wiced_result_t result;
+    wwd_result_t result;
 
-    base = wiced_get_core_address( core_id );
+    base = wwd_get_core_address( core_id );
 
     /* Read the IO control register */
-    result = wiced_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &regdata );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &regdata );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
@@ -130,67 +91,67 @@ wiced_result_t wiced_device_core_is_up( device_core_t core_id )
     /* Verify that the clock is enabled and something else is not on */
     if ( ( regdata & ( SICF_FGC | SICF_CLOCK_EN ) ) != (uint8_t) SICF_CLOCK_EN )
     {
-        return WICED_ERROR;
+        return WWD_CORE_CLOCK_NOT_ENABLED;
     }
 
     /* Read the reset control and verify it is not in reset */
-    result = wiced_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &regdata );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &regdata );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
     if ( ( regdata & AIRC_RESET ) != 0 )
     {
-        return WICED_ERROR;
+        return WWD_CORE_IN_RESET;
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 /*
  * Disables the core identified by the provided coreId
  */
-wiced_result_t wiced_disable_device_core( device_core_t core_id )
+wwd_result_t wwd_disable_device_core( device_core_t core_id )
 {
-    uint32_t base = wiced_get_core_address( core_id );
-    wiced_result_t result;
+    uint32_t base = wwd_get_core_address( core_id );
+    wwd_result_t result;
     uint8_t junk;
 
     /* Read the reset control */
-    result = wiced_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
     /* Write 0 to the IO control and read it back */
-    result = wiced_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, 0 );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, 0 );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    host_rtos_delay_milliseconds( (uint32_t) 1 );
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
 
-    result = wiced_write_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, (uint32_t) AIRC_RESET );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_write_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, (uint32_t) AIRC_RESET );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    host_rtos_delay_milliseconds( (uint32_t) 1 );
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
 
     return result;
 }
@@ -198,45 +159,45 @@ wiced_result_t wiced_disable_device_core( device_core_t core_id )
 /*
  * Resets the core identified by the provided coreId
  */
-wiced_result_t wiced_reset_device_core( device_core_t core_id )
+wwd_result_t wwd_reset_device_core( device_core_t core_id )
 {
-    uint32_t base = wiced_get_core_address( core_id );
-    wiced_result_t result;
+    uint32_t base = wwd_get_core_address( core_id );
+    wwd_result_t result;
     uint8_t junk;
 
-    result = wiced_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_FGC | SICF_CLOCK_EN ) );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_FGC | SICF_CLOCK_EN ) );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_write_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, 0 );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_write_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, 0 );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    host_rtos_delay_milliseconds( (uint32_t) 1 );
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
 
-    result = wiced_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) SICF_CLOCK_EN );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) SICF_CLOCK_EN );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
-    if ( result != WICED_SUCCESS )
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
     {
         return result;
     }
 
-    host_rtos_delay_milliseconds( (uint32_t) 1 );
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
 
     return result;
 }

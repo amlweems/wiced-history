@@ -78,6 +78,7 @@ typedef void (*tcpip_init_done_fn)(void *arg);
 typedef void (*tcpip_callback_fn)(void *ctx);
 
 void tcpip_init(tcpip_init_done_fn tcpip_init_done, void *arg);
+void tcpip_deinit( void );
 
 #if LWIP_NETCONN
 err_t tcpip_apimsg(struct api_msg *apimsg);
@@ -86,7 +87,7 @@ err_t tcpip_apimsg_lock(struct api_msg *apimsg);
 #endif /* LWIP_TCPIP_CORE_LOCKING */
 #endif /* LWIP_NETCONN */
 
-err_t tcpip_input(struct pbuf *p, struct netif *inp);
+err_t tcpip_input( /*@only@*/ struct pbuf *p, struct netif *inp);
 
 #if LWIP_NETIF_API
 err_t tcpip_netifapi(struct netifapi_msg *netifapimsg);
@@ -125,6 +126,7 @@ enum tcpip_msg_type {
   /* WICED_CHANGES */
   TCPIP_MSG_SUSPEND_ALL_TCPIP_TIMEOUTS,
   TCPIP_MSG_RESUME_ALL_TCPIP_TIMEOUTS,
+  TCPIP_EXIT,
   /* WICED_CHANGES */
 #endif /* LWIP_TCPIP_TIMEOUT */
   TCPIP_MSG_CALLBACK

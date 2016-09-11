@@ -64,6 +64,7 @@ extern "C" {
 
 /* Modules initialization */
 void lwip_init(void);
+void lwip_deinit(void);
 
 #ifdef __cplusplus
 }

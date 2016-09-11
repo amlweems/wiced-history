@@ -15,6 +15,9 @@ GLOBAL_INCLUDES := .
 $(NAME)_SOURCES := wiced_network.c \
                    tcpip.c
 
-$(NAME)_COMPONENTS := daemons/dhcp_server
+$(NAME)_COMPONENTS := daemons/DHCP_server
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
+
+$(NAME)_CHECK_HEADERS := \
+                         wiced_network.h

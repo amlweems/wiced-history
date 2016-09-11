@@ -12,6 +12,10 @@
 #include <stdint.h>
 #include "besl_structures.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Endian management functions */
 uint32_t besl_host_hton32(uint32_t intlong);
 uint16_t besl_host_hton16(uint16_t intshort);
@@ -30,3 +34,7 @@ extern void besl_host_random_bytes(uint8_t* buffer, uint16_t buffer_length);
 /* Memory allocation functions */
 extern void* besl_host_malloc( char* name, uint32_t size );
 extern void  besl_host_free( void* p );
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

@@ -52,6 +52,7 @@ extern "C" {
 
 /* Lower layer interface to TCP: */
 #define tcp_init() /* Compatibility define, no init needed. */
+#define tcp_deinit() /* Compatibility define, no deinit needed. */
 void             tcp_tmr     (void);  /* Must be called every
                                          TCP_TMR_INTERVAL
                                          ms. (Typically 250 ms). */

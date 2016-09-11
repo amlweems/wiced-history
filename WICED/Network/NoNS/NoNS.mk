@@ -10,7 +10,7 @@
 
 NAME := NoNS
 
-$(NAME)_COMPONENTS += Wiced/Network/NoNS/wwd
+$(NAME)_COMPONENTS += WICED/network/NoNS/WWD
 
 # Define some macros to allow for some network-specific checks
 GLOBAL_DEFINES += NETWORK_$(NAME)=1

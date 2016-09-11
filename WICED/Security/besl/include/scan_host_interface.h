@@ -9,7 +9,16 @@
  */
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef void (*scan_result_handler_t)(wl_escan_result_t* result, void* user_data);
 typedef void (*scan_complete_hander_t)(void);
 
 extern void besl_host_scan(scan_result_handler_t result_handler, void* user_data);
+
+#ifdef __cplusplus
+} /*extern "C" */
+#endif
+

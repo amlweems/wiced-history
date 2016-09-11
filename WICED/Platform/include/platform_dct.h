@@ -7,6 +7,10 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
+
+/** @file
+ * Defines Device Configuration Table (DCT) structures
+ */
 #pragma once
 
 #include <stdint.h>
@@ -36,6 +40,10 @@ extern "C" {
 #define CONFIG_AP_LIST_SIZE   (5)
 #endif
 
+#ifndef COOEE_KEY_SIZE
+#define COOEE_KEY_SIZE   (16)
+#endif
+
 #define CONFIG_VALIDITY_VALUE        0xCA1BDF58
 
 /******************************************************
@@ -49,9 +57,46 @@ extern "C" {
 /******************************************************
  *                    Structures
  ******************************************************/
-#pragma pack(1)
 
 typedef void (*dct_load_app_func_t)(void);
+
+typedef struct
+{
+    uint32_t location;
+    uint32_t size;
+} fixed_location_t;
+
+typedef struct
+{
+    enum
+    {
+        NONE,
+        INTERNAL,
+        EXTERNAL_FIXED_LOCATION,
+        EXTERNAL_FILESYSTEM_FILE,
+    } id;
+    union
+    {
+        fixed_location_t internal_fixed;
+        fixed_location_t external_fixed;
+        char     filesytem_filename[32];
+    } detail;
+} image_location_t;
+
+typedef struct
+{
+    image_location_t source;
+    image_location_t destination;
+    char             load_once;
+    char             valid;
+} load_details_t;
+
+typedef struct
+{
+    load_details_t load_details;
+
+    uint32_t entry_point;
+} boot_detail_t;
 
 typedef struct
 {
@@ -62,7 +107,8 @@ typedef struct
     char app_valid;
     char mfg_info_programmed;
     unsigned long magic_number;
-    dct_load_app_func_t load_app_func;
+    boot_detail_t boot_detail;
+    void (*load_app_func)(void); /* WARNING: TEMPORARY */
 } platform_dct_header_t;
 
 typedef struct
@@ -102,13 +148,14 @@ typedef struct
     wiced_config_soft_ap_t    config_ap_settings;
     wiced_country_code_t      country_code;
     wiced_mac_t               mac_address;
+    uint8_t                   padding[2];  /* to ensure 32bit aligned size */
 } platform_dct_wifi_config_t;
 
 typedef struct
 {
     char    private_key[PRIVATE_KEY_SIZE];
     char    certificate[CERTIFICATE_SIZE];
-    uint8_t cooee_key[16];
+    uint8_t cooee_key[COOEE_KEY_SIZE];
 } platform_dct_security_t;
 
 typedef struct
@@ -119,7 +166,7 @@ typedef struct
     platform_dct_wifi_config_t   wifi_config;
 } platform_dct_data_t;
 
-#pragma pack()
+
 
 /******************************************************
  *                 Global Variables
@@ -128,14 +175,6 @@ typedef struct
 /******************************************************
  *               Function Declarations
  ******************************************************/
-
-extern void  platform_read_dct ( uint16_t offset, void* buffer, uint16_t buffer_length );
-extern int   platform_write_dct( uint16_t data_start_offset, const void* data, uint16_t data_length, int8_t app_valid, void (*func)(void) );
-extern platform_dct_data_t* platform_get_dct  ( void );
-
-extern int platform_erase_flash( uint16_t start_sector, uint16_t end_sector );
-extern int platform_write_flash_chunk( uint32_t address, const uint8_t* data, uint32_t size );
-extern int platform_write_app_chunk( uint32_t offset, const uint8_t* data, uint32_t size );
 
 #ifdef __cplusplus
 } /* extern "C" */

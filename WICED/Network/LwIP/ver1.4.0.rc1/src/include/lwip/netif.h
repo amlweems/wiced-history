@@ -123,7 +123,7 @@ typedef err_t (*netif_output_fn)(struct netif *netif, struct pbuf *p,
  * @param netif The netif which shall send a packet
  * @param p The packet to send (raw ethernet packet)
  */
-typedef err_t (*netif_linkoutput_fn)(struct netif *netif, struct pbuf *p);
+typedef err_t (*netif_linkoutput_fn)(struct netif *netif, /*@only@*/ struct pbuf *p);
 /** Function prototype for netif status- or link-callback functions. */
 typedef void (*netif_status_callback_fn)(struct netif *netif);
 /** Function prototype for netif igmp_mac_filter functions */
@@ -251,6 +251,7 @@ extern struct netif *netif_list;
 extern struct netif *netif_default;
 
 void netif_init(void);
+void netif_deinit(void);
 
 struct netif *netif_add(struct netif *netif, ip_addr_t *ipaddr, ip_addr_t *netmask,
       ip_addr_t *gw, void *state, netif_init_fn init, netif_input_fn input);
@@ -291,12 +292,12 @@ void netif_set_link_callback(struct netif *netif, netif_status_callback_fn link_
 #endif /* LWIP_NETIF_LINK_CALLBACK */
 
 #if LWIP_NETIF_HOSTNAME
-#define netif_set_hostname(netif, name) do { if((netif) != NULL) { (netif)->hostname = name; }}while(0)
+#define netif_set_hostname(netif, name) do { if((netif) != NULL) { (netif)->hostname = name; }}while(0==1)
 #define netif_get_hostname(netif) (((netif) != NULL) ? ((netif)->hostname) : NULL)
 #endif /* LWIP_NETIF_HOSTNAME */
 
 #if LWIP_IGMP
-#define netif_set_igmp_mac_filter(netif, function) do { if((netif) != NULL) { (netif)->igmp_mac_filter = function; }}while(0)
+#define netif_set_igmp_mac_filter(netif, function) do { if((netif) != NULL) { (netif)->igmp_mac_filter = function; }}while(0==1)
 #define netif_get_igmp_mac_filter(netif) (((netif) != NULL) ? ((netif)->igmp_mac_filter) : NULL)
 #endif /* LWIP_IGMP */
 

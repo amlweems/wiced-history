@@ -16,6 +16,10 @@
 #include "wps_host.h"
 #include "besl_structures.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -216,14 +220,6 @@ typedef struct
 /******************************************************
  *                Unpacked Structures
  ******************************************************/
-
-typedef struct
-{
-    SHA256_CTX sha256_ctx;
-    uint8_t remaining_data[SHA256_CBLOCK];
-    uint8_t remaining_data_length;
-} progressive_hmac_t;
-
 /*
  * This structure contains data that is unique for both agent but contained by both.
  * Each agent starts with their public_key and nonce and progressively generates the secret nonces and hashes while also
@@ -305,7 +301,7 @@ struct _wps_agent_t
     emsk_t         emsk;
 
     /* Progressive HMAC workspace */
-    progressive_hmac_t hmac;
+    sha2_context hmac;
 
     /* State machine stages */
     wps_main_stage_t current_main_stage;
@@ -352,6 +348,7 @@ struct _wps_agent_t
      */
     /* Current target AP */
     wps_ap_t* ap;
+    uint32_t  directed_wps_max_attempts;
     uint8_t   ap_join_attempts;
     uint8_t   identity_request_received_count;
 
@@ -360,3 +357,6 @@ struct _wps_agent_t
     uint16_t m1_copy_length;
 };
 
+#ifdef __cplusplus
+} /*extern "C" */
+#endif

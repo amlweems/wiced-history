@@ -12,8 +12,9 @@
  *
  */
 
+#include "platform_config.h"
 #include "generated_security_dct.h"
-#include "Wiced/Platform/include/platform_dct.h"
+#include "WICED/platform/include/platform_dct.h"
 #include "wiced_defaults.h"
 
 #ifdef WIFI_CONFIG_APPLICATION_DEFINED
@@ -45,11 +46,11 @@
  ******************************************************/
 
 /******************************************************
- *               Function Declarations
+ *               Static Function Declarations
  ******************************************************/
 
 /******************************************************
- *               Variables Definitions
+ *               Variable Definitions
  ******************************************************/
 
 extern const void * const dct_full_size_loc; /* Defined by linker script */
@@ -101,6 +102,19 @@ static const platform_dct_data_t initial_dct =
     .dct_header.app_valid            = 1,
     .dct_header.mfg_info_programmed  = 0,
     .dct_header.magic_number         = BOOTLOADER_MAGIC_NUMBER,
+
+#ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM
+    .dct_header.boot_detail.entry_point = 0,
+    .dct_header.boot_detail.load_details.load_once = 0,
+    .dct_header.boot_detail.load_details.valid = 1,
+    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FILESYSTEM_FILE,
+    .dct_header.boot_detail.load_details.source.detail.filesytem_filename = "app.elf",
+    .dct_header.boot_detail.load_details.destination.id = INTERNAL,
+#else
+    .dct_header.boot_detail.entry_point = 0,
+    .dct_header.boot_detail.load_details.valid = 0,
+#endif /* ifdef USES_RESOURCE_FILESYSTEM */
+
     .security_credentials.certificate = CERTIFICATE_STRING,
     .security_credentials.private_key = PRIVATE_KEY_STRING,
     .security_credentials.cooee_key   = COOEE_KEY_STRING,
@@ -121,7 +135,7 @@ static const platform_dct_data_t initial_dct =
 };
 
 #if defined ( __IAR_SYSTEMS_ICC__ )
-__root int wiced_program_start(void)
+4__root int wiced_program_start(void)
 {
     /* in iar we must reference dct structure, otherwise it may not be included in */
     /* the dct image */

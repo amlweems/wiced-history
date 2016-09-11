@@ -14,8 +14,73 @@
  *
  */
 
-#ifndef INCLUDED_WICED_RTOS_H_
-#define INCLUDED_WICED_RTOS_H_
+#ifndef INCLUDED_WWD_RTOS_H_
+#define INCLUDED_WWD_RTOS_H_
+
+#include "platform_isr.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+/* Define System Tick interrupt handler needed by NoOS abstraction layer. This
+ * defines is used by the vector table.
+ */
+#define SYSTICK_irq NoOS_systick_irq
+
+/* Use this macro to define an RTOS-aware interrupt handler where RTOS
+ * primitives can be safely accessed
+ *
+ * @usage:
+ * WWD_RTOS_DEFINE_ISR( my_irq_handler )
+ * {
+ *     // Do something here
+ * }
+ */
+#if defined( __GNUC__ )
+
+#define WWD_RTOS_DEFINE_ISR( function ) \
+        void function( void ); \
+        __attribute__(( interrupt, used, section(IRQ_SECTION) )) void function( void )
+
+#elif defined ( __IAR_SYSTEMS_ICC__ )
+
+#define WWD_RTOS_DEFINE_ISR( function ) \
+        void function( void ); \
+        __irq __root void function( void )
+#else
+
+#define WWD_RTOS_DEFINE_ISR( function ) \
+        void function( void )
+
+#endif
+
+
+/* Macro for mapping a function defined using WWD_RTOS_DEFINE_ISR
+ * to an interrupt handler declared in
+ * <Wiced-SDK>/WICED/platform/<Arch>/<Family>/platform_irq_handlers.h
+ *
+ * @usage:
+ * WWD_RTOS_MAP_ISR( my_irq, USART1_irq )
+ */
+#if defined( __GNUC__ )
+
+#define WWD_RTOS_MAP_ISR( function, isr ) \
+        extern void isr( void ); \
+        __attribute__(( alias( #function ))) void isr ( void );
+
+#elif defined ( __IAR_SYSTEMS_ICC__ )
+
+#define WWD_RTOS_MAP_ISR( function, isr ) \
+        extern void isr( void ); \
+        _Pragma( TO_STRING( weak isr=function ) )
+#else
+
+#define WWD_RTOS_MAP_ISR( function, isr )
+
+#endif
+
 
 #define RTOS_HIGHER_PRIORTIY_THAN(x)     (x)
 #define RTOS_LOWER_PRIORTIY_THAN(x)      (x)
@@ -24,9 +89,7 @@
 #define RTOS_DEFAULT_THREAD_PRIORITY     (0)
 
 #define RTOS_USE_DYNAMIC_THREAD_STACK
-#define WICED_THREAD_STACK_SIZE        (544)
-
-#define WICED_END_OF_THREAD(thread)   (void)(thread)
+#define WWD_THREAD_STACK_SIZE            (544)
 
 #define malloc_get_current_thread( ) (NULL)
 typedef void* malloc_thread_handle;
@@ -49,4 +112,8 @@ typedef volatile unsigned char   host_queue_type_t;      /** NoOS definition of 
 /*@external@*/ extern void NoOS_stop_timing( void );
 /*@external@*/ extern void NoOS_systick_irq( void );
 
-#endif /* ifndef INCLUDED_WICED_RTOS_H_ */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* ifndef INCLUDED_WWD_RTOS_H_ */

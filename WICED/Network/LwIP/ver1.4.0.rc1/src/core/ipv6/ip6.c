@@ -64,6 +64,12 @@ ip_init(void)
 {
 }
 
+void
+ip_deinit(void)
+{
+}
+
+
 /* ip_route:
  *
  * Finds the appropriate network interface for a given IP address. It searches the

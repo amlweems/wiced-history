@@ -289,6 +289,7 @@ extern struct snmp_msg_trap trap_msg;
 
 /** Agent setup, start listening to port 161. */
 void snmp_init(void);
+void snmp_deinit(void);
 void snmp_trap_dst_enable(u8_t dst_idx, u8_t enable);
 void snmp_trap_dst_ip_set(u8_t dst_idx, ip_addr_t *dst);
 

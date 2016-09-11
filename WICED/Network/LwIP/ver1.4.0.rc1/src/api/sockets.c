@@ -183,6 +183,11 @@ lwip_socket_init(void)
 {
 }
 
+void
+lwip_socket_deinit(void)
+{
+}
+
 /**
  * Map a externally used socket index to the internal socket representation.
  *
@@ -621,6 +626,8 @@ lwip_recvfrom(int s, void *mem, size_t len, int flags,
     } else {
       p = ((struct netbuf *)buf)->p;
     }
+
+    LWIP_ASSERT("p != NULL", p != NULL);
     buflen = p->tot_len;
     LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_recvfrom: buflen=%"U16_F" len=%"SZT_F" off=%d sock->lastoffset=%"U16_F"\n",
       buflen, (unsigned long)len, off, sock->lastoffset));
@@ -813,7 +820,7 @@ lwip_sendto(int s, const void *data, size_t size, int flags,
   LWIP_ASSERT("lwip_sendto: size must fit in u16_t", size <= 0xffff);
   short_size = (u16_t)size;
   LWIP_ERROR("lwip_sendto: invalid address", (((to == NULL) && (tolen == 0)) ||
-             ((tolen == sizeof(struct sockaddr_in)) &&
+             ((tolen == sizeof(struct sockaddr_in)) && (to) &&
              ((to->sa_family) == AF_INET) && ((((mem_ptr_t)to) % 4) == 0))),
              sock_set_errno(sock, err_to_errno(ERR_ARG)); return -1;);
   to_in = (const struct sockaddr_in *)(void*)to;
@@ -879,6 +886,7 @@ lwip_sendto(int s, const void *data, size_t size, int flags,
     netbuf_fromport(&buf) = remote_port;
   } else {
     remote_port           = 0;
+    (void) remote_port;
     ip_addr_set_any(&buf.addr);
     netbuf_fromport(&buf) = 0;
   }

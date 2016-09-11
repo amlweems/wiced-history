@@ -10,18 +10,32 @@
 #pragma once
 
 #include "tx_api.h"
-#include "wwd_constants.h"
+#include "wiced_result.h"
+#include "platform/wwd_platform_interface.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *                      Macros
  ******************************************************/
 
-#define WICED_HARDWARE_IO_WORKER_THREAD     ((wiced_worker_thread_t*)&wiced_hardware_io_worker_thread)
-#define WICED_NETWORKING_WORKER_THREAD      ((wiced_worker_thread_t*)&wiced_networking_worker_thread )
-#define LOWER_THAN_PRIORITY_OF( thread )    ((thread).handle.tx_thread_priority + 1)
-#define HIGHER_THAN_PRIORITY_OF( thread )   ((thread).handle.tx_thread_priority - 1)
+#define WICED_HARDWARE_IO_WORKER_THREAD             ((wiced_worker_thread_t*)&wiced_hardware_io_worker_thread)
+#define WICED_NETWORKING_WORKER_THREAD              ((wiced_worker_thread_t*)&wiced_networking_worker_thread )
+#define LOWER_THAN_PRIORITY_OF( thread )            ((thread).handle.tx_thread_priority + 1)
+#define HIGHER_THAN_PRIORITY_OF( thread )           ((thread).handle.tx_thread_priority - 1)
 
-#define WICED_PRIORITY_TO_NATIVE_PRIORITY(priority)     (priority)
+#define WICED_PRIORITY_TO_NATIVE_PRIORITY(priority) ( priority )
+#define WICED_END_OF_THREAD(thread)                 malloc_leak_check( &(thread).handle, LEAK_CHECK_THREAD); (void)(thread)
+#define WICED_END_OF_CURRENT_THREAD( )              malloc_leak_check( NULL, LEAK_CHECK_THREAD)
+#define WICED_END_OF_CURRENT_THREAD_NO_LEAK_CHECK( )
+
+#define WICED_TO_MALLOC_THREAD( x )                 ((malloc_thread_handle) &((x)->handle ))
+
+#define WICED_GET_THREAD_HANDLE( thread )           (&(( thread )->handle ))
+
+#define WICED_GET_QUEUE_HANDLE( queue )             (&(( queue )->handle ))
 
 /******************************************************
  *                    Constants
@@ -40,10 +54,13 @@
  *    - event queue size : larger than that of wiced_hardware_io_worker_thread because networking operation may block
  */
 
-#define HARDWARE_IO_WORKER_THREAD_STACK_SIZE                                   (512)
-#define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE                                    (10)
-#define NETWORKING_WORKER_THREAD_STACK_SIZE                                 (6*1024)
-#define NETWORKING_WORKER_THREAD_QUEUE_SIZE                                     (15)
+#define HARDWARE_IO_WORKER_THREAD_STACK_SIZE     (512)
+#define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE      (10)
+#define NETWORKING_WORKER_THREAD_STACK_SIZE   (6*1024)
+#define NETWORKING_WORKER_THREAD_QUEUE_SIZE       (15)
+
+#define RTOS_NAME                     "ThreadX"
+#define RTOS_VERSION                  ThreadX_VERSION
 
 /******************************************************
  *                   Enumerations
@@ -55,7 +72,7 @@
 
 typedef TX_EVENT_FLAGS_GROUP wiced_event_flags_t;
 
-typedef TX_SEMAPHORE wiced_semaphore_t;
+typedef host_semaphore_type_t wiced_semaphore_t;
 
 typedef TX_MUTEX wiced_mutex_t;
 
@@ -112,3 +129,7 @@ extern wiced_worker_thread_t wiced_networking_worker_thread;
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif

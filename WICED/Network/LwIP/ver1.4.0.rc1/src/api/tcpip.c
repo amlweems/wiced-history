@@ -54,6 +54,9 @@ static tcpip_init_done_fn tcpip_init_done;
 static void *tcpip_init_done_arg;
 static sys_mbox_t mbox;
 
+
+static sys_thread_t tcpip_thread_handle;
+
 #if LWIP_TCPIP_CORE_LOCKING
 /** The global semaphore to lock the stack. */
 sys_mutex_t lock_tcpip_core;
@@ -74,6 +77,7 @@ static void
 tcpip_thread(void *arg)
 {
   struct tcpip_msg *msg;
+  char quitflag = 0;
   LWIP_UNUSED_ARG(arg);
 
   if (tcpip_init_done != NULL) {
@@ -81,13 +85,18 @@ tcpip_thread(void *arg)
   }
 
   LOCK_TCPIP_CORE();
-  while (1) {                          /* MAIN Loop */
+  while ( quitflag == 0 ) {                          /* MAIN Loop */
     UNLOCK_TCPIP_CORE();
     LWIP_TCPIP_THREAD_ALIVE();
     /* wait for a message, timeouts are processed while waiting */
     sys_timeouts_mbox_fetch(&mbox, (void **)&msg);
     LOCK_TCPIP_CORE();
     switch (msg->type) {
+        case TCPIP_EXIT:
+            quitflag = 1;
+            sys_sem_signal( msg->sem );
+            memp_free(MEMP_TCPIP_MSG_API, msg);
+            break;
 #if LWIP_NETCONN
     case TCPIP_MSG_API:
       LWIP_DEBUGF(TCPIP_DEBUG, ("tcpip_thread: API message %p\n", (void *)msg));
@@ -155,6 +164,8 @@ tcpip_thread(void *arg)
       break;
     }
   }
+
+  sys_thread_exit();
 }
 
 /**
@@ -361,6 +372,7 @@ err_t
 tcpip_apimsg(struct api_msg *apimsg)
 {
   struct tcpip_msg msg;
+  u32_t timeout = 0;
 #ifdef LWIP_DEBUG
   /* catch functions that don't set err */
   apimsg->msg.err = ERR_VAL;
@@ -371,7 +383,11 @@ tcpip_apimsg(struct api_msg *apimsg)
     msg.msg.apimsg = apimsg;
     sys_mbox_post(&mbox, &msg);
     /* WICED_CHANGES - added timeout check */
-    if ( sys_arch_sem_wait(&apimsg->msg.conn->op_completed, apimsg->msg.msg.bc.timeout) == SYS_ARCH_TIMEOUT)
+    if ( apimsg->function == do_connect )
+    {
+        timeout = apimsg->msg.msg.bc.timeout;  /* use the timeout value only for connect() */
+    }
+    if ( sys_arch_sem_wait(&apimsg->msg.conn->op_completed, timeout ) == SYS_ARCH_TIMEOUT )
     {
         apimsg->msg.err = ERR_TIMEOUT;
     }
@@ -456,6 +472,8 @@ tcpip_netifapi_lock(struct netifapi_msg* netifapimsg)
 #endif /* !LWIP_TCPIP_CORE_LOCKING */
 #endif /* LWIP_NETIF_API */
 
+
+
 /**
  * Initialize this module:
  * - initialize all sub modules
@@ -480,7 +498,42 @@ tcpip_init(tcpip_init_done_fn initfunc, void *arg)
   }
 #endif /* LWIP_TCPIP_CORE_LOCKING */
 
-  sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+  tcpip_thread_handle = sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+}
+
+
+void
+tcpip_deinit( void )
+{
+
+    struct tcpip_msg *msg;
+
+    if (sys_mbox_valid(&mbox)) {
+      sys_sem_t sem;
+      err_t retval;
+      msg = (struct tcpip_msg *)memp_malloc(MEMP_TCPIP_MSG_API);
+      LWIP_ASSERT ( "malloc fail", msg != NULL);
+
+      msg->type = TCPIP_EXIT;
+
+      retval = sys_sem_new( &sem, 0 );
+      LWIP_ASSERT( "Failed to create exit semaphore", retval == ERR_OK );
+
+      msg->sem = &sem;
+      sys_mbox_post(&mbox, msg);
+
+      sys_sem_wait(&sem);
+      // TCPIP thread has now stopped and
+      // message has now been freed
+
+      sys_sem_free(&sem);
+      sys_mbox_free( &mbox );
+    }
+
+    lwip_deinit( );
+
+    sys_thread_free( tcpip_thread_handle );
+
 }
 
 /**

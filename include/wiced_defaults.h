@@ -21,37 +21,47 @@ extern "C"
  *  a lot of memory (including dynamic memory)
  */
 
-/* 1. Pick which group of functions are allowed to print              */
-#define WPRINT_ENABLE_APP_INFO         /* Application prints        */
-//#define WPRINT_ENABLE_APP_DEBUG        /* Application prints        */
-//#define WPRINT_ENABLE_APP_ERROR        /* Application prints        */
-#define WPRINT_ENABLE_LIB_INFO         /* General library prints    */
-//#define WPRINT_ENABLE_LIB_DEBUG        /* General library prints    */
-//#define WPRINT_ENABLE_LIB_ERROR        /* General library prints    */
-#define WPRINT_ENABLE_WEBSERVER_INFO   /* Webserver prints          */
-//#define WPRINT_ENABLE_WEBSERVER_DEBUG  /* Webserver prints          */
-//#define WPRINT_ENABLE_WEBSERVER_ERROR  /* Webserver prints          */
-#define WPRINT_ENABLE_NETWORK_INFO     /* Network stack prints      */
-//#define WPRINT_ENABLE_NETWORK_DEBUG    /* Network stack prints      */
-//#define WPRINT_ENABLE_NETWORK_ERROR    /* Network stack prints      */
-#define WPRINT_ENABLE_RTOS_INFO        /* RTOS prints               */
-//#define WPRINT_ENABLE_RTOS_DEBUG       /* RTOS prints               */
-//#define WPRINT_ENABLE_RTOS_ERROR       /* RTOS prints               */
-//#define WPRINT_ENABLE_SECURITY_INFO    /* Security stack prints     */
-//#define WPRINT_ENABLE_SECURITY_DEBUG   /* Security stack prints     */
-//#define WPRINT_ENABLE_SECURITY_ERROR   /* Security stack prints     */
-#define WPRINT_ENABLE_WPS_INFO         /* WPS stack prints          */
-//#define WPRINT_ENABLE_WPS_DEBUG        /* WPS stack prints          */
-//#define WPRINT_ENABLE_WPS_ERROR        /* WPS stack prints          */
-#define WPRINT_ENABLE_PLATFORM_INFO    /* Platform prints           */
-//#define WPRINT_ENABLE_PLATFORM_DEBUG   /* Platform prints           */
-//#define WPRINT_ENABLE_PLATFORM_ERROR   /* Platform prints           */
-#define WPRINT_ENABLE_WICED_INFO       /* Wiced internal prints     */
-//#define WPRINT_ENABLE_WICED_DEBUG      /* Wiced internal prints     */
-//#define WPRINT_ENABLE_WICED_ERROR      /* Wiced internal prints     */
+/* Select which group of functions are allowed to print */
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_APP_INFO           /* Application prints */
+//#define WPRINT_ENABLE_APP_DEBUG
+//#define WPRINT_ENABLE_APP_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_LIB_INFO           /* General library prints */
+//#define WPRINT_ENABLE_LIB_DEBUG
+//#define WPRINT_ENABLE_LIB_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_WEBSERVER_INFO     /* Webserver prints */
+//#define WPRINT_ENABLE_WEBSERVER_DEBUG
+//#define WPRINT_ENABLE_WEBSERVER_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_NETWORK_INFO       /* Network stack prints */
+//#define WPRINT_ENABLE_NETWORK_DEBUG
+//#define WPRINT_ENABLE_NETWORK_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_RTOS_INFO          /* RTOS prints */
+//#define WPRINT_ENABLE_RTOS_DEBUG
+//#define WPRINT_ENABLE_RTOS_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+//#define WPRINT_ENABLE_SECURITY_INFO    /* Security stack prints */
+//#define WPRINT_ENABLE_SECURITY_DEBUG
+//#define WPRINT_ENABLE_SECURITY_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_WPS_INFO           /* WPS stack prints */
+//#define WPRINT_ENABLE_WPS_DEBUG
+//#define WPRINT_ENABLE_WPS_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_WICED_INFO         /* Wiced internal prints */
+//#define WPRINT_ENABLE_WICED_DEBUG
+//#define WPRINT_ENABLE_WICED_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 //#define WPRINT_ENABLE_WWD_INFO         /* Wiced Wi-Fi Driver prints */
-//#define WPRINT_ENABLE_WWD_DEBUG        /* Wiced Wi-Fi Driver prints */
-//#define WPRINT_ENABLE_WWD_ERROR        /* Wiced Wi-Fi Driver prints */
+//#define WPRINT_ENABLE_WWD_DEBUG
+//#define WPRINT_ENABLE_WWD_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_PLATFORM_INFO      /* Platform prints */
+//#define WPRINT_ENABLE_PLATFORM_DEBUG
+//#define WPRINT_ENABLE_PLATFORM_ERROR
 
 
 /************************************************************************
@@ -95,25 +105,28 @@ extern "C"
 
 /************************************************************************
  * WICED TCP Options */
-#define WICED_TCP_WINDOW_SIZE           (14*1024)
+#define WICED_TCP_WINDOW_SIZE                 (7 * 1024)
 #define WICED_DEFAULT_TCP_LISTEN_QUEUE_SIZE   (5)
+#define WICED_DEFAULT_TCP_TX_DEPTH_QUEUE      (5)
+#define WICED_DEFAULT_TCP_RX_DEPTH_QUEUE      (5)
+#define WICED_DEFAULT_TCP_TX_RETRIES          (10)
 
 /************************************************************************
  * WICED Join Options */
-#define WICED_JOIN_RETRY_ATTEMPTS       3
+#define WICED_JOIN_RETRY_ATTEMPTS             (3)
 
 /************************************************************************
  * WICED TLS Options */
-#define WICED_TLS_MAX_RESUMABLE_SESSIONS   4
-#define WICED_TLS_DEFAULT_VERIFICATION     (TLS_VERIFICATION_REQUIRED)
+#define WICED_TLS_MAX_RESUMABLE_SESSIONS      (4)
+#define WICED_TLS_DEFAULT_VERIFICATION        (TLS_VERIFICATION_REQUIRED)
 
 /************************************************************************
  * Country code */
-#define WICED_DEFAULT_COUNTRY_CODE    WICED_COUNTRY_AUSTRALIA
+#define WICED_DEFAULT_COUNTRY_CODE            WICED_COUNTRY_AUSTRALIA
 
 /************************************************************************
  * Application thread stack size */
-#define WICED_DEFAULT_APPLICATION_STACK_SIZE         (6144)
+#define WICED_DEFAULT_APPLICATION_STACK_SIZE    (6144)
 
 /************************************************************************
  * Soft AP Options */
@@ -124,8 +137,8 @@ extern "C"
 //#define WICED_DISABLE_SSID_BROADCAST
 
 /************************************************************************
- * Uncomment to disable AMPDUs */
-//#define WICED_DISABLE_AMPDU
+ * Uncomment to disable AMPDU transmission */
+//#define WICED_DISABLE_AMPDU_TX
 
 /************************************************************************
  * Uncomment to disable watchdog. For debugging only */
@@ -142,6 +155,10 @@ extern "C"
 /************************************************************************
  * Uncomment to enable MCU real time clock */
 //#define WICED_ENABLE_MCU_RTC
+
+/************************************************************************
+ * Uncomment both to disable TLS completely*/
+//#define WICED_DISABLE_TLS
 
 #ifdef __cplusplus
 } /*extern "C" */

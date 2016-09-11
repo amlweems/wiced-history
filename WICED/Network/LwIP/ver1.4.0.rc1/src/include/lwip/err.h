@@ -49,28 +49,28 @@ typedef s8_t err_t;
 
 /* Definitions for error constants. */
 
-#define ERR_OK          0    /* No error, everything OK. */
-#define ERR_MEM        -1    /* Out of memory error.     */
-#define ERR_BUF        -2    /* Buffer error.            */
-#define ERR_TIMEOUT    -3    /* Timeout.                 */
-#define ERR_RTE        -4    /* Routing problem.         */
-#define ERR_INPROGRESS -5    /* Operation in progress    */
-#define ERR_VAL        -6    /* Illegal value.           */
-#define ERR_WOULDBLOCK -7    /* Operation would block.   */
+#define ERR_OK         ((err_t)  0)    /* No error, everything OK. */
+#define ERR_MEM        ((err_t) -1)    /* Out of memory error.     */
+#define ERR_BUF        ((err_t) -2)    /* Buffer error.            */
+#define ERR_TIMEOUT    ((err_t) -3)    /* Timeout.                 */
+#define ERR_RTE        ((err_t) -4)    /* Routing problem.         */
+#define ERR_INPROGRESS ((err_t) -5)    /* Operation in progress    */
+#define ERR_VAL        ((err_t) -6)    /* Illegal value.           */
+#define ERR_WOULDBLOCK ((err_t) -7)    /* Operation would block.   */
 
-#define ERR_IS_FATAL(e) ((e) < ERR_VAL)
+#define ERR_IS_FATAL(e) ((e) < ERR_WOULDBLOCK)
 
-#define ERR_ABRT       -8    /* Connection aborted.      */
-#define ERR_RST        -9    /* Connection reset.        */
-#define ERR_CLSD       -10   /* Connection closed.       */
-#define ERR_CONN       -11   /* Not connected.           */
+#define ERR_ABRT       ((err_t) -8)    /* Connection aborted.      */
+#define ERR_RST        ((err_t) -9)    /* Connection reset.        */
+#define ERR_CLSD       ((err_t) -10)   /* Connection closed.       */
+#define ERR_CONN       ((err_t) -11)   /* Not connected.           */
 
-#define ERR_ARG        -12   /* Illegal argument.        */
+#define ERR_ARG        ((err_t) -12)   /* Illegal argument.        */
 
-#define ERR_USE        -13   /* Address in use.          */
+#define ERR_USE        ((err_t) -13)   /* Address in use.          */
 
-#define ERR_IF         -14   /* Low-level netif error    */
-#define ERR_ISCONN     -15   /* Already connected.       */
+#define ERR_IF         ((err_t) -14)   /* Low-level netif error    */
+#define ERR_ISCONN     ((err_t) -15)   /* Already connected.       */
 
 
 #ifdef LWIP_DEBUG

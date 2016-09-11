@@ -1452,6 +1452,7 @@ decode_next:
       offset -= q->len;
       offset_max -= q->len;
       q = q->next;
+      LWIP_ASSERT("next q null", q );
       options = (u8_t*)q->payload;
     }
   }

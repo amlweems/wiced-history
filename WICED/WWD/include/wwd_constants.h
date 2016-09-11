@@ -24,6 +24,44 @@ extern "C"
 {
 #endif
 
+
+#ifndef MIN
+extern int MIN (/*@sef@*/ int x, /*@sef@*/ int y); /* LINT : This tells lint that  the parameter must be side-effect free. i.e. evaluation does not change any values (since it is being evaulated more than once */
+#define MIN(x,y) ((x) < (y) ? (x) : (y))
+#endif /* ifndef MIN */
+
+#ifndef MAX
+extern int MAX (/*@sef@*/ int x, /*@sef@*/ int y); /* LINT : This tells lint that  the parameter must be side-effect free. i.e. evaluation does not change any values (since it is being evaulated more than once */
+#define MAX(x,y)  ((x) > (y) ? (x) : (y))
+#endif /* ifndef MAX */
+
+#ifndef ROUND_UP
+extern int ROUND_UP (/*@sef@*/ int x, /*@sef@*/ int y); /* LINT : This tells lint that  the parameter must be side-effect free. i.e. evaluation does not change any values (since it is being evaulated more than once */
+#define ROUND_UP(x,y)    ((x) % (y) ? (x) + (y)-((x)%(y)) : (x))
+#endif /* ifndef ROUND_UP */
+
+#ifndef DIV_ROUND_UP
+extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that  the parameter must be side-effect free. i.e. evaluation does not change any values (since it is being evaulated more than once */
+#define DIV_ROUND_UP(m, n)    (((m) + (n) - 1) / (n))
+#endif /* ifndef DIV_ROUND_UP */
+
+#ifndef PLATFORM
+#define PLATFORM "Unknown"
+#endif /* ifndef PLATFORM */
+
+#ifndef FreeRTOS_VERSION
+#define FreeRTOS_VERSION "Unknown"
+#endif /* ifndef FreeRTOS_VERSION */
+
+#ifndef LwIP_VERSION
+#define LwIP_VERSION "Unknown"
+#endif /* ifndef LwIP_VERSION */
+
+#ifndef WICED_VERSION
+#define WICED_VERSION "Unknown"
+#endif /* ifndef WICED_VERSION */
+
+
 /** @cond !ADDTHIS*/
 #define SHARED_ENABLED  0x00008000
 #define WPA_SECURITY    0x00200000
@@ -36,10 +74,9 @@ extern "C"
  */
 typedef enum
 {
-    WICED_STA_INTERFACE     = 0, /**< STA or Client Interface  */
-    WICED_AP_INTERFACE      = 1, /**< softAP Interface         */
-    WICED_CONFIG_INTERFACE  = 3, /**< config softAP Interface  */
-} wiced_interface_t;
+    WWD_STA_INTERFACE, /**< STA or Client Interface  */
+    WWD_AP_INTERFACE,  /**< softAP Interface         */
+} wwd_interface_t;
 
 /**
  * Enumeration of Wi-Fi security modes
@@ -55,13 +92,14 @@ typedef enum
     WICED_SECURITY_WPA2_TKIP_PSK  = ( WPA2_SECURITY | TKIP_ENABLED ),                 /**< WPA2 Security with TKIP                 */
     WICED_SECURITY_WPA2_MIXED_PSK = ( WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED ),   /**< WPA2 Security with AES & TKIP           */
 
-    WICED_SECURITY_WPS_OPEN       = WPS_ENABLED,                                      /**< WPS with open security                  */
-    WICED_SECURITY_WPS_SECURE     = (WPS_ENABLED | AES_ENABLED),                      /**< WPS with AES security                   */
+    WICED_SECURITY_WPS_OPEN       = ( WPS_ENABLED ),                                      /**< WPS with open security                  */
+    WICED_SECURITY_WPS_SECURE     = ( WPS_ENABLED | AES_ENABLED),                      /**< WPS with AES security                   */
 
     WICED_SECURITY_UNKNOWN        = -1,                                               /**< May be returned by scan function if security is unknown. Do not pass this to the join function! */
 
     WICED_SECURITY_FORCE_32_BIT   = 0x7fffffff                                        /**< Exists only to force wiced_security_t type to 32 bits */
 } wiced_security_t;
+
 
 /**
  * Enumeration of methods of scanning
@@ -143,14 +181,14 @@ typedef enum
  */
 typedef enum
 {
-    TOS_VO7 = 0xE0, /**< 0xE0, 111 0  0000 (7)  AC_VO tos/dscp values */
-    TOS_VO  = 0xD0, /**< 0xD0, 110 0  0000 (6)  AC_VO                 */
-    TOS_VI  = 0xA0, /**< 0xA0, 101 0  0000 (5)  AC_VI                 */
-    TOS_VI4 = 0x80, /**< 0x80, 100 0  0000 (4)  AC_VI                 */
-    TOS_BE  = 0x00, /**< 0x00, 000 0  0000 (0)  AC_BE                 */
-    TOS_EE  = 0x60, /**< 0x60, 011 0  0000 (3)  AC_BE                 */
-    TOS_BK  = 0x20, /**< 0x20, 001 0  0000 (1)  AC_BK                 */
-    TOS_LE  = 0x40, /**< 0x40, 010 0  0000 (2)  AC_BK                 */
+    TOS_VO7 = 7, /**< 0xE0, 111 0  0000 (7)  AC_VO tos/dscp values */
+    TOS_VO  = 6, /**< 0xD0, 110 0  0000 (6)  AC_VO                 */
+    TOS_VI  = 5, /**< 0xA0, 101 0  0000 (5)  AC_VI                 */
+    TOS_VI4 = 4, /**< 0x80, 100 0  0000 (4)  AC_VI                 */
+    TOS_BE  = 0, /**< 0x00, 000 0  0000 (0)  AC_BE                 */
+    TOS_EE  = 3, /**< 0x60, 011 0  0000 (3)  AC_BE                 */
+    TOS_BK  = 1, /**< 0x20, 001 0  0000 (1)  AC_BK                 */
+    TOS_LE  = 2, /**< 0x40, 010 0  0000 (2)  AC_BK                 */
 } wiced_ip_header_tos_t;
 
 /**
@@ -180,70 +218,140 @@ typedef enum
     WICED_PACKET_FILTER_RULE_NEGATIVE_MATCHING  = 1  /**< Specifies that a filter should NOT match a given pattern */
 } wiced_packet_filter_rule_t;
 
+typedef enum
+{
+    WICED_SCAN_INCOMPLETE,
+    WICED_SCAN_COMPLETED_SUCCESSFULLY,
+    WICED_SCAN_ABORTED,
+} wiced_scan_status_t;
+
+#ifndef RESULT_ENUM
+#define RESULT_ENUM( prefix, name, value )  prefix ## name = (value)
+#endif /* ifndef RESULT_ENUM */
+
+
+/* These Enum result values are for WWD errors
+ * Values: 1000 - 1999
+ */
+
+#define WWD_RESULT_LIST( prefix )  \
+    RESULT_ENUM( prefix, SUCCESS,                         0 ),   /**< Success */                           \
+    RESULT_ENUM( prefix, PENDING,                         1 ),   /**< Pending */                           \
+    RESULT_ENUM( prefix, TIMEOUT,                         2 ),   /**< Timeout */                           \
+    RESULT_ENUM( prefix, PARTIAL_RESULTS,              1003 ),   /**< Partial results */                   \
+    RESULT_ENUM( prefix, INVALID_KEY,                  1004 ),   /**< Invalid key */                       \
+    RESULT_ENUM( prefix, DOES_NOT_EXIST,               1005 ),   /**< Does not exist */                    \
+    RESULT_ENUM( prefix, NOT_AUTHENTICATED,            1006 ),   /**< Not authenticated */                 \
+    RESULT_ENUM( prefix, NOT_KEYED,                    1007 ),   /**< Not keyed */                         \
+    RESULT_ENUM( prefix, IOCTL_FAIL,                   1008 ),   /**< IOCTL fail */                        \
+    RESULT_ENUM( prefix, BUFFER_UNAVAILABLE_TEMPORARY, 1009 ),   /**< Buffer unavailable temporarily */    \
+    RESULT_ENUM( prefix, BUFFER_UNAVAILABLE_PERMANENT, 1010 ),   /**< Buffer unavailable permanently */    \
+    RESULT_ENUM( prefix, WPS_PBC_OVERLAP,              1011 ),   /**< WPS PBC overlap */                   \
+    RESULT_ENUM( prefix, CONNECTION_LOST,              1012 ),   /**< Connection lost */                   \
+    RESULT_ENUM( prefix, OUT_OF_EVENT_HANDLER_SPACE,   1013 ),   /**< Cannot add extra event handler */    \
+    RESULT_ENUM( prefix, SEMAPHORE_ERROR,              1014 ),   /**< Error manipulating a semaphore */    \
+    RESULT_ENUM( prefix, FLOW_CONTROLLED,              1015 ),   /**< Packet retrieval cancelled due to flow control */ \
+    RESULT_ENUM( prefix, NO_CREDITS,                   1016 ),   /**< Packet retrieval cancelled due to lack of bus credits */ \
+    RESULT_ENUM( prefix, NO_PACKET_TO_SEND,            1017 ),   /**< Packet retrieval cancelled due to no pending packets */ \
+    RESULT_ENUM( prefix, CORE_CLOCK_NOT_ENABLED,       1018 ),   /**< Core disabled due to no clock */    \
+    RESULT_ENUM( prefix, CORE_IN_RESET,                1019 ),   /**< Core disabled - in reset */         \
+    RESULT_ENUM( prefix, UNSUPPORTED,                  1020 ),   /**< Unsupported function */             \
+    RESULT_ENUM( prefix, BUS_WRITE_REGISTER_ERROR,     1021 ),   /**< Error writing to WLAN register */   \
+    RESULT_ENUM( prefix, SDIO_BUS_UP_FAIL,             1022 ),   /**< SDIO bus failed to come up */       \
+    RESULT_ENUM( prefix, JOIN_IN_PROGRESS,             1023 ),   /**< Join not finished yet */   \
+    RESULT_ENUM( prefix, NETWORK_NOT_FOUND,            1024 ),   /**< Specified network was not found */   \
+    RESULT_ENUM( prefix, INVALID_JOIN_STATUS,          1025 ),   /**< Join status error */   \
+    RESULT_ENUM( prefix, UNKNOWN_INTERFACE,            1026 ),   /**< Unknown interface specified */ \
+    RESULT_ENUM( prefix, SDIO_RX_FAIL,                 1027 ),   /**< Error during SDIO receive */   \
+    RESULT_ENUM( prefix, HWTAG_MISMATCH,               1028 ),   /**< Hardware tag header corrupt */   \
+    RESULT_ENUM( prefix, RX_BUFFER_ALLOC_FAIL,         1029 ),   /**< Failed to allocate a buffer to receive into */   \
+    RESULT_ENUM( prefix, BUS_READ_REGISTER_ERROR,      1030 ),   /**< Error reading a bus hardware register */   \
+    RESULT_ENUM( prefix, THREAD_CREATE_FAILED,         1031 ),   /**< Failed to create a new thread */   \
+    RESULT_ENUM( prefix, QUEUE_ERROR,                  1032 ),   /**< Error manipulating a queue */   \
+    RESULT_ENUM( prefix, BUFFER_POINTER_MOVE_ERROR,    1033 ),   /**< Error moving the current pointer of a packet buffer  */   \
+    RESULT_ENUM( prefix, BUFFER_SIZE_SET_ERROR,        1034 ),   /**< Error setting size of packet buffer */   \
+    RESULT_ENUM( prefix, THREAD_STACK_NULL,            1035 ),   /**< Null stack pointer passed when non null was reqired */   \
+    RESULT_ENUM( prefix, THREAD_DELETE_FAIL,           1036 ),   /**< Error deleting a thread */   \
+    RESULT_ENUM( prefix, SLEEP_ERROR,                  1037 ),   /**< Error sleeping a thread */ \
+    RESULT_ENUM( prefix, BUFFER_ALLOC_FAIL,            1038 ),   /**< Failed to allocate a packet buffer */ \
+    RESULT_ENUM( prefix, NO_PACKET_TO_RECEIVE,         1039 ),   /**< No Packets waiting to be received */ \
+    RESULT_ENUM( prefix, INTERFACE_NOT_UP,             1040 ),   /**< Requested interface is not active */ \
+    RESULT_ENUM( prefix, DELAY_TOO_LONG,               1041 ),   /**< Requested delay is too long */ \
+    RESULT_ENUM( prefix, INVALID_DUTY_CYCLE,           1042 ),   /**< Duty cycle is outside limit 0 to 100 */ \
+    RESULT_ENUM( prefix, PMK_WRONG_LENGTH,             1043 ),   /**< Returned pmk was the wrong length */ \
+    RESULT_ENUM( prefix, UNKNOWN_SECURITY_TYPE,        1044 ),   /**< AP security type was unknown */ \
+    RESULT_ENUM( prefix, WEP_NOT_ALLOWED,              1045 ),   /**< AP not allowed to use WEP - it is not secure - use Open instead */ \
+    RESULT_ENUM( prefix, WPA_KEYLEN_BAD,               1046 ),   /**< WPA / WPA2 key length must be between 8 & 64 bytes */ \
+    RESULT_ENUM( prefix, FILTER_NOT_FOUND,             1047 ),   /**< Specified filter id not found */ \
+    RESULT_ENUM( prefix, SPI_ID_READ_FAIL,             1048 ),   /**< Failed to read 0xfeedbead SPI id from chip */ \
+    RESULT_ENUM( prefix, SPI_SIZE_MISMATCH,            1049 ),   /**< Mismatch in sizes between SPI header and SDPCM header */ \
+    RESULT_ENUM( prefix, ADDRESS_ALREADY_REGISTERED,   1050 ),   /**< Attempt to register a multicast address twice */ \
+    RESULT_ENUM( prefix, SDIO_RETRIES_EXCEEDED,        1051 ),   /**< SDIO transfer failed too many times. */ \
+    RESULT_ENUM( prefix, NULL_PTR_ARG,                 1052 ),   /**< Null Pointer argument passed to function. */ \
+    RESULT_ENUM( prefix, THREAD_FINISH_FAIL,           1053 ),   /**< Error deleting a thread */ \
+    RESULT_ENUM( prefix, WAIT_ABORTED,                 1054 ),   /**< Semaphore/mutex wait has been aborted */ \
+    RESULT_ENUM( prefix, SET_BLOCK_ACK_WINDOW_FAIL,    1055 ),   /**< Failed to set block ack window */ \
+    RESULT_ENUM( prefix, INVALID_INTERFACE,            1056 ),   /**< Invalid interface provided */
+
+
+/* These Enum result values are returned directly from the WLAN during an ioctl or iovar call.
+ * Values: 1100 - 1200
+ */
+#define WLAN_ENUM_OFFSET  (2000)
+
+#define WLAN_RESULT_LIST( prefix ) \
+    RESULT_ENUM( prefix, ERROR,                       2001 ),  /**< Generic Error */                     \
+    RESULT_ENUM( prefix, BADARG,                      2002 ),  /**< Bad Argument */                      \
+    RESULT_ENUM( prefix, BADOPTION,                   2003 ),  /**< Bad option */                        \
+    RESULT_ENUM( prefix, NOTUP,                       2004 ),  /**< Not up */                            \
+    RESULT_ENUM( prefix, NOTDOWN,                     2005 ),  /**< Not down */                          \
+    RESULT_ENUM( prefix, NOTAP,                       2006 ),  /**< Not AP */                            \
+    RESULT_ENUM( prefix, NOTSTA,                      2007 ),  /**< Not STA  */                          \
+    RESULT_ENUM( prefix, BADKEYIDX,                   2008 ),  /**< BAD Key Index */                     \
+    RESULT_ENUM( prefix, RADIOOFF,                    2009 ),  /**< Radio Off */                         \
+    RESULT_ENUM( prefix, NOTBANDLOCKED,               2010 ),  /**< Not  band locked */                  \
+    RESULT_ENUM( prefix, NOCLK,                       2011 ),  /**< No Clock */                          \
+    RESULT_ENUM( prefix, BADRATESET,                  2012 ),  /**< BAD Rate valueset */                 \
+    RESULT_ENUM( prefix, BADBAND,                     2013 ),  /**< BAD Band */                          \
+    RESULT_ENUM( prefix, BUFTOOSHORT,                 2014 ),  /**< Buffer too short */                  \
+    RESULT_ENUM( prefix, BUFTOOLONG,                  2015 ),  /**< Buffer too long */                   \
+    RESULT_ENUM( prefix, BUSY,                        2016 ),  /**< Busy */                              \
+    RESULT_ENUM( prefix, NOTASSOCIATED,               2017 ),  /**< Not Associated */                    \
+    RESULT_ENUM( prefix, BADSSIDLEN,                  2018 ),  /**< Bad SSID len */                      \
+    RESULT_ENUM( prefix, OUTOFRANGECHAN,              2019 ),  /**< Out of Range Channel */              \
+    RESULT_ENUM( prefix, BADCHAN,                     2020 ),  /**< Bad Channel */                       \
+    RESULT_ENUM( prefix, BADADDR,                     2021 ),  /**< Bad Address */                       \
+    RESULT_ENUM( prefix, NORESOURCE,                  2022 ),  /**< Not Enough Resources */              \
+    RESULT_ENUM( prefix, UNSUPPORTED,                 2023 ),  /**< Unsupported */                       \
+    RESULT_ENUM( prefix, BADLEN,                      2024 ),  /**< Bad length */                        \
+    RESULT_ENUM( prefix, NOTREADY,                    2025 ),  /**< Not Ready */                         \
+    RESULT_ENUM( prefix, EPERM,                       2026 ),  /**< Not Permitted */                     \
+    RESULT_ENUM( prefix, NOMEM,                       2027 ),  /**< No Memory */                         \
+    RESULT_ENUM( prefix, ASSOCIATED,                  2028 ),  /**< Associated */                        \
+    RESULT_ENUM( prefix, RANGE,                       2029 ),  /**< Not In Range */                      \
+    RESULT_ENUM( prefix, NOTFOUND,                    2030 ),  /**< Not Found */                         \
+    RESULT_ENUM( prefix, WME_NOT_ENABLED,             2031 ),  /**< WME Not Enabled */                   \
+    RESULT_ENUM( prefix, TSPEC_NOTFOUND,              2032 ),  /**< TSPEC Not Found */                   \
+    RESULT_ENUM( prefix, ACM_NOTSUPPORTED,            2033 ),  /**< ACM Not Supported */                 \
+    RESULT_ENUM( prefix, NOT_WME_ASSOCIATION,         2034 ),  /**< Not WME Association */               \
+    RESULT_ENUM( prefix, SDIO_ERROR,                  2035 ),  /**< SDIO Bus Error */                    \
+    RESULT_ENUM( prefix, WLAN_DOWN,                   2036 ),  /**< WLAN Not Accessible */               \
+    RESULT_ENUM( prefix, BAD_VERSION,                 2037 ),  /**< Incorrect version */                 \
+    RESULT_ENUM( prefix, TXFAIL,                      2038 ),  /**< TX failure */                        \
+    RESULT_ENUM( prefix, RXFAIL,                      2039 ),  /**< RX failure */                        \
+    RESULT_ENUM( prefix, NODEVICE,                    2040 ),  /**< Device not present */                \
+    RESULT_ENUM( prefix, UNFINISHED,                  2041 ),  /**< To be finished */                    \
+    RESULT_ENUM( prefix, NONRESIDENT,                 2042 ),  /**< access to nonresident overlay */     \
+    RESULT_ENUM( prefix, DISABLED,                    2043 ),  /**< Disabled in this build */
 
 /**
  * Common result type for WICED functions
  */
 typedef enum
 {
-    WICED_SUCCESS                      = 0,    /**< Success */
-    WICED_PENDING                      = 1,    /**< Pending */
-    WICED_TIMEOUT                      = 2,    /**< Timeout */
-    WICED_PARTIAL_RESULTS              = 3,    /**< Partial results */
-    WICED_INVALID_KEY                  = 4,    /**< Invalid key */
-    WICED_DOES_NOT_EXIST               = 5,    /**< Does not exist */
-    WICED_NOT_AUTHENTICATED            = 6,    /**< Not authenticated */
-    WICED_NOT_KEYED                    = 7,    /**< Not keyed */
-    WICED_IOCTL_FAIL                   = 8,    /**< IOCTL fail */
-    WICED_BUFFER_UNAVAILABLE_TEMPORARY = 9,    /**< Buffer unavailable temporarily */
-    WICED_BUFFER_UNAVAILABLE_PERMANENT = 10,   /**< Buffer unavailable permanently */
-    WICED_WPS_PBC_OVERLAP              = 11,   /**< WPS PBC overlap */
-    WICED_CONNECTION_LOST              = 12,   /**< Connection lost */
-
-    WICED_ERROR                        = -1,   /**< Generic Error */
-    WICED_BADARG                       = -2,   /**< Bad Argument */
-    WICED_BADOPTION                    = -3,   /**< Bad option */
-    WICED_NOTUP                        = -4,   /**< Not up */
-    WICED_NOTDOWN                      = -5,   /**< Not down */
-    WICED_NOTAP                        = -6,   /**< Not AP */
-    WICED_NOTSTA                       = -7,   /**< Not STA  */
-    WICED_BADKEYIDX                    = -8,   /**< BAD Key Index */
-    WICED_RADIOOFF                     = -9,   /**< Radio Off */
-    WICED_NOTBANDLOCKED                = -10,  /**< Not  band locked */
-    WICED_NOCLK                        = -11,  /**< No Clock */
-    WICED_BADRATESET                   = -12,  /**< BAD Rate valueset */
-    WICED_BADBAND                      = -13,  /**< BAD Band */
-    WICED_BUFTOOSHORT                  = -14,  /**< Buffer too short */
-    WICED_BUFTOOLONG                   = -15,  /**< Buffer too long */
-    WICED_BUSY                         = -16,  /**< Busy */
-    WICED_NOTASSOCIATED                = -17,  /**< Not Associated */
-    WICED_BADSSIDLEN                   = -18,  /**< Bad SSID len */
-    WICED_OUTOFRANGECHAN               = -19,  /**< Out of Range Channel */
-    WICED_BADCHAN                      = -20,  /**< Bad Channel */
-    WICED_BADADDR                      = -21,  /**< Bad Address */
-    WICED_NORESOURCE                   = -22,  /**< Not Enough Resources */
-    WICED_UNSUPPORTED                  = -23,  /**< Unsupported */
-    WICED_BADLEN                       = -24,  /**< Bad length */
-    WICED_NOTREADY                     = -25,  /**< Not Ready */
-    WICED_EPERM                        = -26,  /**< Not Permitted */
-    WICED_NOMEM                        = -27,  /**< No Memory */
-    WICED_ASSOCIATED                   = -28,  /**< Associated */
-    WICED_RANGE                        = -29,  /**< Not In Range */
-    WICED_NOTFOUND                     = -30,  /**< Not Found */
-    WICED_WME_NOT_ENABLED              = -31,  /**< WME Not Enabled */
-    WICED_TSPEC_NOTFOUND               = -32,  /**< TSPEC Not Found */
-    WICED_ACM_NOTSUPPORTED             = -33,  /**< ACM Not Supported */
-    WICED_NOT_WME_ASSOCIATION          = -34,  /**< Not WME Association */
-    WICED_SDIO_ERROR                   = -35,  /**< SDIO Bus Error */
-    WICED_WLAN_DOWN                    = -36,  /**< WLAN Not Accessible */
-    WICED_BAD_VERSION                  = -37,  /**< Incorrect version */
-    WICED_TXFAIL                       = -38,  /**< TX failure */
-    WICED_RXFAIL                       = -39,  /**< RX failure */
-    WICED_NODEVICE                     = -40,  /**< Device not present */
-    WICED_UNFINISHED                   = -41,  /**< To be finished */
-    WICED_NONRESIDENT                  = -42,  /**< access to nonresident overlay */
-    WICED_DISABLED                     = -43   /**< Disabled in this build */
-} wiced_result_t;
+    WWD_RESULT_LIST( WWD_ )
+    WLAN_RESULT_LIST( WWD_WLAN_ )
+} wwd_result_t;
 
 /**
  * Boolean values
@@ -259,18 +367,18 @@ typedef enum
  */
 typedef enum
 {
-    WICED_ACTIVE_LOW = 0,
-    WICED_ACTIVE_HIGH = 1
-} wiced_io_state_t;
+    WWD_ACTIVE_LOW = 0,
+    WWD_ACTIVE_HIGH = 1
+} wwd_io_state_t;
 
 /**
  * Enumeration of Dot11 Reason Codes
  */
 typedef enum
 {
-    WICED_DOT11_RC_RESERVED  = 0,    /**< Reserved     */
-    WICED_DOT11_RC_UNSPECIFIED  = 1  /**< Unspecified  */
-} wiced_dot11_reason_code_t;
+    WWD_DOT11_RC_RESERVED  = 0,    /**< Reserved     */
+    WWD_DOT11_RC_UNSPECIFIED  = 1  /**< Unspecified  */
+} wwd_dot11_reason_code_t;
 
 
 /******************************************************
@@ -285,7 +393,7 @@ typedef enum
     /* If updating this enum, the bus_direction_mapping variable will also need to be updated */
     BUS_READ,
     BUS_WRITE
-} bus_transfer_direction_t;
+} wwd_bus_transfer_direction_t;
 
 /**
  * Macro for creating country codes according to endianness
@@ -300,21 +408,30 @@ typedef enum
 
 /* Suppress unused parameter warning */
 #ifndef UNUSED_PARAMETER
-#define UNUSED_PARAMETER(x) ( (void)(x) )
+#define UNUSED_PARAMETER(x) /*@-noeffect@*/ ( (void)(x) ) /*@+noeffect@*/
 #endif
 
 /* Suppress unused variable warning */
 #ifndef UNUSED_VARIABLE
-#define UNUSED_VARIABLE(x) ( (void)(x) )
+#define UNUSED_VARIABLE(x) /*@-noeffect@*/ ( (void)(x) ) /*@+noeffect@*/
 #endif
 
 
 /* Suppress unused variable warning occurring due to an assert which is disabled in release mode */
 #ifndef REFERENCE_DEBUG_ONLY_VARIABLE
-#define REFERENCE_DEBUG_ONLY_VARIABLE(x) ( (void)(x) )
+#define REFERENCE_DEBUG_ONLY_VARIABLE(x) /*@-noeffect@*/ ( (void)(x) ) /*@+noeffect@*/
 #endif
 
-/*@endcond*/
+/* Allow functions to be deprecated */
+#ifdef __GNUC__
+#define DEPRECATE( name )  name __attribute__ ((deprecated))
+#else
+#define DEPRECATE( name )  deprecated_ ## name
+#endif
+
+/*
+ * @endcond
+ */
 
 /**
  * Enumerated list of country codes

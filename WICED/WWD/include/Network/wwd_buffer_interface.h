@@ -34,22 +34,22 @@ extern "C"
 
 typedef enum
 {
-    WICED_NETWORK_TX,
-    WICED_NETWORK_RX
-} wiced_buffer_dir_t;
+    WWD_NETWORK_TX,
+    WWD_NETWORK_RX
+} wwd_buffer_dir_t;
 
 
-typedef wiced_buffer_t  wiced_buffer_queue_ptr_t;
+typedef wiced_buffer_t  wwd_buffer_queue_ptr_t;
 
 #pragma pack(1)
 
 typedef struct
 {
-    /*@owned@*/  wiced_buffer_queue_ptr_t  queue_next;
-#ifdef WICED_BUS_HAS_HEADER
-                 wiced_bus_header_t        bus_header;
-#endif /* ifdef WICED_BUS_HAS_HEADER */
-} wiced_buffer_header_t;
+    /*@owned@*/  wwd_buffer_queue_ptr_t  queue_next;
+#ifdef WWD_BUS_HAS_HEADER
+                 wwd_bus_header_t        bus_header;
+#endif /* ifdef WWD_BUS_HAS_HEADER */
+} wwd_buffer_header_t;
 
 #pragma pack()
 
@@ -71,15 +71,15 @@ typedef struct
  * buffering scheme in use.
  * Some implementations of the packet buffer interface may need additional
  * information for initialization, especially the location of packet buffer
- * pool(s). These can be passed via the 'native_arg' parameter. The @ref wiced_management_init
+ * pool(s). These can be passed via the 'native_arg' parameter. The @ref wwd_management_init
  * function passes the value directly from it's parameters.
  *
- * @param native_arg  An implementation specific argument passed from @ref wiced_management_init
+ * @param native_arg  An implementation specific argument passed from @ref wwd_management_init
  *
- * @return WICED_SUCCESS = Success, WICED_ERROR = Failure
+ * @return WWD_SUCCESS = Success, Error code = Failure
  */
 
-extern wiced_result_t host_buffer_init( void* native_arg );
+extern wwd_result_t host_buffer_init( /*@null@*/ void* native_arg );
 
 /**
  * @brief Allocates a packet buffer
@@ -98,10 +98,11 @@ extern wiced_result_t host_buffer_init( void* native_arg );
  * @param size      : The number of bytes to allocate.
  * @param wait      : Whether to wait for a packet buffer to be available
  *
- * @return WICED_SUCCESS = Success, WICED_ERROR = Failure
+ * @return WWD_SUCCESS = Success, Error code = Failure
  *
  */
-extern wiced_result_t host_buffer_get( /*@out@*/ wiced_buffer_t* buffer, wiced_buffer_dir_t direction, unsigned short size, wiced_bool_t wait );
+
+extern wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait ) /*@allocates *buffer@*/  /*@defines **buffer@*/;
 
 /**
  * Releases a packet buffer
@@ -119,7 +120,7 @@ extern wiced_result_t host_buffer_get( /*@out@*/ wiced_buffer_t* buffer, wiced_b
  *                    been used for. This might be needed if tx/rx pools are separate.
  *
  */
-extern void host_buffer_release( /*@only@*/ wiced_buffer_t buffer, wiced_buffer_dir_t direction );
+extern void host_buffer_release( /*@only@*/ wiced_buffer_t buffer, wwd_buffer_dir_t direction );
 
 /**
  * Retrieves the current pointer of a packet buffer
@@ -134,7 +135,7 @@ extern void host_buffer_release( /*@only@*/ wiced_buffer_t buffer, wiced_buffer_
  *
  * @return The packet buffer's current pointer.
  */
-extern /*@exposed@*/ uint8_t* host_buffer_get_current_piece_data_pointer( wiced_buffer_t buffer );
+extern /*@exposed@*/ uint8_t* host_buffer_get_current_piece_data_pointer( /*@temp@*/ wiced_buffer_t buffer );
 
 /**
  * Retrieves the size of a packet buffer
@@ -150,7 +151,21 @@ extern /*@exposed@*/ uint8_t* host_buffer_get_current_piece_data_pointer( wiced_
  *
  * @return The size of the packet buffer.
  */
-extern uint16_t host_buffer_get_current_piece_size( wiced_buffer_t buffer );
+extern uint16_t host_buffer_get_current_piece_size( /*@temp@*/ wiced_buffer_t buffer );
+
+/**
+ * Sets the current size of a Wiced packet
+ *
+ * Implemented in the WICED buffer interface which is specific to the
+ * buffering scheme in use.
+ * This function sets the current length of a WICED packet buffer
+ *
+ * @param buffer : The packet to be modified
+ * @param size   : The new size of the packet buffer
+ *
+ * @return WWD_SUCCESS = Success, Error code = Failure
+ */
+extern wwd_result_t host_buffer_set_size( /*@temp@*/ wiced_buffer_t buffer, unsigned short size );
 
 /**
  * Retrieves the next piece of a set of daisy chained packet buffers
@@ -166,7 +181,7 @@ extern uint16_t host_buffer_get_current_piece_size( wiced_buffer_t buffer );
  *
  * @return The handle of the next buffer, or NULL if there is none.
  */
-extern /*@exposed@*/ /*@null@*/ wiced_buffer_t host_buffer_get_next_piece( wiced_buffer_t buffer );
+extern /*@exposed@*/ /*@dependent@*/ /*@null@*/ wiced_buffer_t host_buffer_get_next_piece( /*@dependent@*/ wiced_buffer_t buffer );
 
 /**
  * Moves the current pointer of a packet buffer
@@ -189,9 +204,9 @@ extern /*@exposed@*/ /*@null@*/ wiced_buffer_t host_buffer_get_next_piece( wiced
  *                            of the packet buffer - a negative value increases the space
  *                            for headers at the front of the packet, a positive value
  *                            decreases the space.
- * @return WICED_SUCCESS = Success, WICED_ERROR = Failure
+ * @return WWD_SUCCESS = Success, Error code = Failure
  */
-extern wiced_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, int32_t add_remove_amount ); /* Adds or removes buffer parts as needed (and returns new handle) - new bytes must be contiguous with each other, but not necessarily with original bytes */
+extern wwd_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, int32_t add_remove_amount ); /* Adds or removes buffer parts as needed (and returns new handle) - new bytes must be contiguous with each other, but not necessarily with original bytes */
 
 
 /**
@@ -202,12 +217,10 @@ extern wiced_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, i
  * This function must only be used when all buffers are expected to have been
  * released. Function triggers an assertion if any buffers are in use.
  *
- * @return WICED_SUCCESS = Success, WICED_ERROR = Failure
+ * @return WWD_SUCCESS = Success, Error code = Failure
  */
-extern wiced_result_t host_buffer_check_leaked( void );
+extern wwd_result_t host_buffer_check_leaked( void );
 
-
-extern wiced_result_t host_buffer_set_data_end( wiced_buffer_t buffer, uint8_t* end_of_data );
 
 /** @} */
 

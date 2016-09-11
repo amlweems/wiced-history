@@ -99,6 +99,7 @@ struct ip_hdr {
 #define IPH_PROTO(hdr) (iphdr->nexthdr)
 
 void ip_init(void);
+void ip_deinit(void);
 
 #include "lwip/netif.h"
 

@@ -44,24 +44,22 @@ extern volatile uint32_t noos_total_time;
  * @param entry_function : unused - main thread function
  * @param name           : a string thread name used for a debugger
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_create_thread( host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
+wwd_result_t host_rtos_create_thread( host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
 {
-    /*@-noeffect@*/
     *thread = (unsigned char) 0;
     UNUSED_PARAMETER( entry_function );
     UNUSED_PARAMETER( name );
     UNUSED_PARAMETER( stack );
     UNUSED_PARAMETER( stack_size );
     UNUSED_PARAMETER( priority );
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+
+    return WWD_SUCCESS;
 }
 
-wiced_result_t host_rtos_create_thread_with_arg( host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
+wwd_result_t host_rtos_create_thread_with_arg( host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
 {
-    /*@-noeffect@*/
     *thread = (unsigned char) 0;
     UNUSED_PARAMETER( entry_function );
     UNUSED_PARAMETER( name );
@@ -69,8 +67,8 @@ wiced_result_t host_rtos_create_thread_with_arg( host_thread_type_t* thread, voi
     UNUSED_PARAMETER( stack_size );
     UNUSED_PARAMETER( priority );
     UNUSED_PARAMETER( arg );
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+
+    return WWD_SUCCESS;
 }
 
 /**
@@ -79,14 +77,13 @@ wiced_result_t host_rtos_create_thread_with_arg( host_thread_type_t* thread, voi
  *
  * @param thread         : unused - handle of thread
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_finish_thread( host_thread_type_t* thread )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( thread);
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+
+    return WWD_SUCCESS;
 }
 
 /**
@@ -94,14 +91,13 @@ wiced_result_t host_rtos_finish_thread( host_thread_type_t* thread )
  *
  * @param thread         : unused - handle of the terminated thread to delete
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
+wwd_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( thread );
-    /*@+noeffect@*/
-    return WICED_SUCCESS;
+
+    return WWD_SUCCESS;
 }
 
 /**
@@ -111,18 +107,18 @@ wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
  *
  * @param semaphore         : pointer to variable which will receive handle of created semaphore
  *
- * @returns WICED_SUCCESS on success, WICED_ERROR otherwise
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
  */
-wiced_result_t host_rtos_init_semaphore( host_semaphore_type_t* semaphore )
+wwd_result_t host_rtos_init_semaphore( host_semaphore_type_t* semaphore )
 {
     *semaphore = (unsigned char) 0;
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 /**
  * Would normally get a semaphore
  *
- * Since there is only one thread, this function calls the @ref wiced_poll_all to cause Wiced to
+ * Since there is only one thread, this function calls the @ref wwd_thread_poll_all to cause Wiced to
  * repeatedly poll and process the Transmit and receive queues, until the given semaphore is
  * set by a function within the transmit/receive processing. Once the set semaphore has been seen,
  * it is decremented back to zero and the function returns to simulate a resuming thread
@@ -134,17 +130,15 @@ wiced_result_t host_rtos_init_semaphore( host_semaphore_type_t* semaphore )
  * @param timeout_ms  : unsupported - Maximum period to block for. Can be passed NEVER_TIMEOUT to request no timeout
  * @param will_set_in_isr : True if the semaphore will be set in an ISR. Currently only used for NoOS/NoNS
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully acquired
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully acquired
  *                     : WICED_TIMEOUT if semaphore was not acquired before timeout_ms period
  */
 
-wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr )
+wwd_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32_t timeout_ms, wiced_bool_t will_set_in_isr )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( timeout_ms);
-    /*@+noeffect@*/
 
-    /*@-infloops@*/ /* If this function has been called correctly, the wiced_poll_all() call should post this semaphore, and cause the loop to exit */
+    /*@-infloops@*/ /* If this function has been called correctly, the wwd_thread_poll_all() call should post this semaphore, and cause the loop to exit */
     while ( *semaphore == (unsigned char) 0 )
     {
         /* Call wiced poll repeatedly until semaphore is set. */
@@ -153,7 +147,7 @@ wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32
             volatile uint32_t i;
 
 #ifndef WICED_NO_WIFI
-            wiced_poll_all( );
+            wwd_thread_poll_all( );
 #endif
             /* Delay loop to give 802.11 device some breathing room between requests */
 
@@ -166,8 +160,11 @@ wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32
     }
     /*@+infloops@*/
 
+    WICED_DISABLE_INTERRUPTS();
     (*semaphore)--;
-    return WICED_SUCCESS;
+    WICED_ENABLE_INTERRUPTS();
+
+    return WWD_SUCCESS;
 }
 
 /**
@@ -181,18 +178,20 @@ wiced_result_t host_rtos_get_semaphore( host_semaphore_type_t* semaphore, uint32
  * @param called_from_ISR : ignored - Value of WICED_TRUE indicates calling from interrupt context
  *                                    Value of WICED_FALSE indicates calling from normal thread context
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully set
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully set
  *                        : WICED_ERROR if an error occurred
  *
  */
 
-wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
+wwd_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_bool_t called_from_ISR )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( called_from_ISR );
-    /*@+noeffect@*/
+
+    WICED_DISABLE_INTERRUPTS();
     (*semaphore)++;
-    return WICED_SUCCESS;
+    WICED_ENABLE_INTERRUPTS();
+
+    return WWD_SUCCESS;
 }
 
 /**
@@ -201,18 +200,16 @@ wiced_result_t host_rtos_set_semaphore( host_semaphore_type_t* semaphore, wiced_
  *
  * @param semaphore         : Pointer to the semaphore handle
  *
- * @return wiced_result_t : WICED_SUCCESS if semaphore was successfully deleted
+ * @return wwd_result_t : WWD_SUCCESS if semaphore was successfully deleted
  *                        : WICED_ERROR if an error occurred
  *
  */
 
-wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
+wwd_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
 {
-    /*@-noeffect@*/
     UNUSED_PARAMETER( semaphore );
-    /*@+noeffect@*/
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 
@@ -223,9 +220,9 @@ wiced_result_t host_rtos_deinit_semaphore( host_semaphore_type_t* semaphore )
  *
  * @returns Time in milliseconds since RTOS started.
  */
-wiced_time_t host_rtos_get_time( void ) /*@modifies internalState@*/
+wwd_time_t host_rtos_get_time( void ) /*@modifies internalState@*/
 {
-    return (wiced_time_t) noos_total_time;
+    return (wwd_time_t) noos_total_time;
 }
 
 /**
@@ -233,20 +230,20 @@ wiced_time_t host_rtos_get_time( void ) /*@modifies internalState@*/
  *
  * Simply implemented with a tight loop
  *
- * @return wiced_result_t : WICED_SUCCESS if delay was successful
+ * @return wwd_result_t : WWD_SUCCESS if delay was successful
  *                        : WICED_ERROR if an error occurred
  *
  */
-wiced_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
+wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
 {
-    wiced_time_t start = host_rtos_get_time( );
+    wwd_time_t start = host_rtos_get_time( );
 
     while ( ( host_rtos_get_time( ) - start ) < num_ms )
     {
         /* do nothing */
     }
 
-    return WICED_SUCCESS;
+    return WWD_SUCCESS;
 }
 
 

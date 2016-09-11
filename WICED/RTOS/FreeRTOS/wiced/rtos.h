@@ -13,18 +13,33 @@
 #include "task.h"
 #include "semphr.h"
 #include "timers.h"
-#include "wwd_constants.h"
+#include "wiced_result.h"
+#include "wwd_rtos.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /******************************************************
  *                      Macros
  ******************************************************/
 
-#define WICED_HARDWARE_IO_WORKER_THREAD     ((wiced_worker_thread_t*)&wiced_hardware_io_worker_thread)
-#define WICED_NETWORKING_WORKER_THREAD      ((wiced_worker_thread_t*)&wiced_networking_worker_thread )
-#define LOWER_THAN_PRIORITY_OF( thread )    ((thread).handle.tx_thread_priority - 1)
-#define HIGHER_THAN_PRIORITY_OF( thread )   ((thread).handle.tx_thread_priority + 1)
+#define WICED_HARDWARE_IO_WORKER_THREAD             ((wiced_worker_thread_t*)&wiced_hardware_io_worker_thread)
+#define WICED_NETWORKING_WORKER_THREAD              ((wiced_worker_thread_t*)&wiced_networking_worker_thread )
+#define LOWER_THAN_PRIORITY_OF( thread )            ((thread).handle.tx_thread_priority - 1)
+#define HIGHER_THAN_PRIORITY_OF( thread )           ((thread).handle.tx_thread_priority + 1)
 
-#define WICED_PRIORITY_TO_NATIVE_PRIORITY(priority)     (uint8_t)(RTOS_HIGHEST_PRIORITY - priority)
+#define WICED_PRIORITY_TO_NATIVE_PRIORITY(priority) (uint8_t)(RTOS_HIGHEST_PRIORITY - priority)
+
+#define WICED_END_OF_THREAD( thread )               malloc_leak_check(thread, LEAK_CHECK_THREAD); vTaskDelete(thread)
+#define WICED_END_OF_CURRENT_THREAD( )              malloc_leak_check(NULL, LEAK_CHECK_THREAD); vTaskDelete(NULL)
+#define WICED_END_OF_CURRENT_THREAD_NO_LEAK_CHECK( )   vTaskDelete(NULL)
+
+#define WICED_TO_MALLOC_THREAD( x )                 ((malloc_thread_handle) *(x) )
+
+#define WICED_GET_THREAD_HANDLE( thread )           ( thread )
+
+#define WICED_GET_QUEUE_HANDLE( queue )             ( queue )
 
 /******************************************************
  *                    Constants
@@ -46,9 +61,13 @@
 #define HARDWARE_IO_WORKER_THREAD_STACK_SIZE                                   (512)
 #define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE                                    (10)
 #define HARDWARE_IO_WORKER_THREAD_PRIORITY       (WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_DEFAULT_LIBRARY_PRIORITY))
-#define NETWORKING_WORKER_THREAD_STACK_SIZE                               (6 * 1024)
+#define NETWORKING_WORKER_THREAD_STACK_SIZE                               (7 * 1024)
 #define NETWORKING_WORKER_THREAD_QUEUE_SIZE                                     (15)
 #define NETWORKING_WORKER_THREAD_PRIORITY        (WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_NETWORK_WORKER_PRIORITY))
+
+#define RTOS_NAME                     "FreeRTOS"
+#define RTOS_VERSION                  FreeRTOS_VERSION
+
 
 /******************************************************
  *                   Enumerations
@@ -63,7 +82,7 @@
  ******************************************************/
 
 typedef uint32_t  wiced_event_flags_t;
-typedef xSemaphoreHandle wiced_semaphore_t;
+typedef host_semaphore_type_t wiced_semaphore_t;
 
 typedef xSemaphoreHandle wiced_mutex_t;
 
@@ -96,7 +115,6 @@ typedef struct
     wiced_worker_thread_t* thread;
 } wiced_timed_event_t;
 
-
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -108,4 +126,6 @@ extern wiced_worker_thread_t wiced_networking_worker_thread;
  *               Function Declarations
  ******************************************************/
 
-wiced_result_t init_timer_thread(void);
+#ifdef __cplusplus
+} /* extern "C" */
+#endif

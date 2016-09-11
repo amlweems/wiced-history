@@ -138,7 +138,7 @@
  * Default is one big array for all pools
  */
 #ifndef MEMP_SEPARATE_POOLS
-#define MEMP_SEPARATE_POOLS             0
+#define MEMP_SEPARATE_POOLS             1
 #endif
 
 /**
@@ -223,7 +223,7 @@
  * this should be set high.
  */
 #ifndef MEMP_NUM_PBUF
-#define MEMP_NUM_PBUF                   16
+#define MEMP_NUM_PBUF                   ( PBUF_POOL_TX_SIZE + PBUF_POOL_RX_SIZE + 2 )
 #endif
 
 /**
@@ -293,7 +293,7 @@
  * (requires the ARP_QUEUEING option)
  */
 #ifndef MEMP_NUM_ARP_QUEUE
-#define MEMP_NUM_ARP_QUEUE              30
+#define MEMP_NUM_ARP_QUEUE              (PBUF_POOL_TX_SIZE)
 #endif
 
 /**
@@ -1282,7 +1282,7 @@
  * sys_thread_new() when the thread is created.
  */
 #ifndef DEFAULT_THREAD_STACKSIZE
-#define DEFAULT_THREAD_STACKSIZE        0
+#define DEFAULT_THREAD_STACKSIZE        ((unsigned short) 0)
 #endif
 
 /**
@@ -1291,7 +1291,7 @@
  * sys_thread_new() when the thread is created.
  */
 #ifndef DEFAULT_THREAD_PRIO
-#define DEFAULT_THREAD_PRIO             1
+#define DEFAULT_THREAD_PRIO             ((unsigned portBASE_TYPE) 1)
 #endif
 
 /**

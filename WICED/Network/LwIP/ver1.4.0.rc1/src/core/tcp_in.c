@@ -334,7 +334,7 @@ tcp_input(struct pbuf *p, struct netif *inp)
         tcp_pcb_remove(&tcp_active_pcbs, pcb);
         memp_free(MEMP_TCP_PCB, pcb);
       } else {
-        err = ERR_OK;
+//        err = ERR_OK;
         /* If the application has registered a "sent" function to be
            called when new send buffer space is available, we call it
            now. */
@@ -574,7 +574,7 @@ tcp_process(struct tcp_pcb *pcb)
   u8_t acceptable = 0;
   err_t err;
 
-  err = ERR_OK;
+//  err = ERR_OK;
 
   /* Process incoming RST segments. */
   if (flags & TCP_RST) {

@@ -2,6 +2,118 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.1.0 : 03 September 2014 
+-----------------------------------------------------------
+* Added support for Apple HomeKit Beta 3 (compatible with HAT version 1.0 (42) )
+* Updated 4390A1 WLAN firmware to revision 6.38.15.1
+    * This version is ready to pass regulatory testing properly
+* Consolidated duplicate parts of crypto functions to increase speed and reduce size
+* Added new toolchain (GCC 4.9.0) that supports hardware floating point on the Cortex-M4 
+* Added new crypto suites: ChaCha, Curve25519, Ed25519, Poly1305, SHA512
+* Modified API to fix 32 character SSID bug. Functions affected:
+    * wwd_wifi_ap_init
+    * wiced_start_ap
+    * wwd_wifi_join
+* Updated NVRAM files for 43362 platforms
+* Modified FreeRTOS thread creation to yield to higher priority threads
+* Fixed NoOS semaphore API to be atomic
+* Added beta support for TLS 1.2
+* Updated wiced_ssid_t structure to follow WICED naming conventions
+* New 43362 WLAN firmware that adds support for reading arbitrary length of random values
+* Fix SDIO bus credit update when host_buffer_get() fails
+* Added wiced_tcp_unregister_callbacks() and wiced_udp_unregister_callbacks() for NetX_Duo
+* Added wiced_tcp_unregister_callbacks() for LwIP
+* Reduced LwIP ARP queue to 5
+* Added status variable to wiced_scan_result_callback_t to indicate the reason a scan completed
+* LwIP network_tcp_send_packet() now calls netconn_write() with NETCONN_DONTBLOCK
+* Modified API to accept a wiced_interface_t . Functions affected:
+    * wwd_wifi_join_specific()
+    * wwd_wifi_leave()
+    * wwd_wifi_get_mac_address()
+    * wwd_wifi_scan() to accept interface 
+* Added NX_ARP_DISABLE_AUTO_ARP_ENTRY for both NetX and NetX_Duo to conserve ARP cache entries
+* Added websocket library
+* Modified AP interface to transmit multicast packets at 11Mbps instead of 1Mbps
+* Added API to set AMPDU parameters: wwd_wifi_set_ampdu_parameters()
+* Set the AMPDU parameters in wwd_management_wifi_on(). Reduced available and advertised sizes
+* Fixed DHCP issue for NetX_Duo with some APs
+* Increased ARP cache size from 3 to 6
+* Added optional SDIO bus API for platforms that mask the SDIO iterrupt: host_platform_unmask_sdio_interrupt()
+* Added capability to NetX and NetX_Duo to limit the TX and RX queues for TCP sockets    
+* Upgraded HTTP_server library to allow for multiple concurrent, persistent connections
+* Added wiced_tcp_server_xxxxx() API to simplify creation of a multi-socket TCP server
+
+Changes for WICED-SDK 3.0.1 : 15 April 2014
+-----------------------------------------------------------
+* Replaced WLAN firmware with version 5.90.230.3
+  * SoftAP now responds to authentication request from a re-joining client
+  * NOTE: 4-second Wi-Fi sleep time is not supported
+* SoftAP on WWD SPI interface now allows clients to join properly
+* BCM4390 now supports GPIO interrupts, I2C peripheral, and UART4 
+* BCM4390 pin PA00 and PA01 now work as GPIO pins
+* TLS now allows user to validate the peer CN
+* FreeRTOS now supports forcing thread awake
+* FreeRTOS bug fix that prevents a deadlock when using malloc() or free()
+* FreeRTOS wiced_rtos_create_thread() now correctly deals with priorities higher than the maximum
+* NetX-Duo wiced_tcp_listen() now works for both STA and SoftAP sockets
+* NoNS wwd_thread_poll_all() now only sends and receives once to prevent overwriting previously read packets
+* wiced_assert() is now wrapped in do {} while(0)
+* wiced_deinit() now prevents multiple de-initialization
+* canned_send snippet application now uses less memory
+* Documentation update for wiced_rtos_thread_join() and malloc_error()
+* OSX version of OpenOCD now works properly
+
+
+Changes for WICED-SDK-3.0.0 : 7 March 2014
+-----------------------------------------------------------
+WICED-SDK-3.0.0 has changed considerably since the previous 2.4.1 release.
+The accompanying README provides a more detailed summary of the supported 
+features and known limitations for this release.
+
+The following is a brief summary of the major changes:
+* Support for various Broadcom Wi-Fi & combo chips
+  * BCM43362 Wi-Fi SoC
+  * BCM4390 Integrated Apps + Wi-Fi SoC
+  * BCM43341 Wi-Fi + Bluetooth combo SoC
+* Platforms
+  * BCM94390WCD3 platform (BCM4390 Integrated Apps + Wi-Fi SoC)
+  * BCM943341WCD1 platform (STM32F417 MCU + BCM43341 WLAN/BT combos)
+  * BCM943362WCD4_LPCX1769 platform (LPC1769 MCU + BCM943362WCD4 module)
+  * BCM9WCDAUDIO platform
+  * Common Platform components have been re-architected
+  * All platform specific implementation including pin mapping, configuration, 
+    peripheral definitions etc now can be found in <WICED-SDK>/platforms directory
+* RTOS & Network Stack
+  * Updated ThreadX to version 5.6
+  * Updated NetX to version 5.5 service pack 1
+  * Updated NetX-Duo to version 5.7 service pack 1
+  * Updated FreeRTOS to version 7.5.2
+* Libraries & Protocols
+  * Broadcom Embedded Security Library (BESL)
+    * The user provided root CA certificates can now be used to verify intermediate CA certificates 
+      and not just the top root CA certificate
+  * WICED SmartBridge
+    * SmartBridge now supports Passkey entry
+    * SmartBridge now supports both BCM20702 and BCM43341
+  * Apple AirPlay
+  * Apple Wireless Accessory Configuration (WAC) protocol
+  * Bluetooth Audio
+  * WicedFS : Read-only Serial Flash File System
+* WICED API
+  * WICED now provides a simplified approach for defining and mapping RTOS-aware 
+    interrupt handlers
+  * Removed TLS from Config web server - uses WPA2 with passphrase 12345678  
+  * Expanded WICED error codes
+  * Harmonised directory and file names across the SDK
+* WICED Wi-Fi Driver (WWD)
+  * WWD API names now starts with 'wwd' prefix
+* WICED Application Framework (WAF)
+  * Bootloader updated to provide support for loading ELF files from an external serial flash file system
+  * Resources can now be located in an external serial flash file system
+  * WLAN firmware moved into resources to allow it to be located in external serial flash
+  * DCT can now be located in external serial flash
+
+
 Changes for WICED-SDK-2.4.1 : 3 March 2014
 -----------------------------------------------------------
 * ThreadX host_rtos_join_thread() now checks for thread validity before waiting for tx_thread_state to change
@@ -25,6 +137,7 @@ Changes for WICED-SDK-2.4.1 : 3 March 2014
 * Fixed TLS certificate verification in BESL
 * Updated buildsystem to allow optimizations for components while doing a debug build
 * LwIP wiced_tcp_connect() now connects successfully without socket re-initialization
+
 
 Changes for WICED-SDK-2.4.0 : 27 Nov 2013
 -----------------------------------------------------------

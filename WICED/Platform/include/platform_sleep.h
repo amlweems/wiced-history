@@ -7,7 +7,12 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
+
+/** @file
+ * Defines globally accessible powersave functions
+ */
 #pragma once
+#include "platform_constants.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,9 +25,6 @@ extern "C" {
 /******************************************************
  *                   Enumerations
  ******************************************************/
-
-#define WICED_WLAN_POWERSAVE_CLOCK_IS_PWM 0
-#define WICED_WLAN_POWERSAVE_CLOCK_IS_MCO 1
 
 /******************************************************
  *                 Type Definitions
@@ -40,10 +42,23 @@ extern "C" {
  *               Function Declarations
  ******************************************************/
 
-extern unsigned long platform_power_down_hook ( unsigned long delay_ms );
+/*@-exportlocal@*/
 
-extern void          platform_idle_hook       ( void );
+/**
+ * Hook for RTOS for entering deep sleep mode
+ * @param[in] sleep_ms : period in millisecond the MCU needs to sleep
+ *
+ * @return period in millisecond the MCU has slept
+ */
+extern uint32_t platform_power_down_hook( uint32_t sleep_ms );
 
+/**
+ * Hook for RTOS for entering idle mode
+ */
+extern void platform_idle_hook( void );
+
+
+/*@+exportlocal@*/
 
 #ifdef __cplusplus
 } /* extern "C" */
