@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -233,23 +233,25 @@ wiced_bool_t   wiced_bt_smartbridge_is_scanning( void );
  * @warning
  * \li result_callback is an intermediate report callback. The complete scan results
  *     are retrieved using @ref wiced_bt_smartbridge_get_scan_result_list once scan
-       is complete
- * \li Callback functions run on the context of WICED_NETWORKING_WORKER_THREAD
+ *     is complete
+ * \li advertising_report_callback runs on the context of Bluetooth transport thread. Please refrain
+ *     from executing a long task in the callback
+ * \li complete_callback runs on the context of WICED_NETWORKING_WORKER_THREAD
  * \li If the whitelist filter is enabled in the scan settings, only devices
  *     in the whitelist appear in the scan results. Call @ref wiced_bt_smartbridge_add_device_to_whitelist()
  *     to add a device to the whitelist
  *
- * @param[in]  settings          : scan settings
- * @param[in]  complete_callback : callback function which is called when scan is
- *                                 complete
- * @param[in]  result_callback   : callback function which is called when a
- *                                 remote device is found
+ * @param[in]  settings                     : scan settings
+ * @param[in]  complete_callback            : callback function which is called when scan is
+ *                                            complete
+ * @param[in]  advertising_report_callback  : callback function which is called when an advertising
+ *                                            report is received
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_bt_smartbridge_start_scan( const wiced_bt_smart_scan_settings_t*   settings,
-                                                wiced_bt_smart_scan_complete_callback_t complete_callback,
-                                                wiced_bt_smart_scan_result_callback_t   result_callback );
+wiced_result_t wiced_bt_smartbridge_start_scan( const wiced_bt_smart_scan_settings_t*        settings,
+                                                wiced_bt_smart_scan_complete_callback_t      complete_callback,
+                                                wiced_bt_smart_advertising_report_callback_t advertising_report_callback );
 
 
 /** Stop the ongoing scan process
@@ -276,27 +278,6 @@ wiced_result_t wiced_bt_smartbridge_stop_scan( void );
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_bt_smartbridge_get_scan_result_list( wiced_bt_smart_scan_result_t** result_list, uint32_t* count );
-
-
-/** Register directed advertisements callback
- *
- * @note
- * This function registers an application callback to handle directed advertisements
- * from remote Bluetooth Smart devices when scanning. If desired, the application
- * may immediately connect to the device sending the directed advertisement.
- *
- * @warning
- * \li This function must be called before calling @ref wiced_bt_smartbridge_start_scan()
- * \li Callback functions run on the context of WICED_NETWORKING_WORKER_THREAD. Use
- *     a different thread to connect to avoid blocking oncoming tasks to WICED_NETWORKING_WORKER_THREAD.
- *
- * @param[in]  callback : the callback function that will be called every time
- *                        WICED SmartBridge receives a directed advertisement while scanning
- *
- * @return @ref wiced_result_t
- */
-wiced_result_t wiced_bt_smartbridge_register_directed_advertising_callback( wiced_bt_smart_scan_result_callback_t callback );
-
 
 /** @} */
 
@@ -485,6 +466,18 @@ wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t*     
  */
 wiced_result_t wiced_bt_smartbridge_disconnect( wiced_bt_smartbridge_socket_t* socket );
 
+
+/** Set transmit power during connection
+ *
+ * @note
+ * This function set the transmit power of the connection
+ *
+ * @param[in]  socket             : pointer to the socket of the connection
+ * @param[in]  transmit_power_dbm : transmit power in dBm
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_bt_smartbridge_set_transmit_power( wiced_bt_smartbridge_socket_t* socket, int8_t transmit_power_dbm );
 
 /** @} */
 

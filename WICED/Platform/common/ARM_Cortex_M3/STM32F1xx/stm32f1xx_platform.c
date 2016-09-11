@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -115,6 +115,8 @@ typedef struct
     host_semaphore_type_t  tx_complete;
     const uint8_t*         tx_buffer;
     uint32_t               tx_size;
+	wiced_result_t         tx_dma_result;
+    wiced_result_t         rx_dma_result;
 } uart_interface_t;
 
 typedef struct
@@ -1414,27 +1416,37 @@ wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, u
 #endif
 
 #ifndef PLATFORM_DISABLE_UART_DMA
+    /* Reset DMA transmission result. The result is assigned in interrupt handler */
+    uart_interfaces[uart].tx_dma_result = WICED_ERROR;
+	
     uart_mapping[uart].tx_dma_channel->CCR   = 0;
     uart_mapping[uart].tx_dma_channel->CNDTR = size;
     uart_mapping[uart].tx_dma_channel->CMAR  = (uint32_t)data;
     uart_mapping[uart].tx_dma_channel->CCR   = DMA_Priority_VeryHigh | DMA_DIR_PeripheralDST | DMA_MemoryInc_Enable | DMA_CCR1_EN | DMA_CCR1_TCIE;
 
     host_rtos_get_semaphore( &uart_interfaces[uart].tx_complete, WICED_NEVER_TIMEOUT, WICED_TRUE );
-    while( ( uart_mapping[uart].usart->SR & USART_SR_TC )== 0 );
-#else
+    while ( ( uart_mapping[ uart ].usart->SR & USART_SR_TC ) == 0 )
+    {
+    }
 
+#ifdef STOP_MODE_SUPPORT
+    stm32f1xx_clocks_not_needed();
+#endif
+
+    return uart_interfaces[uart].tx_dma_result;
+#else	
     uart_interfaces[uart].tx_buffer = data;
     uart_interfaces[uart].tx_size   = size;
     uart_mapping[uart].usart->CR1  |= USART_CR1_TXEIE;
     host_rtos_get_semaphore( &uart_interfaces[uart].tx_complete, WICED_NEVER_TIMEOUT, WICED_TRUE );
     while( ( uart_mapping[uart].usart->SR & USART_SR_TC )== 0 );
-#endif
 
 #ifdef STOP_MODE_SUPPORT
     stm32f1xx_clocks_not_needed();
 #endif
 
     return WICED_SUCCESS;
+#endif
 }
 
 wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
@@ -1495,10 +1507,11 @@ wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t
 
 static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
 {
-    UNUSED_PARAMETER(uart);
-    UNUSED_PARAMETER(data);
-    UNUSED_PARAMETER(size);
-    UNUSED_PARAMETER(timeout);
+    UNUSED_PARAMETER( uart );
+    UNUSED_PARAMETER( data );
+    UNUSED_PARAMETER( size );
+    UNUSED_PARAMETER( timeout );
+
 #ifdef STOP_MODE_SUPPORT
     stm32f1xx_clocks_needed();
 #endif /* #ifdef STOP_MODE_SUPPORT */
@@ -1517,6 +1530,9 @@ static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data
         uart_mapping[uart].rx_dma_channel->CCR = 0;
     }
 
+    /* Reset DMA transmission result. The result is assigned in interrupt handler */
+    uart_interfaces[uart].rx_dma_result = WICED_ERROR;
+
     uart_mapping[uart].rx_dma_channel->CNDTR = size;
     uart_mapping[uart].rx_dma_channel->CMAR  = (uint32_t)data;
     uart_mapping[uart].rx_dma_channel->CCR   |= DMA_MemoryInc_Enable | DMA_DIR_PeripheralSRC | DMA_CCR1_EN;
@@ -1524,10 +1540,16 @@ static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data
     if ( timeout > 0 )
     {
         host_rtos_get_semaphore( &uart_interfaces[uart].rx_complete, timeout, WICED_TRUE );
+
+#ifdef STOP_MODE_SUPPORT
+    	stm32f1xx_clocks_not_needed();
+#endif /* #ifdef STOP_MODE_SUPPORT */
+
+		return uart_interfaces[uart].rx_dma_result;
     }
 #endif
 
-    #ifdef STOP_MODE_SUPPORT
+#ifdef STOP_MODE_SUPPORT
     stm32f1xx_clocks_not_needed();
 #endif /* #ifdef STOP_MODE_SUPPORT */
 

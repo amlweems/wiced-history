@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -74,7 +74,7 @@ typedef void (*wiced_thread_function_t)( uint32_t arg );
  * Creates and starts a new thread
  *
  * @param thread     : Pointer to variable that will receive the thread handle
- * @param priority   : A priority number or WICED_DEFAULT_APP_THREAD_PRIORITY.
+ * @param priority   : A priority number or WICED_APPLICATION_PRIORITY.
  * @param name       : a text name for the thread (can be null)
  * @param function   : the main thread function
  * @param stack_size : stack size for this thread

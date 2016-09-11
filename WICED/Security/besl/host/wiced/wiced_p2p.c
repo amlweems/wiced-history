@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -113,7 +113,7 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
 
     workspace->p2p_capability = 0x0000;
     workspace->p2p_name       = device_details->device_name;
-    workspace->group_owner_intent = 1;
+    workspace->group_owner_intent = device_details->group_owner_intent;
 
     /* Turn off all the other Wi-Fi interfaces */
     wiced_network_down(WICED_STA_INTERFACE);

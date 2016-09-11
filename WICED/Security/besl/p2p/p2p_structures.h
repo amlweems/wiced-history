@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -231,7 +231,7 @@ typedef struct
 typedef struct
 {
     p2p_capability_tlv_t  capability;
-    p2p_device_id_tlv_t device_info;
+    p2p_device_info_tlv_t device_info;
     /* device name goes here */
 } p2p_probe_response_ie_t;
 

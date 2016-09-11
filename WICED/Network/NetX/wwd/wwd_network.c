@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -259,6 +259,22 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wiced_interface_
     }
 
     ethertype = (USHORT)(buff[12] << 8 | buff[13]);
+
+    /* Check if this is an 802.1Q VLAN tagged packet */
+    if ( ethertype == WICED_ETHERTYPE_8021Q )
+    {
+        /* Need to remove the 4 octet VLAN Tag, by moving src and dest addresses 4 octets to the right,
+         * and then read the actual ethertype. The VLAN ID and priority fields are currently ignored. */
+        uint8_t temp_buffer[12];
+        memcpy( temp_buffer, packet_ptr->nx_packet_prepend_ptr, 12 );
+        memcpy( packet_ptr->nx_packet_prepend_ptr + 4, temp_buffer, 12 );
+
+        packet_ptr->nx_packet_prepend_ptr = packet_ptr->nx_packet_prepend_ptr + 4;
+        packet_ptr->nx_packet_length      = packet_ptr->nx_packet_length - 4;
+
+        buff      = packet_ptr->nx_packet_prepend_ptr;
+        ethertype = (USHORT) ( buff[12] << 8 | buff[13] );
+    }
 
 #ifdef ADD_NETX_EAPOL_SUPPORT
     if ( ethertype == WICED_ETHERTYPE_EAPOL )

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,9 +24,6 @@
  *                      Macros
  ******************************************************/
 
-#define CYCLES_TO_MS( cycles ) ( ( ( cycles ) * 1000 * RTT_CLOCK_PRESCALER ) / RTT_CLOCK_HZ )
-#define MS_TO_CYCLES( ms )     ( ( ( ms ) * RTT_CLOCK_HZ ) / ( 1000 * RTT_CLOCK_PRESCALER ) )
-
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -35,11 +32,12 @@
 #undef WAIT_MODE_SUPPORT
 #endif /* ifndef WICED_DISABLE_MCU_POWERSAVE */
 
-#define RTT_CLOCK_PRESCALER          (4) /*                                                                                        */
-#define RTT_CLOCK_HZ             (32768) /* 32K / prescaler                                                                        */
-#define RTT_MAX_CYCLES           (64000) /* 7.8125 seconds                                                                         */
-#define RC_OSC_DELAY_CYCLES         (15) /* Cycles required to stabilise clock after exiting WAIT mode                             */
-#define JTAG_DEBUG_SLEEP_DELAY_MS (3000) /* Delay in ms to give OpenOCD enough time to halt the CPU before the CPU enter WAIT mode */
+#define RTT_CLOCK_PRESCALER       ( 4 )                                          /*                                                                                        */
+#define RTT_CLOCK_HZ              ( BOARD_FREQ_SLCK_XTAL / RTT_CLOCK_PRESCALER ) /* 32K / prescaler                                                                        */
+#define RTT_MAX_CYCLES            ( 0xffffffffU )                                /* 32-bit counter max value                                                               */
+#define RC_OSC_DELAY_CYCLES       ( 15 )                                         /* Cycles required to stabilise clock after exiting WAIT mode                             */
+#define JTAG_DEBUG_SLEEP_DELAY_MS ( 3000 )                                       /* Delay in ms to give OpenOCD enough time to halt the CPU before the CPU enter WAIT mode */
+#define MAX_SLEEP_TICKS           ( RTT_MAX_CYCLES / RTT_CLOCK_HZ * 1000 )       /* Maximum sleep ticks. This translates to 6 days                                         */
 
 /******************************************************
  *                   Enumerations
@@ -60,7 +58,6 @@
 #ifdef WAIT_MODE_SUPPORT
 static unsigned long  wait_mode_power_down_hook        ( unsigned long delay_ms );
 extern void           init_clocks                      ( void );
-extern void           RTT_irq                          ( void );
 #else
 static unsigned long  idle_power_down_hook             ( unsigned long delay_ms );
 #endif
@@ -74,9 +71,12 @@ extern wiced_result_t host_platform_bus_exit_powersave ( void );
  ******************************************************/
 
 #ifdef WAIT_MODE_SUPPORT
+static volatile uint32_t     pending_sleep_fraction      = 0; /* Fraction of impending sleep */
+static volatile uint32_t     unreturned_sleep_fraction   = 0; /* Fraction of excess tick     */
 static volatile uint32_t     system_io_backup_value      = 0;
 static volatile uint32_t     sam4s_clock_needed_counter  = 0;
 static volatile wiced_bool_t wake_up_interrupt_triggered = WICED_FALSE;
+
 #endif
 
 /******************************************************
@@ -107,11 +107,11 @@ wiced_result_t sam4s_powersave_init( void )
 #endif
 
 #ifdef WAIT_MODE_SUPPORT
-    NVIC_DisableIRQ( RTT_IRQn );
-    NVIC_ClearPendingIRQ( RTT_IRQn );
-    NVIC_SetPriority( RTT_IRQn, SAM4S_RTT_IRQ_PRIO );
-    NVIC_EnableIRQ( RTT_IRQn );
+    /* Enable wake up using RTT alarm */
     pmc_set_fast_startup_input( PMC_FSMR_RTTAL );
+
+    /* Enable the 32-bit RTT counter once and let it free-run */
+    rtt_init( RTT, RTT_CLOCK_PRESCALER );
 #endif
 
     return WICED_SUCCESS;
@@ -217,28 +217,15 @@ void vApplicationIdleSleepHook( void )
 }
 
 /******************************************************
- *        Interrupt Service Routine Definitions
- ******************************************************/
-
-#ifdef WAIT_MODE_SUPPORT
-void RTT_irq( void )
-{
-    __set_PRIMASK( 1 );
-    rtt_get_status( RTT );
-    rtt_disable_interrupt( RTT, RTT_MR_ALMIEN );
-}
-#endif
-
-/******************************************************
  *            Static Function Definitions
  ******************************************************/
-
 #ifdef WAIT_MODE_SUPPORT
 static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
 {
-    wiced_bool_t jtag_enabled       = ( ( CoreDebug ->DHCSR & CoreDebug_DEMCR_TRCENA_Msk ) != 0 ) ? WICED_TRUE : WICED_FALSE;
+    uint32_t     start_cycle        = rtt_read_timer_value( RTT );
+    uint32_t     total_ticks        = ( delay_ms - 1 > MAX_SLEEP_TICKS ) ? MAX_SLEEP_TICKS : delay_ms - 1;
     wiced_bool_t jtag_delay_elapsed = ( host_rtos_get_time() > JTAG_DEBUG_SLEEP_DELAY_MS ) ? WICED_TRUE : WICED_FALSE;
-    uint32_t     elapsed_cycles     = 0;
+    wiced_bool_t jtag_enabled       = ( ( CoreDebug->DHCSR & CoreDebug_DEMCR_TRCENA_Msk ) != 0 ) ? WICED_TRUE : WICED_FALSE;
 
     /* Criteria to enter WAIT mode
      * 1. Clock needed counter is 0 and no JTAG debugging
@@ -247,37 +234,30 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
      */
     if ( ( sam4s_clock_needed_counter == 0 ) && ( ( jtag_enabled == WICED_FALSE ) || ( ( jtag_enabled == WICED_TRUE ) && ( jtag_delay_elapsed == WICED_TRUE ) ) ) )
     {
-        uint32_t total_sleep_cycles;
-        uint32_t total_delay_cycles;
+        uint32_t total_cycles = ( total_ticks * RTT_CLOCK_HZ + pending_sleep_fraction ) / 1000;
 
-        /* Start real-time timer */
-        rtt_init( RTT, RTT_CLOCK_PRESCALER );
-
-        /* Start atomic operation */
-        DISABLE_INTERRUPTS;
-
-        /* Ensure deep sleep bit is enabled, otherwise system doesn't go into deep sleep */
-        SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-
-        /* Disable SysTick */
-        SysTick->CTRL &= ( ~( SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk ) );
-
-        /* End atomic operation */
-        ENABLE_INTERRUPTS;
-
-        /* Expected total time CPU executing in this function (including WAIT mode time) */
-        total_sleep_cycles = MS_TO_CYCLES( delay_ms );
-
-        /* Total cycles in WAIT mode loop */
-        total_delay_cycles = ( total_sleep_cycles / RTT_MAX_CYCLES + 1 ) * RC_OSC_DELAY_CYCLES + WAIT_MODE_ENTER_DELAY_CYCLES + WAIT_MODE_EXIT_DELAY_CYCLES;
-
-        if ( total_sleep_cycles > total_delay_cycles )
+        if ( total_cycles > WAIT_MODE_ENTER_DELAY_CYCLES + WAIT_MODE_EXIT_DELAY_CYCLES + RC_OSC_DELAY_CYCLES )
         {
-            /* Adjust total sleep cycle to exclude exit delay */
-            total_sleep_cycles -= WAIT_MODE_EXIT_DELAY_CYCLES;
+            uint32_t elapsed_cycles = 0;
+            uint32_t returned_ticks = 0;
+
+            /* Update unexecuted sleep fraction */
+            pending_sleep_fraction = ( total_ticks * RTT_CLOCK_HZ + pending_sleep_fraction ) % 1000;
+
+            /* Start atomic operation */
+            DISABLE_INTERRUPTS;
+
+            /* Ensure deep sleep bit is enabled, otherwise system doesn't go into deep sleep */
+            SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+
+            /* Disable SysTick. Note that value of SysTick isn't reset here */
+            SysTick->CTRL &= ( ~(uint32_t)( SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk ) );
+
+            /* End atomic operation */
+            ENABLE_INTERRUPTS;
 
             /* Prepare platform specific settings before entering powersave */
-        	platform_enter_powersave();
+            platform_enter_powersave();
 
             /* Prepare WLAN bus before entering powersave */
             host_platform_bus_enter_powersave();
@@ -301,29 +281,14 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
             /* Disable PLLA */
             pmc_disable_pllack( );
 
-            /* This above process introduces certain delay. Add delay to the elapsed cycles */
-            elapsed_cycles += rtt_read_timer_value( RTT );
+            /* Start real-time timer and alarm. Alarm time compensates for RC_OSC_DELAY_CYCLES */
+            rtt_write_alarm_time( RTT, rtt_read_timer_value( RTT ) + total_cycles - WAIT_MODE_ENTER_DELAY_CYCLES - WAIT_MODE_EXIT_DELAY_CYCLES - RC_OSC_DELAY_CYCLES );
 
-            while ( wake_up_interrupt_triggered == WICED_FALSE  && elapsed_cycles < total_sleep_cycles )
-            {
-                uint32_t current_sleep_cycles = total_sleep_cycles - elapsed_cycles;
+            /* Enter WAIT mode */
+            pmc_enable_waitmode();
 
-                /* Start real-time timer and alarm */
-                rtt_init( RTT, RTT_CLOCK_PRESCALER );
-                rtt_write_alarm_time( RTT, ( current_sleep_cycles > RTT_MAX_CYCLES ) ? RTT_MAX_CYCLES - RC_OSC_DELAY_CYCLES : current_sleep_cycles - RC_OSC_DELAY_CYCLES );
-
-                /* Enter WAIT mode */
-                pmc_enable_waitmode();
-
-                /* Clear wake-up status */
-                rtt_get_status( RTT );
-
-                /* Add sleep time to the elapsed cycles */
-                elapsed_cycles += rtt_read_timer_value( RTT );
-            }
-
-            /* Re-enable real-time timer to time clock reinitialisation delay */
-            rtt_init( RTT, RTT_CLOCK_PRESCALER );
+            /* Clear wake-up status */
+            rtt_get_status( RTT );
 
             /* Reinit fast clock. This takes ~19ms, but the timing has been compensated */
             init_clocks();
@@ -340,28 +305,30 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
             /* Restore platform-specific settings */
             platform_exit_powersave();
 
-            /* Add clock reinitialisation delay to elapsed cycles */
-            elapsed_cycles += rtt_read_timer_value( RTT );
+            /* Start atomic operation */
+            DISABLE_INTERRUPTS;
 
-            /* Disable RTT to save power */
-            RTT->RTT_MR = (uint32_t)( 1 << 20 );
+            /* Switch SysTick back on. Note that value of SysTick counter isn't reset here. It starts counting down from the previous value */
+            SysTick->CTRL |= (uint32_t)( SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk );
+
+            /* Clear flag indicating interrupt triggered by wake up pin */
+            wake_up_interrupt_triggered = WICED_FALSE;
+
+            /* End atomic operation */
+            ENABLE_INTERRUPTS;
+
+            elapsed_cycles = rtt_read_timer_value( RTT ) - start_cycle;
+
+            /* Calculate total ticks and also store the unreturned ticks */
+            returned_ticks            = ( elapsed_cycles * 1000 + unreturned_sleep_fraction ) / RTT_CLOCK_HZ;
+            unreturned_sleep_fraction = ( elapsed_cycles * 1000 + unreturned_sleep_fraction ) % RTT_CLOCK_HZ;
+
+            /* Return total time in milliseconds */
+            return returned_ticks;
         }
     }
 
-    /* Start atomic operation */
-    DISABLE_INTERRUPTS;
-
-    /* Switch SysTick back on */
-    SysTick->CTRL |= ( SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk );
-
-    /* Clear flag indicating interrupt triggered by wake up pin */
-    wake_up_interrupt_triggered = WICED_FALSE;
-
-    /* End atomic operation */
-    ENABLE_INTERRUPTS;
-
-    /* Return total time in milliseconds */
-    return CYCLES_TO_MS( elapsed_cycles );
+    return 0;
 }
 #else /* WAIT_MODE_SUPPORT */
 static unsigned long idle_power_down_hook( unsigned long delay_ms  )

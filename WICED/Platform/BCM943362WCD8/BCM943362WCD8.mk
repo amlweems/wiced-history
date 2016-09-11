@@ -1,5 +1,5 @@
 #
-# Copyright 2013, Broadcom Corporation
+# Copyright 2014, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -58,7 +58,7 @@ GLOBAL_DEFINES  += __SAM4S16B__ \
                    SDIO_4_BIT \
                    TRACE_LEVEL=0 \
                    WAIT_MODE_SUPPORT \
-                   WAIT_MODE_ENTER_DELAY_CYCLES=5 \
+                   WAIT_MODE_ENTER_DELAY_CYCLES=3 \
                    WAIT_MODE_EXIT_DELAY_CYCLES=34 
                    
 # WAIT_MODE_EXIT_DELAY_CYCLES is the delay SAM4S requires to switch the main clock source 

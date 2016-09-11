@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -492,14 +492,13 @@ extern wiced_result_t wiced_wifi_get_acparams_sta( edcf_acparam_t *acp );
  */
 extern void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority );
 
-/** Find the highest available access category (AC), which is equal to or less than the given AC,
- *  which does not require admission control and map it to a type of service (TOS) value.
+/** For each traffic priority (0..7) look up the 802.11 Access Category that is mapped to this type
+ *  of service and update the TOS map with the priority that the AP actually allows
  *
- * @param ac:        Access Category which is to be mapped to a TOS value
- * @param acp:       Pointer to an array of AC parameters
- * @return tos:      Highest available type of service that the selected AC maps to
+ * @return  WICED_SUCCESS : if the
+ *          WICED_ERROR   : if the AC Parameters were not retrieved
  */
-extern int wiced_wifi_get_available_tos( wiced_qos_access_category_t ac, const edcf_acparam_t *acp );
+extern wiced_result_t wiced_wifi_update_tos_map( void );
 
 /** Print access category parameters with their priority (1-4, where 4 is highest priority)
  *
@@ -538,6 +537,27 @@ extern wiced_result_t wiced_wifi_set_channel( uint32_t channel);
  *          WICED_ERROR   : if the counters were not successfully read
  */
 extern wiced_result_t wiced_wifi_get_counters(wiced_interface_t interface, wl_cnt_v6_t* counters);
+
+/** Get the maximum number of associations supported by all interfaces (STA and Soft AP)
+ *
+ * @param max_assoc  : The maximum number of associations supported by the STA and Soft AP interfaces. For example
+ *                     if the STA interface is associated then the Soft AP can support (max_assoc - 1)
+ *                     associated clients.
+ *
+ * @return  WICED_SUCCESS : if the maximum number of associated clients was successfully read
+ *          WICED_ERROR   : if the maximum number of associated clients was not successfully read
+ */
+extern wiced_result_t wiced_wifi_get_max_associations( uint32_t* max_assoc );
+
+/** Set the AMPDU parameters for both AP and STA
+ *
+ * Sets various AMPDU parameters for AP and STA to ensure that the number of buffers dedicated to AMPDUs does
+ * not exceed the resources of the chip.
+ *
+ * @return  WICED_SUCCESS : if the AMPDU parameters were successfully set
+ *          WICED_ERROR   : if the AMPDU parameters were not successfully set
+ */
+extern wiced_result_t wiced_wifi_set_ampdu_parameters( void );
 
 /*@+exportlocal@*/
 /** @} */
@@ -589,9 +609,9 @@ extern wiced_result_t wiced_wifi_disable_keep_alive( uint8_t id );
  */
 extern wiced_result_t wiced_wifi_get_wifi_version( char* version, uint8_t length );
 
+extern wiced_result_t wwd_wifi_set_channel( wiced_interface_t interface, uint32_t channel );
 
-wiced_result_t wwd_wifi_set_channel( wiced_interface_t interface, uint32_t channel );
-wiced_result_t wwd_wifi_get_channel( wiced_interface_t interface, uint32_t* channel );
+extern wiced_result_t wwd_wifi_get_channel( wiced_interface_t interface, uint32_t* channel );
 
 extern wiced_result_t wiced_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length );
 

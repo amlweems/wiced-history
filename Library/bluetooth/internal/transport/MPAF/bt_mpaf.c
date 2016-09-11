@@ -1,5 +1,5 @@
 /**
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,6 +13,7 @@
  */
 #include "wiced.h"
 #include "bt_firmware.h"
+#include "bt_firmware_image.h"
 #include "bt_mpaf.h"
 #include "bt_mpaf_interface.h"
 #include "bt_packet_internal.h"
@@ -128,7 +129,7 @@ wiced_result_t bt_mpaf_init( mpaf_event_cb_t system_event_cb )
         }
 
         /* Download firmware */
-        if ( bt_mpaf_firmware_download( ) != WICED_SUCCESS )
+        if ( bt_firmware_download( bt_mpaf_firmware_image, bt_mpaf_firmware_size, bt_mpaf_firmware_version ) != WICED_SUCCESS )
         {
             WPRINT_LIB_ERROR( ( "Error download MPAF firmware\r\n" ) );
             return WICED_ERROR;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -170,7 +170,7 @@ wiced_result_t wiced_gpio_input_irq_enable( wiced_gpio_t gpio, wiced_gpio_irq_tr
 
     wakeup_config.is_wakeup_pin     = platform_wakeup_pin_config[gpio].is_wakeup_pin;
     wakeup_config.wakeup_pin_number = platform_wakeup_pin_config[gpio].wakeup_pin_number;
-    wakeup_config.trigger           = ( IRQ_TRIGGER_RISING_EDGE | trigger ) ? IOPORT_SENSE_RISING : IOPORT_SENSE_FALLING;
+    wakeup_config.trigger           = platform_wakeup_pin_config[gpio].trigger;
 
     sam4s_powersave_enable_wakeup_pin( &wakeup_config );
 

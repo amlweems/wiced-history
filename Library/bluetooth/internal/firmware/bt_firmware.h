@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,4 +39,4 @@
  *               Function Declarations
  ******************************************************/
 
-wiced_result_t bt_mpaf_firmware_download( void );
+wiced_result_t bt_firmware_download( const uint8_t* firmware_image, uint32_t size, const char* version );

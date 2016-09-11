@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -214,6 +214,10 @@ static const uint16_t mcs_data_rate_lookup_table[32][2][2] =
     [30] = { {  2340,   2600},  {   4860,   5400} },
     [31] = { {  2600,   2888},  {   5400,   6000} },
 };
+
+//static edcf_acparam_t ac_params[AC_COUNT];
+/* Note that the qos_map is accessed by SDPCM */
+uint8_t wwd_tos_map[8] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 };
 
 /******************************************************
  *             Static Function prototypes
@@ -1740,28 +1744,78 @@ void wiced_wifi_prioritize_acparams( const edcf_acparam_t *acp, int *priority )
 }
 
 
-int wiced_wifi_get_available_tos( wiced_qos_access_category_t ac, const edcf_acparam_t *acp )
+wiced_result_t wiced_wifi_update_tos_map( void )
 {
-    int tos = -1;
-    static const wiced_qos_access_category_t ac_values[] = { WMM_AC_VO, WMM_AC_VI, WMM_AC_BE, WMM_AC_BK }; // Highest to lowest priority
-    static const int start_idx[] = { 2, 3, 1, 0 }; // Starting index in the order the AC parameters come in: WMM_AC_BE, WMM_AC_BK, WMM_AC_VI, WMM_AC_VO
-    static const wiced_ip_header_tos_t tos_values[] = { TOS_VO7, TOS_VI, TOS_BE, TOS_BK }; // Highest to lowest priority
-    int i;
+    edcf_acparam_t ac_params[AC_COUNT];
+    const wiced_qos_access_category_t tos_to_ac_map[8] = { WMM_AC_BE, WMM_AC_BK, WMM_AC_BK, WMM_AC_BE, WMM_AC_VI, WMM_AC_VI, WMM_AC_VO, WMM_AC_VO };
+    wiced_qos_access_category_t ac;
+    wiced_bool_t admission_control_mandatory[AC_COUNT];
+    int i, j;
 
-    if ( acp != NULL )
+    if ( wiced_wifi_get_acparams_sta( ac_params ) != WICED_SUCCESS )
     {
-        // For the given AC look up the highest AC available which does not require admission control and map it to a TOS value
-        for ( i = start_idx[ac]; i < AC_COUNT; i++ )
+        return WICED_ERROR;
+    }
+
+    /* For each access category, record whether admission control is necessary or not */
+    for (i = 0; i < AC_COUNT; i++)
+    {
+        j = (ac_params[i].ACI & EDCF_ACI_MASK) >> EDCF_ACI_SHIFT; // Determine which access category (in case they're out of order)
+        if ( ( ac_params[i].ACI & EDCF_ACM_MASK ) == 0 )
         {
-            if ( ( acp[ac_values[i]].ACI & EDCF_ACM_MASK ) == 0 )
+            admission_control_mandatory[j] = WICED_FALSE;
+        }
+        else
+        {
+            admission_control_mandatory[j] = WICED_TRUE;
+        }
+    }
+
+    /* For each type of service value look up the Access Category that is mapped to this type of service and update the TOS map
+     * with what the AP actually allows, if necessary */
+    for (i = 0; i < 8; i++ )
+    {
+        ac = tos_to_ac_map[i];
+        if ( admission_control_mandatory[ac] == WICED_FALSE ) /* No need to re-map to lower priority */
+        {
+            wwd_tos_map[i] = (uint8_t)i;
+        }
+        else
+        {
+            if ( ac == WMM_AC_VO )
             {
-                tos = tos_values[i];
-                break;
+                if ( admission_control_mandatory[WMM_AC_VI] == WICED_FALSE )
+                {
+                    wwd_tos_map[i] = WMM_AC_VI;
+                }
+                else if ( admission_control_mandatory[WMM_AC_BE] == WICED_FALSE )
+                {
+                    wwd_tos_map[i] = WMM_AC_BE;
+                }
+                else
+                {
+                    wwd_tos_map[i] = WMM_AC_BK;
+                }
+            }
+            else if ( ac == WMM_AC_VI )
+            {
+                if ( admission_control_mandatory[WMM_AC_BE] == WICED_FALSE )
+                {
+                    wwd_tos_map[i] = WMM_AC_BE;
+                }
+                else
+                {
+                    wwd_tos_map[i] = WMM_AC_BK;
+                }
+            }
+            else /* Case for best effort and background is the same since we are going to send at lowest priority anyway */
+            {
+                wwd_tos_map[i] = WMM_AC_BK;
             }
         }
     }
 
-    return tos;
+    return WICED_SUCCESS;
 }
 
 
@@ -1815,7 +1869,7 @@ wiced_result_t wwd_wifi_get_channel( wiced_interface_t interface, uint32_t* chan
     wiced_result_t result;
 
     wiced_get_ioctl_buffer( &buffer, sizeof(channel_info_t) );
-    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_CHANNEL, buffer, &response, interface );
+    result = wiced_send_ioctl( SDPCM_GET, WLC_GET_CHANNEL, buffer, &response, (sdpcm_interface_t)interface );
     if ( result == WICED_SUCCESS )
     {
         channel_info_t* channel_info = (channel_info_t*) host_buffer_get_current_piece_data_pointer( response );
@@ -2147,6 +2201,29 @@ wiced_result_t wiced_wifi_get_associated_client_list( void* client_list_buffer, 
     return result;
 }
 
+wiced_result_t wiced_wifi_get_max_associations( uint32_t* max_assoc )
+{
+    wiced_buffer_t buffer;
+    wiced_buffer_t response;
+    wiced_result_t     result;
+
+    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_MAX_ASSOC );
+    CHECK_IOCTL_BUFFER( data );
+    result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
+
+    if ( result != WICED_SUCCESS )
+    {
+        return result;
+    }
+
+    data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
+    *max_assoc = (uint8_t)*data;
+    host_buffer_release( response, WICED_NETWORK_RX );
+
+    return WICED_SUCCESS;
+}
+
+
 wiced_result_t wiced_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length )
 {
     host_semaphore_type_t semaphore;
@@ -2329,7 +2406,21 @@ wiced_result_t wiced_wifi_get_wifi_version( char* version, uint8_t length )
     result = wiced_send_iovar( SDPCM_GET, buffer, &response, SDPCM_STA_INTERFACE );
     if ( result == WICED_SUCCESS )
     {
-        memcpy( version, host_buffer_get_current_piece_data_pointer( response ), length );
+        char* wlan_firmware_version = (char*)host_buffer_get_current_piece_data_pointer( response );
+
+        if ( wlan_firmware_version != NULL )
+        {
+            uint32_t version_length = MIN( strlen( wlan_firmware_version ), length );
+
+            memcpy( version, wlan_firmware_version, version_length );
+
+            if ( version[version_length - 1] == '\n' )
+            {
+                /* Remove newline in WLAN firmware version string. Formatting is handled by WPRINT below */
+                version[version_length - 1] = '\0';
+            }
+        }
+
         host_buffer_release( response, WICED_NETWORK_RX );
     }
     return result;

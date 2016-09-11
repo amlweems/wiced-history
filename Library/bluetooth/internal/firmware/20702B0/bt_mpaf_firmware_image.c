@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,15 +8,15 @@
  * written permission of Broadcom Corporation.
  */
 /* FILE-CSTYLED */
-const char* const bt_firmware_version = "BCM20702B0_002.001.014.0455.0000_Generic_UART_Class2_20MHz_WICED.hcd";
+const char* const bt_mpaf_firmware_version = "BCM20702B0_002.001.014.0487.0000_Generic_UART_Class2_20MHz_WICED.hcd";
 
-const unsigned char bt_firmware_image[14703] =
+const unsigned char bt_mpaf_firmware_image[14703] =
 {
     76, 252, 44, 0, 32, 9, 0, 1, 8, 0, 105, 153, 153, 66, 4, 32, 78, 177,
-    253, 4, 0, 255, 255, 255, 255, 64, 6, 0, 39, 233, 0, 177, 69, 32, 2,
+    253, 4, 0, 255, 255, 255, 255, 64, 6, 0, 69, 35, 1, 43, 112, 32, 2,
     10, 0, 40, 32, 9, 0, 0, 0, 0, 0, 0, 0, 76, 252, 255, 40, 32, 9, 0, 65,
     17, 0, 87, 73, 67, 69, 68, 32, 66, 67, 77, 50, 48, 55, 48, 50, 66, 48,
-    0, 105, 2, 0, 199, 1, 92, 1, 0, 0, 91, 9, 0, 253, 3, 68, 4, 40, 4, 6,
+    0, 105, 2, 0, 231, 1, 92, 1, 0, 0, 91, 9, 0, 253, 3, 68, 4, 40, 4, 6,
     6, 140, 87, 15, 0, 0, 194, 1, 0, 0, 194, 1, 0, 89, 1, 60, 0, 5, 0, 0,
     62, 36, 0, 1, 8, 0, 10, 0, 0, 0, 0, 0, 2, 100, 0, 0, 16, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 230, 0, 122, 2, 12, 255, 255, 255, 192,
@@ -888,4 +888,4 @@ const unsigned char bt_firmware_image[14703] =
     255, 255, 255
 };
 
-const unsigned long bt_firmware_size = sizeof(bt_firmware_image);
+const unsigned long bt_mpaf_firmware_size = sizeof( bt_mpaf_firmware_image );

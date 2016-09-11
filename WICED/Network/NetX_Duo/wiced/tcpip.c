@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -120,9 +120,17 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
     }
     else
     {
-        result = nx_tcp_server_socket_accept( &socket->socket, 1000 );
-        return result;
+        result = nx_tcp_server_socket_accept( &socket->socket, NX_NO_WAIT );
+        if ( result == NX_IN_PROGRESS )
+        {
+            return WICED_SUCCESS;
+        }
+        else
+        {
+            return WICED_ERROR;
+        }
     }
+
     if ( ( result == NX_NOT_CONNECTED ) || ( result == NX_WAIT_ABORTED ) )
     {
         return WICED_TIMEOUT;

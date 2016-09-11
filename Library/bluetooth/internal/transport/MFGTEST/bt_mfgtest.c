@@ -1,5 +1,5 @@
 /**
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,6 +21,8 @@
 #include "bt_mfgtest.h"
 #include "bt_transport_driver.h"
 #include "bt_transport_thread.h"
+#include "bt_firmware.h"
+#include "bt_firmware_image.h"
 
 /******************************************************
  *                      Macros
@@ -64,6 +66,13 @@ static uint8_t             pc_uart_ring_buffer_data[BT_BUS_RX_FIFO_SIZE];
 
 wiced_result_t bt_mfgtest_start( const wiced_uart_config_t* config )
 {
+    /* Download firmware */
+    if ( bt_firmware_download( bt_hci_firmware_image, bt_hci_firmware_size, bt_hci_firmware_version ) != WICED_SUCCESS )
+    {
+        WPRINT_LIB_ERROR( ( "Error downloading HCI firmware\r\n" ) );
+        return WICED_ERROR;
+    }
+
     if ( bt_transport_driver_init( bt_mfgtest_transport_driver_event_handler, bt_mfgtest_transport_driver_bus_read_handler ) != WICED_SUCCESS )
     {
         WPRINT_LIB_ERROR( ( "Error initialising BT transport driver\r\n" ) );

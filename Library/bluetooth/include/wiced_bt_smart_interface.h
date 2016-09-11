@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -87,6 +87,7 @@ typedef enum
     BT_SMART_CONNECTABLE_DIRECTED_ADVERTISING_EVENT       = 0x01, /**< ADV_DIRECT_IND  : Connectable directed advertising event       */
     BT_SMART_SCANNABLE_UNDIRECTED_ADVERTISING_EVENT       = 0x02, /**< ADV_SCAN_IND    : Scannable undirected advertising event       */
     BT_SMART_NON_CONNECTABLE_UNDIRECTED_ADVERTISING_EVENT = 0x03, /**< ADV_NONCONN_IND : Non-connectable undirected advertising event */
+    BT_SMART_SCAN_RESPONSE_EVENT                          = 0x04, /**< SCAN_RSP        : Scan response event                          */
 } wiced_bt_smart_advertising_event_t;
 
 /******************************************************
@@ -119,21 +120,30 @@ typedef struct
 } wiced_bt_smart_scan_settings_t;
 
 /**
+ *  Bluetooth Smart advertising report
+ */
+typedef struct
+{
+    wiced_bt_smart_device_t             remote_device;   /**< Remote device                                      */
+    int8_t                              signal_strength; /**< RSSI in dBm                                        */
+    wiced_bt_smart_advertising_event_t  event;           /**< Advertising event received                         */
+    uint8_t                             eir_data_length; /**< Length of EIR data received with advertising event */
+    uint8_t                             eir_data[31];    /**< EIR data of advertising event                      */
+} wiced_bt_smart_advertising_report_t;
+
+/**
  *  Bluetooth Smart scan result
  */
 typedef struct wiced_bt_smart_scan_result
 {
-    wiced_bt_smart_device_t             remote_device;                 /**< Remote device                                      */
-    int8_t                              signal_strength;               /**< RSSI in dBm                                        */
-    wiced_bt_smart_advertising_event_t  advertising_event;             /**< Advertising event received                         */
-    uint8_t                             advertising_eir_data_length;   /**< Length of EIR data received with advertising event */
-    uint8_t                             advertising_eir_data[31];      /**< EIR data of advertising event                      */
-    uint8_t                             scan_response_eir_data_length; /**< Length of EIR data received with scan response     */
-    uint8_t                             scan_response_eir_data[31];    /**< EIR data of scan response                          */
-    struct wiced_bt_smart_scan_result*  next;                          /**< Pointer to the next scan result                    */
+    wiced_bt_smart_device_t             remote_device;                   /**< Remote device                       */
+    int8_t                              signal_strength;                 /**< RSSI in dBm                         */
+    wiced_bt_smart_advertising_report_t last_scan_response_received;     /**< Last scan response event received   */
+    wiced_bt_smart_advertising_report_t last_advertising_event_received; /**< Last advertising event received     */
+    struct wiced_bt_smart_scan_result*  next;                            /**< Pointer to the next scan result     */
 
     /* Additional flag to help application filter scan results */
-    wiced_bool_t                        filter_display;                /**< Set to WICED_TRUE if filter display                */
+    wiced_bool_t                        filter_display;                  /**< Set to WICED_TRUE if filter display */
 
 } wiced_bt_smart_scan_result_t;
 
@@ -197,9 +207,9 @@ typedef struct
 typedef wiced_result_t (*wiced_bt_smart_scan_complete_callback_t)( void );
 
 /**
- * Bluetooth Smart intermediate scan result callback
+ * Bluetooth Smart advertising report callback
  */
-typedef wiced_result_t (*wiced_bt_smart_scan_result_callback_t)  ( const wiced_bt_smart_scan_result_t* result );
+typedef wiced_result_t (*wiced_bt_smart_advertising_report_callback_t)  ( const wiced_bt_smart_advertising_report_t* result );
 
 /******************************************************
  *                 Global Variables

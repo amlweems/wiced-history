@@ -1,7 +1,7 @@
 /*
  * WICED WPS host implementation
  *
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,8 +27,6 @@
 #include "stdlib.h"
 #include "wps_constants.h"
 #include "wps_common.h"
-#include "wiced_rtos.h"
-#include "wiced_time.h"
 #include "wps_p2p_interface.h"
 #include "besl_host.h"
 #include "besl_host_interface.h"
@@ -48,6 +46,8 @@
 #define WPS_THREAD_STACK_SIZE  (8*1024)
 #define WPS_THREAD_PRIORITY    3
 
+#define SECONDS              (1000)
+#define MINUTES              (60 * SECONDS)
 #define WPS_TOTAL_MAX_TIME   (120*1000) /* In milliseconds */
 
 #define AUTHORIZED_MAC_LIST_LENGTH   (1)
@@ -550,20 +550,20 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap )
 
     uint8_t attempts = 0;
     wiced_result_t ret;
-    wiced_semaphore_t semaphore;
-    wiced_rtos_init_semaphore(&semaphore);
+    host_semaphore_type_t semaphore;
+    host_rtos_init_semaphore( &semaphore );
     do
     {
         ++attempts;
         ret = wiced_wifi_join_specific( ap, NULL, 0, &semaphore );
-        if (ret != WICED_SUCCESS)
+        if ( ret != WICED_SUCCESS )
         {
             continue;
         }
-        ret = wiced_rtos_get_semaphore(&semaphore, DEFAULT_WPS_JOIN_TIMEOUT);
+        ret = host_rtos_get_semaphore( &semaphore, DEFAULT_WPS_JOIN_TIMEOUT, WICED_FALSE );
     } while ( ret != WICED_SUCCESS && attempts < 2 );
 
-    wiced_rtos_deinit_semaphore(&semaphore);
+    host_rtos_deinit_semaphore( &semaphore );
 
     if ( ret != WICED_SUCCESS )
     {

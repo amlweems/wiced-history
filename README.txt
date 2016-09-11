@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 2.4.0 - README
+Broadcom WICED Software Development Kit 2.4.1 - README
 =====================================================================
 
 The WICED SDK provides a full compliment of application level APIs, 
@@ -184,8 +184,8 @@ Known Limitations & Notes
        required for these platforms.
  
  * Wi-Fi Powersave Max. Sleep Time
-   The WLAN firmware sleep time is limited to a maxium of 1 second. Attempts to 
-   set the Wi-Fi listen interval longer than 1 second using the 
+   The WLAN firmware sleep time is limited to a maxium of 4 second. Attempts to 
+   set the Wi-Fi listen interval longer than 4 second using the 
    wiced_wifi_set_listen_interval() function will be ignored. 
  
  * libc does not include support for printing uint64_t (long long)
@@ -200,6 +200,7 @@ Known Limitations & Notes
 
  * Support for IAR toolchain is available for STM32F2xx platform only (support for other platforms TBD)
 
+ * AP mode when running with WPA/WPA2 encryption is limited to 4 STA clients
 
 Tools
 ---------------------------------------------------------------------

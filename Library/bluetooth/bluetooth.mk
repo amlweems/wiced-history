@@ -1,5 +1,5 @@
 #
-# Copyright 2013, Broadcom Corporation
+# Copyright 2014, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,7 +20,6 @@ NAME := Lib_Bluetooth
 # BT_TRANSPORT_BUS             : UART
 # BT_STACK                     : NoStack, LE
 # BT_CHIP                      : 20702B0
-# BT_FIRMWARE                  : BCM20702B0_002.001.014.0455.0000_Generic_UART_Class2_20MHz_WICED.hcd
 ################################################################################
 
 ################################################################################
@@ -41,10 +40,6 @@ endif
 
 ifndef BT_CHIP
 BT_CHIP := 20702B0
-endif
-
-ifndef BT_FIRMWARE
-BT_FIRMWARE := BCM20702B0_002.001.014.0455.0000_Generic_UART_Class2_20MHz_WICED.hcd
 endif
 
 ################################################################################
@@ -82,6 +77,7 @@ GLOBAL_INCLUDES  := include \
                     include/platform/$(BT_TRANSPORT_BUS)/$(PLATFORM_FULL) \
                     internal/bus \
                     internal/firmware \
+                    internal/firmware/$(BT_CHIP) \
                     internal/framework/management \
                     internal/framework/packet \
                     internal/framework/utilities/linked_list \
@@ -97,11 +93,13 @@ ifeq ($(BT_MODE),$(filter $(BT_MODE),MPAF DUAL))
 $(NAME)_DEFINES  += BT_MPAF_MODE
 
 GLOBAL_INCLUDES  += internal/framework/management/MPAF \
-                    internal/transport/MPAF
+                    internal/transport/MPAF \
+                    internal/transport/HCI
 							                        
 $(NAME)_SOURCES  += internal/framework/management/MPAF/bt_management_mpaf.c \
                     internal/transport/MPAF/bt_mpaf.c \
-                    internal/transport/MPAF/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c
+                    internal/transport/MPAF/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c \
+                    internal/firmware/$(BT_CHIP)/bt_mpaf_firmware_image.c
 				    		    				    
 endif # ifeq ($(BT_MODE),$(filter $(BT_MODE),MPAF DUAL))
 
@@ -113,7 +111,8 @@ GLOBAL_INCLUDES  += internal/framework/management/HCI \
 					
 $(NAME)_SOURCES  += internal/framework/management/HCI/bt_management_hci.c \
                     internal/transport/HCI/bt_hci.c \
-                    internal/transport/HCI/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c
+                    internal/transport/HCI/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c \
+                    internal/firmware/$(BT_CHIP)/bt_hci_firmware_image.c
 				    
 endif # ifeq ($(BT_MODE),$(filter $(BT_MODE),HCI DUAL))
 
@@ -124,7 +123,8 @@ GLOBAL_INCLUDES  += internal/transport/MFGTEST \
                     internal/transport/HCI
                     
 $(NAME)_SOURCES  += internal/transport/MFGTEST/bt_mfgtest.c \
-                    internal/transport/MFGTEST/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c
+                    internal/transport/MFGTEST/$(BT_TRANSPORT_BUS)/bt_transport_driver_receive.c \
+                    internal/firmware/$(BT_CHIP)/bt_hci_firmware_image.c
 endif
 
 ifeq ($(BT_STACK),$(filter $(BT_STACK),LE))
@@ -135,13 +135,9 @@ $(NAME)_COMPONENTS := Library/bluetooth/internal/stack/$(BT_STACK)
 
 $(NAME)_SOURCES  += internal/framework/utilities/attribute/bt_smart_attribute.c
 endif # ifeq ($(BT_STACK),$(filter $(BT_STACK),LE))
-
-ifeq ($(BT_FIRMWARE),$(filter $(BT_FIRMWARE),BCM20702B0_002.001.014.0455.0000_Generic_UART_Class2_20MHz_WICED.hcd))
-$(NAME)_SOURCES  += internal/firmware/$(BT_CHIP)/bt_firmware.c \
-                    internal/firmware/$(BT_CHIP)/bt_firmware_image.c
-endif # ifeq ($(BT_FIRMWARE),$(filter $(BT_FIRMWARE),BCM20702B0_002.001.014.0455.0000_Generic_UART_Class2_20MHz_WICED.hcd))  
 					
 $(NAME)_SOURCES  += internal/bus/$(BT_TRANSPORT_BUS)/bt_bus.c \
+                    internal/firmware/bt_firmware.c \
                     internal/transport/driver/$(BT_TRANSPORT_BUS)/bt_transport_driver.c \
                     internal/transport/thread/bt_transport_thread.c \
                     internal/framework/packet/bt_packet.c \

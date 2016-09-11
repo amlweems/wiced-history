@@ -1,5 +1,5 @@
 /**
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -92,10 +92,10 @@ static const hci_event_extended_header_t const expected_hci_events[] =
  *               Function Definitions
  ******************************************************/
 
-wiced_result_t bt_mpaf_firmware_download( void )
+wiced_result_t bt_firmware_download( const uint8_t* firmware_image, uint32_t size, const char* version )
 {
-    uint8_t*       data             = (uint8_t*) bt_firmware_image;
-    uint32_t       remaining_length = bt_firmware_size;
+    uint8_t*       data             = (uint8_t*)firmware_image;
+    uint32_t       remaining_length = size;
     wiced_result_t retval           = WICED_SUCCESS;
     hci_event_extended_header_t hci_event;
 
@@ -159,7 +159,7 @@ wiced_result_t bt_mpaf_firmware_download( void )
 
     WPRINT_LIB_DEBUG( ( "done!\n\r" ) );
 
-    WPRINT_LIB_DEBUG( ( "Uploading %s ... \n\r", bt_firmware_version ) );
+    WPRINT_LIB_DEBUG( ( "Uploading %s ... \n\r", version ) );
 
     /* The firmware image (.hcd format) contains a collection of hci_write_ram command + a block of the image,
      * followed by a hci_write_ram image at the end. Parse and send each individual command and wait for the response.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -81,6 +81,7 @@ extern "C"
 #define WICED_ETHERTYPE_ARP     0x0806
 #define WICED_ETHERTYPE_RARP    0x8035
 #define WICED_ETHERTYPE_EAPOL   0x888E
+#define WICED_ETHERTYPE_8021Q   0x8100
 
 /** @endcond */
 

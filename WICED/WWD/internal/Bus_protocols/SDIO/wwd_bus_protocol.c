@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -140,7 +140,7 @@ typedef union
  *             Variables
  ******************************************************/
 
-static wiced_bool_t bus_is_up;
+static wiced_bool_t bus_is_up                 = WICED_FALSE;
 static wiced_bool_t wiced_bus_flow_controlled = WICED_FALSE;
 
 /******************************************************
@@ -389,6 +389,8 @@ wiced_result_t wiced_bus_init( void )
         return WICED_TIMEOUT;
     }
 
+    bus_is_up = WICED_TRUE;
+
     return result;
 }
 
@@ -396,6 +398,8 @@ wiced_result_t wiced_bus_deinit( void )
 {
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
+
+    bus_is_up = WICED_FALSE;
 
     return WICED_SUCCESS;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -143,14 +143,14 @@ typedef enum
  */
 typedef enum
 {
-    TOS_VO7 = 7, /**< 0xE0, 111 0  0000 (7)  AC_VO tos/dscp values */
-    TOS_VO  = 6, /**< 0xD0, 110 0  0000 (6)  AC_VO                 */
-    TOS_VI  = 5, /**< 0xA0, 101 0  0000 (5)  AC_VI                 */
-    TOS_VI4 = 4, /**< 0x80, 100 0  0000 (4)  AC_VI                 */
-    TOS_BE  = 0, /**< 0x00, 000 0  0000 (0)  AC_BE                 */
-    TOS_EE  = 3, /**< 0x60, 011 0  0000 (3)  AC_BE                 */
-    TOS_BK  = 1, /**< 0x20, 001 0  0000 (1)  AC_BK                 */
-    TOS_LE  = 2, /**< 0x40, 010 0  0000 (2)  AC_BK                 */
+    TOS_VO7 = 0xE0, /**< 0xE0, 111 0  0000 (7)  AC_VO tos/dscp values */
+    TOS_VO  = 0xD0, /**< 0xD0, 110 0  0000 (6)  AC_VO                 */
+    TOS_VI  = 0xA0, /**< 0xA0, 101 0  0000 (5)  AC_VI                 */
+    TOS_VI4 = 0x80, /**< 0x80, 100 0  0000 (4)  AC_VI                 */
+    TOS_BE  = 0x00, /**< 0x00, 000 0  0000 (0)  AC_BE                 */
+    TOS_EE  = 0x60, /**< 0x60, 011 0  0000 (3)  AC_BE                 */
+    TOS_BK  = 0x20, /**< 0x20, 001 0  0000 (1)  AC_BK                 */
+    TOS_LE  = 0x40, /**< 0x40, 010 0  0000 (2)  AC_BK                 */
 } wiced_ip_header_tos_t;
 
 /**

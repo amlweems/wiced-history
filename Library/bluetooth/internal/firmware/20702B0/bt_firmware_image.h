@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -33,9 +33,17 @@
  *                 Global Variables
  ******************************************************/
 
-extern const char* const   bt_firmware_version;
-extern const unsigned char bt_firmware_image[];
-extern const unsigned long bt_firmware_size;
+#if defined ( BT_MPAF_MODE )
+extern const char* const   bt_mpaf_firmware_version;
+extern const unsigned char bt_mpaf_firmware_image[];
+extern const unsigned long bt_mpaf_firmware_size;
+#endif
+
+#if defined ( BT_HCI_MODE ) || defined ( BT_MFGTEST_MODE )
+extern const char* const   bt_hci_firmware_version;
+extern const unsigned char bt_hci_firmware_image[];
+extern const unsigned long bt_hci_firmware_size;
+#endif
 
 /******************************************************
  *               Function Declarations

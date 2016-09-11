@@ -1,2 +1,2 @@
-Wiced Version: 2.4.0
-2297f1c7861962f60089e4869d7601a15f178ba3
+Wiced Version: 2.4.1
+c3c6102f3f2e5adf6e967def892182648e1bab57

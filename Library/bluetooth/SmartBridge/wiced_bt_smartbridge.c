@@ -1,5 +1,5 @@
 /**
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -187,14 +187,14 @@ wiced_bool_t   wiced_bt_smartbridge_is_ready_to_connect( void )
     return ( initialised == WICED_FALSE || connecting_socket != NULL ) ? WICED_FALSE : WICED_TRUE;
 }
 
-wiced_result_t wiced_bt_smartbridge_start_scan( const wiced_bt_smart_scan_settings_t* settings, wiced_bt_smart_scan_complete_callback_t complete_callback, wiced_bt_smart_scan_result_callback_t result_callback )
+wiced_result_t wiced_bt_smartbridge_start_scan( const wiced_bt_smart_scan_settings_t* settings, wiced_bt_smart_scan_complete_callback_t complete_callback, wiced_bt_smart_advertising_report_callback_t advertising_report_callback )
 {
     if ( initialised == WICED_FALSE )
     {
         return WICED_NOTREADY;
     }
 
-    return bt_smart_gap_start_scan( settings, complete_callback, result_callback );
+    return bt_smart_gap_start_scan( settings, complete_callback, advertising_report_callback );
 }
 
 wiced_result_t wiced_bt_smartbridge_stop_scan( void )
@@ -215,16 +215,6 @@ wiced_result_t wiced_bt_smartbridge_get_scan_result_list( wiced_bt_smart_scan_re
     }
 
     return bt_smart_gap_get_scan_results( result_list, count );
-}
-
-wiced_result_t wiced_bt_smartbridge_register_directed_advertising_callback( wiced_bt_smart_scan_result_callback_t callback )
-{
-    if ( initialised == WICED_FALSE )
-    {
-        return WICED_NOTREADY;
-    }
-
-    return bt_smart_gap_register_directed_advertising_callback( callback );
 }
 
 wiced_result_t wiced_bt_smartbridge_add_device_to_whitelist( const wiced_bt_device_address_t* device_address, wiced_bt_smart_address_type_t address_type )
@@ -550,6 +540,16 @@ wiced_result_t wiced_bt_smartbridge_disconnect( wiced_bt_smartbridge_socket_t* s
 
 
     return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_bt_smartbridge_set_transmit_power( wiced_bt_smartbridge_socket_t* socket, int8_t transmit_power_dbm )
+{
+    if ( initialised == WICED_FALSE || socket->state == SOCKET_STATE_DISCONNECTED )
+    {
+        return WICED_NOTREADY;
+    }
+
+    return bt_smart_gap_set_connection_tx_power( socket->connection_handle, transmit_power_dbm );
 }
 
 wiced_result_t wiced_bt_smartbridge_set_bond_info( wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_security_settings_t* settings, const wiced_bt_smart_bond_info_t* bond_info )

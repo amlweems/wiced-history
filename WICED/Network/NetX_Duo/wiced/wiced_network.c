@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -140,7 +140,7 @@ static wiced_bool_t   tcp_sockets_are_closed( void );
 wiced_result_t wiced_network_init( void )
 {
     /* Initialize the NetX system.  */
-    WPRINT_NETWORK_INFO(("Initialising NetX " NetX_Duo_VERSION "\r\n"));
+    WPRINT_NETWORK_INFO(("Initialising NetX_Duo " NetX_Duo_VERSION "\r\n"));
     nx_system_initialize( );
 
     ip_networking_up[0] = WICED_FALSE;

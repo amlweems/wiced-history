@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,7 +9,7 @@
  */
 
 /** @file
- *  Provides an APSTA functionality specific to the 4319B0
+ *  Provides an APSTA functionality specific to the 43362a2
  */
 
 #include "wwd_rtos.h"
@@ -27,6 +27,13 @@
  ******************************************************/
 
 #define WLC_EVENT_MSG_LINK      (0x01)
+#define RATE_SETTING_11_MBPS    (11000000 / 500000)
+
+/* HT/AMPDU specific define */
+#define AMPDU_RX_FACTOR_8K  0   /* max rcv ampdu len (8kb) */
+#define AMPDU_RX_FACTOR_16K 1   /* max rcv ampdu len (16kb) */
+#define AMPDU_RX_FACTOR_32K 2   /* max rcv ampdu len (32kb) */
+#define AMPDU_RX_FACTOR_64K 3   /* max rcv ampdu len (64kb) */
 
 typedef enum
 {
@@ -62,7 +69,9 @@ static const wiced_event_num_t apsta_events[] = { WLC_E_IF, WLC_E_LINK, WLC_E_NO
  *             Static Function prototypes
  ******************************************************/
 
-static void* wiced_handle_apsta_event( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+static void*   wiced_handle_apsta_event( wiced_event_header_t* event_header, uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+wiced_result_t wiced_wifi_ap_init      ( char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint8_t key_length, uint8_t channel );
+wiced_result_t wiced_wifi_ap_up        ( void );
 
 /******************************************************
  *             Function definitions
@@ -95,22 +104,7 @@ static void* wiced_handle_apsta_event( wiced_event_header_t* event_header, uint8
     return handler_user_data;
 }
 
-/** Starts an infrastructure WiFi network
- * @param ssid      : A null terminated string containing the SSID name of the network to join
- * @param auth_type  : Authentication type:
- *                    - WICED_SECURITY_OPEN - Open Security
- *                    - WICED_SECURITY_WPA_TKIP_PSK   - WPA Security
- *                    - WICED_SECURITY_WPA2_AES_PSK   - WPA2 Security using AES cipher
- *                    - WICED_SECURITY_WPA2_MIXED_PSK - WPA2 Security using AES and/or TKIP ciphers
- *                    - WEP security is currently unimplemented due to lack of security
- * @param security_key : A byte array containing the cleartext security key for the network
- * @param key_length   : The length of the security_key in bytes.
- * @param channel     : 802.11 Channel number
- *
- * @return    WICED_SUCCESS : if successfully creates an AP
- *            WICED_ERROR   : if an error occurred
- */
-wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint8_t key_length, uint8_t channel )
+wiced_result_t wiced_wifi_ap_init( char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint8_t key_length, uint8_t channel )
 {
     wiced_bool_t wait_for_interface = WICED_FALSE;
     wiced_buffer_t response;
@@ -124,6 +118,9 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
     {
         return WICED_BADARG;
     }
+
+    /* Keep WLAN awake until AP initialization is complete */
+    wiced_wlan_status.keep_wlan_awake++;
 
     /* Query bss state (does it exist? if so is it UP?) */
     data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
@@ -141,7 +138,8 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
         if ( *data2 == (uint32_t) BSS_UP )
         {
             host_buffer_release( response, WICED_NETWORK_RX );
-            return WICED_SUCCESS;
+            retval = WICED_SUCCESS;
+            goto exit;
         }
         else
         {
@@ -151,15 +149,15 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
 
     if ( host_rtos_init_semaphore( &wiced_wifi_sleep_flag ) != WICED_SUCCESS )
     {
-        return WICED_ERROR;
+        retval = WICED_ERROR;
+        goto exit;
     }
 
     /* Register for interested events */
     if ( WICED_SUCCESS != ( retval = wiced_management_set_event_handler( apsta_events, wiced_handle_apsta_event, NULL ) ) )
     {
-
         (void) host_rtos_deinit_semaphore( &wiced_wifi_sleep_flag );
-        return retval;
+        goto exit;
     }
 
     /*@-noeffect@*/
@@ -182,7 +180,7 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
         if ( ( retval = host_rtos_get_semaphore( &wiced_wifi_sleep_flag, (uint32_t) 10000, WICED_FALSE ) ) != WICED_SUCCESS)
         {
             wiced_assert("Did not receive APSTA link up event\r\n", 0 != 0 );
-            return retval;
+            goto exit;
         }
     }
 
@@ -235,12 +233,20 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
     if ( data == NULL )
     {
         wiced_assert( "start_ap: Could not get buffer for IOCTL", 0 != 0 );
-        return WICED_ERROR;
+        retval = WICED_ERROR;
+        goto exit;
     }
 
     *data = (uint32_t) GMODE_AUTO;
     retval = wiced_send_ioctl( SDPCM_SET, WLC_SET_GMODE, buffer, 0, SDPCM_AP_INTERFACE );
     wiced_assert("start_ap: Failed to set GMode\r\n", ( retval == WICED_SUCCESS ) || ( retval == WICED_ASSOCIATED ) );
+
+    /* Set the multicast transmission rate to 11 Mbps rather than the default 1 Mbps */
+    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_2G_MULTICAST_RATE );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) RATE_SETTING_11_MBPS;
+    retval = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_AP_INTERFACE );
+    wiced_assert("start_ap: Failed to set multicast transmission rate\r\n", retval == WICED_SUCCESS );
 
     /* Set DTIM period */
     data = wiced_get_ioctl_buffer( &buffer, (uint16_t) 4 );
@@ -258,6 +264,17 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
     wiced_assert("start_ap: Failed to hide SSID\r\n", retval == WICED_SUCCESS );
 #endif
 
+exit:
+    wiced_wlan_status.keep_wlan_awake--;
+    return retval;
+}
+
+wiced_result_t wiced_wifi_ap_up( void )
+{
+    wiced_buffer_t buffer;
+    wiced_result_t retval;
+    uint32_t*      data;
+
     data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wiced_wifi_sleep_flag );
     data[0] = (uint32_t) SDPCM_AP_INTERFACE;
@@ -270,6 +287,35 @@ wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint
 
     wiced_wifi_ap_is_up = WICED_TRUE;
     return retval;
+}
+
+/** Starts an infrastructure WiFi network
+ * @param ssid      : A null terminated string containing the SSID name of the network to join
+ * @param auth_type  : Authentication type:
+ *                    - WICED_SECURITY_OPEN - Open Security
+ *                    - WICED_SECURITY_WPA_TKIP_PSK   - WPA Security
+ *                    - WICED_SECURITY_WPA2_AES_PSK   - WPA2 Security using AES cipher
+ *                    - WICED_SECURITY_WPA2_MIXED_PSK - WPA2 Security using AES and/or TKIP ciphers
+ *                    - WEP security is currently unimplemented due to lack of security
+ * @param security_key : A byte array containing the cleartext security key for the network
+ * @param key_length   : The length of the security_key in bytes.
+ * @param channel     : 802.11 Channel number
+ *
+ * @return    WICED_SUCCESS : if successfully creates an AP
+ *            WICED_ERROR   : if an error occurred
+ */
+wiced_result_t wiced_wifi_start_ap( char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint8_t key_length, uint8_t channel )
+{
+    wiced_result_t result;
+
+    result = wiced_wifi_ap_init( ssid, auth_type, security_key, key_length, channel );
+
+    if ( result == WICED_SUCCESS )
+    {
+        return wiced_wifi_ap_up();
+    }
+
+    return result;
 }
 
 
@@ -351,4 +397,40 @@ wiced_bool_t wiced_wifi_is_packet_from_ap( uint8_t flags2 )
     {
         return WICED_FALSE;
     }
+}
+
+/** Sets the chip specific AMPDU parameters for AP and STA
+ *  For SDK 3.0, and beyond, each chip will need it's own function for setting AMPDU parameters.
+ */
+
+wiced_result_t wiced_wifi_set_ampdu_parameters( void )
+{
+    wiced_buffer_t buffer;
+    wiced_result_t retval;
+
+    /* Set AMPDU Block ACK window size */
+    uint32_t* data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_BA_WINDOW_SIZE );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) 8;
+    retval = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+
+    wiced_assert("set_ampdu_parameters: Failed to set block ack window size\r\n", retval == WICED_SUCCESS );
+
+    /* Set number of MPDUs available for AMPDU */
+    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_MPDU );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) 4;
+    retval = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+
+    wiced_assert("set_ampdu_parameters: Failed to set number of MPDUs\r\n", retval == WICED_SUCCESS );
+
+    /* Set size of advertised receive AMPDU */
+    data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_RX_FACTOR );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (uint32_t) AMPDU_RX_FACTOR_8K;
+    retval = wiced_send_iovar( SDPCM_SET, buffer, NULL, SDPCM_STA_INTERFACE );
+
+    wiced_assert("set_ampdu_parameters: Failed to set advertised receive AMPDU size\r\n", retval == WICED_SUCCESS );
+
+    return retval;
 }

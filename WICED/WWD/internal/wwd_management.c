@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -199,6 +199,13 @@ wiced_result_t wiced_management_wifi_on( void )
         }
     }
 #endif
+
+    retval = wiced_wifi_set_ampdu_parameters();
+    if ( retval != WICED_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not set AMPDU parameters\r\n"));
+        return retval;
+    }
 
 #ifdef WICED_STARTUP_DELAY
     host_rtos_delay_milliseconds(WICED_STARTUP_DELAY);

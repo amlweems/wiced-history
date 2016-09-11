@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -84,6 +84,12 @@ static void           scan_result_handler       ( wiced_scan_result_t** result_p
 static void           handshake_timeout_handler ( void* arg );
 static wiced_result_t handshake_error_callback  ( void* arg );
 
+wiced_result_t wiced_core_init( void );
+wiced_result_t wiced_core_deinit( void );
+wiced_result_t wiced_wlan_connectivity_init( void );
+wiced_result_t wiced_wlan_connectivity_deinit( void );
+
+
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -109,21 +115,58 @@ static int                          current_bssid_list_length = 0;
 wiced_result_t wiced_init( void )
 {
     wiced_result_t result;
-    wiced_mac_t    mac;
 
     if ( wiced_initialised == WICED_TRUE )
+    {
         return WICED_SUCCESS;
+    }
+
+    WPRINT_WICED_INFO( ("Starting Wiced v" WICED_VERSION "\r\n") );
+
+    result = wiced_core_init( );
+    if ( result != WICED_SUCCESS )
+    {
+        return result;
+    }
+
+    result = wiced_wlan_connectivity_init( );
+    if (result != WICED_SUCCESS)
+    {
+        return result;
+    }
+
+    wiced_initialised = WICED_TRUE;
+    return result;
+}
+
+wiced_result_t wiced_core_init( void )
+{
+    wiced_result_t result;
 
     result = wiced_platform_init( );
     if ( result != WICED_SUCCESS )
     {
         return result;
     }
+
     result = wiced_rtos_init( );
     if ( result != WICED_SUCCESS )
     {
         return result;
     }
+
+    return result;
+}
+
+wiced_result_t wiced_wlan_connectivity_init( void )
+{
+    wiced_result_t result;
+    wiced_mac_t    mac;
+    
+#ifdef WPRINT_ENABLE_NETWORK_INFO
+    char           version[200];
+#endif
+
     result = wiced_network_init( );
     if ( result != WICED_SUCCESS )
     {
@@ -141,7 +184,7 @@ wiced_result_t wiced_init( void )
     {
         country = WICED_COUNTRY_UNITED_STATES;
     }
-    WPRINT_NETWORK_INFO( ("Starting Wiced v" WICED_VERSION "\r\n") );
+
     result = wiced_management_init( country, wiced_packet_pools );
     if ( result != WICED_SUCCESS )
     {
@@ -149,9 +192,6 @@ wiced_result_t wiced_init( void )
     }
 
     WPRINT_NETWORK_INFO( ( "WWD " BUS " interface initialised\r\n") );
-
-    wiced_wifi_get_mac_address( &mac );
-    WPRINT_APP_INFO(("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac.octet[0],mac.octet[1],mac.octet[2],mac.octet[3],mac.octet[4],mac.octet[5]));
 
     result = wiced_rtos_init_semaphore( &scan_semaphore );
     if ( result != WICED_SUCCESS )
@@ -162,24 +202,44 @@ wiced_result_t wiced_init( void )
 
     wiced_rtos_init_timer( &wiced_sta_handshake_timer, HANDSHAKE_TIMEOUT_MS, handshake_timeout_handler, 0 );
 
-    wiced_initialised = WICED_TRUE;
+#ifdef WPRINT_ENABLE_NETWORK_INFO
+    wiced_wifi_get_mac_address( &mac );
+    WPRINT_NETWORK_INFO(("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac.octet[0],mac.octet[1],mac.octet[2],mac.octet[3],mac.octet[4],mac.octet[5]));
+
+    memset( version, 0, sizeof( version ) );
+    wiced_wifi_get_wifi_version( version, sizeof( version ) );
+    WPRINT_NETWORK_INFO( ("WLAN Firmware    : %s\r\n", version ) );
+#endif
+
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_deinit( void )
+wiced_result_t wiced_core_deinit( void )
+{
+    wiced_rtos_deinit();
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_wlan_connectivity_deinit( void )
 {
     wiced_network_down( WICED_AP_INTERFACE );
     wiced_network_down( WICED_STA_INTERFACE );
 
     wiced_rtos_deinit_timer( &wiced_sta_handshake_timer );
 
-    wiced_rtos_deinit_semaphore(&scan_semaphore);
+    wiced_rtos_deinit_semaphore( &scan_semaphore );
 
     wiced_management_wifi_off( );
 
     wiced_network_deinit( );
 
-    wiced_rtos_deinit();
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_deinit( void )
+{
+    wiced_wlan_connectivity_deinit( );
+    wiced_core_deinit( );
 
     wiced_initialised = WICED_FALSE;
     return WICED_SUCCESS;
@@ -393,6 +453,9 @@ wiced_result_t wiced_join_ap( void )
 
                     wiced_sta_link_up       = WICED_TRUE;
                     wiced_sta_security_type = ap->details.security;
+
+                    /* Update type of service map with information received from AP during association */
+                    wiced_wifi_update_tos_map();
 
                     wiced_management_set_event_handler( link_events, wiced_link_events_handler, 0 );
 

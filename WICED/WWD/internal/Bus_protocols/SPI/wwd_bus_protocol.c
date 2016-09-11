@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,6 +38,8 @@
 
 #define GSPI_PACKET_AVAILABLE  (1 << 8)
 #define GSPI_UNDERFLOW         (1 << 1)
+
+#define WLAN_BUS_UP_ATTEMPTS   (1000)
 
 #define VERIFY_RESULT( x )     { wiced_result_t verify_result; verify_result = ( x ); if ( verify_result != WICED_SUCCESS ) return verify_result; }
 
@@ -93,6 +95,7 @@ static const uint8_t gspi_command_mapping[] =
     1
 };
 
+static wiced_bool_t bus_is_up                 = WICED_FALSE;
 static wiced_bool_t wiced_bus_flow_controlled = WICED_FALSE;
 
 
@@ -296,6 +299,11 @@ return_with_error:
     wiced_result_t result;
     uint32_t wiced_gspi_bytes_pending;
 
+    if ( wiced_bus_ensure_wlan_bus_is_up() != WICED_SUCCESS )
+    {
+        return WICED_ERROR;
+    }
+
     result = wiced_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wiced_gspi_status );
     if ( result != WICED_SUCCESS )
     {
@@ -469,6 +477,8 @@ wiced_result_t wiced_bus_init( void )
         return WICED_TIMEOUT;
     }
 
+    bus_is_up = WICED_TRUE;
+
     return result;
 }
 
@@ -476,6 +486,8 @@ wiced_result_t wiced_bus_deinit( void )
 {
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
+
+    bus_is_up = WICED_FALSE;
 
     return WICED_SUCCESS;
 }
@@ -596,30 +608,64 @@ wiced_result_t wiced_bus_transfer_bytes( bus_transfer_direction_t direction, bus
     return result;
 }
 
-
 wiced_result_t wiced_bus_ensure_wlan_bus_is_up( void )
 {
-    uint8_t csr = 0;
+    uint32_t attempts = (uint32_t) WLAN_BUS_UP_ATTEMPTS;
+    uint32_t spi_bus_reg_value;
+    uint8_t  csr_reg_value;
+
+    if ( bus_is_up == WICED_TRUE )
+    {
+        return WICED_SUCCESS;
+    }
+
+    /* Wake up WLAN SPI interface module */
+    VERIFY_RESULT( wiced_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
+    spi_bus_reg_value |= (uint32_t)( WAKE_UP );
+    VERIFY_RESULT( wiced_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value ) );
 
     /* Ensure HT clock is up */
-    wiced_write_register_value( BACKPLANE_FUNCTION, 0x1000E, 1, ( 1 << 4 ) );
+    VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, SBSDIO_HT_AVAIL_REQ ) );
 
     do
     {
-        wiced_read_register_value( BACKPLANE_FUNCTION, 0x1000E, 1, &csr );
+        VERIFY_RESULT( wiced_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, &csr_reg_value ) );
+        --attempts;
     }
-    while (!(csr & (1 << 7)));
+    while ( ( ( csr_reg_value & SBSDIO_HT_AVAIL ) == 0 ) && ( attempts != 0 ) && ( host_rtos_delay_milliseconds( 1 ), 1 == 1 ) );
 
-    return WICED_SUCCESS;
+    if (attempts == 0)
+    {
+        return WICED_ERROR;
+    }
+    else
+    {
+        bus_is_up = WICED_TRUE;
+        return WICED_SUCCESS;
+    }
 }
 
 wiced_result_t wiced_bus_allow_wlan_bus_to_sleep( void )
 {
-    /* Clear HT clock request */
-    return wiced_write_register_value( BACKPLANE_FUNCTION, 0x1000E, 1, 0 );
+    if ( bus_is_up == WICED_TRUE )
+    {
+        uint32_t spi_bus_reg_value;
+
+        bus_is_up = WICED_FALSE;
+
+        /* Clear HT clock request */
+        VERIFY_RESULT( wiced_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, 0 ) );
+
+        /* Put SPI interface block to sleep */
+        VERIFY_RESULT( wiced_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
+        spi_bus_reg_value &= ~(uint32_t) ( WAKE_UP );
+        return wiced_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value );
+    }
+    else
+    {
+        return WICED_SUCCESS;
+    }
 }
-
-
 
 /******************************************************
  *             Static  Function definitions

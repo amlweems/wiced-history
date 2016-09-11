@@ -1,5 +1,5 @@
 #
-# Copyright 2013, Broadcom Corporation
+# Copyright 2014, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,7 +20,7 @@ COMPONENT_DIRECTORIES := Wiced/Platform \
                          Library \
                          .
 
-WICED_VERSION ?= 2.4.0
+WICED_VERSION ?= 2.4.1
 
 ##################################
 # Macros
@@ -75,13 +75,14 @@ WICED_MAKEFILES          +=$($(NAME)_MAKEFILE)
 
 # Set debug/release specific options
 $(eval $(NAME)_BUILD_TYPE := $(BUILD_TYPE))
-$(eval $(NAME)_BUILD_TYPE := $(if $($(NAME)_NEVER_OPTIMISE),  debug,   $($(NAME)_BUILD_TYPE)))
-$(eval $(NAME)_BUILD_TYPE := $(if $($(NAME)_ALWAYS_OPTIMISE), release, $($(NAME)_BUILD_TYPE)))
 
 $(NAME)_CFLAGS   += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(COMPILER_SPECIFIC_DEBUG_CFLAGS),   $(COMPILER_SPECIFIC_RELEASE_CFLAGS))
 $(NAME)_CXXFLAGS += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(COMPILER_SPECIFIC_DEBUG_CXXFLAGS), $(COMPILER_SPECIFIC_RELEASE_CXXFLAGS))
 $(NAME)_ASMFLAGS += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(COMPILER_SPECIFIC_DEBUG_ASFLAGS),  $(COMPILER_SPECIFIC_RELEASE_ASFLAGS))
 $(NAME)_LDFLAGS  += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(COMPILER_SPECIFIC_DEBUG_LDFLAGS),  $(COMPILER_SPECIFIC_RELEASE_LDFLAGS))
+
+$(NAME)_CFLAGS   += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(if $($(NAME)_ALWAYS_OPTIMISE), $(COMPILER_SPECIFIC_OPTIMISE_CFLAGS), $(COMPILER_SPECIFIC_UNOPTIMISE_CFLAGS)), $(COMPILER_SPECIFIC_OPTIMISE_CFLAGS))
+$(NAME)_CXXFLAGS += $(if $(findstring debug,$($(NAME)_BUILD_TYPE)), $(if $($(NAME)_ALWAYS_OPTIMISE), $(COMPILER_SPECIFIC_OPTIMISE_CXXFLAGS), $(COMPILER_SPECIFIC_UNOPTIMISE_CXXFLAGS)), $(COMPILER_SPECIFIC_OPTIMISE_CXXFLAGS))
 
 $(NAME)_CFLAGS   += -DWICED_VERSION=$(SLASH_QUOTE_START)$(WICED_VERSION)$(SLASH_QUOTE_END) -I$(OUTPUT_DIR)/Resources/
 $(NAME)_CFLAGS   += -DPLATFORM=$(SLASH_QUOTE_START)$$(PLATFORM)$(SLASH_QUOTE_END)

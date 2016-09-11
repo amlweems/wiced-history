@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -78,7 +78,7 @@ wiced_bool_t   bt_smart_gap_is_scanning( void );
 
 /* Start scanning for BLE devices
  */
-wiced_result_t bt_smart_gap_start_scan( const wiced_bt_smart_scan_settings_t* settings, wiced_bt_smart_scan_complete_callback_t complete_callback, wiced_bt_smart_scan_result_callback_t result_callback );
+wiced_result_t bt_smart_gap_start_scan( const wiced_bt_smart_scan_settings_t* settings, wiced_bt_smart_scan_complete_callback_t complete_callback, wiced_bt_smart_advertising_report_callback_t advertising_report_callback );
 
 /* Stop scanning for BLE devices
  */
@@ -87,10 +87,6 @@ wiced_result_t bt_smart_gap_stop_scan( void );
 /* Get scan result list
  */
 wiced_result_t bt_smart_gap_get_scan_results( wiced_bt_smart_scan_result_t** results, uint32_t* count );
-
-/* Register callback to handle ADV_DIRECT_IND
- */
-wiced_result_t bt_smart_gap_register_directed_advertising_callback( wiced_bt_smart_scan_result_callback_t callback );
 
 /* Add a Bluetooth Smart device to the whitelist
  */
@@ -115,6 +111,10 @@ wiced_result_t bt_smart_gap_connect( const wiced_bt_smart_connection_settings_t*
 /* Cancel the most recent connection attempt
  */
 wiced_result_t bt_smart_gap_cancel_last_connect( void );
+
+/* Set transmit power during connection
+ */
+wiced_result_t bt_smart_gap_set_connection_tx_power( uint16_t connection_handle, int8_t tx_power_dbm );
 
 /* Disconnect an existing connection with the given handle
  */

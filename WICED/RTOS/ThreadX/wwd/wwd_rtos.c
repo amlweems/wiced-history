@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,6 +27,7 @@
 #include <reent.h>
 #endif /* #ifdef __GNUC__ */
 #include <tx_api.h>
+#include <tx_thread.h>
 #include "Platform/wwd_platform_interface.h"
 
 extern unsigned long host_rtos_get_tickrate( void );
@@ -130,9 +131,12 @@ wiced_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
  */
 wiced_result_t host_rtos_join_thread( host_thread_type_t* thread )
 {
-    while ( thread->tx_thread_state != TX_COMPLETED )
+    if ( thread->tx_thread_id == TX_THREAD_ID )
     {
-        host_rtos_delay_milliseconds( 10 );
+        while ( thread->tx_thread_state != TX_COMPLETED )
+        {
+            host_rtos_delay_milliseconds( 10 );
+        }
     }
     return WICED_SUCCESS;
 }

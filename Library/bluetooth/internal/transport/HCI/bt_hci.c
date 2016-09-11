@@ -1,5 +1,5 @@
 /**
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,6 +19,8 @@
 #include "bt_hci_interface.h"
 #include "bt_transport_driver.h"
 #include "bt_transport_thread.h"
+#include "bt_firmware.h"
+#include "bt_firmware_image.h"
 
 /******************************************************
  *                      Macros
@@ -96,6 +98,13 @@ wiced_result_t bt_hci_init( void )
         {
             WPRINT_LIB_ERROR( ( "Error initialising HCI ACL data packet pool\r\n" ) );
             return result;
+        }
+
+        /* Download firmware */
+        if ( bt_firmware_download( bt_hci_firmware_image, bt_hci_firmware_size, bt_hci_firmware_version ) != WICED_SUCCESS )
+        {
+            WPRINT_LIB_ERROR( ( "Error download HCI firmware\r\n" ) );
+            return WICED_ERROR;
         }
 
         /* Switch to MPAF mode. Initialise MPAF transport driver */

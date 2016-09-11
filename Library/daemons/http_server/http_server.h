@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,7 +39,7 @@ extern "C" {
     { "/", "", WICED_RAW_STATIC_URL_CONTENT, .url_content.static_data  = {HTTP_REDIRECT(url), sizeof(HTTP_REDIRECT(url))-1 } }
 
 #define END_OF_HTTP_PAGE_DATABASE() \
-    {0} \
+    {0,0,0,{{0,0}}} \
     };
 
 /******************************************************

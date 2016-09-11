@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -130,13 +130,13 @@ wiced_result_t wiced_multicast_leave( wiced_interface_t interface, const wiced_i
 wiced_result_t wiced_ip_get_gateway_address( wiced_interface_t interface, wiced_ip_address_t* ipv4_address )
 {
     ipv4_address->version = WICED_IPV4;
-    ipv4_address->ip.v4 = htonl(IP_HANDLE(interface).gw.addr);
+    ipv4_address->ip.v4   = htonl(IP_HANDLE(interface).gw.addr);
     return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_ip_get_netmask( wiced_interface_t interface, wiced_ip_address_t* ipv4_address )
 {
-    SET_IPV4_ADDRESS( *ipv4_address, htonl(IP_HANDLE(interface).netmask.addr));
+    SET_IPV4_ADDRESS( *ipv4_address, htonl(IP_HANDLE(interface).netmask.addr) );
     return WICED_SUCCESS;
 }
 
@@ -148,44 +148,42 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
         return WICED_ERROR;
     }
 
+    memset(socket, 0, sizeof(wiced_tcp_socket_t));
+
     socket->conn_handler = netconn_new( NETCONN_TCP );
-    if( !socket->conn_handler )
+    if( socket->conn_handler == NULL )
     {
         return WICED_ERROR;
     }
 
-    /* get the local ip addr of the given network interface and keep it inside */
-    /* socket structure since we will need it for future uses when we are going to perform a bind or connect */
     socket->local_ip_addr.addr = IP_HANDLE(interface).ip_addr.addr;
-    socket->is_bound = WICED_FALSE;
-    socket->accept_handler = ( struct netconn* )0;
-    //socket->conn_handler = ( struct netconn* )0;
-    socket->interface = interface;
+    socket->interface          = interface;
 
     return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_tcp_enable_keepalive( wiced_tcp_socket_t* socket, uint16_t interval, uint16_t probes, uint16_t _time )
 {
-    struct netconn*             conn;
+    struct netconn* netconn;
+
     wiced_assert("Bad args", socket != NULL);
-    /* Just set a few options of the socket */
-    if( socket->accept_handler )
+
+    if ( socket->accept_handler != NULL )
     {
-        /* if we are a server, then configure accept tcp pcb */
-        conn = socket->accept_handler;
-    }else
+        netconn = socket->accept_handler;
+    }
+    else
     {
-        if( socket->conn_handler == NULL )
+        if ( socket->conn_handler == NULL )
         {
             return WICED_ERROR;
         }
-        conn = socket->conn_handler;
+        netconn = socket->conn_handler;
     }
-    conn->pcb.tcp->so_options |= SOF_KEEPALIVE;
-    conn->pcb.tcp->keep_idle  =  (u32_t)( 1000 * _time );
-    conn->pcb.tcp->keep_intvl =  (u32_t)( 1000 * interval );
-    conn->pcb.tcp->keep_cnt   =  (u32_t)( probes );
+    netconn->pcb.tcp->so_options |= SOF_KEEPALIVE;
+    netconn->pcb.tcp->keep_idle   = (u32_t)( 1000 * _time );
+    netconn->pcb.tcp->keep_intvl  = (u32_t)( 1000 * interval );
+    netconn->pcb.tcp->keep_cnt    = (u32_t)( probes );
 
     return WICED_SUCCESS;
 }
@@ -207,41 +205,39 @@ wiced_result_t wiced_tcp_server_peer( wiced_tcp_socket_t* socket, wiced_ip_addre
 
 wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
 {
-    err_t status;
+    wiced_result_t result;
 
     wiced_assert("Bad args", socket != NULL);
 
     WICED_LINK_CHECK( socket->interface );
 
+    /* Reset the TLS context */
     if ( socket->tls_context != NULL )
     {
         wiced_tls_reset_context( socket->tls_context);
     }
 
+    /* Delete the existing connection */
     if ( socket->accept_handler != NULL )
     {
-        /* delete previous connection and use the same connection handler to accept a new one */
-        status = netconn_delete( socket->accept_handler );
+        netconn_delete( socket->accept_handler );
         socket->accept_handler = NULL;
-        if ( status != ERR_OK )
-        {
-            return WICED_ERROR;
-        }
     }
 
     if ( netconn_accept( socket->conn_handler, &socket->accept_handler ) != ERR_OK )
     {
-        status = netconn_delete( socket->accept_handler );
+        netconn_delete( socket->accept_handler );
         socket->accept_handler = NULL;
         return WICED_ERROR;
     }
 
     if ( socket->tls_context != NULL )
     {
-        if ( wiced_tcp_start_tls( socket, WICED_TLS_AS_SERVER, WICED_TLS_DEFAULT_VERIFICATION ) != WICED_SUCCESS )
+        result = wiced_tcp_start_tls( socket, WICED_TLS_AS_SERVER, WICED_TLS_DEFAULT_VERIFICATION );
+        if ( result != WICED_SUCCESS )
         {
             WPRINT_LIB_INFO( ( "Error starting TLS connection\r\n" ) );
-            return WICED_ERROR;
+            return result;
         }
     }
 
@@ -251,8 +247,7 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
 wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_address_t* address, uint16_t port, uint32_t timeout )
 {
     uint32_t temp;
-    err_t    lwip_error;
-    UNUSED_PARAMETER( timeout );
+    err_t    lwip_result;
 
     wiced_assert("Bad args", (socket != NULL) && (address != NULL));
 
@@ -268,8 +263,8 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
         }
         socket->is_bound = WICED_TRUE;
     }
-    lwip_error = netconn_connect( socket->conn_handler, (ip_addr_t*) &temp, port, (uint16_t) timeout );
-    if ( lwip_error != ERR_OK )
+    lwip_result = netconn_connect( socket->conn_handler, (ip_addr_t*) &temp, port, (uint16_t) timeout );
+    if ( lwip_result != ERR_OK )
     {
         return WICED_ERROR;
     }
@@ -290,36 +285,32 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
 
 wiced_result_t wiced_tcp_bind( wiced_tcp_socket_t* socket, uint16_t port )
 {
-    err_t lwip_error;
+    err_t lwip_result;
     wiced_assert("Bad args", socket != NULL);
 
     WICED_LINK_CHECK( socket->interface );
-
-    if ( socket->conn_handler != NULL )
-    {
-        lwip_error = netconn_bind( socket->conn_handler, &socket->local_ip_addr, port );
-        if ( lwip_error == ERR_OK)
-        {
-            socket->is_bound = WICED_TRUE;
-            return WICED_SUCCESS;
-        }
-    }
-
-    return WICED_ERROR;
-}
-
-wiced_result_t wiced_tcp_delete_socket( wiced_tcp_socket_t* socket )
-{
-    wiced_assert("Bad args", socket != NULL);
 
     if ( socket->conn_handler == NULL )
     {
         return WICED_ERROR;
     }
 
+    lwip_result = netconn_bind( socket->conn_handler, &socket->local_ip_addr, port );
+    if ( lwip_result != ERR_OK)
+    {
+        return WICED_ERROR;
+    }
+
+    socket->is_bound = WICED_TRUE;
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_tcp_delete_socket( wiced_tcp_socket_t* socket )
+{
+    wiced_assert("Bad args", socket != NULL);
+
     if ( socket->tls_context != NULL )
     {
-        /* Check if context is of an advanced variety. Note that the server and advanced client context are exactly the same */
         wiced_tls_deinit_context( socket->tls_context );
         if ( socket->context_malloced == WICED_TRUE )
         {
@@ -329,17 +320,11 @@ wiced_result_t wiced_tcp_delete_socket( wiced_tcp_socket_t* socket )
         }
     }
 
-    if ( netconn_delete( socket->conn_handler ) != ERR_OK )
-    {
-        socket->conn_handler = NULL;
-        return WICED_ERROR;
-    }
+    /* Note: No need to check if netconn is NULL because netconn_delete() can deal with it. We also don't need to check the return */
+    netconn_delete( socket->conn_handler );
+    netconn_delete( socket->accept_handler );
 
-    if ( socket->accept_handler != NULL )
-    {
-        netconn_delete( socket->accept_handler );
-    }
-
+    socket->conn_handler   = NULL;
     socket->accept_handler = NULL;
     socket->conn_handler   = NULL;
     socket->is_bound       = WICED_FALSE;
@@ -359,7 +344,7 @@ wiced_result_t wiced_tcp_listen( wiced_tcp_socket_t* socket, uint16_t port )
     }
 
     /* Check if this socket is already listening */
-    if (socket->conn_handler->state == NETCONN_LISTEN)
+    if ( socket->conn_handler->state == NETCONN_LISTEN )
     {
         return WICED_SUCCESS;
     }
@@ -393,7 +378,7 @@ wiced_result_t wiced_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t
 
 wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t* packet )
 {
-    err_t    status;
+    err_t    lwip_result;
     uint16_t length;
     void*    data;
     uint16_t available;
@@ -411,19 +396,19 @@ wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet
 
     if ( socket->accept_handler == NULL )
     {
-        status = netconn_write( socket->conn_handler, data, length, NETCONN_COPY );
+        lwip_result = netconn_write( socket->conn_handler, data, length, NETCONN_COPY );
     }
     else
     {
-        status = netconn_write( socket->accept_handler, data, length, NETCONN_COPY );
+        lwip_result = netconn_write( socket->accept_handler, data, length, NETCONN_COPY );
     }
 
-    if ( status != ERR_OK )
+    if ( lwip_result != ERR_OK )
     {
         return WICED_ERROR;
     }
 
-    /* Release the use provided packet as the contents have been copied */
+    /* Release the provided packet as the contents have been copied */
     netbuf_delete( packet );
 
     return WICED_SUCCESS;
@@ -502,19 +487,14 @@ wiced_result_t wiced_tcp_disconnect( wiced_tcp_socket_t* socket )
 
     if ( socket->accept_handler != NULL )
     {
-        if ( netconn_delete( socket->accept_handler ) != ERR_OK )
-        {
-            return WICED_ERROR;
-        }
-
+        netconn_delete( socket->accept_handler );
         socket->accept_handler = NULL;
     }
     else
     {
-        if ( netconn_close( socket->conn_handler ) != ERR_OK )
-        {
-            return WICED_ERROR;
-        }
+        netconn_delete( socket->conn_handler );
+        socket->conn_handler = NULL;
+        socket->is_bound     = WICED_FALSE;
     }
 
     return WICED_SUCCESS;
@@ -555,7 +535,7 @@ wiced_result_t wiced_tcp_register_callbacks( wiced_tcp_socket_t* socket, wiced_s
 
 wiced_result_t wiced_packet_create_tcp( wiced_tcp_socket_t* socket, uint16_t content_length, wiced_packet_t** packet, uint8_t** data, uint16_t* available_space )
 {
-    UNUSED_PARAMETER(content_length);
+    UNUSED_PARAMETER( content_length );
 
     if ( internal_packet_create( packet, MAX_TCP_PAYLOAD_SIZE, data, available_space ) == WICED_SUCCESS )
     {
@@ -573,7 +553,7 @@ wiced_result_t wiced_packet_create_tcp( wiced_tcp_socket_t* socket, uint16_t con
             {
                 temp -= temp % (uint32_t) socket->tls_context->context.ivlen;
             }
-            temp -= (uint32_t) socket->tls_context->context.maclen + 40;
+            temp            -= (uint32_t) socket->tls_context->context.maclen + 40;
             *available_space = (uint16_t) temp;
         }
         return WICED_SUCCESS;
@@ -674,16 +654,14 @@ wiced_result_t wiced_ip_get_ipv6_address( wiced_interface_t interface, wiced_ip_
     UNUSED_PARAMETER( interface );
     UNUSED_PARAMETER( ipv6_address );
     UNUSED_PARAMETER( address_type );
-//    wiced_assert("IPv6 unsupported in LwIP", 0!=0);
     return WICED_UNSUPPORTED;
 }
 
 wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t port, wiced_interface_t interface )
 {
-    err_t status;
+    err_t lwip_result;
     wiced_assert("Bad args", socket != NULL);
 
-    /* Check link and return if there is no link */
     WICED_LINK_CHECK( interface );
 
     socket->conn_handler = netconn_new( NETCONN_UDP );
@@ -693,8 +671,8 @@ wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t por
     }
 
     /* Bind it to designated port and an interface */
-    status = netconn_bind( socket->conn_handler, &IP_HANDLE(interface).ip_addr, port );
-    if( status != ERR_OK )
+    lwip_result = netconn_bind( socket->conn_handler, &IP_HANDLE(interface).ip_addr, port );
+    if ( lwip_result != ERR_OK )
     {
         netconn_delete( socket->conn_handler );
         socket->conn_handler = NULL;
@@ -744,7 +722,7 @@ wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_addres
 
 wiced_result_t wiced_udp_reply( wiced_udp_socket_t* socket, wiced_packet_t* in_packet, wiced_packet_t* out_packet )
 {
-    UNUSED_PARAMETER(in_packet);
+    UNUSED_PARAMETER( in_packet );
 
     wiced_assert("Bad args", (socket != NULL) && (in_packet != NULL) && (out_packet != NULL));
 
@@ -769,7 +747,7 @@ wiced_result_t wiced_udp_reply( wiced_udp_socket_t* socket, wiced_packet_t* in_p
 
 wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout )
 {
-    CONVERT_TO_LWIP_TIMEOUT(timeout);
+    CONVERT_TO_LWIP_TIMEOUT( timeout );
 
     wiced_assert("Bad args", socket != NULL);
 
@@ -796,8 +774,8 @@ wiced_result_t wiced_udp_delete_socket( wiced_udp_socket_t* socket )
 
     /* Note: No need to check return value of netconn_delete. It only ever returns ERR_OK */
     netconn_delete( socket->conn_handler );
-
     socket->conn_handler = NULL;
+
     return WICED_SUCCESS;
 }
 
@@ -920,20 +898,20 @@ wiced_result_t wiced_tcp_stream_flush( wiced_tcp_stream_t* tcp_stream )
 
 static wiced_result_t internal_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout )
 {
-    err_t status;
+    err_t lwip_result;
 
     if ( socket->accept_handler == NULL )
     {
-        netconn_set_recvtimeout( socket->conn_handler, (int)timeout );
-        status = netconn_recv( socket->conn_handler, packet );
+        netconn_set_recvtimeout( socket->conn_handler, (int )timeout );
+        lwip_result = netconn_recv( socket->conn_handler, packet );
     }
     else
     {
-        netconn_set_recvtimeout( socket->accept_handler, (int)timeout );
-        status = netconn_recv( socket->accept_handler, packet );
+        netconn_set_recvtimeout( socket->accept_handler, (int )timeout );
+        lwip_result = netconn_recv( socket->accept_handler, packet );
     }
 
-    if ( status != ERR_OK )
+    if ( lwip_result != ERR_OK )
     {
         return WICED_ERROR;
     }
@@ -1016,7 +994,7 @@ static wiced_tcp_socket_t* internal_netconn_to_wiced_async_socket( struct netcon
     return NULL;
 }
 
-static void internal_async_socket_callback( struct netconn *conn, enum netconn_evt event, u16_t length )
+static void internal_async_socket_callback( struct netconn* conn, enum netconn_evt event, u16_t length )
 {
     wiced_tcp_socket_t* socket;
 

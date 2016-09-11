@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,16 +26,10 @@
  */
 #define BT_TRANSPORT_THREAD_PRIORITY WICED_NETWORK_WORKER_PRIORITY - 1
 
-#ifdef DEBUG
-/* DEBUG version requires larger stack space for printf and stack check.
- * printf requires ~4K of stack space.
+/* ~4K of stack space is for printf and stack check.
  */
 #define BT_TRANSPORT_STACK_SIZE      4096
-#else
-/* This stack number is the common profiled number for different RTOS variants
- */
-#define BT_TRANSPORT_STACK_SIZE      800
-#endif
+
 
 #define BT_TRANSPORT_QUEUE_SIZE      10
 

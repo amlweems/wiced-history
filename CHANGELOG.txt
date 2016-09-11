@@ -2,7 +2,31 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
-Changes for WICED-SDK-2.4.0
+Changes for WICED-SDK-2.4.1 : 3 March 2014
+-----------------------------------------------------------
+* ThreadX host_rtos_join_thread() now checks for thread validity before waiting for tx_thread_state to change
+* Fixed definition of END_HTTP_PAGE_DATABASE
+* NetX_Duo wiced_tcp_accept() now ensures that the accept window stays open indefinitely
+* Improved stability of WICED UART API for all ST platforms
+* MCU powersave in bootloader is now disabled by default
+* Updated WLAN firmware to version 5.90.230.7
+* Wi-Fi Direct now allows changing of Group Owner intent via console application
+* Added support for receiving 802.1Q VLAN-tagged ethernet frames (NetX only)
+* Corrected mapping for IP precedence bits
+* Added 'get_associated_client_list' command to console application
+* Changed softAP multicast transmission rate to 11Mbps
+* Improved AMPDU settings for 43362a2 WLAN chip
+* wiced_init() now prints WLAN firmware version and MAC address
+* Improved MCU powersave timing accuracy of SAM4S platform
+* SAM4S wiced_gpio_input_irq_enable() now sets the edge trigger correctly
+* SmartBridge now returns all unfiltered advertisement reports properly
+* Added wiced_bt_smartbridge_set_transmit_power() API to SmartBridge
+* Added capability to independently initialize the WICED core and WLAN connectivity for power optimizations
+* Fixed TLS certificate verification in BESL
+* Updated buildsystem to allow optimizations for components while doing a debug build
+* LwIP wiced_tcp_connect() now connects successfully without socket re-initialization
+
+Changes for WICED-SDK-2.4.0 : 27 Nov 2013
 -----------------------------------------------------------
 * Libraries & Protocols
   * Added Bluetooth SmartBridge for Wi-Fi <-> Bluetooth bridging

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -646,7 +646,11 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_VERSION                "ver"
 #define IOVAR_STR_SUP_WPA2_EAPVER        "sup_wpa2_eapver"
 #define IOVAR_STR_CLOSEDNET              "closednet"
-
+#define IOVAR_STR_MAX_ASSOC              "maxassoc"
+#define IOVAR_STR_2G_MULTICAST_RATE      "2g_mrate"
+#define IOVAR_STR_AMPDU_BA_WINDOW_SIZE   "ampdu_ba_wsize"
+#define IOVAR_STR_AMPDU_MPDU             "ampdu_mpdu"
+#define IOVAR_STR_AMPDU_RX_FACTOR        "ampdu_rx_factor"
 
 #define WLC_IOCTL_MAGIC                    ( 0x14e46c77 )
 #define WLC_IOCTL_VERSION                  (          1 )

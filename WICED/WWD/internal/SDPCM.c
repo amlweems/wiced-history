@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -58,7 +58,6 @@
 
 /* QoS related definitions (type of service) */
 #define IPV4_TOS_OFFSET               (15)      /** Offset for finding the TOS field in an IPv4 header */
-#define TOS_MASK                    (0x07)      /** Mask for extracting priority the bits (IPv4 or IPv6) */
 
 /* CDC flag definitions taken from bcmcdc.h */
 #define CDCF_IOC_ERROR              (0x01)      /** 0=success, 1=ioctl cmd failed */
@@ -285,6 +284,9 @@ static wiced_buffer_t /*@owned@*/ /*@null@*/ wiced_sdpcm_send_queue_tail = (wice
 
 extern wiced_bool_t monitor_mode_enabled;
 
+/* QoS variables */
+extern uint8_t wwd_tos_map[8];
+
 /******************************************************
  *             SDPCM Logging
  *
@@ -475,7 +477,16 @@ void wiced_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced_i
 {
     sdpcm_data_packet_t* packet;
     wiced_result_t result;
-    uint8_t* tos = (uint8_t*)host_buffer_get_current_piece_data_pointer( buffer ) + IPV4_TOS_OFFSET;
+    uint8_t* tos = NULL;
+    uint8_t priority = 0;
+    sdpcm_ethernet_header_t* ethernet_header = (sdpcm_ethernet_header_t*)host_buffer_get_current_piece_data_pointer( buffer );
+    uint16_t ether_type;
+
+    ether_type = NTOH16( ethernet_header->ethertype );
+    if ( ether_type == WICED_ETHERTYPE_IPv4 )
+    {
+        tos = (uint8_t*)host_buffer_get_current_piece_data_pointer( buffer ) + IPV4_TOS_OFFSET;
+    }
 
     add_sdpcm_log_entry( LOG_TX, DATA, host_buffer_get_current_piece_size( buffer ), (char*) host_buffer_get_current_piece_data_pointer( buffer ) );
 
@@ -505,7 +516,36 @@ void wiced_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wiced_i
     /* Prepare the BDC header */
     packet->bdc_header.flags = 0;
     packet->bdc_header.flags = (uint8_t) ( BDC_PROTO_VER << BDC_FLAG_VER_SHIFT );
-    packet->bdc_header.priority = *tos & TOS_MASK;
+
+    /* If it's an IPv4 packet set the BDC header priority using the IP precedence bits from the IP TOS
+     * (DSCP) field */
+    if ((ether_type == WICED_ETHERTYPE_IPv4) && (tos != NULL))
+    {
+        if (*tos != 0)
+        {
+            priority = (uint8_t)(*tos >> 7);
+            if ((*tos & 0x40) == 0x40)
+            {
+                priority |= 0x02;
+            }
+            if ((*tos & 0x20) == 0x20)
+            {
+                priority |= 0x04;
+            }
+        }
+    }
+
+    /* If it's for the STA interface then re-map priority to the TOS allowed by the AP, regardless
+     * of whether it's an IPv4 packet */
+    if ( interface == WICED_STA_INTERFACE )
+    {
+        packet->bdc_header.priority = wwd_tos_map[priority];
+    }
+    else
+    {
+        packet->bdc_header.priority = priority;
+    }
+
     packet->bdc_header.flags2 = (uint8_t) ( (interface == WICED_STA_INTERFACE)?SDPCM_STA_INTERFACE:SDPCM_AP_INTERFACE );
     packet->bdc_header.data_offset = 0;
 
@@ -976,12 +1016,12 @@ wiced_result_t wwd_management_set_event_handler( const wiced_event_num_t* event_
 
     /* Send the new event mask value to the wifi chip */
     data = (uint32_t*) wiced_get_iovar_buffer( &buffer, (uint16_t) 16 + 4, "bsscfg:" IOVAR_STR_EVENT_MSGS );
+    if ( data == NULL )
+    {
+        return WICED_BUFFER_UNAVAILABLE_TEMPORARY;
+    }
     data[0] = interface;
     event_mask = (uint8_t*)&data[1];
-    if ( event_mask == NULL )
-    {
-        return WICED_BUFFER_UNAVAILABLE_PERMANENT;
-    }
 
     /* Keep the wlan awake while we set the event_msgs */
     ++wiced_wlan_status.keep_wlan_awake;

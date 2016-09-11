@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -132,6 +132,8 @@ typedef struct
     wiced_ring_buffer_t*   rx_buffer;
     host_semaphore_type_t  rx_complete;
     host_semaphore_type_t  tx_complete;
+    wiced_result_t         tx_dma_result;
+    wiced_result_t         rx_dma_result;
 } uart_interface_t;
 
 typedef struct
@@ -1167,10 +1169,10 @@ static wiced_result_t platform_uart_init( wiced_uart_t uart, const wiced_uart_co
     NVIC_Init( &nvic_init_structure );
 
     /* Enable TC (transfer complete) and TE (transfer error) interrupts on source */
-    DMA_ITConfig( uart_mapping[uart].tx_dma_stream, DMA_IT_TC | DMA_IT_TE, ENABLE );
+    DMA_ITConfig( uart_mapping[uart].tx_dma_stream, DMA_IT_TC | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE, ENABLE );
 
-    /* Enable USART's TX and RX DMA interfaces */
-    USART_DMACmd( uart_mapping[uart].usart, USART_DMAReq_Rx | USART_DMAReq_Tx, ENABLE );
+    /* Enable USART's RX DMA interfaces */
+    USART_DMACmd( uart_mapping[uart].usart, USART_DMAReq_Rx, ENABLE );
 
     /**************************************************************************
      * Initialise STM32 USART interrupt
@@ -1208,7 +1210,7 @@ static wiced_result_t platform_uart_init( wiced_uart_t uart, const wiced_uart_co
         NVIC_Init( &nvic_init_structure );
 
         /* Enable TC (transfer complete) and TE (transfer error) interrupts on source */
-        DMA_ITConfig( uart_mapping[uart].rx_dma_stream, DMA_IT_TC | DMA_IT_TE, ENABLE );
+        DMA_ITConfig( uart_mapping[uart].rx_dma_stream, DMA_IT_TC | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE, ENABLE );
     }
 
     return WICED_SUCCESS;
@@ -1270,30 +1272,28 @@ wiced_result_t wiced_uart_deinit( wiced_uart_t uart )
 
 wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, uint32_t size )
 {
-    uint32_t tmpvar; /* needed to ensure ordering of volatile accesses */
-    uint32_t shift = uart_mapping[uart].tx_dma_stream_number % 4;
+    /* Reset DMA transmission result. The result is assigned in interrupt handler */
+    uart_interfaces[uart].tx_dma_result = WICED_ERROR;
+
 
     uart_mapping[uart].tx_dma_stream->CR &= ~(uint32_t) DMA_SxCR_CIRC;
-
-    if ( uart_mapping[uart].tx_dma_stream_number > 3 )
-    {
-        tmpvar = uart_mapping[uart].tx_dma->HISR;
-        uart_mapping[uart].tx_dma->HIFCR |= ( tmpvar & ( 0xffUL << shift ) );
-    }
-    else
-    {
-        tmpvar = uart_mapping[uart].tx_dma->LISR;
-        uart_mapping[uart].tx_dma->LIFCR |= ( tmpvar & ( 0xffUL << shift ) );
-    }
-
     uart_mapping[uart].tx_dma_stream->NDTR = size;
     uart_mapping[uart].tx_dma_stream->M0AR = (uint32_t)data;
-    uart_mapping[uart].tx_dma_stream->CR  |= DMA_SxCR_EN;
 
-    host_rtos_get_semaphore( &uart_interfaces[uart].tx_complete, WICED_NEVER_TIMEOUT, WICED_TRUE );
-    while( ( uart_mapping[uart].usart->SR & USART_SR_TC )== 0 );
+    USART_DMACmd( uart_mapping[uart].usart, USART_DMAReq_Tx, ENABLE );
+    USART_ClearFlag( uart_mapping[uart].usart, USART_FLAG_TC );
+    DMA_Cmd( uart_mapping[uart].tx_dma_stream, ENABLE );
 
-    return WICED_SUCCESS;
+    host_rtos_get_semaphore( &uart_interfaces[ uart ].tx_complete, WICED_NEVER_TIMEOUT, WICED_TRUE );
+
+    while ( ( uart_mapping[ uart ].usart->SR & USART_SR_TC ) == 0 )
+    {
+    }
+
+    DMA_Cmd( uart_mapping[uart].tx_dma_stream, DISABLE );
+    USART_DMACmd( uart_mapping[uart].usart, USART_DMAReq_Tx, DISABLE );
+
+    return uart_interfaces[uart].tx_dma_result;
 }
 
 wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
@@ -1354,9 +1354,6 @@ wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t
 
 static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
 {
-    uint32_t tmpvar; /* needed to ensure ordering of volatile accesses */
-    uint32_t shift = uart_mapping[uart].rx_dma_stream_number % 4;
-
     if ( uart_interfaces[uart].rx_buffer != NULL )
     {
         uart_mapping[uart].rx_dma_stream->CR |= DMA_SxCR_CIRC;
@@ -1369,16 +1366,8 @@ static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data
         uart_mapping[uart].rx_dma_stream->CR &= ~(uint32_t) DMA_SxCR_CIRC;
     }
 
-    if ( uart_mapping[uart].rx_dma_stream_number > 3 )
-    {
-        tmpvar = uart_mapping[uart].rx_dma->HISR;
-        uart_mapping[uart].rx_dma->HIFCR |= ( tmpvar & ( 0xffUL << shift ) );
-    }
-    else
-    {
-        tmpvar = uart_mapping[uart].rx_dma->LISR;
-        uart_mapping[uart].rx_dma->LIFCR |= ( tmpvar & ( 0xffUL << shift ) );
-    }
+    /* Reset DMA transmission result. The result is assigned in interrupt handler */
+    uart_interfaces[uart].rx_dma_result = WICED_ERROR;
 
     uart_mapping[uart].rx_dma_stream->NDTR = size;
     uart_mapping[uart].rx_dma_stream->M0AR = (uint32_t)data;
@@ -1387,6 +1376,7 @@ static wiced_result_t platform_uart_receive_bytes( wiced_uart_t uart, void* data
     if ( timeout > 0 )
     {
         host_rtos_get_semaphore( &uart_interfaces[uart].rx_complete, timeout, WICED_TRUE );
+        return uart_interfaces[uart].rx_dma_result;
     }
 
     return WICED_SUCCESS;
@@ -1688,67 +1678,101 @@ void usart6_irq( void )
 
 void usart1_tx_dma_irq( void )
 {
-    if ( ( DMA2 ->HISR & DMA_HISR_TCIF7 ) != 0 )
+    wiced_bool_t tx_complete = WICED_FALSE;
+
+    if ( ( DMA2->HISR & DMA_HISR_TCIF7 ) != 0 )
     {
-        DMA2 ->HIFCR |= DMA_HISR_TCIF7;
-        host_rtos_set_semaphore( &uart_interfaces[0].tx_complete, WICED_TRUE );
+        /* Clear interrupt */
+        DMA2->HIFCR |= DMA_HISR_TCIF7;
+        uart_interfaces[ 0 ].tx_dma_result = WICED_SUCCESS;
+        tx_complete = WICED_TRUE;
     }
 
     /* TX DMA error */
-    if ( ( DMA2 ->HISR & DMA_HISR_TEIF7 )!= 0 )
+    if ( ( DMA2->HISR & ( DMA_HISR_TEIF7 | DMA_HISR_DMEIF7 | DMA_HISR_FEIF7 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA2 ->HIFCR |= DMA_HISR_TEIF7;
+        DMA2->HIFCR |= ( DMA_HISR_TEIF7 | DMA_HISR_DMEIF7 | DMA_HISR_FEIF7 );
+
+        if ( tx_complete == WICED_FALSE )
+        {
+            uart_interfaces[ 0 ].tx_dma_result = WICED_ERROR;
+        }
     }
+
+    /* Set semaphore regardless of result to prevent waiting thread from locking up */
+    host_rtos_set_semaphore( &uart_interfaces[ 0 ].tx_complete, WICED_TRUE );
 }
 
 void usart2_tx_dma_irq( void )
 {
-    if ( (DMA1->HISR & DMA_HISR_TCIF6) != 0 )
+    wiced_bool_t tx_complete = WICED_FALSE;
+
+    if ( ( DMA1->HISR & DMA_HISR_TCIF6 ) != 0 )
     {
         DMA1->HIFCR |= DMA_HISR_TCIF6;
-        host_rtos_set_semaphore( &uart_interfaces[1].tx_complete, WICED_TRUE );
+        uart_interfaces[ 1 ].tx_dma_result = WICED_SUCCESS;
+        tx_complete = WICED_TRUE;
     }
 
     /* TX DMA error */
-    if ( (DMA1->HISR & DMA_HISR_TEIF6) != 0 )
+    if ( ( DMA1->HISR & ( DMA_HISR_TEIF6 | DMA_HISR_DMEIF6 | DMA_HISR_FEIF6 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA1->HIFCR |= DMA_HISR_TEIF6;
+        DMA1->HIFCR |= ( DMA_HISR_TEIF6 | DMA_HISR_DMEIF6 | DMA_HISR_FEIF6 );
+
+        if ( tx_complete == WICED_FALSE )
+        {
+            uart_interfaces[1].tx_dma_result = WICED_ERROR;
+        }
     }
+
+    host_rtos_set_semaphore( &uart_interfaces[ 1 ].tx_complete, WICED_TRUE );
 }
 
 void usart6_tx_dma_irq( void )
 {
-    if ( (DMA2->HISR & DMA_HISR_TCIF6) != 0 )
+    wiced_bool_t tx_complete = WICED_FALSE;
+
+    if ( ( DMA2->HISR & DMA_HISR_TCIF6 ) != 0 )
     {
         DMA2->HIFCR |= DMA_HISR_TCIF6;
-        host_rtos_set_semaphore( &uart_interfaces[0].tx_complete, WICED_TRUE );
+        uart_interfaces[ 0 ].tx_dma_result = WICED_SUCCESS;
+        tx_complete = WICED_TRUE;
     }
 
     /* TX DMA error */
-    if ( (DMA2->HISR & DMA_HISR_TEIF6) != 0 )
+    if ( ( DMA2->HISR & ( DMA_HISR_TEIF6 | DMA_HISR_DMEIF6 | DMA_HISR_FEIF6 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA2->HIFCR |= DMA_HISR_TEIF6;
+        DMA2->HIFCR |= ( DMA_HISR_TEIF6 | DMA_HISR_DMEIF6 | DMA_HISR_FEIF6 );
+
+        if ( tx_complete == WICED_FALSE )
+        {
+            uart_interfaces[0].tx_dma_result = WICED_ERROR;
+        }
     }
+
+    host_rtos_set_semaphore( &uart_interfaces[0].tx_complete, WICED_TRUE );
 }
 
 void usart1_rx_dma_irq( void )
 {
-    if ( ( DMA2->LISR & DMA_LISR_TCIF2)  != 0 )
+    if ( ( DMA2->LISR & DMA_LISR_TCIF2 ) != 0 )
     {
         DMA2->LIFCR |= DMA_LISR_TCIF2;
-        host_rtos_set_semaphore( &uart_interfaces[0].rx_complete, WICED_TRUE );
-//        DMA2_Stream2 ->NDTR = uart_interfaces[0].rx_buffer->size;
+        uart_interfaces[ 0 ].rx_dma_result = WICED_SUCCESS;
     }
 
-    /* TX DMA error */
-    if ( ( DMA2->LISR & DMA_LISR_TEIF2 ) != 0 )
+    /* RX DMA error */
+    if ( ( DMA2->LISR & ( DMA_LISR_TEIF2 | DMA_LISR_DMEIF2 | DMA_LISR_FEIF2 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA2->LIFCR |= DMA_LISR_TEIF2;
+        DMA2->LIFCR |= ( DMA_LISR_TEIF2 | DMA_LISR_DMEIF2 | DMA_LISR_FEIF2 );
+        uart_interfaces[ 0 ].rx_dma_result = WICED_ERROR;
     }
+
+    host_rtos_set_semaphore( &uart_interfaces[ 0 ].rx_complete, WICED_TRUE );
 }
 
 void usart2_rx_dma_irq( void )
@@ -1756,16 +1780,18 @@ void usart2_rx_dma_irq( void )
     if ( ( DMA1->HISR & DMA_HISR_TCIF5 ) != 0 )
     {
         DMA1->HIFCR |= DMA_HISR_TCIF5;
-        host_rtos_set_semaphore( &uart_interfaces[1].rx_complete, WICED_TRUE );
-//        DMA1_Stream5 ->NDTR = uart_interfaces[1].rx_buffer->size;
+        uart_interfaces[ 1 ].rx_dma_result = WICED_SUCCESS;
     }
 
-    /* TX DMA error */
-    if ( ( DMA1->HISR & DMA_HISR_TEIF5 ) != 0 )
+    /* RX DMA error */
+    if ( ( DMA1->HISR & ( DMA_HISR_TEIF5 | DMA_HISR_DMEIF5 | DMA_HISR_FEIF5 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA1->HIFCR |= DMA_HISR_TEIF5;
+        DMA1->HIFCR |= ( DMA_HISR_TEIF5 | DMA_HISR_DMEIF5 | DMA_HISR_FEIF5 );
+        uart_interfaces[ 1 ].rx_dma_result = WICED_ERROR;
     }
+
+    host_rtos_set_semaphore( &uart_interfaces[ 1 ].rx_complete, WICED_TRUE );
 }
 
 void usart6_rx_dma_irq( void )
@@ -1773,16 +1799,19 @@ void usart6_rx_dma_irq( void )
     if ( ( DMA2->LISR & DMA_LISR_TCIF1 ) != 0 )
     {
         DMA2->LIFCR |= DMA_LISR_TCIF1;
-        host_rtos_set_semaphore( &uart_interfaces[0].rx_complete, WICED_TRUE );
-//        DMA1_Stream5 ->NDTR = uart_interfaces[1].rx_buffer->size;
+        uart_interfaces[ 0 ].rx_dma_result = WICED_SUCCESS;
+
     }
 
     /* TX DMA error */
-    if ( ( DMA2->LISR & DMA_LISR_TEIF1 ) != 0 )
+    if ( ( DMA2->LISR & ( DMA_LISR_TEIF1 | DMA_LISR_DMEIF1 | DMA_LISR_FEIF1 ) ) != 0 )
     {
         /* Clear interrupt */
-        DMA2->LIFCR |= DMA_LISR_TEIF1;
+        DMA2->LIFCR |= ( DMA_LISR_TEIF1 | DMA_LISR_DMEIF1 | DMA_LISR_FEIF1 );
+        uart_interfaces[ 0 ].rx_dma_result = WICED_ERROR;
     }
+
+    host_rtos_set_semaphore( &uart_interfaces[0].rx_complete, WICED_TRUE );
 }
 
 #ifdef __GNUC__
