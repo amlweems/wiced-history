@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -111,6 +111,27 @@ extern wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* threa
  * @return WWD result code
  */
 extern wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( wwd_thread_arg_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, wwd_thread_arg_t arg );
+
+
+/**
+ * Note: different RTOS have different parameters for creating threads.
+ * Use this function carefully if portability is important.
+ * Create a thread with RTOS specific thread argument (E.g. specify time-slicing behavior)
+ *
+ * Implemented in the WICED RTOS interface which is specific to the
+ * RTOS in use.
+ *
+ * @param thread         : pointer to a variable which will receive the new thread handle
+ * @param entry_function : function pointer which points to the main function for the new thread
+ * @param name           : a string thread name used for a debugger
+ * @param stack_size     : the size of the thread stack in bytes
+ * @param priority       : the priority of the thread
+ * @param arg            : the argument to pass to the new thread
+ * @param config        : os specific thread configuration
+ * @return WWD result code
+ */
+extern wwd_result_t host_rtos_create_configed_thread(  /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config );
+
 
 /**
  * Exit a thread

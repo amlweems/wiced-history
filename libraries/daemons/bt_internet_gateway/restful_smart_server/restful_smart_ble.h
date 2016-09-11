@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -33,13 +33,13 @@ extern "C" {
 
 typedef enum
 {
-    REST_SMART_PAIRING_DISPLAY_ONLY     = BTM_IO_CAPABILITIES_DISPLAY_ONLY,         /**< Display Only           */
-    REST_SMART_PAIRING_DISPLAY_YES_NO   = BTM_IO_CAPABILITIES_DISPLAY_AND_KEYBOARD, /**< Display Yes/No         */
-    REST_SMART_PAIRING_KEYBOARD_ONLY    = BTM_IO_CAPABILITIES_KEYBOARD_ONLY,        /**< Keyboard Only          */
-    REST_SMART_PAIRING_NO_IO            = BTM_IO_CAPABILITIES_NONE,                 /**< No Input, No Output    */
-    REST_SMART_PAIRING_KEYBOARD_DISPLAY = BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY,     /**< Keyboard display       */
-    REST_SMART_PAIRING_LEGACY_OOB,                                                  /**< Legacy OOB             */
-    REST_SMART_PAIRING_SECURE_CONNECTIONS_OOB                                       /**< Secure Connections OOB */
+    REST_SMART_PAIRING_DISPLAY_ONLY     = BTM_IO_CAPABILITIES_DISPLAY_ONLY,                     /**< Display Only           */
+    REST_SMART_PAIRING_DISPLAY_YES_NO   = BTM_IO_CAPABILITIES_DISPLAY_AND_YES_NO_INPUT,         /**< Display Yes/No         */
+    REST_SMART_PAIRING_KEYBOARD_ONLY    = BTM_IO_CAPABILITIES_KEYBOARD_ONLY,                    /**< Keyboard Only          */
+    REST_SMART_PAIRING_NO_IO            = BTM_IO_CAPABILITIES_NONE,                             /**< No Input, No Output    */
+    REST_SMART_PAIRING_KEYBOARD_DISPLAY = BTM_IO_CAPABILITIES_BLE_DISPLAY_AND_KEYBOARD_INPUT,   /**< Keyboard display       */
+    REST_SMART_PAIRING_LEGACY_OOB,                                                              /**< Legacy OOB             */
+    REST_SMART_PAIRING_SECURE_CONNECTIONS_OOB                                                   /**< Secure Connections OOB */
 } rest_smart_pairing_type_t;
 
 /**

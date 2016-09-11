@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -28,7 +28,9 @@
 #include "platform_ethernet.h"
 #include "platform_appscr4.h"
 
+#if !defined (NO_MALLOC_H)
 #include <malloc.h>
+#endif /* NO_MALLOC_H */
 
 #ifndef PLATFORM_L1_CACHE_SHIFT
 #define PLATFORM_L1_CACHE_SHIFT   0

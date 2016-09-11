@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -182,7 +182,7 @@ wiced_result_t wiced_rtos_create_worker_thread( wiced_worker_thread_t* worker_th
         return WICED_ERROR;
     }
 
-    if ( wiced_rtos_create_thread( &worker_thread->thread, WICED_PRIORITY_TO_NATIVE_PRIORITY( priority ), "worker thread", worker_thread_main, stack_size, (void*) worker_thread ) != WICED_SUCCESS )
+    if ( wiced_rtos_create_thread( &worker_thread->thread, priority , "worker thread", worker_thread_main, stack_size, (void*) worker_thread ) != WICED_SUCCESS )
     {
         wiced_rtos_deinit_queue( &worker_thread->event_queue );
         return WICED_ERROR;

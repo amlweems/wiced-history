@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -215,7 +215,7 @@ platform_result_t platform_gpio_irq_enable( const platform_gpio_t* gpio, platfor
     if ( ( EXTI->IMR & interrupt_line ) == 0 )
     {
         EXTI_InitTypeDef exti_init_structure;
-        IRQn_Type        interrupt_vector = 0;
+        IRQn_Type        interrupt_vector = ( IRQn_Type ) 0;
 
         SYSCFG_EXTILineConfig( platform_gpio_get_port_number( gpio->port ), gpio->pin_number );
 
@@ -270,8 +270,8 @@ platform_result_t platform_gpio_irq_disable( const platform_gpio_t* gpio )
 
     if ( ( EXTI->IMR & interrupt_line ) && gpio_irq_data[gpio->pin_number].owner_port == gpio->port )
     {
-        wiced_bool_t     interrupt_line_used = 0;
-        IRQn_Type        interrupt_vector    = 0;
+        wiced_bool_t     interrupt_line_used = WICED_FALSE;
+        IRQn_Type        interrupt_vector    = ( IRQn_Type ) 0;
         EXTI_InitTypeDef exti_init_structure;
 
         /* Disable EXTI interrupt line */
@@ -384,7 +384,7 @@ uint8_t platform_gpio_get_port_number( platform_gpio_port_t* gpio_port )
         case GPIOI_BASE:
             return EXTI_PortSourceGPIOI;
         default:
-            return INVALID_UART_PORT_NUMBER;
+            return INVALID_GPIO_PORT_NUMBER;
     }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,7 +12,7 @@
  *
  */
 #if defined ( IAR_TOOLCHAIN )
-#include "platform_cmis.h"
+#include "platform_cmsis.h"
 #endif
 #include <string.h>
 #include "ring_buffer.h"
@@ -54,11 +54,16 @@
 
 wiced_result_t ring_buffer_init( /*@out@*/ wiced_ring_buffer_t* ring_buffer, /*@keep@*/ uint8_t* buffer, uint32_t buffer_size )
 {
-    ring_buffer->buffer = (uint8_t*)buffer;
-    ring_buffer->size   = buffer_size;
-    ring_buffer->head   = 0;
-    ring_buffer->tail   = 0;
-    return WICED_SUCCESS;
+    if (ring_buffer)
+    {
+        ring_buffer->buffer = (uint8_t*)buffer;
+        ring_buffer->size   = buffer_size;
+        ring_buffer->head   = 0;
+        ring_buffer->tail   = 0;
+        return WICED_SUCCESS;
+    }
+    else
+        return WICED_BADARG;
 }
 
 wiced_result_t ring_buffer_deinit( wiced_ring_buffer_t* ring_buffer )

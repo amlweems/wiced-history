@@ -1,7 +1,7 @@
 /*
  * WICED WPS host implementation
  *
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -71,9 +71,6 @@
 /******************************************************
  *             Local Structures
  ******************************************************/
-
-typedef void (*wps_scan_handler_t)(wl_escan_result_t* result, void* user_data);
-
 
 typedef struct
 {
@@ -433,7 +430,7 @@ void wps_scan_result_handler( wl_escan_result_t* result, void* user_data )
     /* Validate the BSS count */
     if ( result->bss_count != 1 )
     {
-        wiced_verify( "More than one result returned by firmware", result->bss_count == 1 );
+        wiced_minor_assert( "More than one result returned by firmware", result->bss_count == 1 );
         goto exit;
     }
 
@@ -448,7 +445,7 @@ void wps_scan_result_handler( wl_escan_result_t* result, void* user_data )
     if ( ( ie_offset > bss_info_length ) ||
          ( length > bss_info_length - ie_offset ) )
     {
-        wiced_verify( "Invalid ie length", 1 == 0 );
+        wiced_minor_assert( "Invalid ie length", 1 == 0 );
         goto exit;
     }
 
@@ -899,12 +896,12 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap, wwd_interface_t inter
 
 void wps_host_add_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wwd_wifi_manage_custom_ie( interface, WICED_ADD_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( ( wwd_interface_t )interface, WICED_ADD_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
 }
 
 void wps_host_remove_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wwd_wifi_manage_custom_ie( interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( ( wwd_interface_t )interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) WPS_OUI, WPS_OUI_TYPE, data, data_length, packet_mask );
 }
 
 /*

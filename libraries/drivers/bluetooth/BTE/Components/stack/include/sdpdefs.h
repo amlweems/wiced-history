@@ -4,7 +4,7 @@
 **
 **  Function    this file contains the definitions for the SDP API
 **
-**  Copyright (c) 1999-2015, Broadcom Corp, All Rights Reserved.
+**  Copyright (c) 1999-2014, Broadcom Corp, All Rights Reserved.
 **  Broadcom Bluetooth Core. Proprietary and confidential.
 **
 ******************************************************************************/
@@ -267,10 +267,9 @@
 #define UUID_SERVCLASS_CURRENT_TIME             0x1805      /* Link Loss Alert */
 #define UUID_SERVCLASS_DST_CHG                  0x1806      /* DST Time change */
 #define UUID_SERVCLASS_REF_TIME_UPD             0x1807      /* reference time update */
-#define UUID_SERVCLASS_GLUCOSE                  0x1808      /* Glucose Meter Service */
 #define UUID_SERVCLASS_THERMOMETER              0x1809      /* Thermometer UUID */
 #define UUID_SERVCLASS_DEVICE_INFO              0x180A      /* device info service */
-#define UUID_SERVCLASS_NWA                      0x180B      /* Network availability (not in spec?) */
+#define UUID_SERVCLASS_NWA                      0x180B      /* Network availability */
 #define UUID_SERVCLASS_HEART_RATE               0x180D      /* Heart Rate service */
 #define UUID_SERVCLASS_PHALERT                  0x180E      /* phone alert service */
 #define UUID_SERVCLASS_BATTERY                  0x180F     /* battery service */
@@ -278,11 +277,11 @@
 #define UUID_SERVCLASS_ALERT_NOTIFICATION       0x1811      /* alert notification service */
 #define UUID_SERVCLASS_LE_HID                   0x1812     /*  HID over LE */
 #define UUID_SERVCLASS_SCAN_PARAM               0x1813      /* Scan Parameter service */
+#define UUID_SERVCLASS_GLUCOSE                  0x1808      /* Glucose Meter Service */
 #define UUID_SERVCLASS_RSC                      0x1814      /* Runners Speed and Cadence Service */
-#define UUID_SERVCLASS_AUTO_IO                  0x1815      /* Automation IO */
 #define UUID_SERVCLASS_CSC                      0x1816      /* Cycling Speed and Cadence Service */
-#define UUID_SERVCLASS_CP                       0x1818      /* Cycling Power Service */
-#define UUID_SERVCLASS_LN                       0x1819      /* Location and Navigation Service */
+#define UUID_SERVCLASS_CP                       0x1818      /* Cycling Power Service (pre-Adoption IOP) */
+#define UUID_SERVCLASS_LN                       0x1819      /* Location and Navigation Service (pre-Adoption IOP) */
 #define UUID_SERVCLASS_ENV_SENSING              0x181A      /* Environmental Sensing */
 #define UUID_SERVCLASS_BODY_COMP                0x181B      /* Body Composition */
 #define UUID_SERVCLASS_USER_DATA                0x181C      /* User Data */
@@ -292,7 +291,6 @@
 #define UUID_SERVCLASS_IPS                      0x1820      /* Internet Protocol Support Service */
 #define UUID_SERVCLASS_INDOOR_POS               0x1821      /* Indoor Positioning */
 #define UUID_SERVCLASS_PULSE_OXI                0x1822      /* Pulse Oximeter */
-
 #define UUID_SERVCLASS_HPS                      0x7F10      /* HTTP Proxy Service */
 
 #define UUID_SERVCLASS_TEST_SERVER              0x9000      /* Test Group UUID */

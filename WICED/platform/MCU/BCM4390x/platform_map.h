@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -132,6 +132,17 @@ static inline uint32_t platform_addr_cpu_to_dma( const void* cpu_addr )
         dma_addr = dma_addr - PLATFORM_SOCSRAM_CH0_BASE(0x0) + PLATFORM_SOCSRAM_CH1_BASE(0x0);
     }
     return dma_addr;
+}
+
+static inline int platform_addr_is_uncached_region( const void* memory )
+{
+    /* The second channel SOCSRAM addresses are mapped as uncached. Check if given memory address is in this region. */
+    const uint32_t mem_addr = (uint32_t)memory;
+    if ((mem_addr >= PLATFORM_SOCSRAM_CH1_BASE(0x0)) && (mem_addr < (PLATFORM_SOCSRAM_CH1_BASE(0x0) + PLATFORM_SOCSRAM_MAX_SIZE)))
+    {
+        return 1;
+    }
+    return 0;
 }
 #endif /* __ASSEMBLER__ */
 

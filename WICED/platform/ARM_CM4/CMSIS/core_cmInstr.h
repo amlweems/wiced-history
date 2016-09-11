@@ -294,7 +294,10 @@ __attribute__((section(".revsh_text"))) __STATIC_INLINE __ASM int32_t __REVSH(in
 
 #elif defined ( __ICCARM__ ) /*------------------ ICC Compiler -------------------*/
 /* IAR iccarm specific functions */
-
+#include <stdint.h>
+#ifndef __INLINE
+#define __INLINE inline
+#endif
 #include <cmsis_iar.h>
 
 

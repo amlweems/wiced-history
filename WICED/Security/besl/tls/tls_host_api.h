@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -48,6 +48,7 @@ extern tls_result_t tls_host_free_packet     ( tls_packet_t* packet );
 extern tls_result_t tls_host_send_tcp_packet ( void* context, tls_packet_t* packet );
 extern tls_result_t tls_host_get_packet_data ( ssl_context* ssl, tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length );
 extern tls_result_t tls_host_set_packet_start( tls_packet_t* packet, uint8_t* start );
+extern tls_result_t tls_calculate_encrypt_buffer_length( ssl_context* context, uint16_t* required_buff_size, uint16_t payload_size);
 
 /*
  * This should wait for a specified amount of time to receive a packet.

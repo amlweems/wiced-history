@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -343,7 +343,7 @@ wiced_result_t wm8533_configure( void *driver_data, wiced_audio_config_t *config
     uint16_t              ctrl2;
     size_t                i;
     wiced_bool_t          mclk_is_found = WICED_FALSE;
-    uint                  mclk_lrck_ratio = 0;
+    uint32_t              mclk_lrck_ratio = 0;
     uint16_t              psctrl_value;
 
     /*

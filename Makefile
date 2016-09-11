@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -56,6 +56,9 @@ Usage: make <target> [download] [run | debug] [JTAG=xxx] [no_dct]
 
   [JOBS=x]
     Sets the maximum number of parallel build threads (default=4)
+
+  [ALWAYS=1]
+    Always download all components (DCT, apps, etc) (default is to only download when changed)
 
   Notes
     * Component names are case sensitive
@@ -114,6 +117,26 @@ Usage: make <target> [download] [run | debug] [JTAG=xxx] [no_dct]
 										   be during manufacture. In the example code, hold teh "factory reset" button during reboot and the
 										   bootloader will extract the Image.
 
+    Build an Over The Air (OTA) in-field upgrade for an older SDK (SDK-3.6.3 and up)
+    	The Bootloader is never updated. Match parts of the DCT with the older SDK Bootloader
+
+      $> make snip.ping-BCM943362WCD4 UPDATE_FROM_SDK=X_X_X <APP_USED_BT=1> <APP_USED_P2P=1> <APP_USED_OTA2=1>
+      		Where X_X_X is the SDK you are creating an update application for
+      			Valid SDKs: 3_0_1
+                            3_1_0   3_1_1   3_1_2
+                            3_3_0   3_3_1
+                            3_4_0
+                            3_5_1   3_5_2
+                            3_6_0   3_6_1   3_6_2
+            Optional additions - Must match original app compilation to match these DCT sections
+            	APP_USED_BT=1		If Original Applciation used Bluetooth
+            						 That is, this was added to <application>.mk file:
+										GLOBAL_DEFINES += WICED_DCT_INCLUDE_BT_CONFIG
+            	APP_USED_P2P=1		If Original Applciation used P2P
+            						 That is, this was added to <application>.mk file:
+										GLOBAL_DEFINES += WICED_DCT_INCLUDE_P2P_CONFIG
+            	APP_USED_OTA2=1		If Original Applciation used OTA2
+            						 That is, if the command line build included "ota2_xxx" as described for OTA2 builds above
 endef
 
 ############################
@@ -132,7 +155,7 @@ export SUB_BUILD
 export OPENOCD_LOG_FILE
 export EXTERNAL_WICED_GLOBAL_DEFINES
 
-# We look for a command goal of ota2_image or ota2_download or ota2_factory_iamge or ota2_factory_download
+# We look for a command goal of ota2_image or ota2_download or ota2_factory_image or ota2_factory_download
 # So that we include the ota_bootloader in *any* Application build
 # and so we build to correct FLASH positioning
 override OTA2_SUPPORT := $(if $(findstring ota2_, $(MAKECMDGOALS)),1)
@@ -141,6 +164,45 @@ ifeq (1, $(OTA2_SUPPORT))
 $(info MAKEFILE MAKECMDGOALS=$(MAKECMDGOALS) OTA2_SUPPORT is enabled)
 else
 $(info MAKEFILE MAKECMDGOALS=$(MAKECMDGOALS) OTA2_SUPPORT is disabled)
+endif
+
+# This section is for setting DCT information for Upgrade between SDKs
+# Starting with SDK-3.6.3 we will support an in-the-field upgade - also known as Over The Air (OTA or OTA2)
+# upgrade - between SDKs. The Bootloader code is not updated, but the DCT layout has changed. These defines allow
+# the new application to address the crucial part of the DCT so that the Bootloader and the Application are in
+# agreement as to the layout of platform_dc_header_t. And the DCT can be updated to a new DCT layout.
+BOOTLOADER_SDK:=
+BOOTLOADER_SDK_VER:=
+BOOTLOADER_SDK_CFLAGS:=
+ORIGINAL_APP_SDK_USED_BT_CONFIG_D:=
+ORIGINAL_APP_SDK_USED_P2P_CONFIG_D:=
+ORIGINAL_APP_SDK_USED_OTA2_CONFIG_D:=
+ifneq ($(UPDATE_FROM_SDK),)
+BOOTLOADER_SDK_VER:=BOOTLOADER_SDK_$(UPDATE_FROM_SDK)
+BOOTLOADER_SDK_VER_D:=-D$(BOOTLOADER_SDK_VER)
+ifeq ($(APP_USED_BT),1)
+ORIGINAL_APP_SDK_USED_BT_CONFIG:=ORIGINAL_APP_SDK_USED_BT_CONFIG
+ORIGINAL_APP_SDK_USED_BT_CONFIG_D:= -DORIGINAL_APP_SDK_USED_BT_CONFIG
+endif
+ifeq ($(APP_USED_P2P),1)
+ORIGINAL_APP_SDK_USED_P2P_CONFIG:=ORIGINAL_APP_SDK_USED_P2P_CONFIG
+ORIGINAL_APP_SDK_USED_P2P_CONFIG_D := -DORIGINAL_APP_SDK_USED_P2P_CONFIG
+endif
+ifeq ($(APP_USED_OTA2),1)
+ORIGINAL_APP_SDK_USED_OTA2_CONFIG:=ORIGINAL_APP_SDK_USED_OTA2_CONFIG
+ORIGINAL_APP_SDK_USED_OTA2_CONFIG_D := -DORIGINAL_APP_SDK_USED_OTA2_CONFIG
+endif
+BOOTLOADER_SDK := $(BOOTLOADER_SDK_VER) $(ORIGINAL_APP_SDK_USED_BT_CONFIG) $(ORIGINAL_APP_SDK_USED_P2P_CONFIG) $(ORIGINAL_APP_SDK_USED_OTA2_CONFIG)
+BOOTLOADER_SDK_CFLAGS:= $(BOOTLOADER_SDK_VER_D) $(ORIGINAL_APP_SDK_USED_BT_CONFIG_D) $(ORIGINAL_APP_SDK_USED_P2P_CONFIG_D) $(ORIGINAL_APP_SDK_USED_OTA2_CONFIG_D)
+$(info Building an Upgrade Application using:: $(BOOTLOADER_SDK))
+#always export it
+export BOOTLOADER_SDK BOOTLOADER_SDK_CFLAGS UPDATE_FROM_SDK
+endif      # $(UPDATE_FROM_SDK)
+# End of SDK upgrade section
+
+ALWAYS_DOWNLOAD_COMPONENTS :=
+ifeq ($(ALWAYS),1)
+ALWAYS_DOWNLOAD_COMPONENTS := 1
 endif
 
 
@@ -192,7 +254,11 @@ endif
 ifneq ($(BUILD_STRING),)
 -include build/$(CLEANED_BUILD_STRING)/config.mk
 # Now we know the target architecture - include all toolchain makefiles and check one of them can handle the architecture
+ifeq ($(IAR),1)
+include $(MAKEFILES_PATH)/wiced_toolchain_IAR.mk
+else
 include $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk
+endif
 
 build/$(CLEANED_BUILD_STRING)/config.mk: $(SOURCE_ROOT)Makefile $(MAKEFILES_PATH)/wiced_config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk $(MAKEFILES_PATH)/wiced_toolchain_ARM_GNU.mk $(WICED_SDK_MAKEFILES)
 	$(QUIET)$(ECHO) $(if $(WICED_SDK_MAKEFILES),Applying changes made to: $?,Making config file for first time)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -84,6 +84,7 @@ wiced_bt_cfg_settings_t wiced_bt_cfg_settings =
          .client_max_links = 3,   /**< Client config: maximum number of servers that local client can connect to  */
          .server_max_links = 0,   /**< Server config: maximum number of remote clients connections allowed by the local */
          .max_attr_len     = 360, /**< Maximum attribute length; gki_cfg must have a corresponding buffer pool that can hold this length */
+         .max_mtu_size     = 517, /**< Maxiimum MTU size;gki_cfg must have a corresponding buffer pool that can hold this length */
     },
      /* Application managed l2cap protocol configuration */
     .rfcomm_cfg =
@@ -113,7 +114,14 @@ wiced_bt_cfg_settings_t wiced_bt_cfg_settings =
      {
          .roles     = 0, /**< Mask of local roles supported (AVRC_CONN_INITIATOR|AVRC_CONN_ACCEPTOR) */
          .max_links = 0  /**< Maximum simultaneous remote control links */
-     }
+     },
+
+    .max_number_of_buffer_pools = WICED_BT_CFG_NUM_BUF_POOLS,
+
+    .addr_resolution_db_size = 3,
+
+    /* rpa_refresh_timeout > 0 for enabling privacy */
+    .rpa_refresh_timeout = 900, /**< random address refreshing rate in seconds  */
 };
 
 

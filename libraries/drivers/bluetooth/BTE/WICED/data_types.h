@@ -26,6 +26,15 @@
 #define FALSE  0
 #endif
 
+#if defined( __IAR_SYSTEMS_ICC__ )
+typedef __UINT8_T_TYPE__  UINT8;
+typedef __UINT16_T_TYPE__ UINT16;
+typedef __UINT32_T_TYPE__ UINT32;
+typedef __UINT64_T_TYPE__ UINT64;
+typedef __INT32_T_TYPE__  INT32;
+typedef __INT8_T_TYPE__   INT8;
+typedef __INT16_T_TYPE__  INT16;
+#else
 typedef unsigned char   UINT8;
 typedef unsigned short  UINT16;
 typedef unsigned long   UINT32;
@@ -33,6 +42,8 @@ typedef unsigned long long int UINT64;
 typedef signed   long   INT32;
 typedef signed   char   INT8;
 typedef signed   short  INT16;
+#endif /* defined( __IAR_SYSTEMS_ICC__ ) */
+
 typedef unsigned char   BOOLEAN;
 typedef UINT32          UINTPTR;
 typedef UINT32          TIME_STAMP;

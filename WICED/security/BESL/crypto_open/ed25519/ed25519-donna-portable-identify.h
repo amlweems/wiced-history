@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,12 +14,16 @@ extern "C"
 #endif
 
 /* os */
-#if defined(_WIN32)    || defined(_WIN64) || defined(__TOS_WIN__) || defined(__WINDOWS__)
+#if defined(__NUTTX__)
+    #define OS_NUTTX
+#elif defined(_WIN32)    || defined(_WIN64) || defined(__TOS_WIN__) || defined(__WINDOWS__)
     #define OS_WINDOWS
 #elif defined(sun) || defined(__sun) || defined(__SVR4) || defined(__svr4__)
     #define OS_SOLARIS
 #else
+#if !defined ( __ICCARM__ )
     #include <sys/param.h> /* need this to define BSD */
+#endif
     #define OS_NIX
     #if defined(__linux__)
         #define OS_LINUX

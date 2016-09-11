@@ -39,6 +39,7 @@
 #define GKI_ERROR_ADDR_NOT_IN_BUF       0xFFF5
 #define GKI_ERROR_OUT_OF_BUFFERS        0xFFF4
 #define GKI_ERROR_GETPOOLBUF_BAD_QID    0xFFF3
+#define GKI_ERROR_POOLBUF_BAD_SIZE      0xFFF2
 
 
 /********************************************************************
@@ -52,24 +53,41 @@
 **  Buffer Management Data Structures
 *********************************************************************/
 
+typedef struct _buffer_pool_t wiced_pool_t;
+typedef struct _free_queue FREE_QUEUE_T;
+
 typedef struct _buffer_hdr
 {
     struct _buffer_hdr *p_next;   /* next buffer in the queue */
-	UINT8   q_id;                 /* id of the queue */
-	UINT8   task_id;              /* task which allocated the buffer*/
+    UINT8   pool_id;              /* id of the queue */
+    UINT8   task_id;              /* task which allocated the buffer*/
     UINT8   status;               /* FREE, UNLINKED or QUEUED */
-	UINT8   Type;
+    UINT8   Type;
 } BUFFER_HDR_T;
 
 typedef struct _free_queue
 {
-	BUFFER_HDR_T *p_first;      /* first buffer in the queue */
+    BUFFER_HDR_T *p_first;      /* first buffer in the queue */
     BUFFER_HDR_T *p_last;       /* last buffer in the queue */
-	UINT16		 size;          /* size of the buffers in the pool */
-	UINT16		 total;         /* toatal number of buffers */
-	UINT16		 cur_cnt;       /* number of  buffers currently allocated */
-	UINT16		 max_cnt;       /* maximum number of buffers allocated at any time */
+    UINT16        size;         /* size of the buffers in the pool */
+    UINT16        total;        /* toatal number of buffers */
+    UINT16        cur_cnt;      /* number of  buffers currently allocated */
+    UINT16        max_cnt;      /* maximum number of buffers allocated at any time */
+    UINT32        magic_number; /* magic no to identify the freeq*/
 } FREE_QUEUE_T;
+
+typedef struct _buffer_pool_t{
+    FREE_QUEUE_T            pool_freeq;
+    struct _buffer_pool_t * pool_next;
+
+    /* Define the buffer pool start addresses
+    */
+    UINT8   *pool_start;   /* array of pointers to the start of each buffer pool */
+    UINT8   *pool_end;     /* array of pointers to the end of each buffer pool */
+    UINT16   pool_size;     /* actual size of the buffers in a pool */
+    UINT8    pool_id;
+    UINT8    pool_restricted;
+} BUFFER_POOL_T;
 
 
 /* Buffer related defines
@@ -79,6 +97,7 @@ typedef struct _free_queue
 #define BUFFER_PADDING_SIZE (sizeof(BUFFER_HDR_T) + sizeof(UINT32)) /* Header + Magic Number */
 #define MAX_USER_BUF_SIZE   ((UINT16)0xffff - BUFFER_PADDING_SIZE)  /* pool size must allow for header */
 #define MAGIC_NO            0xDDBADDBA
+#define MAGIC_NUMBER_FREE_Q 0xDEADBEEF
 
 #define BUF_STATUS_FREE     0
 #define BUF_STATUS_UNLINKED 1
@@ -90,12 +109,19 @@ typedef struct _free_queue
 #if (GKI_DEBUG == TRUE)
 typedef struct
 {
-	UINT16  type;
-	UINT8   taskid;
-	UINT8   msg[GKI_MAX_EXCEPTION_MSGLEN];
+    UINT16  type;
+    UINT8   taskid;
+    UINT8   msg[GKI_MAX_EXCEPTION_MSGLEN];
 } EXCEPTION_T;
 #endif
 
+typedef struct{
+    BUFFER_POOL_T * gki_pool;
+    BUFFER_POOL_T **ppa_pools;
+    int             pool_max_count;
+    int             pool_current_count;
+
+}tGKI_COM_POOL;
 
 /* Put all GKI variables into one control block
 */
@@ -295,17 +321,9 @@ typedef struct
     /* Define the buffer pool management variables
     */
 #if (defined(GKI_DYNAMIC_POOL_CFG) && (GKI_DYNAMIC_POOL_CFG == TRUE))
-    FREE_QUEUE_T    *freeq;
-
-    /* Define the buffer pool start addresses
-    */
-    UINT8   **pool_start;   /* array of pointers to the start of each buffer pool */
-    UINT8   **pool_end;     /* array of pointers to the end of each buffer pool */
-    UINT16  *pool_size;     /* actual size of the buffers in a pool */
-
-    /* Define the buffer pool access control variables */
-    UINT8   *pool_list;     /* buffer pools arranged in the order of size */
+    tGKI_COM_POOL uPool;
 #else
+    BUFFER_POOL_T   gki_pool[GKI_NUM_TOTAL_BUF_POOLS];
     FREE_QUEUE_T    freeq[GKI_NUM_TOTAL_BUF_POOLS];
 
     UINT16   pool_buf_size[GKI_NUM_TOTAL_BUF_POOLS];
@@ -320,10 +338,10 @@ typedef struct
 
     /* Define the buffer pool access control variables */
     UINT8       pool_list[GKI_NUM_TOTAL_BUF_POOLS]; /* buffer pools arranged in the order of size */
-#endif
-    void        *p_user_mempool;                    /* User O/S memory pool */
-    UINT16      pool_access_mask;                   /* Bits are set if the corresponding buffer pool is a restricted pool */
     UINT8       curr_total_no_of_pools;             /* number of fixed buf pools + current number of dynamic pools */
+#endif
+    UINT8       no_of_init_pools;                   /* number of buf pools in p_btm_cfg_buf_pools */
+    void        *p_user_mempool;                    /* User O/S memory pool */
 
     BOOLEAN     timer_nesting;                      /* flag to prevent timer interrupt nesting */
 
@@ -350,8 +368,15 @@ extern "C" {
 GKI_API extern BOOLEAN   gki_chk_buf_damage(void *);
 extern BOOLEAN   gki_chk_buf_owner(void *);
 extern void      gki_buffer_init (void);
+extern void      gki_buffer_deinit(void);
 extern void      gki_timers_init(void);
 extern void      gki_adjust_timer_count (INT32);
+
+extern void wiced_delete_pool(wiced_pool_t *pool);
+extern wiced_pool_t * wiced_create_pool(void * p_cfg, UINT32 is_restricted);
+extern void * wiced_get_pool_buf(wiced_pool_t * pool);
+extern wiced_pool_t* wiced_get_pool(UINT8 pool_id);
+wiced_pool_t * GKI_GetMaxSizePool(void);
 
 extern void    OSStartRdy(void);
 extern void	   OSCtxSw(void);

@@ -1,13 +1,14 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
-
+/****************************************************************************
+**
+**  Name        gki.h
+**
+**  Function    This file contains GKI public definitions
+**
+**
+**  Copyright (c) 1999-2012, Broadcom Corp., All Rights Reserved.
+**  Proprietary and confidential.
+**
+*****************************************************************************/
 #ifndef GKI_H
 #define GKI_H
 
@@ -122,7 +123,7 @@
 #define GKI_POOL_ID_6                6
 #define GKI_POOL_ID_7                7
 #define GKI_POOL_ID_8                8
-#define GKI_POOL_ID_9                9 
+#define GKI_POOL_ID_9                9
 #define GKI_POOL_ID_10               10
 #define GKI_POOL_ID_11               11
 #define GKI_POOL_ID_12               12
@@ -504,9 +505,15 @@ GKI_API extern void      GKI_os_free (void *);
 /* os timer operation */
 GKI_API extern UINT32 GKI_get_os_tick_count(void);
 
+/* Update tick count */
+#if defined(MPAF_CUSTOM_STACK)
+void Gki_timer_tick(void);
+#endif
+
 /* Exception handling
 */
 GKI_API extern void    GKI_exception (UINT16, char *);
+
 
 #if GKI_DEBUG == TRUE
 GKI_API extern void    GKI_PrintBufferUsage(UINT8 *p_num_pools, UINT16 *p_cur_used);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -403,6 +403,7 @@ wwd_result_t wwd_bus_deinit( void )
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
 
+    wwd_bus_set_resource_download_halt( WICED_FALSE );
     return WWD_SUCCESS;
 }
 
@@ -414,6 +415,9 @@ wwd_result_t wwd_bus_ack_interrupt(uint32_t intstatus)
 uint32_t wwd_bus_packet_available_to_read(void)
 {
     uint32_t int_status = 0;
+
+    /* Ensure the wlan backplane bus is up */
+    VERIFY_RESULT( wwd_ensure_wlan_bus_is_up() );
 
     /* Read the IntStatus */
     if ( wwd_bus_read_backplane_value( (uint32_t) SDIO_INT_STATUS, (uint8_t) 4, (uint8_t*)&int_status ) != WWD_SUCCESS )
@@ -511,7 +515,6 @@ wwd_result_t wwd_bus_read_frame( /*@out@*/ wiced_buffer_t* buffer )
     }
 
     /* Copy the data already read */
-    memset( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wwd_buffer_header_t), 0, ( size_t )( INITIAL_READ + extra_space_required ) );
     memcpy( host_buffer_get_current_piece_data_pointer( *buffer ) + sizeof(wwd_buffer_header_t), hwtag, (size_t) INITIAL_READ );
 
     /* Read the rest of the data */
@@ -539,7 +542,9 @@ wwd_result_t wwd_bus_write_backplane_value( uint32_t address, uint8_t register_l
 {
     VERIFY_RESULT( wwd_bus_set_backplane_window( address ) );
 
-    return wwd_bus_sdio_transfer( BUS_WRITE, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, (uint8_t*) &value, RESPONSE_NEEDED );
+    VERIFY_RESULT( wwd_bus_sdio_transfer( BUS_WRITE, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, (uint8_t*) &value, RESPONSE_NEEDED ));
+
+    return wwd_bus_set_backplane_window( CHIPCOMMON_BASE_ADDRESS );
 }
 
 wwd_result_t wwd_bus_read_backplane_value( uint32_t address, uint8_t register_length, /*@out@*/ uint8_t* value )
@@ -547,7 +552,9 @@ wwd_result_t wwd_bus_read_backplane_value( uint32_t address, uint8_t register_le
     *value = 0;
     VERIFY_RESULT( wwd_bus_set_backplane_window( address ) );
 
-    return wwd_bus_sdio_transfer( BUS_READ, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, value, RESPONSE_NEEDED );
+    VERIFY_RESULT( wwd_bus_sdio_transfer( BUS_READ, BACKPLANE_FUNCTION, address & 0x07FFF, register_length, value, RESPONSE_NEEDED ));
+
+    return wwd_bus_set_backplane_window( CHIPCOMMON_BASE_ADDRESS );
 }
 
 wwd_result_t wwd_bus_write_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, uint32_t value )
@@ -559,7 +566,6 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
 {
     return wwd_bus_sdio_transfer( direction, function, address, size, (uint8_t*)data, RESPONSE_NEEDED );
 }
-
 
 /******************************************************
  *             Static  Function definitions
@@ -660,7 +666,7 @@ static wwd_result_t wwd_bus_sdio_download_firmware( void )
     VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
     VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
 
-    VERIFY_RESULT( wwd_disable_sram3_remap( ));
+    VERIFY_RESULT( wwd_chip_specific_socsram_init( ));
 #if 0
     /* 43362 specific: Remap JTAG pins to UART output */
     uint32_t data = 0;

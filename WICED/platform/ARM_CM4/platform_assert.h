@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -55,8 +55,6 @@ extern /*@noreturn@*/ void WICED_TRIGGER_BREAKPOINT( void );
 #define WICED_ENABLE_INTERRUPTS() do { __asm__("CPSIE i"); } while (0)
 
 #elif defined ( __IAR_SYSTEMS_ICC__ )
-
-#include <cmsis_iar.h>
 
 #define WICED_TRIGGER_BREAKPOINT() do { __asm("bkpt 0"); } while (0)
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -127,7 +127,6 @@ typedef uint8_t wiced_dev_ble_signature_t[BTM_BLE_AUTH_SIGNATURE_SIZE];     /**<
 #define BTM_BLE_ADVERT_FLAG_MASK                    (BTM_BLE_LIMITED_DISCOVERABLE_FLAG | BTM_BLE_BREDR_NOT_SUPPORTED | BTM_BLE_GENERAL_DISCOVERABLE_FLAG)
 #define BTM_BLE_LIMITED_DISCOVERABLE_MASK           (BTM_BLE_LIMITED_DISCOVERABLE_FLAG )
 
-
 /** Advertisement data types */
 enum wiced_bt_ble_advert_type_e {
     BTM_BLE_ADVERT_TYPE_FLAG                        = 0x01,                 /**< Advertisement flags */
@@ -168,9 +167,9 @@ enum wiced_bt_ble_sec_flags_e
 
 typedef struct
 {
-    uint8_t                     *p_data;        /**< Advertisement data */
-    uint16_t                    len;            /**< Advertisement length */
-    wiced_bt_ble_advert_type_t  advert_type;    /**< Advertisement data type */
+    uint8_t                         *p_data;                        /**< ADV data */
+    uint16_t                        len;                               /**< Advertisement length */
+    wiced_bt_ble_advert_type_t      advert_type;                          /**< Advertisement data type */
 }wiced_bt_ble_advert_elem_t;
 
 /** Scan result event type */
@@ -292,7 +291,6 @@ wiced_bt_ble_advert_mode_t wiced_bt_ble_get_current_advert_mode(void);
 wiced_result_t wiced_bt_ble_set_raw_advertisement_data(UINT8 num_elem,
                                                        wiced_bt_ble_advert_elem_t *p_data);
 
-
 /**
  *
  * Function         wiced_bt_ble_set_raw_scan_response_data
@@ -305,8 +303,24 @@ wiced_result_t wiced_bt_ble_set_raw_advertisement_data(UINT8 num_elem,
  * @return          status of the operation
  *
  */
-wiced_bt_dev_status_t wiced_bt_ble_set_raw_scan_response_data(UINT8 num_elem,
+wiced_bt_dev_status_t wiced_bt_ble_set_raw_scan_response_data(uint8_t num_elem,
                                                         wiced_bt_ble_advert_elem_t *p_data);
+
+/**
+ *
+ * Function         wiced_bt_ble_observe
+ *
+ *                  This function makes the device start or stop operating in the observer role.
+ *                  The observer role device receives advertising events from a broadcast device.
+ *
+ * @param[in] start :               TRUE to start the observer role
+ * @param[in] duration :            the duration for the observer role
+ * @param[in] p_scan_result_cback : scan result callback
+ *
+ * @return          status of the operation
+ *
+ */
+wiced_bt_dev_status_t wiced_bt_ble_observe (wiced_bool_t start, uint8_t duration, wiced_bt_ble_scan_result_cback_t *p_scan_result_cback);
 
 /**
  * Function         wiced_bt_ble_scan
@@ -447,21 +461,6 @@ uint8_t *wiced_bt_ble_check_advertising_data( uint8_t *p_adv, wiced_bt_ble_adver
 
 /**
  *
- * Function         wiced_bt_ble_enable_privacy
- *
- *                  This function is called to enable or disable the privacy in
- *                  the local device.
- *
- * @param[in]       enable: TRUE to enable it; FALSE to disable it.
- *
- * @return          void
- *
- */
-void wiced_bt_ble_enable_privacy (wiced_bool_t enable);
-
-
-/**
- *
  * Function         wiced_bt_ble_get_security_state
  *
  *                  Get security mode 1 flags and encryption key size for LE peer.
@@ -505,10 +504,9 @@ wiced_bool_t wiced_btm_ble_update_advertisement_filter_policy(wiced_bt_ble_adver
  *
  * Function         wiced_bt_ble_clear_white_list
  *
- *                  Flush white list in controller side to be removed
+ *                     Request clearing white list in controller side
  *
- *
- * @return          TRUE if request of clear is sent to controller side
+ * @return         TRUE if request of clear is sent to controller side
  *
  */
 wiced_bool_t wiced_bt_ble_clear_white_list(void);

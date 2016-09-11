@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,7 +67,7 @@ wiced_result_t wiced_establish_websocket_handshake( wiced_websocket_t* websocket
  *
  * @return                              WICED_SUCCESS if successful, or WICED_ERROR.
  */
-wiced_result_t wiced_get_websocket_subprotocol( const char* subprotocol );
+wiced_result_t wiced_get_websocket_subprotocol( char* subprotocol );
 
 #ifdef __cplusplus
 } /* extern "C" */

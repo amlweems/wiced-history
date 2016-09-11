@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -58,13 +58,20 @@ static const uint8_t uart_alternate_functions[NUMBER_OF_UART_PORTS] =
 {
     [0] = GPIO_AF_USART1,
     [1] = GPIO_AF_USART2,
-#if defined(STM32F401xx) || defined(STM32F411xE)
+#if defined(STM32F401xx) || defined(STM32F411xE) || defined(STM32F412xG)
     [2] = GPIO_AF_USART6,
+#if defined(STM32F412xG)
+    [3] = GPIO_AF_USART3,
+#endif
 #else
     [2] = GPIO_AF_USART3,
     [3] = GPIO_AF_UART4,
     [4] = GPIO_AF_UART5,
     [5] = GPIO_AF_USART6,
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [6] = GPIO_AF_UART7,
+    [7] = GPIO_AF_UART8,
+#endif
 #endif
 };
 
@@ -73,13 +80,20 @@ static const platform_peripheral_clock_function_t uart_peripheral_clock_function
 {
     [0] = RCC_APB2PeriphClockCmd,
     [1] = RCC_APB1PeriphClockCmd,
-#if defined(STM32F401xx) || defined(STM32F411xE)
+#if defined(STM32F401xx) || defined(STM32F411xE) || defined(STM32F412xG)
     [2] = RCC_APB2PeriphClockCmd,
+#if defined(STM32F412xG)
+    [3] = RCC_APB1PeriphClockCmd,
+#endif
 #else
     [2] = RCC_APB1PeriphClockCmd,
     [3] = RCC_APB1PeriphClockCmd,
     [4] = RCC_APB1PeriphClockCmd,
     [5] = RCC_APB2PeriphClockCmd,
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [6] = RCC_APB1PeriphClockCmd,
+    [7] = RCC_APB1PeriphClockCmd,
+#endif
 #endif
 };
 
@@ -88,13 +102,20 @@ static const uint32_t uart_peripheral_clocks[NUMBER_OF_UART_PORTS] =
 {
     [0] = RCC_APB2Periph_USART1,
     [1] = RCC_APB1Periph_USART2,
-#if defined(STM32F401xx) || defined(STM32F411xE)
+#if defined(STM32F401xx) || defined(STM32F411xE) || defined(STM32F412xG)
     [2] = RCC_APB2Periph_USART6,
+#if defined(STM32F412xG)
+    [3] = RCC_APB1Periph_USART3,
+#endif
 #else
     [2] = RCC_APB1Periph_USART3,
     [3] = RCC_APB1Periph_UART4,
     [4] = RCC_APB1Periph_UART5,
     [5] = RCC_APB2Periph_USART6,
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    [6] = RCC_APB1Periph_UART7,
+    [7] = RCC_APB1Periph_UART8,
+#endif
 #endif
 };
 
@@ -103,8 +124,11 @@ static const IRQn_Type uart_irq_vectors[NUMBER_OF_UART_PORTS] =
 {
     [0] = USART1_IRQn,
     [1] = USART2_IRQn,
-#if defined(STM32F401xx) || defined(STM32F411xE)
+#if defined(STM32F401xx) || defined(STM32F411xE)|| defined(STM32F412xG)
     [2] = USART6_IRQn,
+#if defined(STM32F412xG)
+    [3] = USART3_IRQn,
+#endif
 #else
     [2] = USART3_IRQn,
     [3] = UART4_IRQn,
@@ -179,7 +203,7 @@ platform_result_t platform_uart_init( platform_uart_driver_t* driver, const plat
             break;
 
         default:
-            return WICED_BADARG;
+            return PLATFORM_BADARG;
     }
 
     switch ( config->flow_control )
@@ -201,7 +225,7 @@ platform_result_t platform_uart_init( platform_uart_driver_t* driver, const plat
             break;
 
         default:
-            return WICED_BADARG;
+            return PLATFORM_BADARG;
     }
 
 
@@ -399,6 +423,7 @@ platform_result_t platform_uart_transmit_bytes( platform_uart_driver_t* driver, 
 platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* expected_data_size, uint32_t timeout_ms )
 {
     platform_result_t result = PLATFORM_SUCCESS;
+    uint32_t data_size = *expected_data_size;
 
     wiced_assert( "bad argument", ( driver != NULL ) && ( data_in != NULL ) && ( expected_data_size != NULL ) && ( *expected_data_size != 0 ) );
 
@@ -456,6 +481,7 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
 
         platform_mcu_powersave_enable();
 
+        *expected_data_size = data_size - *expected_data_size;
         return result;
     }
     else
@@ -478,11 +504,17 @@ uint8_t platform_uart_get_port_number( USART_TypeDef* uart )
     {
         return 1;
     }
-#if defined(STM32F401xx) || defined(STM32F411xE)
+#if defined(STM32F401xx) || defined(STM32F411xE) || defined(STM32F412xG)
     else if ( uart == USART6 )
     {
         return 2;
     }
+#if defined(STM32F412xG)
+    else if ( uart == USART3 )
+    {
+        return 3;
+    }
+#endif
 #else
     else if ( uart == USART3 )
     {
@@ -500,10 +532,20 @@ uint8_t platform_uart_get_port_number( USART_TypeDef* uart )
     {
         return 5;
     }
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    else if (uart == UART7)
+    {
+        return 6;
+    }
+    else if (uart == UART8)
+    {
+        return 7;
+    }
+#endif
 #endif
     else
     {
-        return 0xff;
+        return INVALID_UART_PORT_NUMBER;
     }
 }
 
@@ -534,7 +576,7 @@ static platform_result_t receive_bytes( platform_uart_driver_t* driver, void* da
 
     if ( timeout > 0 )
     {
-        result = host_rtos_get_semaphore( &driver->rx_complete, timeout, WICED_TRUE );
+        result = ( platform_result_t ) host_rtos_get_semaphore( &driver->rx_complete, timeout, WICED_TRUE );
     }
 
     return result;

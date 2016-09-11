@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,6 +11,7 @@
 /** @file
  *  Platform cores power related code
  */
+#include "platform_toolchain.h"
 #include "platform_mcu_peripheral.h"
 #include "platform_appscr4.h"
 #include "platform_map.h"
@@ -39,6 +40,15 @@
       PMU_RES_MASK( PMU_RES_SR_SUBCORE_AND_PHY_PWRSW ) | \
       PMU_RES_MASK( PMU_RES_SR_SLEEP )                 | \
       PMU_RES_MASK( PMU_RES_MAC_PHY_CLK_AVAIL ) )
+
+#define PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_DATA_BEGIN     0x554000
+#define PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_DATA_END       0x560000
+
+#define PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_STACK_BEGIN    0x660000
+#define PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_STACK_END      0x6A0000
+
+#define PLATFORM_CORES_POWERSAVE_BOOTLOADER_BEGIN              0x660000
+#define PLATFORM_CORES_POWERSAVE_BOOTLOADER_END                0x6A0000
 
 /******************************************************
  *                    Constants
@@ -169,6 +179,177 @@ platform_cores_powersave_init_wlan_domain( void )
 
 #endif /* WICED_NO_WIFI */
 
+#if !PLATFORM_NO_SOCSRAM_POWERDOWN
+
+static uint32_t powersave_control_memory_begin = 0;
+static uint32_t powersave_control_memory_end   = 0;
+
+static wiced_bool_t
+platform_cores_powersave_is_powerdown_permitted( uint32_t begin, uint32_t end )
+{
+    /*
+     * ROM bootloader uses some SOCSRAM memory.
+     * It cannot be powered down because reset is not restoring memory power state (not power up).
+     */
+
+    static const uint32_t bad_ranges[][2] =
+    {
+        { PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_DATA_BEGIN,  PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_DATA_END },
+        { PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_STACK_BEGIN, PLATFORM_CORES_POWERSAVE_ROM_BOOTLOADER_STACK_END },
+        { PLATFORM_CORES_POWERSAVE_BOOTLOADER_BEGIN,           PLATFORM_CORES_POWERSAVE_BOOTLOADER_END }
+    };
+    unsigned i;
+
+    for ( i = 0; i < ARRAYSIZE(bad_ranges); i++ )
+    {
+        if ( ( begin >= bad_ranges[i][0] ) && ( begin < bad_ranges[i][1] ) )
+        {
+            return WICED_FALSE;
+        }
+        if ( ( end > bad_ranges[i][0] ) && ( end <= bad_ranges[i][1] ) )
+        {
+            return WICED_FALSE;
+        }
+    }
+
+    return WICED_TRUE;
+}
+
+static void
+platform_cores_powersave_control_memory_power( uint32_t begin, uint32_t end, wiced_bool_t powerdown )
+{
+    uint32_t sram_addr = PLATFORM_SOCSRAM_CH0_RAM_BASE(0x0);
+    unsigned i;
+
+    wiced_assert( "bad range", end >= begin );
+    if ( begin >= end )
+    {
+        return;
+    }
+
+    for ( i = 0; i < SOCSRAM_BANK_NUMBER; i++ )
+    {
+        uint32_t bank_size;
+
+        if ( sram_addr >= end )
+        {
+            break;
+        }
+
+        PLATFORM_SOCSRAM->bank_x_index.bits.bank_number = i;
+
+        bank_size = SOCSRAM_BANK_SIZE;
+
+        if ( sram_addr >= begin )
+        {
+            uint32_t pda = PLATFORM_SOCSRAM->bank_x_pda.bits.pda & SOCSRAM_BANK_PDA_MASK;
+
+            if ( powerdown )
+            {
+                if ( ( sram_addr + bank_size <= end ) && ( pda != SOCSRAM_BANK_PDA_MASK ) && platform_cores_powersave_is_powerdown_permitted( sram_addr, sram_addr + bank_size ) )
+                {
+                    PLATFORM_SOCSRAM->bank_x_pda.bits.pda = SOCSRAM_BANK_PDA_MASK;
+                }
+            }
+            else
+            {
+                unsigned j;
+
+                for ( j = 0; ( pda != 0 ) && ( j < 32 ); j++ )
+                {
+                    uint32_t new_pda = pda & ~( 1 << j );
+
+                    if ( new_pda != pda )
+                    {
+                        PLATFORM_SOCSRAM->bank_x_pda.bits.pda = new_pda;
+                        pda = PLATFORM_SOCSRAM->bank_x_pda.bits.pda; /* read it back to ensure write completed */
+
+                        /*
+                         * From ASIC: wait time of 10ns between each PDA switch turn-on (a PDA bit going 1 to 0)
+                         *            is adequate to limit inrush current accumulation due to multiple switches turning on.
+                         * We have no delay function with nanosecond resolution, but it can be created.
+                         * 10ns is just few CPU cycles delay and we can just add small delay loop here.
+                         * Maybe this is too cautious, but I use existed function and 1us delay, which should be more then enough.
+                         */
+                        OSL_DELAY(1);
+                    }
+                }
+            }
+        }
+
+        sram_addr += bank_size;
+    }
+}
+
+void
+platform_toolchain_sbrk_prepare( void* ptr, int incr )
+{
+    if ( incr != 0 )
+    {
+        uint32_t begin = (uint32_t)( ptr );
+        uint32_t end   = (uint32_t)( ptr + incr );
+
+        uint32_t     powersave_begin;
+        uint32_t     powersave_end;
+        wiced_bool_t powerdown;
+
+        if ( end > begin )
+        {
+            powersave_begin = powersave_control_memory_begin;
+            powersave_end   = end;
+            powerdown       = WICED_FALSE;
+        }
+        else
+        {
+            powersave_begin = end;
+            powersave_end   = powersave_control_memory_end;
+            powerdown       = WICED_TRUE;
+        }
+
+        if ( powersave_begin < powersave_end )
+        {
+            platform_cores_powersave_control_memory_power( powersave_begin, powersave_end, powerdown );
+        }
+    }
+}
+
+static void
+platform_cores_powersave_powerdown_memory( void )
+{
+    extern unsigned char _heap[];
+    extern unsigned char _eheap[];
+
+    powersave_control_memory_begin = (uint32_t)&_heap[ 0 ];
+    powersave_control_memory_end   = (uint32_t)&_eheap[ 0 ];
+
+    wiced_assert( "bad configuration", powersave_control_memory_end >= powersave_control_memory_begin );
+
+    platform_cores_powersave_control_memory_power( powersave_control_memory_begin, powersave_control_memory_end, WICED_TRUE );
+}
+
+static void
+platform_cores_powersave_powerup_memory( void )
+{
+    if ( powersave_control_memory_end > powersave_control_memory_begin )
+    {
+        platform_cores_powersave_control_memory_power( powersave_control_memory_begin, powersave_control_memory_end, WICED_FALSE );
+    }
+}
+
+#else
+
+static void
+platform_cores_powersave_powerdown_memory( void )
+{
+}
+
+static void
+platform_cores_powersave_powerup_memory( void )
+{
+}
+
+#endif /* !PLATFORM_NO_SOCSRAM_POWERDOWN */
+
 static void
 platform_cores_powersave_shutoff_usb20d( void )
 {
@@ -225,6 +406,8 @@ platform_cores_powersave_init_apps_domain( void )
     platform_cores_powersave_shutoff_usb20d( );
 
     platform_cores_powersave_enable_memory_clock_gating( );
+
+    platform_cores_powersave_powerdown_memory( );
 }
 
 static void
@@ -240,6 +423,12 @@ platform_cores_powersave_init( void )
     platform_cores_powersave_disable_wl_reg_on_pulldown( WICED_TRUE );
     platform_cores_powersave_init_apps_domain( );
     platform_cores_powersave_init_wlan_domain( );
+}
+
+void
+platform_cores_powersave_deinit( void )
+{
+    platform_cores_powersave_powerup_memory( );
 }
 
 WICED_DEEP_SLEEP_EVENT_HANDLER( deep_sleep_cores_powersave_event_handler )
@@ -258,6 +447,11 @@ WICED_DEEP_SLEEP_EVENT_HANDLER( deep_sleep_cores_powersave_event_handler )
 
 void
 platform_cores_powersave_init( void )
+{
+}
+
+void
+platform_cores_powersave_deinit( void )
 {
 }
 

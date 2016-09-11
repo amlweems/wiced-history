@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -64,6 +64,7 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../wiced_apps_common.c	\
                    ../wiced_waf_common.c	\
                    ../wiced_dct_internal_common.c \
+                   ../wiced_dct_update.c \
 		           ../platform_nsclock.c \
                    platform_vector_table.c \
                    platform_init.c \
@@ -83,7 +84,7 @@ $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
                       ../../$(HOST_ARCH)/hardfault_handler.o \
                       platform_vector_table.o
 
-$(NAME)_CFLAGS = $(ADD_COMPILER_SPECIFIC_STANDARD_CFLAGS)
+$(NAME)_CFLAGS = $(COMPILER_SPECIFIC_STANDARD_CFLAGS)
 
 
 # Add maximum and default watchdog timeouts to definitions. Warning: Do not change MAX_WATCHDOG_TIMEOUT_SECONDS

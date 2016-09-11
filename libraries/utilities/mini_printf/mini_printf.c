@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,6 +8,7 @@
  * written permission of Broadcom Corporation.
  */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -225,7 +226,10 @@ int mini_printf( const char *format, ...)
             {
                 char* my_string = va_arg(ap, char *);
                 count = strlen(my_string);
-                platform_stdio_write( my_string, count );
+                if (count > 0)
+                {
+                    platform_stdio_write( my_string, count );
+                }
             }
 
             percent_ptr ++;    /* skip the format character */
@@ -236,7 +240,10 @@ int mini_printf( const char *format, ...)
         else
         {
             count = strlen(curr_ptr);
-            platform_stdio_write( curr_ptr, count );
+            if (count > 0)
+            {
+                platform_stdio_write( curr_ptr, count );
+            }
             out_count += count;
 
             curr_ptr = NULL;
@@ -246,4 +253,54 @@ int mini_printf( const char *format, ...)
     va_end(ap);
 
     return out_count;
+}
+
+int hex_dump_print(const void* data_ptr, uint16_t length, int show_ascii)
+{
+    uint8_t*  data = (uint8_t*)data_ptr;
+    int i, count;
+
+    if ((data == NULL) || (length == 0))
+    {
+        return -1;
+    }
+
+    count = 0;
+    while (length > 0)
+    {
+        uint8_t* save_ptr = data;
+        i = 0;
+        while ((length > 0) && (i < 16))
+        {
+            mini_printf(" %02x", *data);
+            i++;
+            data++;
+            length--;
+            count++;
+        }
+
+        if (show_ascii != 0)
+        {
+            int fill = 16 - i;
+            /* fill in for < 16 */
+            while(fill > 0)
+            {
+                mini_printf("   ");
+                fill--;
+            }
+
+            mini_printf("    ");
+            data = save_ptr;
+            while (i >= 0)
+            {
+                mini_printf(" %c",(isprint(*data) ? *data : '.'));
+                data++;
+                i--;
+            }
+        }
+
+        mini_printf("\r\n");
+    }
+
+    return count;
 }

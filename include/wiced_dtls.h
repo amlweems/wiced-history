@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -66,7 +66,7 @@ wiced_result_t wiced_dtls_init_context( wiced_dtls_context_t* context, wiced_dtl
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_dtls_init_identity( wiced_dtls_identity_t* identity, const char* private_key, const uint8_t* certificate_data, uint32_t certificate_length );
+wiced_result_t wiced_dtls_init_identity( wiced_dtls_identity_t* identity, const char* private_key, const uint32_t key_length, const uint8_t* certificate_data, uint32_t certificate_length );
 
 /** DeiInitialises a DTLS identity
  *

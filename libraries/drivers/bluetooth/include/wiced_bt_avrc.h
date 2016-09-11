@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -179,7 +179,7 @@ typedef struct
 *****************************************************************************/
 /**
  * @addtogroup  wicedbt_av          Audio / Video
- * @ingroup     wicedbt
+ * @ingroup     wicedbt_av
  *
  * Audio Video Profiles
  *
@@ -264,6 +264,25 @@ uint16_t wiced_bt_avrc_open_browse(uint8_t handle, uint8_t conn_role);
  *
  */
 uint16_t wiced_bt_avrc_close_browse(uint8_t handle);
+
+/**
+ *
+ * Function         wiced_bt_avrc_set_buffer_pool
+ *
+ *                  If buffer_size > 0 and there's no private pool for re-assembly,
+ *                  this function allocates a private buffer pool for
+ *                  re-assembling incoming messages
+ *                  If buffer_size = 0 and there's a private buffer pool for re-assembly,
+ *                  this function deallocates the private buffer pool for
+ *                  re-assembling incoming messages
+ *
+ * @param[in]       buffer_size      : buffer size for the private pool
+ * @param[in]       buffer_count     : the number of buffers in this new pool
+ *
+ * @return          Result code (see @ref AVRC_RESULT "AVRC result codes")
+ *
+ */
+uint16_t wiced_bt_avrc_set_buffer_pool(uint16_t buffer_size, uint16_t buffer_count);
 
 /**
  *

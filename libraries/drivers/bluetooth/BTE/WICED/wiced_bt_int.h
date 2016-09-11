@@ -17,7 +17,6 @@
 #define uint8_t         UINT8
 #define uint16_t        UINT16
 #define uint32_t        UINT32
-
 /*
  * TODO: wiced_bool_t(enum) should not be redefined to BOOLEAN(uint8).
  * It will lead to certain data-type mismatch errors and wrong calculations in DCT if wiced_bt_int.h
@@ -52,7 +51,6 @@
 #define wiced_bt_dev_vendor_specific_command_complete_params_t  tBTM_VSC_CMPL
 #endif
 #define wiced_bt_dev_vendor_specific_event_callback_t           tBTM_VS_EVT_CB
-
 #define wiced_bt_ble_advert_elem_t                              tBTM_BLE_ADV_ELEM
 #define wiced_bt_ble_conn_type_t                                tBTM_BLE_CONN_TYPE
 #define wiced_bt_ble_selective_conn_cback_t                     tBTM_BLE_SEL_CBACK
@@ -75,7 +73,6 @@
 #define wiced_bt_l2c_ch_cfg_bits_t                              tL2CAP_CH_CFG_BITS
 #define wiced_bt_l2cap_ertm_information_t                       tL2CAP_ERTM_INFO
 #define wiced_bt_l2cap_chnl_priority_t                          tL2CAP_CHNL_PRIORITY
-#define wiced_bt_l2cap_nocp_cback_t                             tL2CA_NOCP_CB
 #define wiced_bt_l2cap_chnl_data_rate_t                         tL2CAP_CHNL_DATA_RATE
 
 #define wiced_bt_gatt_appearance_t                              tGATT_APPEARANCE

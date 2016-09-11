@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,14 +61,14 @@ wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wi
 
     wwd_wlan_status.country_code = country;
 
-    retval = host_platform_init( );
+    retval = (wwd_result_t)host_platform_init( );
     if ( retval != WWD_SUCCESS )
     {
         WPRINT_WWD_ERROR(("Could not initialize platform interface\n"));
         return retval;
     }
 
-    retval = host_platform_bus_init( );
+    retval = (wwd_result_t)host_platform_bus_init( );
     if ( retval != WWD_SUCCESS )
     {
         WPRINT_WWD_ERROR(("Could not initialize platform bus interface\n"));
@@ -77,8 +77,15 @@ wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wi
 
     /* Enable 32K WLAN sleep clock */
     host_platform_init_wlan_powersave_clock();
+    if ( resume_after_deep_sleep == WICED_TRUE )
+    {
+        retval = ( wwd_result_t ) wwd_bus_resume_after_deep_sleep( );
+    }
+    else
+    {
+        retval = ( wwd_result_t ) wwd_bus_init( );
+    }
 
-    retval = resume_after_deep_sleep ? wwd_bus_resume_after_deep_sleep( ) : wwd_bus_init( );
     if ( retval != WWD_SUCCESS )
     {
         WPRINT_WWD_ERROR(("Could not initialize bus\n"));
@@ -97,6 +104,15 @@ wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wi
 
     host_platform_bus_enable_interrupt( );
 
+    return WWD_SUCCESS;
+}
+
+/*
+* Halt resource download and abort init
+*/
+wwd_result_t wwd_management_wifi_platform_init_halt( wiced_bool_t halt )
+{
+    wwd_bus_set_resource_download_halt( halt );
     return WWD_SUCCESS;
 }
 
@@ -165,7 +181,7 @@ wwd_result_t wwd_management_wifi_on( wiced_country_code_t country )
     }
 
     /* Turn APSTA on */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_APSTA );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) sizeof(*data), IOVAR_STR_APSTA );
     if ( data == NULL )
     {
         wiced_assert( "Could not get buffer for IOVAR", 0 != 0 );
@@ -222,6 +238,16 @@ wwd_result_t wwd_management_wifi_on( wiced_country_code_t country )
      *                       system might think that the IOCTL has timed out much faster than it should do.
      *
      */
+#ifdef WICED_ENABLE_AUTO_COUNTRY
+    /* Turn auto country on */
+    retval = wwd_wifi_set_iovar_value( IOVAR_STR_AUTOCOUNTRY, 1, WWD_STA_INTERFACE );
+    if( retval != WWD_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not enable auto country\r\n"));
+        return retval;
+    }
+#endif /* WICED_ENABLE_AUTO_COUNTRY */
+
     country_struct = (wl_country_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) sizeof(wl_country_t), IOVAR_STR_COUNTRY );
     if ( country_struct == NULL )
     {

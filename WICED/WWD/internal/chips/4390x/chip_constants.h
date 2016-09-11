@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,7 +22,7 @@ extern "C" {
  ******************************************************/
 
 /* General chip stats */
-#define CHIP_RAM_SIZE      0x3C000
+#define CHIP_RAM_SIZE            0x90000
 
 /* Backplane architecture */
 #define CHIPCOMMON_BASE_ADDRESS  0x18000000    /* Chipcommon core register region   */

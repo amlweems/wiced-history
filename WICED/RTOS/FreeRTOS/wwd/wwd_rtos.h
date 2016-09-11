@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -68,6 +68,11 @@ typedef QueueHandle_t       /*@abstract@*/ /*@only@*/ host_queue_type_t;      /*
 
 /*@external@*/ extern void vApplicationMallocFailedHook( void );
 /*@external@*/ extern void vApplicationIdleSleepHook( void );
+
+typedef struct
+{
+    uint8_t info;    /* not supported yet */
+} host_rtos_thread_config_type_t;
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -673,9 +673,9 @@ static wiced_bt_dev_status_t big_stack_callback( wiced_bt_management_evt_t event
             connection = internal_find_connection_by_address( &data->security_request.bd_addr );
             break;
 
-        case BTM_SECURITY_UPGRADE_EVT:
+        case BTM_SECURITY_FAILED_EVT:
             /**< Check if the application wants to upgrade the link key. Event data: #wiced_bt_dev_security_upgrade_t */
-            connection = internal_find_connection_by_address( &data->security_upgrade.bd_addr );
+            connection = internal_find_connection_by_address( &data->security_failed.bd_addr );
             break;
 
         case BTM_SECURITY_ABORTED_EVT:

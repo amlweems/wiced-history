@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,6 +17,7 @@
 #include <wiced_utilities.h>
 #include "wiced_time.h"
 #include "wwd_assert.h"
+#include "wiced_crypto.h"
 
 /******************************************************
  *                      Macros
@@ -35,7 +36,30 @@
 #endif
 
 /* Change to 1 to turn debug trace */
-#define WICED_DNS_DEBUG   (0)
+#define WICED_DNS_DEBUG   ( 0 )
+
+#ifndef htons
+#ifdef BIG_ENDIAN
+#define htons(x)        ((uint16_t)(x))
+#else
+#define SWAP_SHORT( bytes ) ( ( ( ( bytes ) >> 8 ) & 0xff ) | \
+    ( ( ( bytes ) << 8 ) & 0xff00 ) )
+#define htons(x)        ((uint16_t)SWAP_SHORT((uint16_t)(x)))
+#endif /* BIG_ENDIAN */
+#endif /* htons */
+
+#ifndef htonl
+#ifdef BIG_ENDIAN
+#define htonl(x)        ((uint32_t)(x))
+#else
+#define SWAP_LONG( bytes ) ( ( ( ( ( bytes ) & 0xff000000 ) >> 24 ) ) | \
+    ( ( ( ( bytes ) & 0xff0000 ) >> 8 ) ) | \
+    ( ( ( ( bytes ) & 0x00ff00 ) << 8 ) ) | \
+    ( ( ( ( bytes ) & 0x000000ff ) << 24 ) ) )
+
+#define htonl(x)        SWAP_LONG((uint32_t)(x))
+#endif /* BIG_ENDIAN */
+#endif /* htonl */
 
 /******************************************************
  *                   Enumerations
@@ -88,7 +112,9 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
     uint32_t               a;
     wiced_packet_t*        packet;
     dns_message_iterator_t iter;
+    uint8_t*               data_end;
     wiced_udp_socket_t     socket;
+    wiced_result_t         result;
     uint32_t               remaining_time         = timeout_ms;
     wiced_ip_address_t     resolved_ipv4_address  = { WICED_INVALID_IP, .ip.v4 = 0 };
     wiced_ip_address_t     resolved_ipv6_address  = { WICED_INVALID_IP, .ip.v4 = 0 };
@@ -96,6 +122,7 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
     wiced_bool_t           ipv6_address_found     = WICED_FALSE;
     char*                  temp_hostname          = (char*)hostname;
     uint16_t               hostname_length        = (uint16_t) strlen( hostname );
+    uint16_t               id;
 
 #if WICED_DNS_DEBUG
     wiced_time_t time;
@@ -126,7 +153,9 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
             iter.max_size = available_space;
             iter.current_size = 0;
             iter.iter = (uint8_t*) ( iter.header ) + sizeof(dns_message_header_t);
-            dns_write_header( &iter, 0, 0x100, 1, 0, 0, 0 );
+
+            wiced_crypto_get_random( &id, sizeof( id ) );
+            dns_write_header( &iter, id, 0x100, 1, 0, 0, 0 );
             dns_write_question( &iter, temp_hostname, RR_CLASS_IN, RR_TYPE_A );
             wiced_packet_set_data_end( packet, iter.iter );
 
@@ -147,7 +176,8 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                 }
 
                 iter.iter = (uint8_t*) ( iter.header ) + sizeof(dns_message_header_t);
-                dns_write_header( &iter, 0, 0x100, 1, 0, 0, 0 );
+                wiced_crypto_get_random( &id, sizeof( id ) );
+                dns_write_header( &iter, id, 0x100, 1, 0, 0, 0 );
                 dns_write_question( &iter, temp_hostname, RR_CLASS_IN, RR_TYPE_AAAA );
                 wiced_packet_set_data_end( packet, iter.iter );
 
@@ -175,11 +205,13 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                 wiced_bool_t answer_found = WICED_FALSE;
 
                 /* Extract the data */
-                if ( wiced_packet_get_data( packet, 0, (uint8_t**) &iter.header, &data_length, &available_data_length ) != WICED_SUCCESS )
+                result = wiced_packet_get_data( packet, 0, (uint8_t**) &iter.header, &data_length, &available_data_length );
+                if ( ( result != WICED_SUCCESS ) || ( data_length < sizeof(dns_message_header_t) ) )
                 {
                     goto exit;
                 }
                 iter.iter = (uint8_t*) ( iter.header ) + sizeof(dns_message_header_t);
+                data_end = (uint8_t*) ( iter.header ) + data_length;
 
                 /* Check if the message is a response (otherwise its a query) */
                 if ( htobe16( iter.header->flags ) & DNS_MESSAGE_IS_A_RESPONSE )
@@ -188,7 +220,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                     for ( a = 0; a < htobe16( iter.header->question_count ); ++a )
                     {
                         /* Skip the name */
-                        dns_skip_name( &iter );
+                        if ( dns_skip_name( &iter, data_end ) != WICED_SUCCESS )
+                        {
+                            goto exit;
+                        }
 
                         /* Skip the type and class */
                         iter.iter += 4;
@@ -200,7 +235,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                         dns_name_t   name;
                         dns_record_t record;
 
-                        dns_get_next_record( &iter, &record, &name );
+                        if ( dns_get_next_record( &iter, data_end, &record, &name ) != WICED_SUCCESS )
+                        {
+                            goto exit;
+                        }
 
                         switch ( record.type )
                         {
@@ -211,7 +249,7 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                                     /* Only free if we're certain we've malloc'd it*/
                                     free( (char*) temp_hostname );
                                 }
-                                temp_hostname = dns_read_name( record.rdata, (dns_message_header_t*) name.start_of_packet );
+                                temp_hostname = dns_read_name( record.rdata, record.rd_length, (dns_message_header_t*) name.start_of_packet );
                                 if ( temp_hostname == NULL )
                                 {
                                     goto exit;
@@ -221,7 +259,6 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                                 #if WICED_DNS_DEBUG
                                 WPRINT_LIB_INFO( ("Found alias: %s\n", temp_hostname) );
                                 #endif
-
 
                                 break;
 
@@ -285,7 +322,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                     for ( a = 0; a < htobe16( iter.header->authoritative_answer_count ); ++a )
                     {
                         /* Skip the name */
-                        dns_skip_name( &iter );
+                        if ( dns_skip_name( &iter, data_end ) != WICED_SUCCESS)
+                        {
+                            goto exit;
+                        }
 
                         /* Skip the type, class and TTL */
                         iter.iter += 8;
@@ -301,7 +341,10 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                         dns_record_t record;
 
                         /* Skip additional record */
-                        dns_get_next_record( &iter, &record, &name );
+                        if ( dns_get_next_record( &iter, data_end, &record, &name ) != WICED_SUCCESS )
+                        {
+                            goto exit;
+                        }
                     }
                 }
 
@@ -430,25 +473,32 @@ wiced_result_t dns_write_bytes ( dns_message_iterator_t* iter, const uint8_t* da
 /*
  * DNS packet processing functions
  */
-void dns_get_next_question(dns_message_iterator_t* iter, dns_question_t* q, dns_name_t* name)
+wiced_result_t dns_get_next_question(dns_message_iterator_t* iter, uint8_t* iter_end, dns_question_t* q, dns_name_t* name)
 {
     /* Set the name pointers and then skip it */
     name->start_of_name   = (uint8_t*) iter->iter;
     name->start_of_packet = (uint8_t*) iter->header;
-    dns_skip_name(iter);
+    if ( dns_skip_name(iter, iter_end) != WICED_SUCCESS)
+    {
+        return WICED_ERROR;
+    }
 
     /* Read the type and class */
     q->type  = dns_read_uint16(&iter->iter[0]);
     q->class = dns_read_uint16(&iter->iter[2]);
     iter->iter += 4;
+    return (iter->iter > iter_end) ? WICED_ERROR : WICED_SUCCESS;
 }
 
-void dns_get_next_record(dns_message_iterator_t* iter, dns_record_t* r, dns_name_t* name)
+wiced_result_t dns_get_next_record(dns_message_iterator_t* iter, uint8_t* iter_end, dns_record_t* r, dns_name_t* name)
 {
     /* Set the name pointers and then skip it */
     name->start_of_name   = (uint8_t*) iter->iter;
     name->start_of_packet = (uint8_t*) iter->header;
-    dns_skip_name(iter);
+    if ( dns_skip_name(iter, iter_end) != WICED_SUCCESS)
+    {
+        return WICED_ERROR;
+    }
 
     /* Set the record values and the rdata pointer */
     r->type      = dns_read_uint16(&iter->iter[0]);
@@ -460,6 +510,7 @@ void dns_get_next_record(dns_message_iterator_t* iter, dns_record_t* r, dns_name
 
     /* Skip the rdata */
     iter->iter += r->rd_length;
+    return (iter->iter > iter_end) ? WICED_ERROR : WICED_SUCCESS;
 }
 
 void dns_reset_iterator( dns_message_iterator_t* iter )
@@ -538,9 +589,9 @@ wiced_bool_t dns_compare_name_to_string( const dns_name_t* name, const char* str
     return result;
 }
 
-void dns_skip_name(dns_message_iterator_t* iter)
+wiced_result_t dns_skip_name(dns_message_iterator_t* iter, uint8_t* iter_end)
 {
-    while (*iter->iter != 0)
+    while ((iter->iter < iter_end) && (*iter->iter != 0))
     {
         /* Check if the name is compressed */
         if (*iter->iter & 0xC0)
@@ -555,22 +606,28 @@ void dns_skip_name(dns_message_iterator_t* iter)
     }
     /* Skip the null byte */
     ++iter->iter;
+    return (iter->iter > iter_end) ? WICED_ERROR : WICED_SUCCESS;
 }
 
-char* dns_read_name( const uint8_t* data, const dns_message_header_t* start_of_packet )
+char* dns_read_name( const uint8_t* data, uint16_t data_len, const dns_message_header_t* start_of_packet )
 {
     uint16_t       length = 0;
     const uint8_t* buffer = data;
     char*          string;
     char*          stringIter;
+    const uint8_t* buf_end = data + data_len;
 
     /* Find out how long the string is */
-    while (*buffer != 0)
+    while ((buffer < buf_end) && (*buffer != 0))
     {
         /* Check if the name is compressed */
         if (*buffer & 0xC0)
         {
             uint16_t offset = (uint16_t) ( (*buffer++) << 8 );
+            if (buffer >= buf_end)
+            {
+                return NULL;
+            }
             offset = (uint16_t) ( offset + *buffer );
             offset &= 0x3FFF;
             buffer = (uint8_t*) start_of_packet + offset;
@@ -581,13 +638,18 @@ char* dns_read_name( const uint8_t* data, const dns_message_header_t* start_of_p
             buffer += *buffer + 1;
         }
     }
-    if ( length == 0 )
+
+    if (( length == 0 ) || (buffer >= buf_end))
     {
         return NULL;
     }
 
     /* Allocate memory for the string */
     string = malloc_named("dns", length);
+    if ( string == NULL )
+    {
+        return NULL;
+    }
     stringIter = string;
 
     buffer = data;

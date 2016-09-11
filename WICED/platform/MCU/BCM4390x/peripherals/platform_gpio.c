@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -116,6 +116,45 @@ static platform_pin_t gpio_irq_mapping[GPIO_TOTAL_PIN_NUMBERS] =
     [29] = PIN_MAX,
     [30] = PIN_MAX,
     [31] = PIN_MAX
+};
+
+/*
+ * Run-time mapping of GPIO bit and associated GPIO operating mode
+ */
+static platform_pin_config_t gpio_config_mapping[GPIO_TOTAL_PIN_NUMBERS] =
+{
+    [0]  = INPUT_HIGH_IMPEDANCE,
+    [1]  = INPUT_HIGH_IMPEDANCE,
+    [2]  = INPUT_HIGH_IMPEDANCE,
+    [3]  = INPUT_HIGH_IMPEDANCE,
+    [4]  = INPUT_HIGH_IMPEDANCE,
+    [5]  = INPUT_HIGH_IMPEDANCE,
+    [6]  = INPUT_HIGH_IMPEDANCE,
+    [7]  = INPUT_HIGH_IMPEDANCE,
+    [8]  = INPUT_HIGH_IMPEDANCE,
+    [9]  = INPUT_HIGH_IMPEDANCE,
+    [10] = INPUT_HIGH_IMPEDANCE,
+    [11] = INPUT_HIGH_IMPEDANCE,
+    [12] = INPUT_HIGH_IMPEDANCE,
+    [13] = INPUT_HIGH_IMPEDANCE,
+    [14] = INPUT_HIGH_IMPEDANCE,
+    [15] = INPUT_HIGH_IMPEDANCE,
+    [16] = INPUT_HIGH_IMPEDANCE,
+    [17] = INPUT_HIGH_IMPEDANCE,
+    [18] = INPUT_HIGH_IMPEDANCE,
+    [19] = INPUT_HIGH_IMPEDANCE,
+    [20] = INPUT_HIGH_IMPEDANCE,
+    [21] = INPUT_HIGH_IMPEDANCE,
+    [22] = INPUT_HIGH_IMPEDANCE,
+    [23] = INPUT_HIGH_IMPEDANCE,
+    [24] = INPUT_HIGH_IMPEDANCE,
+    [25] = INPUT_HIGH_IMPEDANCE,
+    [26] = INPUT_HIGH_IMPEDANCE,
+    [27] = INPUT_HIGH_IMPEDANCE,
+    [28] = INPUT_HIGH_IMPEDANCE,
+    [29] = INPUT_HIGH_IMPEDANCE,
+    [30] = INPUT_HIGH_IMPEDANCE,
+    [31] = INPUT_HIGH_IMPEDANCE
 };
 
 /*
@@ -309,7 +348,12 @@ platform_chipcommon_gpio_init( const platform_pin_internal_config_t *pin_conf, u
             break;
 
         case OUTPUT_PUSH_PULL:
-            pin_gpio_conf.output_disable = 0;
+            break;
+
+        case OUTPUT_OPEN_DRAIN_NO_PULL:
+            break;
+
+        case OUTPUT_OPEN_DRAIN_PULL_UP:
             break;
 
         default:
@@ -327,11 +371,20 @@ platform_chipcommon_gpio_init( const platform_pin_internal_config_t *pin_conf, u
 
     WICED_SAVE_INTERRUPTS(flags);
 
+    if ( (config == OUTPUT_OPEN_DRAIN_NO_PULL) || (config == OUTPUT_OPEN_DRAIN_PULL_UP) )
+    {
+        /* For open-drain modes, the GPIO output is driven active-low */
+        PLATFORM_CHIPCOMMON->gpio.output &= (~( 1 << cc_gpio_bit ));
+    }
+
     /* Initialize the appropriate ChipCommon GPIO registers */
     PLATFORM_CHIPCOMMON->gpio.pull_down     = ( PLATFORM_CHIPCOMMON->gpio.pull_down     & (~( 1 << cc_gpio_bit ))) | ( (pin_gpio_conf.pulldown_enable)? (1 << cc_gpio_bit) : 0 );
     PLATFORM_CHIPCOMMON->gpio.pull_up       = ( PLATFORM_CHIPCOMMON->gpio.pull_up       & (~( 1 << cc_gpio_bit ))) | ( (pin_gpio_conf.pullup_enable)  ? (1 << cc_gpio_bit) : 0 );
     PLATFORM_CHIPCOMMON->gpio.output_enable = ( PLATFORM_CHIPCOMMON->gpio.output_enable & (~( 1 << cc_gpio_bit ))) | ( (pin_gpio_conf.output_disable) ? 0 : (1 << cc_gpio_bit) );
     PLATFORM_CHIPCOMMON->gpio.control       = ( PLATFORM_CHIPCOMMON->gpio.control       & (~( 1 << cc_gpio_bit )));
+
+    /* Initialize the appropriate GPIO configuration */
+    gpio_config_mapping[cc_gpio_bit] = config;
 
     WICED_RESTORE_INTERRUPTS(flags);
 
@@ -380,6 +433,9 @@ platform_chipcommon_gpio_deinit( const platform_pin_internal_config_t *pin_conf,
     PLATFORM_CHIPCOMMON->gpio.output_enable &= (~( 1 << cc_gpio_bit ));
     PLATFORM_CHIPCOMMON->gpio.control       &= (~( 1 << cc_gpio_bit ));
 
+    /* Reset the appropriate GPIO configuration */
+    gpio_config_mapping[cc_gpio_bit] = INPUT_HIGH_IMPEDANCE;
+
     WICED_RESTORE_INTERRUPTS(flags);
 
     return PLATFORM_SUCCESS;
@@ -406,7 +462,8 @@ platform_result_t platform_gpio_init( const platform_gpio_t* gpio, platform_pin_
 
     /* Initialize the GPIO pin function configuration */
     if ( (config != INPUT_PULL_UP) && (config != INPUT_PULL_DOWN) &&
-         (config != INPUT_HIGH_IMPEDANCE) && (config != OUTPUT_PUSH_PULL) )
+         (config != INPUT_HIGH_IMPEDANCE) && (config != OUTPUT_PUSH_PULL) &&
+         (config != OUTPUT_OPEN_DRAIN_NO_PULL) && (config != OUTPUT_OPEN_DRAIN_PULL_UP) )
     {
         wiced_assert( "Not supported", 0 );
         return PLATFORM_UNSUPPORTED;
@@ -502,6 +559,16 @@ platform_result_t platform_gpio_output_low( const platform_gpio_t* gpio )
     /* Drive the GPIO pin output low */
     PLATFORM_CHIPCOMMON->gpio.output &= (~( 1 << cc_gpio_bit ));
 
+    if ( gpio_config_mapping[cc_gpio_bit] == OUTPUT_OPEN_DRAIN_NO_PULL )
+    {
+        PLATFORM_CHIPCOMMON->gpio.output_enable |= ( 1 << cc_gpio_bit );
+    }
+    else if ( gpio_config_mapping[cc_gpio_bit] == OUTPUT_OPEN_DRAIN_PULL_UP )
+    {
+        PLATFORM_CHIPCOMMON->gpio.output_enable |= ( 1 << cc_gpio_bit );
+        PLATFORM_CHIPCOMMON->gpio.pull_up       &= (~( 1 << cc_gpio_bit ));
+    }
+
     WICED_RESTORE_INTERRUPTS(flags);
 
     return PLATFORM_SUCCESS;
@@ -527,8 +594,20 @@ platform_result_t platform_gpio_output_high( const platform_gpio_t* gpio )
 
     WICED_SAVE_INTERRUPTS(flags);
 
-    /* Drive the GPIO pin output high */
-    PLATFORM_CHIPCOMMON->gpio.output |= ( 1 << cc_gpio_bit );
+    if ( gpio_config_mapping[cc_gpio_bit] == OUTPUT_OPEN_DRAIN_NO_PULL )
+    {
+        PLATFORM_CHIPCOMMON->gpio.output_enable &= (~( 1 << cc_gpio_bit ));
+    }
+    else if ( gpio_config_mapping[cc_gpio_bit] == OUTPUT_OPEN_DRAIN_PULL_UP )
+    {
+        PLATFORM_CHIPCOMMON->gpio.pull_up       |= ( 1 << cc_gpio_bit );
+        PLATFORM_CHIPCOMMON->gpio.output_enable &= (~( 1 << cc_gpio_bit ));
+    }
+    else
+    {
+        /* Drive the GPIO pin output high */
+        PLATFORM_CHIPCOMMON->gpio.output |= ( 1 << cc_gpio_bit );
+    }
 
     WICED_RESTORE_INTERRUPTS(flags);
 

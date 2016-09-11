@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -55,9 +55,12 @@ typedef wiced_result_t (*wiced_usb_host_event_callback_t)( uint32_t evt, void *p
 /* USB User Config */
 typedef struct
 {
-    uint32_t                        reserve1;
-    uint32_t                        reserve2;
-    uint32_t                        reserve3;
+    uint32_t                        host_max_class;
+    uint32_t                        host_max_hcd;
+    uint32_t                        host_max_devices;
+    uint32_t                        host_max_ed;
+    uint32_t                        host_max_td;
+    uint32_t                        host_max_iso_td;
     wiced_usb_host_event_callback_t host_event_callback;
 } wiced_usb_user_config_t;
 

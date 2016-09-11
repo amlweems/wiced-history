@@ -1,5 +1,5 @@
 /**
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -69,7 +69,7 @@ do \
  *               Static Function Declarations
  ******************************************************/
 
-void nfc_rx_irq_handler( void* arg );
+//void nfc_rx_irq_handler( void* arg );
 
 /******************************************************
  *               Variable Definitions
@@ -90,7 +90,7 @@ wiced_i2c_device_t wiced_nfc_device =
  *               Function Definitions
  ******************************************************/
 
-wiced_result_t nfc_bus_init( void )
+wiced_result_t nfc_bus_init( platform_gpio_irq_callback_t nfc_bus_rx_event_handler )
 {
     wiced_result_t status;
     wiced_bool_t   device_found;
@@ -116,7 +116,7 @@ wiced_result_t nfc_bus_init( void )
 
     /* Configure IRQ REQ pin to input pull-up */
     VERIFY_RETVAL( platform_gpio_init( wiced_nfc_control_pins[ WICED_NFC_PIN_IRQ_REQ ], INPUT_PULL_UP ) );
-    platform_gpio_irq_enable( wiced_nfc_control_pins[ WICED_NFC_PIN_IRQ_REQ ], IRQ_TRIGGER_RISING_EDGE, nfc_rx_irq_handler, (void*) 0 );
+    platform_gpio_irq_enable( wiced_nfc_control_pins[ WICED_NFC_PIN_IRQ_REQ ], IRQ_TRIGGER_RISING_EDGE, nfc_bus_rx_event_handler, (void*) 0 );
 
     status = wiced_i2c_init( &wiced_nfc_device );
     if ( status != WICED_SUCCESS )
@@ -182,6 +182,7 @@ wiced_result_t nfc_bus_receive( uint8_t* data_in, uint32_t size, uint32_t timeou
         VERIFY_RETVAL( wiced_i2c_init_rx_message( &message, &data_in[ i ], 1, 3, 1 ) );
         status = wiced_i2c_transfer( &wiced_nfc_device, &message, 1 );
     }
+
     return status;
 }
 
@@ -200,7 +201,3 @@ wiced_bool_t nfc_receive_ready(void)
     return platform_gpio_input_get( wiced_nfc_control_pins[ WICED_NFC_PIN_IRQ_REQ ] );
 }
 
-void nfc_rx_irq_handler( void* arg )
-{
-    nfc_signal_rx_irq( );
-}

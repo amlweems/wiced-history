@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -231,7 +231,7 @@
 /******************************************************
  *               Interface functions
  ******************************************************/
-wiced_result_t  mqtt_frame_recv( wiced_mqtt_buffer_t *buffer, void *p_user, uint32_t *size )
+wiced_result_t mqtt_frame_recv( wiced_mqtt_buffer_t *buffer, uint16_t buffer_data_len, void *p_user, uint32_t *size )
 {
     mqtt_frame_type_t  type;
     mqtt_frame_t       frame;
@@ -247,41 +247,76 @@ wiced_result_t  mqtt_frame_recv( wiced_mqtt_buffer_t *buffer, void *p_user, uint
     /* Check valid type type */
     frame.start  = buffer->data;
     frame.buffer = *buffer;
-    MQTT_BUFFER_GET_OCTET( buffer, type );
-    buffer->data--;
-    type = ( ( type & 0xF0 ) >> 4 );
+    type = ( ( *(buffer->data) & 0xF0 ) >> 4 );
     switch (type)
     {
         case MQTT_PACKET_TYPE_UNSUBACK              :
         {
-            mqtt_unsuback_arg_t   args;
-            (*size) = 4;
+            mqtt_unsuback_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_unsuback( &frame, &args );
             result = mqtt_backend_get_unsuback( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_SUBACK              :
         {
-            wiced_mqtt_suback_arg_t   args;
-            (*size) = 5;
+            wiced_mqtt_suback_arg_t args;
+            ( *size ) = 5;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_suback( &frame, &args );
             result = mqtt_backend_get_suback( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_CONNACK:
         {
-            mqtt_connack_arg_t   args;
-            (*size) = 4;
+            mqtt_connack_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_connack( &frame, &args );
             result = mqtt_backend_get_connack( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PUBLISH:
         {
-            mqtt_publish_arg_t   args;
+            mqtt_publish_arg_t args;
             uint32_t total_size;
+            uint8_t *data_gb;
+            uint32_t multiplier = 1;
+            uint32_t remaining_length = 0;
+            uint32_t multi_bytes = 0;
+            buffer->data++ ;
+
+            /* TODO : Need to handle the case, where MQTT packet size is greater than buffer length.
+             * Bigger MQTT publish received packets which has variable length more than MTU(1460) are not handled */
+            do
+            {
+                data_gb = buffer->data++ ;
+                multi_bytes++ ;
+                remaining_length += ( ( *data_gb ) & 0x7F ) * multiplier;
+                if ( multi_bytes <= 4 )
+                {
+                    if ( buffer_data_len < ( remaining_length + ( multi_bytes + 1 ) ) )
+                    {
+                        return WICED_ERROR;
+                    }
+                }
+                multiplier *= 128;
+            } while ( ( ( *data_gb ) & 0x80 ) != 0 );
+
+            buffer->data = buffer->data - multi_bytes;
+
             mqtt_frame_get_publish( &frame, &args );
-            total_size = args.data_len + args.topic.len + sizeof(args.topic.len ) + (args.qos == MQTT_QOS_DELIVER_AT_MOST_ONCE ? 0 : 2);
+            total_size = args.data_len + args.topic.len + sizeof( args.topic.len ) + ( args.qos == MQTT_QOS_DELIVER_AT_MOST_ONCE ? 0 : 2 );
             /* accounting for variable length size */
             if ( total_size <= 127 )
             {
@@ -300,45 +335,66 @@ wiced_result_t  mqtt_frame_recv( wiced_mqtt_buffer_t *buffer, void *p_user, uint
                 total_size += 4;
             }
             total_size += 1; /* To account for the type and flags */
-            (*size) = total_size;
+            ( *size ) = total_size;
+
             result = mqtt_backend_get_publish( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PUBACK              :
         {
-            mqtt_puback_arg_t   args;
-            (*size) = 4;
+            mqtt_puback_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_puback( &frame, &args );
             result = mqtt_backend_get_puback( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PUBREC              :
         {
-            mqtt_pubrec_arg_t   args;
-            (*size) = 4;
+            mqtt_pubrec_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_pubrec( &frame, &args );
             result = mqtt_backend_get_pubrec( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PUBREL              :
         {
-            mqtt_pubrel_arg_t   args;
-            (*size) = 4;
+            mqtt_pubrel_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_pubrel( &frame, &args );
             result = mqtt_backend_get_pubrel( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PUBCOMP             :
         {
-            mqtt_pubcomp_arg_t   args;
-            (*size) = 4;
+            mqtt_pubcomp_arg_t args;
+            ( *size ) = 4;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             mqtt_frame_get_pubcomp( &frame, &args );
             result = mqtt_backend_get_pubcomp( &args, conn );
             break;
         }
         case MQTT_PACKET_TYPE_PINGRESP            :
         {
-            (*size) = 2;
+            ( *size ) = 2;
+            if ( buffer_data_len < ( *size ) )
+            {
+                return WICED_ERROR;
+            }
             result = mqtt_backend_get_pingres( conn );
             break;
         }

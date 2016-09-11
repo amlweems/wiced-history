@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,7 +17,7 @@ extern "C"
 /******************************************************
  *                     Macros
  ******************************************************/
-#define ENTRY_ADDRESS (__iar_program_start)
+#define ENTRY_ADDRESS (&reset_handler)
 
 /******************************************************
  *                    Constants
@@ -38,13 +38,12 @@ extern "C"
 /******************************************************
  *                 Global Variables
  ******************************************************/
-/*#pragma section="CSTACK" */
-extern void* link_stack_end = __section_end("CSTACK");  /* provided by link script */
+extern void* reset_handler;
+extern void* link_stack_end;
 
 /******************************************************
  *               Function Declarations
  ******************************************************/
-void wiced_program_start(void);
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -79,8 +79,7 @@ static const platform_rtc_time_t default_rtc_time =
    .year    = 13,
 };
 
-static wiced_bool_t  wake_up_interrupt_triggered  = WICED_FALSE;
-static uint32_t      rtc_timeout_start_time       = 0;
+static unsigned long rtc_timeout_start_time       = 0;
 static int32_t       stm32f2_clock_needed_counter = 0;
 #endif /* #ifndef WICED_DISABLE_MCU_POWERSAVE */
 
@@ -111,7 +110,9 @@ platform_result_t platform_mcu_powersave_init( void )
     /* Allow access to BKP Domain */
     PWR_BackupAccessCmd(ENABLE);
 
-    /* Enable the LSE OSC */
+    /* USE LSE if there is an external OSC otherwise use LSI */
+#if !defined(STM_LSE_OFF)
+    /* Enable the LSE OSC using XTAL */
     RCC_LSEConfig(RCC_LSE_ON);
     /* Wait till LSE is ready */
     while(RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET)
@@ -120,6 +121,14 @@ platform_result_t platform_mcu_powersave_init( void )
 
     /* Select the RTC Clock Source */
     RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
+#else
+    /* Enable the bypass mode to enable using internal clock */
+    RCC_LSEConfig(RCC_LSE_OFF);
+
+    /* Select the RTC Clock Source */
+    RCC_RTCCLKConfig(RCC_RTCCLKSource_LSI);
+#endif
+
 
     /* Enable the RTC Clock */
     RCC_RTCCLKCmd(ENABLE);
@@ -202,9 +211,6 @@ platform_result_t platform_mcu_powersave_enable( void )
 
 void platform_mcu_powersave_exit_notify( void )
 {
-#ifndef WICED_DISABLE_MCU_POWERSAVE
-    wake_up_interrupt_triggered = WICED_TRUE;
-#endif
 }
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE
@@ -316,7 +322,7 @@ static unsigned long idle_power_down_hook( unsigned long sleep_ms  )
 /* MCU Powersave is enabled */
 static unsigned long stop_mode_power_down_hook( unsigned long sleep_ms )
 {
-    unsigned long retval;
+    uint32_t retval;
     unsigned long wut_ticks_passed;
     unsigned long scale_factor = 0;
     UNUSED_PARAMETER(sleep_ms);
@@ -337,7 +343,7 @@ static unsigned long stop_mode_power_down_hook( unsigned long sleep_ms )
         PWR_ClearFlag(PWR_FLAG_WU);
         RTC_ClearFlag(RTC_FLAG_WUTF);
 
-        RTC_SetWakeUpCounter( rtc_timeout_start_time );
+        RTC_SetWakeUpCounter( ( uint32_t )rtc_timeout_start_time );
         RTC_WakeUpCmd( ENABLE );
         platform_rtc_enter_powersave();
 
@@ -371,8 +377,8 @@ static unsigned long stop_mode_power_down_hook( unsigned long sleep_ms )
         /* as soon as interrupts are enabled, we will go and execute the interrupt handler */
         /* which triggered a wake up event */
         WICED_ENABLE_INTERRUPTS();
-        wake_up_interrupt_triggered = WICED_FALSE;
-        return retval;
+
+        return ( unsigned long ) retval;
     }
     else
     {

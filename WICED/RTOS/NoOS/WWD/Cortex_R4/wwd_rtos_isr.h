@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,7 +34,7 @@ extern "C" {
 #elif defined ( __IAR_SYSTEMS_ICC__ )
 
 #define WWD_RTOS_DEFINE_ISR_DEMUXER( function ) \
-        void function( void ); \
+        __irq __root void function( void ); \
         __irq __root void function( void )
 #else
 

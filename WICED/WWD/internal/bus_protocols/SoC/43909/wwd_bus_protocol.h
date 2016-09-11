@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,6 +31,9 @@ extern "C" {
 #else
 #define WWD_BUS_USE_STATUS_REPORT_SCHEME             (1==0)
 #endif
+
+#define WWD_BUS_MAX_BACKPLANE_TRANSFER_SIZE          ( WICED_PAYLOAD_MTU )
+#define WWD_BUS_BACKPLANE_READ_PADD_SIZE             ( 0 )
 
 #define WWD_WLAN_KEEP_AWAKE()
 #define WWD_WLAN_LET_SLEEP()

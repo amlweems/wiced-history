@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,7 +38,7 @@ $(NAME)_SOURCES := \
                    src/stm32f4xx_usart.c \
                    src/stm32f4xx_wwdg.c
 
-# Add FSMC to non-F411/401 MCUs
-ifeq ($(filter $(HOST_MCU_VARIANT), STM32F411 STM32F401),)                
+# Add FSMC some STM32F4xx MCUs
+ifeq ($(filter $(HOST_MCU_VARIANT), STM32F411 STM32F401 STM32F412 STM32F410),)                
 $(NAME)_SOURCES += src/stm32f4xx_fsmc.c
 endif 

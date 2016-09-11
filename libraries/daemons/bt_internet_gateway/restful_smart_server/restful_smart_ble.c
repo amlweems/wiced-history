@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -123,7 +123,7 @@ static wiced_mutex_t              list_mutex; /* Mutex for protecting access to 
 static const wiced_bt_dev_ble_io_caps_req_t default_local_io_caps =
 {
     .bd_addr      = { 0 },
-    .local_io_cap = BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY,
+    .local_io_cap = BTM_IO_CAPABILITIES_BLE_DISPLAY_AND_KEYBOARD_INPUT,
     .oob_data     = 0,
     .auth_req     = BTM_LE_AUTH_REQ_BOND|BTM_LE_AUTH_REQ_MITM, /* BTM_LE_AUTH_REQ_SC_MITM_BOND */
     .max_key_size = 16,
@@ -795,7 +795,8 @@ wiced_result_t restful_smart_subscribe_notification( wiced_http_response_stream_
     cached_value->sse_stream    = stream;
     result = WICED_SUCCESS;
     wiced_rtos_unlock_mutex( &list_mutex );
-    rest_smart_response_write_status_code( stream, REST_SMART_STATUS_200 );
+
+    wiced_http_response_stream_write_header( stream, HTTP_200_TYPE, CHUNKED_CONTENT_LENGTH, HTTP_CACHE_DISABLED, MIME_TYPE_TEXT_EVENT_STREAM );
     return WICED_SUCCESS;
 
     exit:
@@ -1378,7 +1379,7 @@ static wiced_bt_gatt_status_t restful_smart_gatt_callback( big_gatt_connection_t
                     /* Search if cached value is available */
                     wiced_rtos_lock_mutex( &list_mutex );
                     cached_value = find_cached_value_by_value_handle( connection, data->operation_complete.response_data.att_value.handle );
-                    if ( ( cached_value != NULL ) && ( data->operation_complete.status == WICED_BT_SUCCESS ) )
+                    if ( ( cached_value != NULL ) )
                     {
                         /* Copy new value to cached value */
                         memset( cached_value->value.value, 0, CACHED_VALUE_BUFFER_LENGTH );
@@ -1390,6 +1391,10 @@ static wiced_bt_gatt_status_t restful_smart_gatt_callback( big_gatt_connection_t
 
                     if ( ( sse_subscribed == WICED_TRUE ) && ( stream != NULL ) )
                     {
+                        if( data->operation_complete.op == GATTC_OPTYPE_INDICATION)
+                        {
+                            wiced_bt_gatt_send_indication_confirm( connection->connection_id, data->operation_complete.response_data.att_value.handle );
+                        }
                         rest_smart_response_send_notification( stream, &data->operation_complete.response_data.att_value );
                     }
                     break;
@@ -1882,8 +1887,7 @@ static wiced_result_t remove_cached_value( rest_smart_cached_value_t* value )
     {
         return result;
     }
-
-    return linked_list_insert_node_at_rear( &inactive_cached_value_list, &value->value_node );
+    return linked_list_insert_node_at_front( &inactive_cached_value_list, &value->value_node );
 }
 
 static wiced_result_t write_client_characteristic_config( big_gatt_connection_t* connection, uint16_t ccc_handle, wiced_bt_gatt_client_char_config_t config, void* arg )
@@ -2033,16 +2037,8 @@ static wiced_result_t handle_ccc_read_response( big_gatt_connection_t* connectio
         stream = cached_value->sse_stream;
         config = cached_value->config;
         wiced_rtos_unlock_mutex( &list_mutex );
-
-        if ( data->status == WICED_BT_SUCCESS )
-        {
-            /* Write value to CCC */
-            if ( write_client_characteristic_config( connection, data->response_data.att_value.handle, config, (void*)CCC_EVENT ) != WICED_SUCCESS )
-            {
-                rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
-            }
-        }
-        else
+        /* Write value to CCC */
+        if ( write_client_characteristic_config( connection, data->response_data.att_value.handle, config, (void*)CCC_EVENT ) != WICED_SUCCESS )
         {
             rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
         }

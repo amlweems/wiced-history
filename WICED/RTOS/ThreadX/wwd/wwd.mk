@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,16 +12,6 @@ NAME := WWD_ThreadX_Interface
 
 GLOBAL_INCLUDES := .
 
-ifeq ($(TOOLCHAIN_NAME),IAR)
-$(NAME)_SOURCES  := wwd_rtos.c \
-                    low_level_init.c \
-                    interrupt_handlers_IAR.s
-
-$(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
-
-$(NAME)_LINK_FILES := interrupt_handlers_IAR.o
-
-else
 $(NAME)_SOURCES  := wwd_rtos.c
 
 ifneq ($(filter $(HOST_ARCH), ARM_CM3 ARM_CM4),)
@@ -35,7 +25,6 @@ $(NAME)_LINK_FILES += CR4/timer_isr.o
 GLOBAL_INCLUDES    += CR4
 else
 $(error No ThreadX low_level_init function for architecture $(HOST_ARCH))
-endif
 endif
 
 

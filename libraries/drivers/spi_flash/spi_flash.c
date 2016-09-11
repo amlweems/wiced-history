@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -100,12 +100,6 @@ int sflash_sector_erase ( const sflash_handle_t* const handle, unsigned long dev
     {
         return status;
     }
-
-#ifdef SFLASH_SUPPORT_MICRON_PARTS
-    if ( handle->device_id == SFLASH_ID_N25Q512A )
-        retval = generic_sflash_command( handle, SFLASH_SECTOR_ERASE_MICRON, (unsigned long) 3, device_address_array, 0, NULL, NULL );
-    else
-#endif
     retval = generic_sflash_command( handle, SFLASH_SECTOR_ERASE, (unsigned long) 3, device_address_array, 0, NULL, NULL );
 
 

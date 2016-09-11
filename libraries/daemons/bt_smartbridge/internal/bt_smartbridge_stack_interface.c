@@ -1,5 +1,5 @@
 /**
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,7 +61,7 @@ wiced_bt_smart_advertising_report_callback_t app_scan_report_callback;
 wiced_bt_dev_ble_io_caps_req_t  default_io_caps_ble  =
 {
     .bd_addr      = { 0 },
-    .local_io_cap = BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY,
+    .local_io_cap = BTM_IO_CAPABILITIES_BLE_DISPLAY_AND_KEYBOARD_INPUT,
     .oob_data     = 0,
     .auth_req     = BTM_LE_AUTH_REQ_BOND|BTM_LE_AUTH_REQ_MITM, /* BTM_LE_AUTH_REQ_SC_MITM_BOND */
     .max_key_size = 16,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -171,6 +171,11 @@ extern void malloc_print_mallocs           ( void );
 #define WICED_NEVER_TIMEOUT   (0xFFFFFFFF)
 #define WICED_WAIT_FOREVER    (0xFFFFFFFF)
 #define WICED_NO_WAIT         (0)
+#define FLOAT_TO_STRING_MAX_FRACTION_SUPPORTED      (6)
+
+/* size  ascii printable string for an ethernet address */
+#define WICED_ETHER_ADDR_STR_LEN 18
+#define WICED_ETHER_ADDR_LEN      6
 
 /******************************************************
  *                   Enumerations
@@ -275,7 +280,7 @@ uint32_t generic_string_to_unsigned( const char* str );
  * @return the number of characters successfully converted (including sign).  i.e. 0 = error
  *
  */
-uint8_t string_to_signed( const char* string, uint8_t str_length, int32_t* value_out, uint8_t is_hex );
+uint8_t string_to_signed( const char* string, uint16_t str_length, int32_t* value_out, uint8_t is_hex );
 
 
 /**
@@ -414,6 +419,19 @@ char* strnstr( const char* s, uint16_t s_len, const char* substr, uint16_t subst
 
 /**
  ******************************************************************************
+ * Length limited version of strcasestr. Adapted from bcmstrnstr in bcmutils.c
+ *
+ * @param     arg  The string to be searched.
+ * @param     arg  The length of the string to be searched.
+ * @param     arg  The string to be found.
+ * @param     arg  The length of the string to be found.
+ *
+ * @return    pointer to the found string if search successful, otherwise NULL
+ */
+char* strncasestr( const char* s, uint16_t s_len, const char* substr, uint16_t substr_len );
+
+/**
+ ******************************************************************************
  * Compare a string to a pattern containing wildcard character(s).
  *
  * @note: The following wildcard characters are supported:
@@ -427,6 +445,30 @@ char* strnstr( const char* s, uint16_t s_len, const char* substr, uint16_t subst
  * @return    1 if the string matches the pattern; 0 otherwise.
  */
 uint8_t match_string_with_wildcard_pattern( const char* string, uint32_t length, const char* pattern );
+
+/**
+ ******************************************************************************
+ * Convert ether address to a printable string
+ *
+ * @param[in] ea         Ethernet address to convert
+ * @param[in] buf        Buffer to write the ascii string into
+ * @param[in] buf_len  Length of the memory buf points to
+ *
+ * @return                   Pointer to buf if successful; "" if not successful due to buffer too short
+ */
+char* wiced_ether_ntoa( const uint8_t *ea, char *buf, uint8_t buf_len );
+
+/*
+ ******************************************************************************
+ * Float output into the char buffer
+ *
+ * @param     arg  Char buffer in which float value to be stored.
+ * @param     arg  Float value.
+ * @param     arg  Decimal resolution max support upto 6.
+ *
+* @return    Number of char printed in buffer. On error, returns 0.
+ */
+uint8_t float_to_string ( char* buffer, uint8_t buffer_len, float value, uint8_t resolution  );
 
 #ifdef __cplusplus
 } /*extern "C" */

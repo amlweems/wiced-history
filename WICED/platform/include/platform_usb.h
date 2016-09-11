@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -74,6 +74,7 @@ typedef struct
  ******************************************************/
 /* USB20 Host init/deinit */
 platform_result_t   platform_usb_host_init( void );
+platform_result_t   platform_usb_host_post_init( void );
 void                platform_usb_host_deinit( void );
 
 /* USB20 Host init IRQ */

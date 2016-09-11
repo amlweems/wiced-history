@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,7 +10,6 @@
 
 NAME := Lib_command_console_wifi
 
-$(NAME)_SOURCES := command_console_wifi.c \
-                   $(RTOS)_$(NETWORK)_wifi.c
+$(NAME)_SOURCES := command_console_wifi.c
 
 GLOBAL_INCLUDES := .

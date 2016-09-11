@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include "apollocore.h"
+#include "apollo_cmd_common.h"
 
 /******************************************************
  *                      Macros
@@ -29,14 +30,39 @@ extern "C" {
 
 typedef enum
 {
+    APOLLO_CMD_RTP_TIMING_NONE  = 0,
+    APOLLO_CMD_RTP_TIMING_INIT  = 1,
+    APOLLO_CMD_RTP_TIMING_START = 2,
+    APOLLO_CMD_RTP_TIMING_STOP  = 3,
+    APOLLO_CMD_RTP_TIMING_RESET = 4,
+    APOLLO_CMD_RTP_TIMING_DUMP  = 5,
+
+    APOLLO_CMD_RTP_TIMING_MAX
+} APOLLO_CMD_RTP_TIMING_T;
+
+typedef enum
+{
     APOLLO_CMD_EVENT_QUERY_SPEAKER,
     APOLLO_CMD_EVENT_SET_SPEAKER,
-    APOLLO_CMD_EVENT_SET_VOLUME
+    APOLLO_CMD_EVENT_SET_VOLUME,
+    APOLLO_CMD_EVENT_SET_LOG_SERVER,
+    APOLLO_CMD_EVENT_SET_LOG_LEVEL,
+    APOLLO_CMD_EVENT_RTP_TIMING
 } APOLLO_CMD_EVENT_T;
 
 /******************************************************
  *                    Structures
  ******************************************************/
+
+/**
+ * RTP timing log command event structure used for APOLLO_CMD_EVENT_RTP_TIMING events.
+ */
+
+typedef struct
+{
+    APOLLO_CMD_RTP_TIMING_T cmd;
+    uint32_t num_entries;                   /* Only valid for APOLLO_CMD_RTP_TIMING_INIT command */
+} apollo_cmd_rtp_timing_t;
 
 /**
  * Speaker structure used with QUERY_SPEAKER and GET_SPEAKER events.

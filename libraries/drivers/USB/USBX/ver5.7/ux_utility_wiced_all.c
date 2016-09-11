@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,18 +27,17 @@
 
 
 /**
- *  LwIP init complete callback
+ *  USBX Device Dump Utility
  *
- *  This function is called by LwIP when initialisation has finished.
- *  A semaphore is posted to allow the startup thread to resume, and to run the app_main function
+ *  This function briefly dump some useful USBX device information.
+ *  Current usage is only for debug purpose, and we could extend the list for dump if necessary.
  *
- *  @param arg : the handle for the semaphore to post (cast to a void pointer)
  */
 UINT _ux_utility_device_dump(UX_DEVICE *device)
 {
 	if(device == UX_NULL)
 	{
-		return (UX_MEMORY_INSUFFICIENT);
+        return (UX_ERROR);
 	}
 
 	printf("\n");
@@ -71,3 +70,56 @@ UINT _ux_utility_device_dump(UX_DEVICE *device)
     return (UX_SUCCESS);
 }
 
+/**
+ *  Platform Data Cache Handle Utility
+ *
+ *  This function handle memory cache issue before DMA data transfer, if the data buffer used is in cache memory region!
+ *  USBX uses both cache/non-cache memory sets for transfer requests.
+ *  Basically USBX do control path transfer uses non-cache memory, while data path transfer uses cache memory.
+ *  Whenever platform cache memory been used, it's necessary to handle cache issues for DMA data transfer.
+ *
+ */
+UINT _ux_utility_platform_data_cache_handle(UX_TRANSFER *transfer_request)
+{
+    UCHAR           *data_pointer = UX_NULL;
+    ULONG           requested_length = 0;
+    UINT            request_direction = 0;
+
+    if (transfer_request == UX_NULL)
+    {
+        return (UX_ERROR);
+    }
+
+    data_pointer        = transfer_request -> ux_transfer_request_data_pointer;
+    requested_length    = transfer_request -> ux_transfer_request_requested_length;
+    request_direction   = (transfer_request -> ux_transfer_request_type & UX_REQUEST_DIRECTION);
+
+    /* Some transfer requests do not have data phase, ignore them for handle.  */
+    if ((data_pointer == UX_NULL) || (requested_length == 0))
+    {
+        return (UX_SUCCESS);
+    }
+
+    /* Check if this transfer request data buffer is in cache memory region.  */
+    if (platform_addr_is_uncached_region((void *)data_pointer))
+    {
+        /* If in non-cache memory region, just return.  */
+        return (UX_SUCCESS);
+    }
+
+    /* Data buffer in cache memory region, need to do d-cache INVALIDATE/CLEAN based on transfer direction IN/OUT.  */
+    if (request_direction == UX_REQUEST_IN)
+    {
+        /* DMA input transfer, clean & invalidate d-cache.  */
+        platform_dcache_clean_and_inv_range((void *)data_pointer, requested_length);
+        WPRINT_PLATFORM_DEBUG( ("#UX#: UX_REQUEST_IN, platform_dcache_inv_range, data_pointer = 0x%08X, len = %lu\n", (UINT)data_pointer, requested_length) );
+    }
+    else
+    {
+        /* DMA output transfer, clean d-cache.  */
+        platform_dcache_clean_range((void *)data_pointer, requested_length);
+        WPRINT_PLATFORM_DEBUG( ("#UX#: UX_REQUEST_OUT, platform_dcache_clean_range, data_pointer = 0x%08X, len = %lu\n", (UINT)data_pointer, requested_length) );
+    }
+
+    return (UX_SUCCESS);
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -79,6 +79,50 @@ extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that
 #define HT_CAPABILITIES_IE_LENGTH (26)
 #define HT_OPERATION_IE_LENGTH    (22)
 
+#define RRM_CAPABILITIES_LEN (5)
+#define WL_RRM_RPT_VER      0
+#define WL_RRM_RPT_MAX_PAYLOAD  64
+#define WL_RRM_RPT_MIN_PAYLOAD  7
+#define WL_RRM_RPT_FALG_ERR 0
+#define WL_RRM_RPT_FALG_OK  1
+
+/* TLV defines */
+#define TLV_TAG_OFF        0    /* tag offset */
+#define TLV_LEN_OFF        1    /* length offset */
+#define TLV_HDR_LEN        2    /* header length */
+#define TLV_BODY_OFF        2    /* body offset */
+
+#define DOT11_NEIGHBOR_REP_IE_FIXED_LEN 13
+#define DOT11_MNG_NEIGHBOR_REP_ID       52  /* 11k & 11v Neighbor report id */
+
+/* Bitmap definitions for cap ie */
+#define DOT11_RRM_CAP_LINK      0
+#define DOT11_RRM_CAP_NEIGHBOR_REPORT   1
+#define DOT11_RRM_CAP_PARALLEL      2
+#define DOT11_RRM_CAP_REPEATED      3
+#define DOT11_RRM_CAP_BCN_PASSIVE   4
+#define DOT11_RRM_CAP_BCN_ACTIVE    5
+#define DOT11_RRM_CAP_BCN_TABLE     6
+#define DOT11_RRM_CAP_BCN_REP_COND  7
+#define DOT11_RRM_CAP_FM        8
+#define DOT11_RRM_CAP_CLM       9
+#define DOT11_RRM_CAP_NHM       10
+#define DOT11_RRM_CAP_SM        11
+#define DOT11_RRM_CAP_LCIM      12
+#define DOT11_RRM_CAP_LCIA      13
+#define DOT11_RRM_CAP_TSCM      14
+#define DOT11_RRM_CAP_TTSCM     15
+#define DOT11_RRM_CAP_AP_CHANREP    16
+#define DOT11_RRM_CAP_RMMIB     17
+/* bit18-bit26, not used for RRM_IOVAR */
+#define DOT11_RRM_CAP_MPTI      27
+#define DOT11_RRM_CAP_NBRTSFO       28
+#define DOT11_RRM_CAP_RCPI      29
+#define DOT11_RRM_CAP_RSNI      30
+#define DOT11_RRM_CAP_BSSAAD        31
+#define DOT11_RRM_CAP_BSSAAC        32
+#define DOT11_RRM_CAP_AI        33
+#define DOT11_RRM_CAP_LAST 34
 
 /** Enumeration of WICED interfaces. \n
  * @note The config interface is a virtual interface that shares the softAP interface
@@ -132,6 +176,7 @@ typedef enum
 {
     WICED_SCAN_TYPE_ACTIVE              = 0x00,  /**< Actively scan a network by sending 802.11 probe(s)         */
     WICED_SCAN_TYPE_PASSIVE             = 0x01,  /**< Passively scan a network by listening for beacons from APs */
+    WICED_SCAN_TYPE_PNO                 = 0x02,  /**< Use preferred network offload to detect an AP */
     WICED_SCAN_TYPE_PROHIBITED_CHANNELS = 0x04   /**< Passively scan on channels not enabled by the country code */
 } wiced_scan_type_t;
 
@@ -398,6 +443,14 @@ typedef enum
     /* 222-255 Reserved */
 } dot11_ie_id_t;
 
+/* Protected Management Frame Capability */
+typedef enum
+{
+    MFP_NONE = 0,
+    MFP_CAPABLE,
+    MFP_REQUIRED
+} mfp_capability_t;
+
 #ifndef RESULT_ENUM
 #define RESULT_ENUM( prefix, name, value )  prefix ## name = (value)
 #endif /* ifndef RESULT_ENUM */
@@ -412,6 +465,7 @@ typedef enum
     RESULT_ENUM( prefix, PENDING,                         1 ),   /**< Pending */                           \
     RESULT_ENUM( prefix, TIMEOUT,                         2 ),   /**< Timeout */                           \
     RESULT_ENUM( prefix, BADARG,                          5 ),   /**< Bad Arguments */                     \
+    RESULT_ENUM( prefix, UNFINISHED,                     10 ),   /**< Operation not finished yet (maybe aborted) */ \
     RESULT_ENUM( prefix, PARTIAL_RESULTS,              1003 ),   /**< Partial results */                   \
     RESULT_ENUM( prefix, INVALID_KEY,                  1004 ),   /**< Invalid key */                       \
     RESULT_ENUM( prefix, DOES_NOT_EXIST,               1005 ),   /**< Does not exist */                    \
@@ -837,6 +891,7 @@ typedef enum
     WICED_COUNTRY_UNITED_KINGDOM                                  = MK_CNTRY( 'G', 'B', 0 ),             /* GB United_Kingdom */
     WICED_COUNTRY_UNITED_STATES                                   = MK_CNTRY( 'U', 'S', 0 ),             /* US United_States */
     WICED_COUNTRY_UNITED_STATES_REV4                              = MK_CNTRY( 'U', 'S', 4 ),             /* US United_States Revision 4 */
+    WICED_COUNTRY_UNITED_STATES_REV931                            = MK_CNTRY( 'Q', '1', 931 ),           /* Q1 United_States Revision 931 */
     WICED_COUNTRY_UNITED_STATES_NO_DFS                            = MK_CNTRY( 'Q', '2', 0 ),             /* Q2 United_States_(No_DFS) */
     WICED_COUNTRY_UNITED_STATES_MINOR_OUTLYING_ISLANDS            = MK_CNTRY( 'U', 'M', 0 ),             /* UM United_States_Minor_Outlying_Islands */
     WICED_COUNTRY_URUGUAY                                         = MK_CNTRY( 'U', 'Y', 0 ),             /* UY Uruguay */
@@ -849,11 +904,22 @@ typedef enum
     WICED_COUNTRY_WALLIS_AND_FUTUNA                               = MK_CNTRY( 'W', 'F', 0 ),             /* WF Wallis_and_Futuna */
     WICED_COUNTRY_WEST_BANK                                       = MK_CNTRY( '0', 'C', 0 ),             /* 0C West_Bank */
     WICED_COUNTRY_WESTERN_SAHARA                                  = MK_CNTRY( 'E', 'H', 0 ),             /* EH Western_Sahara */
+    WICED_COUNTRY_WORLD_WIDE_XV_REV983                            = MK_CNTRY( 'X', 'V', 983 ),           /* Worldwide Locale Revision 983 */
     WICED_COUNTRY_WORLD_WIDE_XX                                   = MK_CNTRY( 'X', 'X', 0 ),             /* Worldwide Locale (passive Ch12-14) */
+    WICED_COUNTRY_WORLD_WIDE_XX_REV17                             = MK_CNTRY( 'X', 'X', 17 ),            /* Worldwide Locale (passive Ch12-14) Revision 17 */
     WICED_COUNTRY_YEMEN                                           = MK_CNTRY( 'Y', 'E', 0 ),             /* YE Yemen */
     WICED_COUNTRY_ZAMBIA                                          = MK_CNTRY( 'Z', 'M', 0 ),             /* ZM Zambia */
     WICED_COUNTRY_ZIMBABWE                                        = MK_CNTRY( 'Z', 'W', 0 ),             /* ZW Zimbabwe */
 } wiced_country_code_t;
+
+/* WICED Radio Resource Management Report Types */
+typedef enum
+{
+   WICED_RRM_CHLOAD_REPORT = 0,
+   WICED_RRM_NBR_LIST_REPORT,
+   WICED_RRM_BCN_REPORT,
+   WICED_LM_REPORT
+} wwd_rrm_report_type_t;
 
 /** @endcond */
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -92,7 +92,7 @@ typedef enum
     WLC_E_IF                             =  54, /** I/F change (for wlan host notification) */
     WLC_E_P2P_DISC_LISTEN_COMPLETE       =  55, /** P2P Discovery listen state expires */
     WLC_E_RSSI                           =  56, /** indicate RSSI change based on configured levels */
-    WLC_E_PFN_SCAN_COMPLETE              =  57, /** PFN completed scan of network list */
+    WLC_E_PFN_BEST_BATCHING              =  57, /** PFN best network batching event */
     WLC_E_EXTLOG_MSG                     =  58,
     WLC_E_ACTION_FRAME                   =  59, /** Action frame reception */
     WLC_E_ACTION_FRAME_COMPLETE          =  60, /** Action frame Tx complete */
@@ -164,8 +164,20 @@ typedef enum
     WLC_E_TX_STAT_ERROR                  = 126, /** tx error indication */
     WLC_E_BCMC_CREDIT_SUPPORT            = 127, /** credit check for BCMC supported */
     WLC_E_PSTA_PRIMARY_INTF_IND          = 128, /** psta primary interface indication */
-    WLC_E_LAST                           = 129, /** highest val + 1 for range checking */
+    WLC_E_BT_WIFI_HANDOVER_REQ           = 130, /* Handover Request Initiated */
+    WLC_E_SPW_TXINHIBIT                  = 131, /* Southpaw TxInhibit notification */
+    WLC_E_FBT_AUTH_REQ_IND               = 132, /* FBT Authentication Request Indication */
+    WLC_E_RSSI_LQM                       = 133, /* Enhancement addition for WLC_E_RSSI */
+    WLC_E_PFN_GSCAN_FULL_RESULT          = 134, /* Full probe/beacon (IEs etc) results */
+    WLC_E_PFN_SWC                        = 135, /* Significant change in rssi of bssids being tracked */
+    WLC_E_AUTHORIZED                     = 136, /* a STA been authroized for traffic */
+    WLC_E_PROBREQ_MSG_RX                 = 137, /* probe req with wl_event_rx_frame_data_t header */
+    WLC_E_PFN_SCAN_COMPLETE              = 138, /* PFN completed scan of network list */
+    WLC_E_RMC_EVENT                      = 139, /* RMC Event */
+    WLC_E_DPSTA_INTF_IND                 = 140, /* DPSTA interface indication */
+    WLC_E_RRM                            = 141, /* RRM Event */
 
+    WLC_E_LAST                           = 142, /** highest val + 1 for range checking */
     WLC_E_FORCE_32_BIT                   = 0x7FFFFFFE  /** Force enum to be stored in 32 bit variable */
 } wwd_event_num_t;
 
@@ -333,16 +345,32 @@ typedef enum
     WLC_E_REASON_FORCE_32_BIT     = 0x7FFFFFFE                     /** Force enum to be stored in 32 bit variable */
 } wwd_event_reason_t;
 
-
-
-
-typedef struct wiced_event_header_struct wwd_event_header_t;
-
 /**
  * Event handler prototype definition
+ *
+ * @param[out] wwd_event_header_t : wwd event header
+ * @param[out] uint8_t*           : event data
+ * @param[out] handler_user_data  : semaphore data
  */
 typedef void* (*wwd_event_handler_t)( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@null@*/ void* handler_user_data );
 
+
+
+/*
+ * @param[in] wwd_rrm_report_type : Radio resource management report type
+ * @param[out] callback           : A callback when the RRM report is received
+ * @param[in]  rrm_req            : pointer to the radio resource management request data
+ * @param[out] report_ptr         : A pointer to the pointer that indicates where to put the next RRM report
+ * @param[in]  void *             : user data ( semaphore)
+ * @param[in]  interface          : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+*/
+wwd_result_t wwd_wifi_rrm_request(   wwd_rrm_report_type_t                      report_type,
+                                     wwd_event_handler_t                        callback,
+                                     void*                                      rrm_req,
+                                     wwd_rrm_report_t**                         report_ptr,
+                                     void*                                      user_data,
+                                     wwd_interface_t                            interface
+                                  );
 /** @endcond */
 
 
@@ -405,9 +433,20 @@ extern wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event
 
 /** @cond */
 
+extern void*  wiced_rrm_report_handler ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
 
-
-
+/*
+* @param[out] result_ptr         : A pointer to the pointer that indicates where to put the next RRM report
+* @param[out] callback           : A callback when the RRM report is received
+* @param[out] wwd_rrm_report_t   : Pointer to RRM report data
+* @param[in] interface           : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+*/
+wwd_result_t wiced_wifi_rrm_request(   wwd_rrm_report_type_t                        report_type,
+                                       wwd_event_handler_t                          callback,
+                                       void*                                        rrm_req,
+                                       wwd_rrm_report_t**                           report_ptr,
+                                       wwd_interface_t                              interface
+                                   );
 #pragma pack(1)
 struct wiced_event_header_struct
 {

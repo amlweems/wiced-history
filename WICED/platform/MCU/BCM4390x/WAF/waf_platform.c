@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -98,7 +98,7 @@ void platform_erase_app_area( uint32_t physical_address, uint32_t size )
     UNUSED_PARAMETER( physical_address );
     UNUSED_PARAMETER( size );
 }
-
+#if (DCT_BOOTLOADER_SDK_VERSION >= DCT_BOOTLOADER_SDK_3_1_1)
 void platform_load_app_chunk(const image_location_t* app_header_location, uint32_t offset, void* physical_address, uint32_t size )
 {
     wiced_bool_t aon_segment;
@@ -113,3 +113,4 @@ void platform_load_app_chunk(const image_location_t* app_header_location, uint32
         }
     }
 }
+#endif

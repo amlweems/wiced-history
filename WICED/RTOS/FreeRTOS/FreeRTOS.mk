@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -37,6 +37,7 @@ $(NAME)_SOURCES :=  ver$(VERSION)/Source/croutine.c \
 # Win32_x86 specific sources and includes
 $(NAME)_Win32_x86_SOURCES  := ver$(VERSION)/Source/portable/MSVC-MingW/port.c
 $(NAME)_Win32_x86_INCLUDES := ver$(VERSION)/Source/portable/MSVC-MingW
+$(NAME)_Win32_x86_LDFLAGS  := -l winmm
 
 $(NAME)_DEFINES := FREERTOS_WICED
 
@@ -55,5 +56,6 @@ $(NAME)_ARM_CM4_INCLUDES := $($(NAME)_ARM_CM3_INCLUDES)
 
 $(NAME)_SOURCES += $($(NAME)_$(HOST_ARCH)_SOURCES)
 GLOBAL_INCLUDES += $($(NAME)_$(HOST_ARCH)_INCLUDES)
+GLOBAL_LDFLAGS  += $($(NAME)_$(HOST_ARCH)_LDFLAGS)
 
 

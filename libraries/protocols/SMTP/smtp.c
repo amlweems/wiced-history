@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
 #include <string.h>
 #include <wiced_utilities.h>
 #include "base64.h"
+#include "wiced_tls.h"
 
 /******************************************************
  *                      Macros
@@ -231,6 +232,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     uint32_t                    field_index;
     uint32_t                    content_index;
     char                        date[32]; /* Date string in email header format */
+    int                         ret_value;
 
     memset( content_table, 0, sizeof( content_table ) );
     memset( &account->internal->smtp_socket, 0, sizeof( account->internal->smtp_socket ) );
@@ -267,9 +269,13 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     {
         goto exit_without_connection;
     }
+
+
+
     VERIFY( WICED_SUCCESS, receive_smtp_reply( &account->internal->smtp_socket, &packet, &reply, &length ) );
     VERIFY( SMTP_SERVICE_READY, get_smtp_reply_code(&account->internal->smtp_socket, packet ) );
     wiced_packet_delete( packet );
+    packet = NULL;
 
     /* Send EHLO */
     VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, smtp_ehlo, GET_CONST_BUF_LENGTH(smtp_ehlo), localhost, GET_CONST_BUF_LENGTH(localhost)));
@@ -277,19 +283,27 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));
 
     /* Check if encryption required */
-    if ( account->smtp_encryption == WICED_EMAIL_ENCRYPTION_TLS && strstr( reply, smtp_starttls )  )
+    if ( account->smtp_encryption == WICED_EMAIL_ENCRYPTION_TLS && strnstr( reply, length, smtp_starttls, sizeof(smtp_starttls) - 1 )  )
     {
         wiced_packet_delete( packet );
+        packet = NULL;
 
         /* Send STARTTLS */
         VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, smtp_starttls, GET_CONST_BUF_LENGTH(smtp_starttls), NULL, 0));
         VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
         VERIFY(SMTP_SERVICE_READY, get_smtp_reply_code(&account->internal->smtp_socket, packet));
         wiced_packet_delete( packet );
+        packet = NULL;
 
         /* Establish TLS handshake here. Every packet from here onwards is encrypted */
-        tls_context = MALLOC_OBJECT("email tls ctx", wiced_tls_context_t);
+        tls_context = malloc_named("smtp", sizeof(wiced_tls_context_t));
+        if (tls_context == NULL)
+        {
+            return WICED_OUT_OF_HEAP_SPACE;
+        }
+
         memset( tls_context, 0, sizeof( *tls_context ) );
+        wiced_tls_init_context( tls_context, NULL, NULL );
         account->internal->smtp_socket.context_malloced = WICED_TRUE;
 
         result = wiced_tcp_enable_tls( &account->internal->smtp_socket, tls_context );
@@ -313,12 +327,13 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     }
 
     /* Check if authentication is required */
-    if ( strstr( reply, smtp_auth_login ) )
+    if ( strnstr( reply, length, smtp_auth_login, sizeof(smtp_auth_login) - 1 ) )
     {
         uint32_t buffer_length;
         char buffer[50];
 
         wiced_packet_delete( packet );
+        packet = NULL;
 
         /* Send AUTH LOGIN */
         VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, smtp_auth_login, GET_CONST_BUF_LENGTH(smtp_auth_login), NULL, 0));
@@ -327,15 +342,26 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
 
         /* Decode SMTP server reply using base64 algorithm */
         INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-        base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+        ret_value = base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+        if( ret_value <= 0 )
+        {
+            WPRINT_LIB_ERROR(( "Failed to decode SMTP reply\n" ));
+            goto exit;
+        }
         wiced_packet_delete( packet );
+        packet = NULL;
 
         /* Check if decoded string is username challenge */
-        if ( strstr( buffer, smtp_username_prompt ) )
+        if ( strnstr( buffer, (uint16_t)buffer_length, smtp_username_prompt, sizeof(smtp_username_prompt) - 1 ) )
         {
             /* Encode username */
             INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-            base64_encode( (unsigned char*)account->user_name, (int32_t) strlen( account->user_name ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+            ret_value = base64_encode( (unsigned char*)account->user_name, (int32_t) strlen( account->user_name ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+            if( ret_value <= 0 )
+            {
+                WPRINT_LIB_ERROR(( "Failed to encode user name\n" ));
+                goto exit;
+            }
 
             VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, buffer, (uint8_t) buffer_length, NULL, 0));
             VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
@@ -343,33 +369,46 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
 
             /* Decode SMTP server reply using base64 algorithm */
             INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-            base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+            ret_value = base64_decode( (unsigned char*)reply, length, (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+            if( ret_value <= 0 )
+            {
+                WPRINT_LIB_ERROR(( "Failed to decode the SMTP reply.\n" ));
+                goto exit;
+            }
             wiced_packet_delete( packet );
+            packet = NULL;
 
             /* Check if decoded string is password challenge */
-            if ( strstr( buffer, smtp_password_prompt ) )
+            if ( strnstr( buffer, (uint16_t)buffer_length, smtp_password_prompt, sizeof(smtp_password_prompt) - 1 ) )
             {
                 /* Encode and send password back to SMTP server */
                 INIT_BUFFER_AND_LENGTH(buffer, buffer_length);
-                base64_encode( (unsigned char*)account->password, (int32_t) strlen( account->password ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+                ret_value = base64_encode( (unsigned char*)account->password, (int32_t) strlen( account->password ), (unsigned char*)buffer, buffer_length, BASE64_STANDARD );
+                if( ret_value <= 0 )
+                {
+                    WPRINT_LIB_ERROR(( "Failed to encode password\n" ));
+                    goto exit;
+                }
 
                 VERIFY(WICED_SUCCESS, send_smtp_command(&account->internal->smtp_socket, buffer, (uint8_t) buffer_length, NULL, 0));
                 VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
                 VERIFY(SMTP_AUTH_SUCCESSFUL, get_smtp_reply_code(&account->internal->smtp_socket, packet));
                 wiced_packet_delete( packet );
+                packet = NULL;
             }
         }
     }
     else
     {
         wiced_packet_delete( packet );
+        packet = NULL;
     }
-
     /* Send sender information to the server (MAIL FROM command) */
     VERIFY(WICED_SUCCESS, send_smtp_sender(&account->internal->smtp_socket, account->email_address, (uint8_t) strlen(account->email_address)));
     VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
     VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));;
     wiced_packet_delete( packet );
+    packet = NULL;
 
     /* Send recipient information to the server (RCPT TO command) */
     address_list = email->to_addresses;
@@ -379,6 +418,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
         VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
         VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));
         wiced_packet_delete( packet );
+        packet = NULL;
     }
 
     /* Send recipient information from the cc list to the server (RCPT TO command) */
@@ -391,6 +431,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
             VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
             VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));
             wiced_packet_delete( packet );
+            packet = NULL;
         }
     }
 
@@ -404,6 +445,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
             VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
             VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));
             wiced_packet_delete( packet );
+            packet = NULL;
         }
     }
 
@@ -412,6 +454,7 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
     VERIFY(SMTP_START_MAIL_INPUT, get_smtp_reply_code(&account->internal->smtp_socket, packet));
     wiced_packet_delete( packet );
+    packet = NULL;
 
     /* Fill packets with email content and send */
     init_content_table(account, email, date, content_table);
@@ -451,18 +494,26 @@ wiced_result_t wiced_smtp_send( wiced_email_account_t* account, const wiced_emai
     VERIFY(WICED_SUCCESS, receive_smtp_reply(&account->internal->smtp_socket, &packet, &reply, &length));
     VERIFY(SMTP_ACTION_COMPLETED, get_smtp_reply_code(&account->internal->smtp_socket, packet));
 
-    exit:
-    wiced_packet_delete( packet );
+exit:
+    if (packet != NULL)
+    {
+        wiced_packet_delete( packet );
+        packet = NULL;
+    }
 
     /* Send QUIT command and disconnect */
     send_smtp_command( &account->internal->smtp_socket, smtp_quit, GET_CONST_BUF_LENGTH(smtp_quit), NULL, 0 );
     receive_smtp_reply( &account->internal->smtp_socket, &packet, &reply, &length );
+    if (packet != NULL)
+    {
+        wiced_packet_delete( packet );
+        packet = NULL;
+    }
 
-    exit_without_sending_quit_command:
-    wiced_packet_delete( packet );
+exit_without_sending_quit_command:
     wiced_tcp_disconnect( &account->internal->smtp_socket );
 
-    exit_without_connection:
+exit_without_connection:
     wiced_tcp_delete_socket( &account->internal->smtp_socket );
 
     return result;
@@ -526,6 +577,10 @@ static wiced_result_t receive_smtp_reply( wiced_tcp_socket_t *socket, wiced_pack
     }
 #endif
 
+    if ( *reply_length <= 4 )
+    {
+        return WICED_ERROR;
+    }
     *reply_string += 4;
     *reply_length = (uint16_t) ( *reply_length - 4 );
     return WICED_SUCCESS;
@@ -540,6 +595,11 @@ static uint16_t get_smtp_reply_code( wiced_tcp_socket_t *socket, wiced_packet_t 
     UNUSED_PARAMETER( socket );
 
     WICED_VERIFY( wiced_packet_get_data( reply_packet, 0, &data, &length, &available_space ) );
+
+    if( length < 3 )
+    {
+        return WICED_ERROR;
+    }
 
     memcpy( (void*) error_code_str, (void*) data, 3 );
     error_code_str[3] = '\0';

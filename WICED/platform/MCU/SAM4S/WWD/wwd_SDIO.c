@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -456,9 +456,11 @@ void host_platform_enable_high_speed_sdio( void )
 
     /* Enable high-speed mode */
     MCI_EnableHsMode( &sdio_driver, 1 );
-
+#ifndef SDIO_1_BIT
     MCI_SetBusWidth( &sdio_driver, HSMCI_SDCR_SDCBUS_4 ); // 10: 4-bit
-
+#else
+    MCI_SetBusWidth( &sdio_driver, HSMCI_SDCR_SDCBUS_1 ); // 1-bit
+#endif /* SDIO_1_BIT */
     /* Enable SDIO RX interrupt */
     enable_sdio_rx_irq();
 }

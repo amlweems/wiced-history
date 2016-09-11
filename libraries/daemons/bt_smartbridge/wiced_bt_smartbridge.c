@@ -1,5 +1,5 @@
 /**
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -142,7 +142,7 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
 {
     wiced_bt_smart_attribute_t* attr;
     uint8_t *data = NULL;
-    uint32_t i;
+
     /* Create a new attribute */
     wiced_bt_smart_attribute_create( &attr, WICED_ATTRIBUTE_TYPE_CHARACTERISTIC_VALUE, response_data->len );
 
@@ -167,12 +167,17 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
         {
             memcpy( attr->value.characteristic_value.value, data, attr->value_length );
         }
-        else if ( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_DESCRIPTORS)
+        else if( subprocedure.subprocedure == GATT_READ_USING_CHARACTERISTIC_UUID )
+        {
+            attr->handle = response_data->handle;
+
+            memcpy( attr->value.characteristic_value.value, data, attr->value_length );
+            subprocedure.attr_count++;
+        }
+        else if ( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_DESCRIPTORS )
         {
             memcpy( &attr->value, data, attr->value_length );
         }
-
-        //memcpy( &attr->type, &subprocedure.uuid, sizeof(wiced_bt_uuid_t));
 
         /* Update temporary variables */
         if ( subprocedure.attr_head == NULL )
@@ -180,24 +185,6 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
             subprocedure.attr_head = attr;
         }
         subprocedure.result = WICED_BT_SUCCESS;
-
-        WPRINT_LIB_INFO( ( "[Smartbridge] Read value: UUID:%x length:%d\n", attr->type.uu.uuid16, attr->type.len ) );
-
-        if( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_VALUE )
-        {
-            for ( i = 0; i < attr->value_length; i ++ )
-            {
-                WPRINT_LIB_INFO( ( "%02x ", (int)attr->value.characteristic_value.value[i] ) );
-            }
-        }
-        else if ( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_DESCRIPTORS)
-        {
-            for ( i = 0; i < attr->value_length; i ++ )
-            {
-                WPRINT_LIB_INFO( ( "%02x ", (int)attr->value.value[i] ) );
-            }
-        }
-        WPRINT_LIB_INFO( ( "\n" ) );
     }
     else
     {

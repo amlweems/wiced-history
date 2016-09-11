@@ -1,12 +1,18 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/****************************************************************************
+**
+**  Name:       gki_target.h
+**
+**  Function    this file contains platform-specific GKI defintions
+**              to be included by bt_target.h, nfc_target.h, and other
+**              target header files.
+**
+**  NOTE        This file should always be included first.
+**
+**
+**  Copyright (c) 1999-2014, Broadcom Corp., All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+**
+*****************************************************************************/
 #ifndef GKI_TARGET_H
 #define GKI_TARGET_H
 

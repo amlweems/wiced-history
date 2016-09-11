@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -71,6 +71,7 @@
 /******************************************************
  *               Static Function Declarations
  ******************************************************/
+extern wiced_tls_key_type_t type;
 
 static int32_t tls_get_session( ssl_context *ssl );
 static int32_t tls_set_session( ssl_context *ssl );
@@ -81,7 +82,7 @@ static wiced_result_t tls_eap_buffered_data       ( wiced_tls_workspace_t* conte
 
 
 static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const uint8_t* certificate_data, uint32_t certificate_length, wiced_tls_certificate_format_t certificate_format );
-static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string );
+static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string, const uint32_t key_length );
 
 /******************************************************
  *               Variable Definitions
@@ -96,7 +97,7 @@ static int session_list_initialized = 0;
  */
 static const cipher_suite_t* my_ciphers[] =
 {
-        /* First: Ephemeral Diffie Hellman with 256 bit cipher, in order of MAC strength */
+/* First: Ephemeral Diffie Hellman with 256 bit cipher, in order of MAC strength */
 #if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA256_MAC )
         &TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,
 #endif
@@ -177,8 +178,19 @@ static const cipher_suite_t* my_ciphers[] =
 #if defined( USE_ECDH_ECDSA_KEYSCHEME ) && defined( USE_AES_256_CBC_CIPHER ) && defined( USE_SHA384_MAC )
         &TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
 #endif
+#if defined( USE_ECDHE_RSA_KEYSCHEME ) && defined( USE_AES_128_GCM_CIPHER ) && defined( USE_SHA256_MAC )
+        &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+#endif /* if defined( USE_ECDHE_RSA_KEYSCHEME ) && defined( USE_AES_128_GCM_CIPHER ) && defined( USE_SHA256_MAC ) */
 
-        0   /* List termination */
+#if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_GCM_CIPHER ) && defined( USE_SHA256_MAC )
+        &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+#endif
+
+#if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CCM_8_CIPHER ) && defined( USE_AES_128_CCM_8_MAC )
+        &TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8,
+#endif /* if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CCM_8_CIPHER ) && defined( USE_AES_128_CCM_8_MAC ) */
+
+        0 /* List termination */
 };
 
 x509_cert* root_ca_certificates = NULL;
@@ -242,7 +254,8 @@ tls_result_t tls_host_create_buffer( ssl_context* ssl, uint8_t** buffer, uint16_
         if ( wiced_packet_create_tcp( ssl->send_context, buffer_size, (wiced_packet_t**) &ssl->outgoing_packet, buffer, &actual_packet_size ) != WICED_SUCCESS )
         {
             *buffer = NULL;
-            return 1;
+            /* Return is not currently used; however, need to define a TLS enum value for this case eventually */
+            return ( tls_result_t )1;
         }
         if ( ssl->state == SSL_HANDSHAKE_OVER )
         {
@@ -264,7 +277,7 @@ tls_result_t tls_host_create_buffer( ssl_context* ssl, uint8_t** buffer, uint16_
         ssl->out_buffer_size = buffer_size;
     }
 
-    return 0;
+    return TLS_SUCCESS;
 }
 
 tls_result_t tls_host_get_packet_data( ssl_context* ssl, tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length )
@@ -361,7 +374,7 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
                 {
                     tls_host_free(buffer);
                     buffer = NULL;
-                    return 1;
+                    return ( tls_result_t )1;
                 }
                 if ( ssl->state == SSL_HANDSHAKE_OVER )
                 {
@@ -514,11 +527,50 @@ static int32_t tls_set_session( ssl_context *ssl )
     return ( 0 );
 }
 
+tls_result_t tls_calculate_encrypt_buffer_length( ssl_context* context, uint16_t* required_buff_size, uint16_t payload_size)
+{
+    uint16_t padlen = 0;
+    tls_result_t result = TLS_SUCCESS;
+
+    if ( context != NULL && context->state == SSL_HANDSHAKE_OVER )
+    {
+      *required_buff_size = payload_size;
+
+      /* MAC */
+      *required_buff_size += context->maclen;
+
+      /* Compensate for padding */
+      if ( context->ivlen != 0 )
+      {
+          /* Note: There must be at least one byte of padding so align to block size and add an extra 1 */
+          padlen = context->ivlen - (*required_buff_size + 1) % context->ivlen;
+          if ( padlen == context->ivlen )
+          {
+              padlen = 0;
+          }
+          *required_buff_size += padlen + 1;
+      }
+
+      /* TLS 1.1+ uses explicit IV in footer */
+      if ( context->minor_ver > 1 )
+      {
+          *required_buff_size += context->ivlen;
+      }
+    }
+    else
+    {
+        result = TLS_ERROR;
+    }
+
+    return result;
+}
+
 static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const uint8_t* certificate_data, uint32_t certificate_length, wiced_tls_certificate_format_t certificate_format )
 {
     besl_result_t result;
     uint32_t der_certificate_length;
     uint32_t total_der_bytes;
+    x509_name* name_iter = NULL;
 
     /* Allocate space for temporary processing */
     certificate->processed_certificate_data = tls_host_malloc( "cert", sizeof(x509_cert) );
@@ -558,7 +610,7 @@ static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certif
     /* Take ownership of the public_key and common_name */
     certificate->public_key  = certificate->processed_certificate_data->public_key;
 
-    x509_name* name_iter = &certificate->processed_certificate_data->subject;
+    name_iter = &certificate->processed_certificate_data->subject;
     for (; name_iter != NULL; name_iter = name_iter->next)
     {
         if (name_iter->val.p[name_iter->val.len] == 0x30)
@@ -601,11 +653,20 @@ end:
     return result;
 }
 
-static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string )
+static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string, const uint32_t key_length )
 {
+    key->type = type;
     if ( key->type == TLS_RSA_KEY )
     {
-        if ( x509parse_key( (rsa_context*)key, (unsigned char *) key_string, (uint32_t) strlen( key_string ), NULL, 0 ) != 0 )
+        if ( x509parse_key( (rsa_context*) key, (unsigned char *) key_string, key_length, NULL, 0 ) != 0 )
+        {
+            wiced_assert( "Key parse error", 0 != 0 );
+            return BESL_KEY_PARSE_FAIL;
+        }
+    }
+    else if ( key->type == TLS_ECC_KEY )
+    {
+        if ( x509parse_key_ecc( (wiced_tls_ecc_key_t*) key, (unsigned char *) key_string, key_length, NULL, 0 ) != 0 )
         {
             wiced_assert( "Key parse error", 0 != 0 );
             return BESL_KEY_PARSE_FAIL;
@@ -613,7 +674,8 @@ static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_s
     }
     else
     {
-        // Fill ECC key
+        wiced_assert( "Key type not found", 0 != 0 );
+        return BESL_KEY_PARSE_FAIL;
     }
 
     return BESL_SUCCESS;
@@ -630,7 +692,86 @@ wiced_result_t wiced_tls_init_context( wiced_tls_context_t* context, wiced_tls_i
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_init_identity( wiced_tls_identity_t* identity, const char* private_key, const uint8_t* certificate_data, uint32_t certificate_length )
+int tls_sign_hash( wiced_tls_rsa_key_t* rsa_key ,rsa_hash_id_t hash_id, int32_t hashlen, const unsigned char *hash, unsigned char *rsa_sign, uint32_t* key_length)
+{
+    /* This function should sign on hash message using RSA private key and should
+     * give signed hash message and private RSA key length as output.
+     *
+     * rsa_key    (IN)    : rsa key information
+     * hash_id    (IN)    : Hash algorithm type (Ex: RSA_SHA256)
+     * hashlen    (IN)    : Length of Hash
+     * hash       (IN)    : Hash of all the messages
+     * sig        (OUT)   : Signed hash by private key
+     * key_length (OUT)   : Length of private key
+     *
+     * Return : return 0 on success
+    */
+    int ret = 0;
+
+    *key_length = rsa_key->length;
+
+    ret = rsa_pkcs1_sign( rsa_key , RSA_PRIVATE, hash_id, hashlen, hash, rsa_sign );
+    if ( ret != 0 )
+    {
+        return ( ret );
+    }
+
+    return 0;
+}
+
+wiced_result_t wiced_tls_set_extension(wiced_tls_context_t* context, wiced_tls_extension_t* extension)
+{
+    wiced_result_t result = WICED_SUCCESS;
+    ssl_extension* new_ext;
+
+    if(context != NULL)
+    {
+        if(context->context.extension_count >= MAX_NUMBER_OF_EXTENSIONS_SUPPORTED)
+        {
+            WPRINT_SECURITY_INFO(("Extensions full"));
+            return WICED_ERROR;
+        }
+
+        switch (extension->type)
+        {
+            case TLS_EXTENSION_TYPE_SERVER_NAME:
+            {
+                new_ext = &(context->context.extensions[context->context.extension_count++]);
+                new_ext->id = TLS_EXTENSION_TYPE_SERVER_NAME;
+                strlcpy((char*) new_ext->data, (char*)extension->extension_data.server_name, sizeof( new_ext->data ));
+                new_ext->sz = strlen( (char*)new_ext->data );
+                new_ext->used = 1;
+                break;
+            }
+            case TLS_EXTENSION_TYPE_MAX_FRAGMENT_LENGTH:
+            {
+                new_ext = &(context->context.extensions[context->context.extension_count++]);
+                new_ext->id = TLS_EXTENSION_TYPE_MAX_FRAGMENT_LENGTH;
+                new_ext->data[0] = (char)extension->extension_data.max_fragment_length;
+                new_ext->sz = TLS_EXT_MAX_FRAGMENT_LENGTH_FIELD_SIZE;
+                new_ext->used = 1;
+                break;
+            }
+            default:
+                WPRINT_SECURITY_INFO(("Unknown Extension. Currently not supported by WICED" ));
+                result = WICED_ERROR;
+                break;
+        }
+    }
+
+    return result;
+}
+
+wiced_result_t wiced_tls_add_extension( wiced_tls_context_t* context, const ssl_extension* extension )
+{
+    if ( ussl_set_extension( &context->context, ( ssl_extension* ) extension) != 0 )
+    {
+        return WICED_ERROR;
+    }
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_tls_init_identity( wiced_tls_identity_t* identity, const char* private_key, const uint32_t key_length, const uint8_t* certificate_data, uint32_t certificate_length )
 {
     besl_result_t result;
 
@@ -638,17 +779,24 @@ wiced_result_t wiced_tls_init_identity( wiced_tls_identity_t* identity, const ch
 
     memset( identity, 0, sizeof( *identity ) );
 
-    result = wiced_tls_load_key( (wiced_tls_key_t*)&identity->private_key, private_key );
-    if ( result != BESL_SUCCESS )
-    {
-        return result;
-    }
-
     result = wiced_tls_load_certificate( &identity->certificate, certificate_data, certificate_length, TLS_CERTIFICATE_IN_PEM_FORMAT );
     if ( result != BESL_SUCCESS )
     {
-        return result;
+        return ( wiced_result_t )result;
     }
+
+    /* This allows private key to be passed as " " if user doesn't want to load key here. */
+    if(private_key[0] != '\0')
+    {
+        result = wiced_tls_load_key( (wiced_tls_key_t*)&identity->private_key, private_key, key_length  );
+        if ( result != BESL_SUCCESS )
+        {
+            return result;
+        }
+    }
+
+    identity->private_key.rsa_sign = tls_sign_hash;
+
     return WICED_SUCCESS;
 }
 
@@ -704,7 +852,7 @@ wiced_result_t wiced_tls_deinit_context( wiced_tls_context_t* tls_context )
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certificates )
+wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certificates, const uint32_t length )
 {
     int result;
 
@@ -718,7 +866,7 @@ wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certi
 
     memset( root_ca_certificates, 0, sizeof(*root_ca_certificates) );
 
-    result = x509_parse_certificate( root_ca_certificates, (const uint8_t*)trusted_ca_certificates, strlen( (const char*)trusted_ca_certificates ) );
+    result = x509_parse_certificate( root_ca_certificates, (const uint8_t*) trusted_ca_certificates, length );
     if ( result != 0 )
     {
         tls_host_free( root_ca_certificates );
@@ -795,12 +943,15 @@ wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_context_t* tls_co
     tls_context->session.age = MAX_TLS_SESSION_AGE;
     wiced_crypto_get_random( &rngstate.entropy, 4 );
 
+    /* Set default value to max_fragment_length extension */
     tls_context->context.transport_protocol = transport_protocol;
+    tls_context->context.ext_max_fragment_length = TLS_DEFAULT_MAX_FRAGMENT_LENGTH;
 
     microrng_init( &rngstate );
 
     ssl_set_endpoint( &tls_context->context, type );
     ssl_set_rng     ( &tls_context->context, microrng_rand, &rngstate );
+
     tls_context->context.receive_context = referee;
     tls_context->context.send_context    = referee;
     tls_context->context.get_session     = tls_get_session;
@@ -883,6 +1034,17 @@ exit_with_inited_context:
     ssl_free(&tls_context->context);
     return (wiced_result_t) result;
 }
+
+/* this function is used to calculate how much buffer is needed after encrypting the payload */
+wiced_result_t wiced_tls_calculate_encrypt_buffer_length( wiced_tls_workspace_t* context, uint16_t payload_size, uint16_t* required_buff_size)
+{
+    wiced_result_t result;
+
+    result = tls_calculate_encrypt_buffer_length(context, required_buff_size, payload_size);
+
+    return result;
+}
+
 
 /*
  * Calculates the maximium amount of payload that can fit in a given sized buffer
@@ -971,6 +1133,8 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
 
     wiced_assert("Bad args", (socket != NULL) && (packet != NULL));
 
+    /* Set the packet pointer to NULL initially */
+    *packet = NULL;
 
     /* Check if we already have a record which should only happen if it was larger than a packet which means it's stored in the defragmentation buffer */
     if ( context->current_record != NULL )
@@ -1104,8 +1268,8 @@ static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* contex
 {
     uint8_t*       data;
     uint16_t       length;
-    uint16_t       available_length;
-    uint16_t       record_length;
+    uint16_t       available_length = 0;
+    uint16_t       record_length = 0;
     wiced_result_t result;
     uint32_t       amount_to_copy;
 
@@ -1151,7 +1315,7 @@ static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* contex
 static wiced_result_t tls_eap_buffered_data( wiced_tls_workspace_t* context, besl_packet_t* packet )
 {
     uint16_t       length;
-    uint16_t       available_length;
+    uint16_t       available_length = 0;
     uint16_t       record_length;
     besl_result_t  result;
     uint32_t       amount_to_copy;
@@ -1164,7 +1328,7 @@ static wiced_result_t tls_eap_buffered_data( wiced_tls_workspace_t* context, bes
     result = besl_host_create_packet( packet, (uint16_t) MIN(1024, record_length - context->defragmentation_buffer_bytes_processed) );
     if ( result != BESL_SUCCESS )
     {
-        return result;
+        return ( wiced_result_t )result;
     }
     header = ( eap_packet_t* ) besl_host_get_data( *packet );
     length = besl_host_get_packet_size( *packet );

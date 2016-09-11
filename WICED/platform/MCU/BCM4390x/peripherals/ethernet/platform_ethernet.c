@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -795,4 +795,50 @@ platform_result_t platform_ethernet_set_loopback_mode( platform_ethernet_loopbac
     }
 
     return PLATFORM_SUCCESS;
+}
+
+static platform_result_t platform_ethernet_control_multicast_address( wiced_mac_t* mac, wiced_bool_t add )
+{
+    et_info_t*        et = &et_instance;
+    wiced_mutex_t*    mutex = &et->op_mutex;
+    etc_info_t*       etc;
+    struct ether_addr ethernet_mac_addr;
+    int               result;
+
+    if ( !PLATFORM_FEATURE_ENAB( GMAC ) )
+    {
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    etc = et->etc;
+    WICED_ETHERNET_CHECK_AND_RET( etc != NULL, PLATFORM_ERROR );
+
+    memcpy( &ethernet_mac_addr.octet[0], &mac->octet[0], ETHER_ADDR_LEN );
+
+    wiced_rtos_lock_mutex( mutex );
+    if ( add )
+    {
+        result = etc_multicast_filter_add( etc, &ethernet_mac_addr );
+    }
+    else
+    {
+        result = etc_multicast_filter_remove( etc, &ethernet_mac_addr );
+    }
+    wiced_rtos_unlock_mutex( mutex );
+    if ( result != SUCCESS )
+    {
+        return PLATFORM_ERROR;
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_ethernet_add_multicast_address( wiced_mac_t* mac )
+{
+    return platform_ethernet_control_multicast_address( mac, WICED_TRUE );
+}
+
+platform_result_t platform_ethernet_remove_multicast_address( wiced_mac_t* mac )
+{
+    return platform_ethernet_control_multicast_address( mac, WICED_FALSE );
 }

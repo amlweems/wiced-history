@@ -1,0 +1,22 @@
+/*
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+/* Application code symbols */
+/* starts at address 0x08000000 ends at address 0x08080000  */
+define symbol __App_start                         = 0x08000000;
+define symbol __App_length                        = 512k;
+define symbol __App_end                           = (__App_start + __App_length);
+
+
+/* SRAM memory location */
+/* starts at address 0x20000000 ends at address 0x20020000 */
+define symbol __SRAM_start                        = 0x20000000;
+define symbol __SRAM_length                       = 128K;
+define symbol __SRAM_end                          = (__SRAM_start + __SRAM_length);

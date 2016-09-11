@@ -8,7 +8,6 @@
  * written permission of Broadcom Corporation.
  */
 
-
 /** @file
  *
  * This file has the BT UUIDs (https://developer.bluetooth.org/gatt/)

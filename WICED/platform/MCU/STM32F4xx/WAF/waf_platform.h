@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,7 +16,43 @@ extern "C" {
 /******************************************************
  *                   Constants
  ******************************************************/
+#if defined(OTA2_SUPPORT)
+#define SECTOR_SIZE         (4096)
+#define FLASH_ADDR_MASK     (0x007FFFFF)
 
+/******************************************************
+ *                    Macros
+ ******************************************************/
+#define DCT1_START_ADDR  ((uint32_t)&dct1_start_addr_loc)
+#define DCT1_SIZE        ((uint32_t)&dct1_size_loc)
+#define DCT2_START_ADDR  ((uint32_t)&dct2_start_addr_loc)
+#define DCT2_SIZE        ((uint32_t)&dct2_size_loc)
+
+#define PLATFORM_DCT_COPY1_START_ADDRESS     ( DCT1_START_ADDR & FLASH_ADDR_MASK )
+#define PLATFORM_DCT_COPY1_START_SECTOR      ( (uint16_t)(PLATFORM_DCT_COPY1_START_ADDRESS / SECTOR_SIZE) )
+#define PLATFORM_DCT_COPY1_END_ADDRESS       ( (uint16_t)(PLATFORM_DCT_COPY1_START_ADDRESS + DCT1_SIZE) )
+#define PLATFORM_DCT_COPY1_END_SECTOR        ( (uint16_t)(PLATFORM_DCT_COPY1_END_ADDRESS / SECTOR_SIZE) )  /* one sector ?!?!?! */
+
+#define PLATFORM_DCT_COPY2_START_ADDRESS     ( (uint16_t)(DCT2_START_ADDR & FLASH_ADDR_MASK) )
+#define PLATFORM_DCT_COPY2_START_SECTOR      ( (uint16_t)(PLATFORM_DCT_COPY2_START_ADDRESS / SECTOR_SIZE)  )
+#define PLATFORM_DCT_COPY2_END_ADDRESS       ( (uint16_t)(PLATFORM_DCT_COPY2_START_ADDRESS + DCT2_SIZE) )
+#define PLATFORM_DCT_COPY2_END_SECTOR        ( (uint16_t)(PLATFORM_DCT_COPY2_END_ADDRESS / SECTOR_SIZE) )  /* one sector ?!?!?! */
+
+#define PLATFORM_DEFAULT_LOAD                ( WICED_FRAMEWORK_LOAD_ONCE )
+
+#ifdef CURRENT_APPLICATION_USES_INTERNAL_FLASH
+#define PLATFORM_APP_INT_START_SECTOR        ( FLASH_Sector_3  )
+#if defined(STM32F401xx)
+#define PLATFORM_APP_INT_END_SECTOR          ( FLASH_Sector_5 )
+#elif defined(STM32F411xE)
+#define PLATFORM_APP_INT_END_SECTOR          ( FLASH_Sector_7 )
+#elif defined(STM32F412xG)
+#define PLATFORM_APP_INT_END_SECTOR          ( FLASH_Sector_11 )
+#endif
+#endif
+
+#define PLATFORM_SFLASH_PERIPHERAL_ID        (0)
+#else
 /******************************************************
  *                    Macros
  ******************************************************/
@@ -35,6 +71,7 @@ extern "C" {
 #define PLATFORM_DCT_COPY2_END_ADDRESS       ( DCT2_START_ADDR + DCT1_SIZE )
 
 #define PLATFORM_DEFAULT_LOAD                ( WICED_FRAMEWORK_LOAD_ONCE )
+#endif
 /******************************************************
  *                   Enumerations
  ******************************************************/

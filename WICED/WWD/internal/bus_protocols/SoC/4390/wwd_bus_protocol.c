@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -63,15 +63,15 @@
  *               Static Function Declarations
  ******************************************************/
 
-static void boot_wlan( void );
+static wwd_result_t boot_wlan( void );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
-static uint32_t     fake_backplane_window_addr = 0;
-static wiced_bool_t wwd_bus_flow_controlled;
-
+static uint32_t     fake_backplane_window_addr          = 0;
+static wiced_bool_t wwd_bus_flow_controlled             = WICED_FALSE;
+static volatile wiced_bool_t resource_download_aborted  = WICED_FALSE;
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -82,6 +82,11 @@ wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
     host_buffer_add_remove_at_front(&buffer, sizeof(wwd_buffer_header_t));
     wwd_bus_dma_transmit( buffer, host_buffer_get_current_piece_size( buffer ) );
     return WWD_SUCCESS;
+}
+
+void wwd_bus_set_resource_download_halt( wiced_bool_t halt )
+{
+    resource_download_aborted = halt;
 }
 
 wwd_result_t wwd_bus_write_wifi_firmware_image( void )
@@ -98,6 +103,10 @@ wwd_result_t wwd_bus_write_wifi_firmware_image( void )
 
     while ( total_size > offset )
     {
+        if ( resource_download_aborted == WICED_TRUE )
+        {
+            return WWD_UNFINISHED;
+        }
         resource_read ( &wifi_firmware_image, 0, WLAN_MEMORY_SIZE, &size_read, (uint8_t *)(WLAN_ADDR+offset) );
         offset += size_read;
     }
@@ -146,22 +155,27 @@ wwd_result_t wwd_bus_write_wifi_nvram_image( void )
 
 wwd_result_t wwd_bus_init( void )
 {
+    wwd_result_t result = WWD_SUCCESS;
+
     host_platform_reset_wifi( WICED_TRUE );
     host_rtos_delay_milliseconds( 1 );
     host_platform_power_wifi( WICED_FALSE );
     wwd_bus_prepare_firmware_download( );
-    boot_wlan( );
+    result = boot_wlan( );
 
-    /*
-     * The enabling of SDIO internal clock is done in WLAN firmware.
-     * Doing many access across AXI-bridge without proper sequencing will lead more instability
-     */
-    wwd_bus_dma_init( );
+    if ( result == WWD_SUCCESS )
+    {
+     /*
+         * The enabling of SDIO internal clock is done in WLAN firmware.
+         * Doing many access across AXI-bridge without proper sequencing will lead more instability
+         */
+        wwd_bus_dma_init( );
 
-    /* Reinitialise STDIO UART if WLAN UART (UART4) is used */
-    platform_reinit_wlan_stdio_uart( );
+        /* Reinitialise STDIO UART if WLAN UART (UART4) is used */
+        platform_reinit_wlan_stdio_uart( );
+    }
 
-    return WWD_SUCCESS;
+    return result;
 }
 
 wwd_result_t wwd_bus_deinit( void )
@@ -169,6 +183,8 @@ wwd_result_t wwd_bus_deinit( void )
     wwd_bus_dma_deinit();
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
+    resource_download_aborted = WICED_FALSE;
+
     return WWD_SUCCESS;
 }
 
@@ -303,16 +319,32 @@ uint32_t wwd_bus_get_rx_packet_size( void )
     return WICED_LINK_MTU;
 }
 
-void boot_wlan( void )
+static wwd_result_t boot_wlan( void )
 {
-#ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
-    external_write_wifi_firmware_and_nvram_image( );
-#else
-    /* Load wlan firmware from sflash */
-    wwd_bus_write_wifi_firmware_image();
+    wwd_result_t result = WWD_SUCCESS;
 
-    /* Load nvram from sflash */
+#ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
+
+    UNUSED_PARAMETER(result);
+    external_write_wifi_firmware_and_nvram_image( );
+
+#else
+
+    /* Load wlan firmware from sflash */
+    result = wwd_bus_write_wifi_firmware_image();
+    if ( result == WWD_UNFINISHED )
+    {
+        /* for user abort, then put wifi module into known good state */
+        host_platform_reset_wifi( WICED_TRUE );
+        /* power wifi is a no-op, so don't need to do anything there */
+    }
+    if ( result != WWD_SUCCESS )
+    {
+        /* stop here and return control to the user */
+        return result;
+    }    /* Load nvram from sflash */
     wwd_bus_write_wifi_nvram_image( );
+
 #endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
 
     /* init wlan uart */
@@ -322,4 +354,6 @@ void boot_wlan( void )
     wwd_bus_reset_wlan_core( );
 
     host_rtos_delay_milliseconds( 200 );
+
+    return WWD_SUCCESS;
 }

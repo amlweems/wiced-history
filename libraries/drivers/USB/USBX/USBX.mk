@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,7 +24,11 @@ GLOBAL_DEFINES += USB_$(NAME)=1
 GLOBAL_DEFINES += $(NAME)_VERSION=$$(SLASH_QUOTE_START)v$(USBX_VERSION)$$(SLASH_QUOTE_END)
 GLOBAL_DEFINES += UX_INCLUDE_USER_DEFINE_FILE UX_ENABLE_DEBUG_LOG
 
-# Now USBX only works with FileX
+# Check if we had FileX compiled in
+#ifneq ($(FILESYSTEM),FileX)
+#GLOBAL_DEFINES += UX_NO_FILEX
+#endif
+
 $(NAME)_COMPONENTS += filesystems/FileX
 USING_FILEX_USBX := yes
 

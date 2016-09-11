@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,6 +19,7 @@
 #include <sys/times.h>
 #include <sys/unistd.h>
 #include <malloc.h>
+#include "platform_toolchain.h"
 #include <wwd_assert.h>
 #include <wwd_constants.h>
 
@@ -43,6 +44,10 @@ extern unsigned char _eheap[];
 /*@+declundef@*/ /*@+exportheadervar@*/
 
 static /*@shared@*/ unsigned char *sbrk_heap_top = _heap;
+
+WEAK NEVER_INLINE void platform_toolchain_sbrk_prepare( void* ptr, int incr )
+{
+}
 
 /*@-exportheader@*/ /* Lint: These functions are used by newlib, but it does not provide a header */
 
@@ -70,6 +75,8 @@ static /*@shared@*/ unsigned char *sbrk_heap_top = _heap;
     prev_heap = sbrk_heap_top;
 
     sbrk_heap_top += incr;
+
+    platform_toolchain_sbrk_prepare( prev_heap, incr );
 
     return (caddr_t) prev_heap;
 }

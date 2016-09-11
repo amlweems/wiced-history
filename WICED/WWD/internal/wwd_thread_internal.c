@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,7 +34,7 @@
 
 WEAK void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
 {
-    wwd_result_t result;
+    wwd_result_t result = WWD_SUCCESS;
 
     REFERENCE_DEBUG_ONLY_VARIABLE( result );
 

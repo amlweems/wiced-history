@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -95,7 +95,7 @@ typedef enum
     SFLASH_X4IO_WRITE                   = 0x38, /* 4PP    - Macronix only */
     SFLASH_X4IO_READ                    = 0xEB, /* 4READ  - Macronix only */
     SFLASH_DIE_ERASE_MICRON             = 0xC4, /* Die Erase - Micron only */
-    SFLASH_SECTOR_ERASE_MICRON          = 0xD8, /* Sector Erase - Micron only */
+    SFLASH_SECTOR_ERASE_MICRON          = 0xD8, /* Sector Erase (64KB) - Micron only */
     SFLASH_CLEAR_FLAG_STATUS_REGISTER   = 0x50,  /* Micro Only */
     SFLASH_READ_FLAG_STATUS_REGISTER    = 0x70,  /* Micron Only */
     SFLASH_WRITE_ENH_VOLATILE_REGISTER  = 0x61, /* WRITE Enhance status register, Micron only */

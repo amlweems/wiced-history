@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -60,6 +60,7 @@ static void              subtract_second_from_time                  ( wiced_rtc_
  *               Variable Definitions
  ******************************************************/
 
+#ifdef WICED_ENABLE_MCU_RTC
 /* Default RTC time. Set to 12:20:30 08/04/2013 Monday */
 static const platform_rtc_time_t default_rtc_time =
 {
@@ -71,6 +72,7 @@ static const platform_rtc_time_t default_rtc_time =
    .month   = 4,
    .year    = 13,
 };
+#endif /* #ifdef WICED_ENABLE_MCU_RTC */
 
 static const char not_leap_days[] =
 {

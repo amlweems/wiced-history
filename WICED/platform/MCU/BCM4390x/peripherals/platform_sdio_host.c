@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -146,14 +146,16 @@ void platform_sdio_host_enable_high_speed( void )
     uint8_t  baseclk;
 
     value = 1;
-    sdioh_iovar_op(glob_sd, "sd_highspeed", NULL, 0, (void *)&value, sizeof(uint32_t), TRUE);
+
+    sdioh_iovar_op(glob_sd, "sd_highspeed", NULL, 0, (void *)&value, sizeof(value), TRUE);
 
     /* Get base clock in MHz */
     baseclk = GFIELD(glob_sd->caps, CAP_BASECLK);
     /* Calculate divisor number */
     value = DIV_ROUND_UP(baseclk, 50);
 
-    sdioh_iovar_op(glob_sd, "sd_divisor", NULL, 0, (void *)&value, sizeof(uint32_t), TRUE);
+    sdioh_iovar_op(glob_sd, "sd_divisor", NULL, 0, (void *)&value, sizeof(value), TRUE);
+
 }
 
 wiced_result_t platform_sdio_host_enable_interrupt( void )

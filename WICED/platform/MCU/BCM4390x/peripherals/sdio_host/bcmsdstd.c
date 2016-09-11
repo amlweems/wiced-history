@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -3607,6 +3607,10 @@ sdstd_start_clock(sdioh_info_t *sd, uint16 new_sd_divisor)
     }
 
 #endif /* __IOPOS__ */
+
+    /* Add delay before starting clock */
+    OSL_DELAY(100);
+
     sd_err(("%s: Using clock divisor of %d (regval 0x%04x)\n", __FUNCTION__,
              new_sd_divisor, divisor));
     if (new_sd_divisor > 0)
@@ -3707,7 +3711,9 @@ sdstd_start_clock(sdioh_info_t *sd, uint16 new_sd_divisor)
         sdstd_wreg16(sd, SD_ErrorIntrStatusEnable, (regdata & ~ERRINT_DATA_TIMEOUT_BIT));
     }
 #endif
-    OSL_DELAY(2);
+
+    /* Add delay after starting clock. the board takes a while to become ready */
+    OSL_DELAY(100);
 
     sd_info(("Final Clock control is 0x%x\n", sdstd_rreg16(sd, SD_ClockCntrl)));
 

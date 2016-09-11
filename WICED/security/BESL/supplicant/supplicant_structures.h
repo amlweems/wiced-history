@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -90,6 +90,7 @@ typedef struct
     /* The ID of the last received packet we should use when replying */
     uint8_t                     last_received_id;
 
+    uint8_t                     have_packet;      /* Flags that a packet is already created for TLS records */
     uint32_t                    start_time;
 
     besl_mac_t                  supplicant_mac_address;
@@ -99,6 +100,7 @@ typedef struct
 
     wiced_tls_context_t*        tls_context;
     tls_agent_workspace_t       tls_agent;
+    uint8_t                     tls_length_overhead;    /* This is a workaround flag for eap_tls_packet lenght parameter */
     uint8_t*                    buffer;    // XXX temporary until we review how the TLS engine is working with EAP transport
     uint32_t                    buffer_size;
     uint8_t*                    data_start;

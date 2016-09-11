@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "wiced.h"
 #include "wiced_bt_types.h"
 #include "wiced_result.h"
 #include "bt_target.h"
@@ -79,7 +78,11 @@ extern "C" {
 /**
  * AVRC remote control functions
  *
- * @addtogroup  wicedbt_RemoteControl       Remote control
+ * @defgroup    wicedbt_avrcp   Audio/Video Remote Control Protocol (AVRCP)
+ * @ingroup     wicedbt_av_profiles
+ *
+ * @addtogroup  wicedbt_avrcp       Remote control
+ * @ingroup     wicedbt_av_profiles
  *
  * @{
  */

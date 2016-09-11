@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -304,7 +304,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
 	chipreset(ch);
 
 	/* dma attach */
-	sprintf(name, "etc%d", etc->coreunit);
+	snprintf(name, sizeof(name), "etc%d", etc->coreunit);
 
 	/* allocate dma resources for txqs */
 	/* TX: TC_BK, RX: RX_Q0 */
@@ -416,7 +416,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
 #endif /* ! _CFE_ */
 
 	/* set default sofware intmask */
-	sprintf(name, "et%d_no_txint", etc->unit);
+	snprintf(name, sizeof(name), "et%d_no_txint", etc->unit);
 	if (getintvar(ch->vars, name)) {
 		/* if no_txint variable is non-zero we disable tx interrupts.
 		 * we do the tx buffer reclaim once every few frames.
@@ -1303,6 +1303,42 @@ gmac_mf_add(ch_t *ch, struct ether_addr *mcaddr)
 	ch->mf.bucket[hash] = entry;
 
 	return (SUCCESS);
+}
+
+/*
+ * Remove a multicast address from the filter hash table.
+ */
+static int
+gmac_mf_remove(ch_t *ch, struct ether_addr *mcaddr)
+{
+	mflist_t **head = &ch->mf.bucket[GMAC_MCADDR_HASH(mcaddr)];
+	mflist_t *ptr;
+	mflist_t *prev_ptr;
+
+	for (ptr = *head, prev_ptr = NULL; ptr != NULL; ptr = ptr->next) {
+		if (!ETHER_MCADDR_CMP(&ptr->mc_addr, mcaddr)) {
+			if (prev_ptr != NULL) {
+				prev_ptr->next = ptr->next;
+			} else {
+				*head = ptr->next;
+			}
+			MFREE(ch->osh, ptr, sizeof(*ptr));
+			return (SUCCESS);
+		}
+		prev_ptr = ptr;
+	}
+
+	return (FAILURE);
+}
+
+int etc_multicast_filter_add(etc_info_t *etc, struct ether_addr *mcaddr)
+{
+	return gmac_mf_add(etc->ch, mcaddr);
+}
+
+int etc_multicast_filter_remove(etc_info_t *etc, struct ether_addr *mcaddr)
+{
+	return gmac_mf_remove(etc->ch, mcaddr);
 }
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -59,9 +59,15 @@ extern "C"
 #if defined(STM32F401xx) || defined(STM32F411xE)
     #define NUMBER_OF_UART_PORTS      (3)    // USART1, USART2, and USART6
 #endif
+#if defined(STM32F412xG)
+    #define NUMBER_OF_UART_PORTS      (4)    // USART1, USART2, USART3 and USART6
+#endif
 
 /* Invalid UART port number */
 #define INVALID_UART_PORT_NUMBER  (0xff)
+
+/* Invalid GPIO port number */
+#define INVALID_GPIO_PORT_NUMBER  (0xff)
 
 /* Default STDIO buffer size */
 #ifndef STDIO_BUFFER_SIZE
@@ -78,7 +84,7 @@ extern "C"
 #if defined(STM32F401xx) || defined(STM32F446xx)
 #define NUMBER_OF_SPI_PORTS       (4)
 #endif
-#if defined(STM32F411xE)
+#if defined(STM32F411xE) || defined(STM32F412xG)
 #define NUMBER_OF_SPI_PORTS       (5)
 #endif
 
@@ -155,7 +161,7 @@ typedef struct
 typedef struct
 {
     platform_spi_port_t*                 port;
-    uint8_t                              gpio_af;
+    uint32_t                             gpio_af;
     uint32_t                             peripheral_clock_reg;
     platform_peripheral_clock_function_t peripheral_clock_func;
     const platform_gpio_t*               pin_mosi;

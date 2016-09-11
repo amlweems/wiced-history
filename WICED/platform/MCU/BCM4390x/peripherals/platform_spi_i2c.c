@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -54,6 +54,7 @@
 
 #include "platform_mcu_peripheral.h"
 #include "platform_map.h"
+#include "platform_pinmux.h"
 
 #include "bcmutils.h"
 #include "sbchipc.h"
@@ -89,6 +90,8 @@
 
 #define I2C_DRIVER(i2c) ( i2c->driver )
 
+#define SPI_DRIVER(spi) ( spi->driver )
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -111,6 +114,9 @@
 #define GSIO_I2C_REPEATED_START_NEEDS_GPIO 0
 #endif
 
+/* Function selection for SPI1_MISO (GCI Chip Control 9 Register) */
+#define PIN_FUNCTION_SEL_SPI1_MISO  (1U << 27)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -131,6 +137,12 @@ typedef platform_result_t (*i2c_deinit_func_t)      ( const platform_i2c_t* i2c,
 typedef platform_result_t (*i2c_read_func_t)        ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
 typedef platform_result_t (*i2c_write_func_t)       ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
 typedef platform_result_t (*i2c_transfer_func_t)    ( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn );
+
+typedef platform_result_t (*spi_init_func_t)               ( const platform_spi_t* spi, const platform_spi_config_t* config );
+typedef platform_result_t (*spi_deinit_func_t)             ( const platform_spi_t* spi );
+typedef platform_result_t (*spi_transfer_func_t)           ( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments );
+typedef platform_result_t (*spi_transfer_nosetup_func_t)   ( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length );
+typedef platform_result_t (*spi_chip_select_toggle_func_t) ( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate );
 
 /******************************************************
  *                    Structures
@@ -159,6 +171,15 @@ struct i2c_driver
     i2c_transfer_func_t transfer;
 };
 
+struct spi_driver
+{
+    spi_init_func_t init;
+    spi_deinit_func_t deinit;
+    spi_transfer_func_t transfer;
+    spi_transfer_nosetup_func_t transfer_nosetup;
+    spi_chip_select_toggle_func_t chip_select_toggle;
+};
+
 /******************************************************
  *               Function Declarations
  ******************************************************/
@@ -181,6 +202,20 @@ static platform_result_t    i2c_bb_deinit      ( const platform_i2c_t* i2c, cons
 static platform_result_t    i2c_bb_read        ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
 static platform_result_t    i2c_bb_write       ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
 static platform_result_t    i2c_bb_transfer    ( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn );
+
+/* GSIO SPI bus interface */
+static platform_result_t    spi_init                  ( const platform_spi_t* spi, const platform_spi_config_t* config );
+static platform_result_t    spi_deinit                ( const platform_spi_t* spi );
+static platform_result_t    spi_transfer              ( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments );
+static platform_result_t    spi_transfer_nosetup      ( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length );
+static platform_result_t    spi_chip_select_toggle    ( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate );
+
+/* Bit-Banging SPI bus interface */
+static platform_result_t    spi_bb_init               ( const platform_spi_t* spi, const platform_spi_config_t* config );
+static platform_result_t    spi_bb_deinit             ( const platform_spi_t* spi );
+static platform_result_t    spi_bb_transfer           ( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments );
+static platform_result_t    spi_bb_transfer_nosetup   ( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length );
+static platform_result_t    spi_bb_chip_select_toggle ( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate );
 
 /******************************************************
  *               Variables Definitions
@@ -231,6 +266,26 @@ const i2c_driver_t i2c_bb_driver =
         .read = i2c_bb_read,
         .write = i2c_bb_write,
         .transfer = i2c_bb_transfer
+};
+
+/* GSIO SPI bus driver functions */
+const spi_driver_t spi_gsio_driver =
+{
+    .init = spi_init,
+    .deinit = spi_deinit,
+    .transfer = spi_transfer,
+    .transfer_nosetup = spi_transfer_nosetup,
+    .chip_select_toggle = spi_chip_select_toggle
+};
+
+/* Bit-Banging SPI bus driver functions */
+const spi_driver_t spi_bb_driver =
+{
+    .init = spi_bb_init,
+    .deinit = spi_bb_deinit,
+    .transfer = spi_bb_transfer,
+    .transfer_nosetup = spi_bb_transfer_nosetup,
+    .chip_select_toggle = spi_bb_chip_select_toggle
 };
 
 /******************************************************
@@ -1323,15 +1378,116 @@ static uint32_t gsio_spi_divider( uint32_t clk_rate, uint32_t target_speed_hz )
     return divider;
 }
 
-platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_spi_config_t* config )
+static void gsio_spi_pinmux_init( const platform_spi_t* spi )
+{
+    /* Setup the pin-mux for SPI MOSI function */
+    if ( spi->pin_mosi != NULL )
+    {
+        if ( spi->port == BCM4390X_SPI_0 )
+        {
+            platform_pinmux_init( spi->pin_mosi->pin, PIN_FUNCTION_SPI0_MOSI );
+        }
+        else if ( spi->port == BCM4390X_SPI_1 )
+        {
+            platform_pinmux_init( spi->pin_mosi->pin, PIN_FUNCTION_SPI1_MOSI );
+        }
+    }
+
+    /* Setup the pin-mux for SPI MISO function */
+    if ( spi->pin_miso != NULL )
+    {
+        if ( spi->port == BCM4390X_SPI_0 )
+        {
+            platform_pinmux_init( spi->pin_miso->pin, PIN_FUNCTION_SPI0_MISO );
+        }
+        else if ( spi->port == BCM4390X_SPI_1 )
+        {
+            platform_pinmux_init( spi->pin_miso->pin, PIN_FUNCTION_SPI1_MISO );
+
+            /* Workaround from ASIC team for routing SPI_1 MISO
+             * on the muxed pin (instead of the dedicated pin) */
+            platform_gci_chipcontrol( GCI_CHIPCONTROL_REG_9, 0, PIN_FUNCTION_SEL_SPI1_MISO );
+        }
+    }
+
+    /* Setup the pin-mux for SPI Clock function */
+    if ( spi->pin_clock != NULL )
+    {
+        if ( spi->port == BCM4390X_SPI_0 )
+        {
+            platform_pinmux_init( spi->pin_clock->pin, PIN_FUNCTION_SPI0_CLK );
+        }
+        else if ( spi->port == BCM4390X_SPI_1 )
+        {
+            platform_pinmux_init( spi->pin_clock->pin, PIN_FUNCTION_SPI1_CLK );
+        }
+    }
+
+    /* Setup the pin-mux for SPI CS function */
+    if ( spi->pin_cs != NULL )
+    {
+        if ( spi->port == BCM4390X_SPI_0 )
+        {
+            platform_pinmux_init( spi->pin_cs->pin, PIN_FUNCTION_SPI0_CS );
+        }
+        else if ( spi->port == BCM4390X_SPI_1 )
+        {
+            platform_pinmux_init( spi->pin_cs->pin, PIN_FUNCTION_SPI1_CS );
+        }
+    }
+}
+
+static platform_result_t spi_chip_select_toggle( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate )
+{
+    if ( config->chip_select != NULL )
+    {
+        if ( activate == WICED_TRUE )
+        {
+            if ( config->mode & SPI_CS_ACTIVE_HIGH )
+            {
+                platform_gpio_output_high( config->chip_select );
+            }
+            else
+            {
+                platform_gpio_output_low( config->chip_select );
+            }
+        }
+        else
+        {
+            if ( config->mode & SPI_CS_ACTIVE_HIGH )
+            {
+                platform_gpio_output_low( config->chip_select );
+            }
+            else
+            {
+                platform_gpio_output_high( config->chip_select );
+            }
+        }
+    }
+    else
+    {
+        if ( activate == WICED_TRUE)
+        {
+            gsio_regs[ spi->port ].interface->ctrl |=  GSIO_GG_SPI_CHIP_SELECT;
+        }
+        else
+        {
+            gsio_regs[ spi->port ].interface->ctrl &= ( ~GSIO_GG_SPI_CHIP_SELECT );
+        }
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t spi_init( const platform_spi_t* spi, const platform_spi_config_t* config )
 {
     platform_result_t result = PLATFORM_SUCCESS;
-
-    wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) && (( config->mode & SPI_USE_DMA ) == 0 ));
 
     gsio_set_clock(spi->port, config->speed, gsio_spi_divider);
 
     gsio_regs[spi->port].interface->ctrl = ( 0 & GSIO_GO_MASK) | GSIO_GC_SPI_NOD_DATA_IO | GSIO_NOD_1 | GSIO_GM_SPI;
+
+    gsio_spi_pinmux_init(spi);
 
     if ( config->chip_select != NULL )
     {
@@ -1349,80 +1505,415 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
     return result;
 }
 
-platform_result_t platform_spi_deinit( const platform_spi_t* spi )
+static platform_result_t spi_deinit( const platform_spi_t* spi )
 {
     UNUSED_PARAMETER( spi );
     /* TODO: unimplemented */
     return PLATFORM_UNSUPPORTED;
 }
 
-platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments )
+static platform_result_t spi_transfer_nosetup( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length )
 {
-    platform_result_t result = PLATFORM_SUCCESS;
-    uint32_t          count  = 0;
+    while ( length-- )
+    {
+        uint16_t data = 0xFF;
+
+        if ( send_ptr != NULL )
+        {
+            data = *send_ptr++;
+        }
+
+        gsio_regs[spi->port].interface->data = data;
+        gsio_regs[spi->port].interface->ctrl |= GSIO_SB_BUSY;
+        gsio_wait_for_xfer_to_complete( spi->port );
+        data = gsio_regs[spi->port].interface->data;
+
+        if ( rcv_ptr != NULL )
+        {
+            *rcv_ptr++ = (uint8_t)data;
+        }
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t spi_transfer( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments )
+{
+    platform_result_t result      = PLATFORM_SUCCESS;
     uint16_t          i;
 
-    wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) && ( segments != NULL ) && ( number_of_segments != 0 ) && ( config->bits == 8 ) );
+    platform_spi_core_clock_toggle( WICED_TRUE );
 
-    gsio_clock_request();
-
-    result = platform_spi_init( spi, config );
+    result = spi_init( spi, config );
     if ( result != PLATFORM_SUCCESS )
     {
-        gsio_clock_release();
+        platform_spi_core_clock_toggle( WICED_FALSE );
         return result;
     }
 
     /* Activate chip select */
-    if ( config->chip_select != NULL )
-    {
-        platform_gpio_output_low( config->chip_select );
-    }
-    else
-    {
-        gsio_regs[spi->port].interface->ctrl |= GSIO_GG_SPI_CHIP_SELECT;
-    }
+    spi_chip_select_toggle( spi, config, WICED_TRUE );
 
+    /* SPI transfer after init and CS */
     for ( i = 0; i < number_of_segments; i++ )
     {
-        count = segments[i].length;
-
         const uint8_t* send_ptr = ( const uint8_t* )segments[i].tx_buffer;
         uint8_t*       rcv_ptr  = ( uint8_t* )segments[i].rx_buffer;
 
-        while ( count-- )
-        {
-            uint16_t data = 0xFF;
-
-            if ( send_ptr != NULL )
-            {
-                data = *send_ptr++;
-            }
-
-            gsio_regs[spi->port].interface->data = data;
-            gsio_regs[spi->port].interface->ctrl |= GSIO_SB_BUSY;
-            gsio_wait_for_xfer_to_complete( spi->port );
-            data = gsio_regs[spi->port].interface->data;
-
-            if ( rcv_ptr != NULL )
-            {
-                *rcv_ptr++ = (uint8_t)data;
-            }
-        }
+        spi_transfer_nosetup( spi, config, send_ptr, rcv_ptr, segments[i].length );
     }
 
     /* Deassert chip select */
-    if ( config->chip_select != NULL )
-    {
-        platform_gpio_output_high( config->chip_select );
-    }
-    else
-    {
-        gsio_regs[spi->port].interface->ctrl &= (~GSIO_GG_SPI_CHIP_SELECT);
-    }
+    spi_chip_select_toggle( spi, config, WICED_FALSE );
 
-    gsio_clock_release();
+    platform_spi_core_clock_toggle( WICED_FALSE );
 
     return result;
 }
 
+/*****************************************************************************
+ *            4390x SPI Master Bit-Banging Driver Implementation.            *
+ *                                                                           *
+ *****************************************************************************/
+
+#define SPI_BB_CS_SETUP_DELAY_CYCLES 25
+#define SPI_BB_CS_HOLD_DELAY_CYCLES  25
+
+static uint32_t spi_bb_clock_toggle_delay_cycles;
+
+#ifdef SPI_BB_TRANSFER_DELAY_SUPPORT
+#define SPI_BB_DELAY( cycles )                                                          \
+    do                                                                                  \
+    {                                                                                   \
+        uint32_t delay_cycles = cycles;                                                 \
+        uint32_t last_stamp  = PLATFORM_APPSCR4->cycle_cnt;                             \
+                                                                                        \
+        while (delay_cycles != 0)                                                       \
+        {                                                                               \
+            uint32_t current_stamp = PLATFORM_APPSCR4->cycle_cnt;                       \
+            uint32_t passed_cycles = current_stamp - last_stamp;                        \
+                                                                                        \
+            if (passed_cycles >= delay_cycles)                                          \
+            {                                                                           \
+                break;                                                                  \
+            }                                                                           \
+                                                                                        \
+            delay_cycles -= passed_cycles;                                              \
+            last_stamp = current_stamp;                                                 \
+        }                                                                               \
+    }                                                                                   \
+    while ( 0 )
+#else
+#define SPI_BB_DELAY( cycles )
+#endif /* SPI_BB_TRANSFER_DELAY_SUPPORT */
+
+#define SPI_BB_SETDIR_INPUT( pin )     ( platform_gpio_init( pin, INPUT_PULL_UP ) )
+#define SPI_BB_SETDIR_OUTPUT( pin )    ( platform_gpio_init( pin, OUTPUT_PUSH_PULL ) )
+
+#define SPI_BB_GETPIN( pin )         ( ( platform_gpio_input_get( pin ) == WICED_TRUE ) ? 1 : 0 )
+#define SPI_BB_SETPIN( pin, val )    ( val ? platform_gpio_output_high( pin ) : platform_gpio_output_low( pin ) )
+
+/* SPI Clock Polarity (CPOL) configuration */
+#define SPI_BB_CPOL_HIGH( config )        ( ( config->mode & SPI_CLOCK_IDLE_HIGH ) ? 1 : 0 )
+/* SPI Clock Phase (CPHA) configuration */
+#define SPI_BB_CPHA_HIGH( config )        ( ( config->mode & SPI_CLOCK_RISING_EDGE ) ? SPI_BB_CPOL_HIGH( config ) : !SPI_BB_CPOL_HIGH( config ) )
+/* SPI Data Transfer Order configuration */
+#define SPI_BB_MSB_FIRST( config )        ( ( config->mode & SPI_MSB_FIRST ) ? 1 : 0 )
+/* SPI Chip Select Level configuration */
+#define SPI_BB_CS_ACTIVEHIGH( config )    ( ( config->mode & SPI_CS_ACTIVE_HIGH ) ? 1 : 0 )
+
+/* Sets the value on the CLOCK line */
+#define SPI_BB_SET_CLOCK( spi, val )    SPI_BB_SETPIN( spi->pin_clock, val )
+/* Sets the value on the MOSI line */
+#define SPI_BB_SET_MOSI( spi, val )     SPI_BB_SETPIN( spi->pin_mosi, val )
+/* Gets the value on the MISO line */
+#define SPI_BB_GET_MISO( spi )          SPI_BB_GETPIN( spi->pin_miso )
+/* Sets the value on the CS line */
+#define SPI_BB_SET_CS( spi, val )       SPI_BB_SETPIN( spi->pin_cs, val )
+
+static void spi_bb_cs_activate( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate )
+{
+    SPI_BB_DELAY( SPI_BB_CS_SETUP_DELAY_CYCLES );
+    SPI_BB_SET_CS( spi, ((activate == WICED_TRUE) ? SPI_BB_CS_ACTIVEHIGH(config) : !SPI_BB_CS_ACTIVEHIGH(config)) );
+    SPI_BB_DELAY( SPI_BB_CS_HOLD_DELAY_CYCLES );
+}
+
+static platform_result_t spi_bb_chip_select_toggle( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate )
+{
+    spi_bb_cs_activate( spi, config, activate );
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t spi_bb_init( const platform_spi_t* spi, const platform_spi_config_t* config )
+{
+    if ( (spi->pin_clock == NULL) || (spi->pin_mosi == NULL) || (spi->pin_miso == NULL) || (spi->pin_cs == NULL) )
+    {
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    /* Setup the signal toggle delay cycles for SPI CLOCK */
+    spi_bb_clock_toggle_delay_cycles = (((CPU_CLOCK_HZ + (config->speed / 2)) / config->speed) + 1) / 2;
+
+    /* Setup the GPIOs for CLOCK, MOSI, MISO, CS */
+    SPI_BB_SETDIR_OUTPUT( spi->pin_clock );
+    SPI_BB_SETDIR_OUTPUT( spi->pin_mosi );
+    SPI_BB_SETDIR_INPUT( spi->pin_miso );
+    SPI_BB_SETDIR_OUTPUT( spi->pin_cs );
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t spi_bb_deinit( const platform_spi_t* spi )
+{
+    platform_gpio_deinit( spi->pin_clock );
+    platform_gpio_deinit( spi->pin_mosi );
+    platform_gpio_deinit( spi->pin_miso );
+    platform_gpio_deinit( spi->pin_cs );
+
+    return PLATFORM_SUCCESS;
+}
+
+static uint8_t spi_bb_transfer_byte( const platform_spi_t* spi, const platform_spi_config_t* config, uint8_t send_byte )
+{
+    uint8_t spi_mode;
+    uint8_t rcv_byte;
+    uint8_t data_bit;
+
+    spi_mode = ( SPI_BB_CPOL_HIGH(config) << 1 ) | ( SPI_BB_CPHA_HIGH(config) );
+    rcv_byte = 0x00;
+
+    if ( SPI_BB_MSB_FIRST(config) != 0 )
+    {
+        data_bit = 0x80;
+    }
+    else
+    {
+        data_bit = 0x01;
+    }
+
+    while ( data_bit )
+    {
+        switch (spi_mode)
+        {
+            case 0: /* CPOL = 0, CPHA = 0 */
+                /* output data on MOSI */
+                SPI_BB_SET_MOSI(spi, ((send_byte & data_bit) ? 1 : 0));
+
+                /* CLOCK setup time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to high */
+                SPI_BB_SET_CLOCK(spi, 1);
+
+                /* sample data on MISO */
+                if ( SPI_BB_GET_MISO(spi) != 0 )
+                {
+                    rcv_byte |= data_bit;
+                }
+
+                /* CLOCK hold time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to low */
+                SPI_BB_SET_CLOCK(spi, 0);
+
+                break;
+            case 1: /* CPOL = 0, CPHA = 1 */
+                /* drive CLOCK to high */
+                SPI_BB_SET_CLOCK(spi, 1);
+
+                /* output data on MOSI */
+                SPI_BB_SET_MOSI(spi, ((send_byte & data_bit) ? 1 : 0));
+
+                /* CLOCK setup time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to low */
+                SPI_BB_SET_CLOCK(spi, 0);
+
+                /* sample data on MISO */
+                if ( SPI_BB_GET_MISO(spi) != 0 )
+                {
+                    rcv_byte |= data_bit;
+                }
+
+                /* CLOCK hold time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                break;
+            case 2: /* CPOL = 1, CPHA = 0 */
+                /* output data on MOSI */
+                SPI_BB_SET_MOSI(spi, ((send_byte & data_bit) ? 1 : 0));
+
+                /* CLOCK setup time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to low */
+                SPI_BB_SET_CLOCK(spi, 0);
+
+                /* sample data on MISO */
+                if ( SPI_BB_GET_MISO(spi) != 0 )
+                {
+                    rcv_byte |= data_bit;
+                }
+
+                /* CLOCK hold time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to high */
+                SPI_BB_SET_CLOCK(spi, 1);
+
+                break;
+            case 3: /* CPOL = 1, CPHA = 1 */
+                /* drive CLOCK to low */
+                SPI_BB_SET_CLOCK(spi, 0);
+
+                /* output data on MOSI */
+                SPI_BB_SET_MOSI(spi, ((send_byte & data_bit) ? 1 : 0));
+
+                /* CLOCK setup time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                /* drive CLOCK to high */
+                SPI_BB_SET_CLOCK(spi, 1);
+
+                /* sample data on MISO */
+                if ( SPI_BB_GET_MISO(spi) != 0 )
+                {
+                    rcv_byte |= data_bit;
+                }
+
+                /* CLOCK hold time delay */
+                SPI_BB_DELAY(spi_bb_clock_toggle_delay_cycles);
+
+                break;
+        }
+
+        if ( SPI_BB_MSB_FIRST(config) != 0 )
+        {
+            data_bit >>= 1;
+        }
+        else
+        {
+            data_bit <<= 1;
+        }
+    }
+
+    return rcv_byte;
+}
+
+static platform_result_t spi_bb_transfer_nosetup( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length )
+{
+    while ( length-- )
+    {
+        uint8_t send_byte = 0x00;
+        uint8_t rcv_byte = 0x00;
+
+        if ( send_ptr != NULL )
+        {
+            send_byte = *send_ptr++;
+        }
+
+        rcv_byte = spi_bb_transfer_byte( spi, config, send_byte );
+
+        if ( rcv_ptr != NULL )
+        {
+            *rcv_ptr++ = rcv_byte;
+        }
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t spi_bb_transfer( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments )
+{
+    platform_result_t result = PLATFORM_SUCCESS;
+    uint16_t i;
+
+    platform_spi_core_clock_toggle( WICED_TRUE );
+
+    /* Activate chip select */
+    spi_bb_cs_activate( spi, config, WICED_TRUE );
+
+    /* Start SPI transfer */
+    for ( i = 0; i < number_of_segments; i++ )
+    {
+        const uint8_t* send_ptr = ( const uint8_t* )segments[i].tx_buffer;
+        uint8_t*       rcv_ptr  = ( uint8_t* )segments[i].rx_buffer;
+
+        spi_bb_transfer_nosetup( spi, config, send_ptr, rcv_ptr, segments[i].length );
+    }
+
+    /* Deactivate chip select */
+    spi_bb_cs_activate( spi, config, WICED_FALSE );
+
+    platform_spi_core_clock_toggle( WICED_FALSE );
+
+    return result;
+}
+
+platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_spi_config_t* config )
+{
+    platform_result_t result;
+
+    wiced_assert( "bad argument", ( spi != NULL ) && ( spi->driver != NULL ) && ( config != NULL ) && (( config->mode & SPI_USE_DMA ) == 0 ));
+
+    result = SPI_DRIVER(spi)->init(spi, config);
+
+    return result;
+}
+
+platform_result_t platform_spi_deinit( const platform_spi_t* spi )
+{
+    platform_result_t result;
+
+    wiced_assert( "bad argument", ( spi != NULL ) && ( spi->driver != NULL ) );
+
+    result = SPI_DRIVER(spi)->deinit(spi);
+
+    return result;
+}
+
+platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments )
+{
+    platform_result_t result;
+
+    wiced_assert( "bad argument", ( spi != NULL ) && ( spi->driver != NULL ) && ( config != NULL ) && ( segments != NULL ) && ( number_of_segments != 0 ) && ( config->bits == 8 ) );
+
+    result = SPI_DRIVER(spi)->transfer(spi, config, segments, number_of_segments);
+
+    return result;
+}
+
+platform_result_t platform_spi_transfer_nosetup( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* rcv_ptr, uint32_t length )
+{
+    platform_result_t result;
+
+    result = SPI_DRIVER(spi)->transfer_nosetup(spi, config, send_ptr, rcv_ptr, length);
+
+    return result;
+}
+
+platform_result_t platform_spi_chip_select_toggle( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate )
+{
+    platform_result_t result;
+
+    result = SPI_DRIVER(spi)->chip_select_toggle(spi, config, activate);
+
+    return result;
+}
+
+platform_result_t platform_spi_core_clock_toggle( wiced_bool_t request )
+{
+    if ( request == WICED_TRUE )
+    {
+        gsio_clock_request( );
+    }
+    else
+    {
+        gsio_clock_release( );
+    }
+
+    return PLATFORM_SUCCESS;
+}

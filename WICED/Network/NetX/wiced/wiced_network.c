@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -367,7 +367,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
 {
     UINT        status;
 
-    if ( IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         return WICED_SUCCESS;
     }
@@ -587,7 +587,7 @@ driver_not_notified_leave_wifi_and_delete_ip:
 
 wiced_result_t wiced_ip_down( wiced_interface_t interface )
 {
-    if ( IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         /* Cleanup DHCP & DNS */
         if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE )
@@ -958,7 +958,7 @@ wiced_bool_t wiced_ip_is_any_pending_packets( wiced_interface_t interface )
     NX_IP* ip_handle;
     ULONG  i;
 
-    if ( !IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_FALSE )
     {
         return WICED_FALSE;
     }

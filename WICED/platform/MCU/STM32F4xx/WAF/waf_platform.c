@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -32,6 +32,8 @@
 #define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_11 )
 #elif defined(STM32F427_437xx) || defined(STM32F429_439xx)
 #define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_23 )
+#elif defined(STM32F412xG)
+#define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_11 )
 #else
 #error Platform maximum number of flash sectors not defined
 #endif
@@ -76,8 +78,7 @@ typedef uint64_t flash_write_t;
 
 static inline void __jump_to( uint32_t addr )
 {
-    __asm( "MOV R1, #0x00000001" );
-    __asm( "ORR R0, R1, #0" );  /* Last bit of jump address indicates whether destination is Thumb or ARM code */
+    __asm( "ORR R0, R0, #1" );  /* Last bit of jump address indicates whether destination is Thumb or ARM code */
     __asm( "BX R0" );
 }
 

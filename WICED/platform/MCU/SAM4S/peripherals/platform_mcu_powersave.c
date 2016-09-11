@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,13 +26,6 @@
 #include "wiced_defaults.h"
 
 /******************************************************
- *                      Macros
- ******************************************************/
-
-#define CYCLES_TO_MS( cycles ) ( ( ( cycles ) * 1000 * RTT_CLOCK_PRESCALER ) / RTT_CLOCK_HZ )
-#define MS_TO_CYCLES( ms )     ( ( ( ms ) * RTT_CLOCK_HZ ) / ( 1000 * RTT_CLOCK_PRESCALER ) )
-
-/******************************************************
  *                    Constants
  ******************************************************/
 
@@ -41,6 +34,13 @@
 #define RTT_MAX_CYCLES           (64000) /* 7.8125 seconds                                                                         */
 #define RC_OSC_DELAY_CYCLES         (15) /* Cycles required to stabilise clock after exiting WAIT mode                             */
 #define JTAG_DEBUG_SLEEP_DELAY_MS (3000) /* Delay in ms to give OpenOCD enough time to halt the CPU before the CPU enter WAIT mode */
+
+/******************************************************
+ *                      Macros
+ ******************************************************/
+
+#define CYCLES_TO_MS( cycles ) ( ( ( cycles ) * 1000 * RTT_CLOCK_PRESCALER ) / RTT_CLOCK_HZ )
+#define MS_TO_CYCLES( ms )     ( ( ( ms ) * RTT_CLOCK_HZ ) / ( 1000 * RTT_CLOCK_PRESCALER ) )
 
 /******************************************************
  *                   Enumerations
@@ -107,7 +107,7 @@ platform_result_t platform_mcu_powersave_init( void )
 
     NVIC_DisableIRQ( RTT_IRQn );
     NVIC_ClearPendingIRQ( RTT_IRQn );
-//    NVIC_SetPriority( RTT_IRQn, SAM4S_RTT_IRQ_PRIO );
+    NVIC_SetPriority( RTT_IRQn, 0 );
     NVIC_EnableIRQ( RTT_IRQn );
     pmc_set_fast_startup_input( PMC_FSMR_RTTAL );
 
@@ -118,7 +118,6 @@ platform_result_t platform_mcu_powersave_init( void )
 platform_result_t platform_mcu_powersave_disable( void )
 {
 #ifndef WICED_DISABLE_MCU_POWERSAVE
-
     /* Atomic operation starts */
     WICED_DISABLE_INTERRUPTS();
 
@@ -127,7 +126,6 @@ platform_result_t platform_mcu_powersave_disable( void )
 
     /* Atomic operation ends */
     WICED_ENABLE_INTERRUPTS();
-
 #endif /* WICED_DISABLE_MCU_POWERSAVE */
     return PLATFORM_SUCCESS;
 }
@@ -229,6 +227,7 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
     wiced_bool_t jtag_enabled       = ( ( CoreDebug ->DHCSR & CoreDebug_DEMCR_TRCENA_Msk ) != 0 ) ? WICED_TRUE : WICED_FALSE;
     wiced_bool_t jtag_delay_elapsed = ( host_rtos_get_time() > JTAG_DEBUG_SLEEP_DELAY_MS ) ? WICED_TRUE : WICED_FALSE;
     uint32_t     elapsed_cycles     = 0;
+    uint32_t     counter_read_v1 = 0, counter_read_v2 = 0;
 
     /* Criteria to enter WAIT mode
      * 1. Clock needed counter is 0 and no JTAG debugging
@@ -240,6 +239,12 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
         uint32_t total_sleep_cycles;
         uint32_t total_delay_cycles;
 
+        /* Enable RTT */
+        rtt_enable( RTT );
+        /* select source */
+        rtt_sel_source( RTT, false );
+        /* Clear all interrupt sources */
+        rtt_disable_interrupt( RTT, RTT_MR_RTTINCIEN | RTT_MR_ALMIEN );
         /* Start real-time timer */
         rtt_init( RTT, RTT_CLOCK_PRESCALER );
 
@@ -280,10 +285,10 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
             matrix_set_system_io( 0x0CF0 );
 
             /* Switch Master Clock to Main Clock (internal fast RC oscillator) */
-            pmc_switch_mck_to_mainck( PMC_PCK_PRES_CLK_1 );
-
             /* Switch on internal fast RC oscillator, switch Main Clock source to internal fast RC oscillator and disables external fast crystal */
-            pmc_switch_mainck_to_fastrc( CKGR_MOR_MOSCRCF_4_MHz );
+            pmc_switch_mck_to_sclk(PMC_MCKR_PRES_CLK_1);
+            pmc_switch_mainck_to_fastrc(CKGR_MOR_MOSCRCF_4_MHz);
+            pmc_switch_mck_to_mainck(PMC_PCK_PRES_CLK_1);
 
             /* Disable external fast crystal */
             pmc_osc_disable_xtal( 0 );
@@ -292,7 +297,11 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
             pmc_disable_pllack( );
 
             /* This above process introduces certain delay. Add delay to the elapsed cycles */
-            elapsed_cycles += rtt_read_timer_value( RTT );
+            do {
+                counter_read_v1 = rtt_read_timer_value( RTT );
+                counter_read_v2 = rtt_read_timer_value( RTT );
+            } while (counter_read_v1 != counter_read_v2);
+            elapsed_cycles += (counter_read_v2 * RTT_CLOCK_PRESCALER);
 
             while ( wake_up_interrupt_triggered == WICED_FALSE  && elapsed_cycles < total_sleep_cycles )
             {
@@ -300,6 +309,11 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
 
                 /* Start real-time timer and alarm */
                 rtt_init( RTT, RTT_CLOCK_PRESCALER );
+                /* From Atmel reference code */
+                counter_read_v1 = rtt_read_timer_value(RTT);
+                while (counter_read_v1 == rtt_read_timer_value(RTT));
+                counter_read_v2 = counter_read_v1 = 0;
+                rtt_enable_interrupt(RTT, RTT_MR_ALMIEN);
                 rtt_write_alarm_time( RTT, ( current_sleep_cycles > RTT_MAX_CYCLES ) ? RTT_MAX_CYCLES - RC_OSC_DELAY_CYCLES : current_sleep_cycles - RC_OSC_DELAY_CYCLES );
 
                 /* Enter WAIT mode */
@@ -309,14 +323,25 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
                 rtt_get_status( RTT );
 
                 /* Add sleep time to the elapsed cycles */
-                elapsed_cycles += rtt_read_timer_value( RTT );
+                do {
+                    counter_read_v1 = rtt_read_timer_value( RTT );
+                    counter_read_v2 = rtt_read_timer_value( RTT );
+                } while (counter_read_v1 != counter_read_v2);
+                elapsed_cycles += (counter_read_v2 * RTT_CLOCK_PRESCALER);
+                counter_read_v2 = counter_read_v1 = 0;
             }
 
             /* Re-enable real-time timer to time clock reinitialisation delay */
+            rtt_disable_interrupt( RTT, RTT_MR_RTTINCIEN | RTT_MR_ALMIEN );
             rtt_init( RTT, RTT_CLOCK_PRESCALER );
 
             /* Reinit fast clock. This takes ~19ms, but the timing has been compensated */
-            platform_init_system_clocks();
+            pmc_switch_mck_to_sclk(PMC_MCKR_PRES_CLK_1);
+
+            /* Switch mainck to external xtal using default values */
+            pmc_switch_mainck_to_xtal(0, 15625UL);
+
+            sysclk_init();
 
             /* Disable unused clock to save power */
             pmc_osc_disable_fastrc();
@@ -331,10 +356,15 @@ static unsigned long wait_mode_power_down_hook( unsigned long delay_ms )
 //            platform_exit_powersave();
 
             /* Add clock reinitialisation delay to elapsed cycles */
-            elapsed_cycles += rtt_read_timer_value( RTT );
+            do {
+                counter_read_v1 = rtt_read_timer_value( RTT );
+                counter_read_v2 = rtt_read_timer_value( RTT );
+            } while (counter_read_v1 != counter_read_v2);
+            elapsed_cycles += (counter_read_v2 * RTT_CLOCK_PRESCALER);
+            counter_read_v2 = counter_read_v1 = 0;
 
             /* Disable RTT to save power */
-            RTT->RTT_MR = (uint32_t)( 1 << 20 );
+            rtt_disable ( RTT );
         }
     }
 
@@ -371,9 +401,17 @@ static unsigned long idle_power_down_hook( unsigned long delay_ms  )
 #ifndef WICED_DISABLE_MCU_POWERSAVE
 WWD_RTOS_DEFINE_ISR(rtc_wakeup_irq)
 {
-    __set_PRIMASK( 1 );
-    rtt_get_status( RTT );
-    rtt_disable_interrupt( RTT, RTT_MR_ALMIEN );
+     uint32_t ul_status;
+
+     /* Get RTT status */
+     ul_status = rtt_get_status(RTT);
+
+     if ((ul_status & RTT_SR_RTTINC) == RTT_SR_RTTINC) {
+     }
+
+     /* Alarm */
+     if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
+     }
 }
 WWD_RTOS_MAP_ISR( rtc_wakeup_irq, RTT_irq )
 #endif /* WICED_DISABLE_MCU_POWERSAVE */

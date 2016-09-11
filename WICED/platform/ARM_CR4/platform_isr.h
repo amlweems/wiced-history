@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -48,8 +48,8 @@ extern "C" {
 #elif defined ( __IAR_SYSTEMS_ICC__ )
 /* IAR Systems */
 #define PLATFORM_DEFINE_ISR( name ) \
-        void name( void ); \
-        void name( void )
+        __root void name( void ); \
+        __root void name( void )
 
 #else
 
@@ -106,11 +106,23 @@ extern "C" {
 
 #if defined( __GNUC__ )
 
+#ifdef WICED_NO_VECTORS
+
 #define WICED_SAVE_INTERRUPTS(flags) \
-    __asm__ volatile("mrs %0, cpsr\ncpsid i" : "=r" (flags) : : "memory", "cc");
+    do { __asm__ volatile("" : : : "memory"); (void)flags; } while(0)
 
 #define WICED_RESTORE_INTERRUPTS(flags) \
-    __asm__ volatile ("msr cpsr_c, %0" : : "r" (flags) : "memory", "cc")
+    do { __asm__ volatile("" : : : "memory"); } while(0)
+
+#else
+
+#define WICED_SAVE_INTERRUPTS(flags) \
+    do { __asm__ volatile("mrs %0, cpsr\ncpsid i" : "=r" (flags) : : "memory", "cc"); } while(0)
+
+#define WICED_RESTORE_INTERRUPTS(flags) \
+    do {__asm__ volatile ("msr cpsr_c, %0" : : "r" (flags) : "memory", "cc"); } while(0)
+
+#endif
 
 #endif
 
@@ -130,7 +142,10 @@ typedef enum
     PLATFORM_CPU_CLOCK_FREQUENCY_80_MHZ,
     PLATFORM_CPU_CLOCK_FREQUENCY_120_MHZ,
     PLATFORM_CPU_CLOCK_FREQUENCY_160_MHZ,
-    PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ
+    PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ,
+#if defined(PLATFORM_4390X_OVERCLOCK)
+    PLATFORM_CPU_CLOCK_FREQUENCY_480_MHZ
+#endif  /* PLATFORM_4390X_OVERCLOCK */
 } platform_cpu_clock_frequency_t;
 
 typedef enum
@@ -168,7 +183,7 @@ extern void         platform_tick_irq_init   ( void );
 extern wiced_bool_t platform_tick_irq_handler( void );
 extern uint32_t     platform_tick_get_time   ( platform_tick_times_t which_time );
 
-extern void         platform_cpu_clock_init  ( platform_cpu_clock_frequency_t freq );
+extern wiced_bool_t platform_cpu_clock_init  ( platform_cpu_clock_frequency_t freq );
 
 #ifdef __cplusplus
 } /*extern "C" */

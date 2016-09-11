@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -86,7 +86,8 @@ extern "C" {
  *               Function Definitions
  ******************************************************/
 
-int mini_printf( const char *format, ...);
+int mini_printf( const char* format, ...);
+int hex_dump_print(const void* data, uint16_t length, int show_ascii);
 
 #ifdef __cplusplus
 } /* extern "C" */

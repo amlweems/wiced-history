@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,6 +12,7 @@
 #include "wiced_result.h"
 #include "wiced_nfc_api.h"
 #include "nfc_queue.h"
+#include "platform_peripheral.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -90,7 +91,7 @@ extern const uint8_t nfc_task_value;
  *          NFC to Host Function Declarations
  ******************************************************/
 
-wiced_result_t nfc_bus_init( void );
+wiced_result_t nfc_bus_init( platform_gpio_irq_callback_t nfc_bus_rx_event_handler );
 wiced_result_t nfc_bus_deinit( void );
 wiced_result_t nfc_bus_transmit( const uint8_t* data_out, uint32_t size );
 wiced_result_t nfc_bus_receive( uint8_t* data_in, uint32_t size, uint32_t timeout_ms );
@@ -108,6 +109,7 @@ void set_common_wait_event_flag( uint8_t task_id, uint16_t flag );
 void nfc_internal_debug_exception( uint16_t code, char *msg );
 int nfc_internal_init( void );
 int nfc_internal_deinit( void );
+wiced_result_t nfc_internal_mfgtest_start( void );
 uint8_t GKI_send_event( uint8_t task_id, uint16_t event );
 void nfc_signal_rx_irq( void );
 int nfc_fwk_boot_entry( void );
@@ -120,6 +122,7 @@ void GKI_timer_update( uint32_t ticks_since_last_update );
 void nfc_delay_milliseconds( uint32_t delay_ms );
 void nfc_push_to_queue( void* message );
 void USERIAL_Init( void *p_cfg );
+wiced_result_t nfc_hci_transport_read();
 void GKI_enqueue( BUFFER_Q *p_q, void *p_buf );
 void GKI_init_q( BUFFER_Q *p_q );
 void *GKI_getbuf( uint16_t size );

@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,7 +29,7 @@ TRX_CREATOR          := $(SOURCE_ROOT)WICED/platform/MCU/BCM4390x/make_trx.pl
 MAC_GENERATOR        := $(TOOLS_ROOT)/mac_generator/mac_generator.pl
 AES128_CBC_ENCRYPTOR := $(COMMON_TOOLS_PATH)aes_cbc_128$(TOOLCHAIN_SUFFIX)
 HMAC_SHA256_SIGNER   := $(COMMON_TOOLS_PATH)hmac_sha256$(TOOLCHAIN_SUFFIX)
-RSA_SIGNER           := $(SOURCE_ROOT)/tools/secureboot/rsa/rsa_pkcs1_sign.pl
+RSA_SIGNER           := $(SOURCE_ROOT)tools/secureboot/rsa/rsa_pkcs1_sign.pl
 SECURE_TRX_CREATOR   := $(SOURCE_ROOT)WICED/platform/MCU/BCM4390x/make_secure_trx.pl
 KEYSDIR              := $(SOURCE_ROOT)WICED/platform/MCU/BCM4390x/keys
 
@@ -126,6 +126,13 @@ ifneq (download,$(findstring download,$(MAKECMDGOALS)))
 NO_BOOTLOADER_REQUIRED:=1
 endif
 
+
+#if building an upgrade, don't build the bootloader
+ifneq (,$(BOOTLOADER_SDK))
+NO_BOOTLOADER_REQUIRED:=1
+NO_TINY_BOOTLOADER_REQUIRED:=1
+endif
+
 # Do not include $(TINY_BOOTLOADER_BIN2C_OBJ) if building bootloader/tiny_bootloader/sflash_write
 ifneq (,$(findstring waf.bootloader, $(BUILD_STRING))$(findstring waf.tiny_bootloader, $(BUILD_STRING))$(findstring waf.sflash_write, $(BUILD_STRING)))
 NO_TINY_BOOTLOADER_REQUIRED:=1
@@ -145,7 +152,7 @@ $(TINY_BOOTLOADER_BIN2C_OBJ):
 	$(ECHO) Building Tiny Bootloader
 	$(MAKE) -r -f $(SOURCE_ROOT)Makefile $(TINY_BOOTLOADER_TARGET) -I$(OUTPUT_DIR) SUB_BUILD=tiny_bootloader $(TINY_BOOTLOADER_REDIRECT)
 	$(BIN2C) $(TINY_BOOTLOADER_BIN_FILE) $(TINY_BOOTLOADER_BIN2C_FILE) $(TINY_BOOTLOADER_BIN2C_ARRAY_NAME)
-	$(CC) $(CPU_CFLAGS) $(COMPILER_SPECIFIC_COMP_ONLY_FLAG) $(TINY_BOOTLOADER_BIN2C_FILE) $(WICED_SDK_DEFINES) $(WICED_SDK_INCLUDES) $(COMPILER_SPECIFIC_DEBUG_CFLAGS)  $(call ADD_COMPILER_SPECIFIC_STANDARD_CFLAGS, ) -o $(TINY_BOOTLOADER_BIN2C_OBJ)
+	$(CC) $(CPU_CFLAGS) $(COMPILER_SPECIFIC_COMP_ONLY_FLAG) $(TINY_BOOTLOADER_BIN2C_FILE) $(WICED_SDK_DEFINES) $(WICED_SDK_INCLUDES) $(COMPILER_SPECIFIC_DEBUG_CFLAGS)  $(COMPILER_SPECIFIC_STANDARD_CFLAGS) -o $(TINY_BOOTLOADER_BIN2C_OBJ)
 	$(ECHO) Finished Building Tiny Bootloader
 endif
 
@@ -339,6 +346,8 @@ endif
 
 
 download: APPS_LUT_DOWNLOAD $(STRIPPED_LINK_OUTPUT_FILE) display_map_summary download_bootloader $(if $(findstring no_dct,$(MAKECMDGOALS)),,download_dct)
+
+download_apps: APPS_LUT_DOWNLOAD
 
 ifneq (no_dct,$(findstring no_dct,$(MAKECMDGOALS)))
 FS_DEP := download_dct

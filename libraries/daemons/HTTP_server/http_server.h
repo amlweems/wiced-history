@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -213,11 +213,19 @@ typedef struct
 {
     const uint8_t*            data;                         /* packet data in message body      */
     uint16_t                  message_data_length;          /* data length in current packet    */
-    uint16_t                  total_message_data_remaining; /* data yet to be consumed          */
+    uint32_t                  total_message_data_remaining; /* data yet to be consumed          */
     wiced_bool_t              chunked_transfer;             /* chunked data format              */
     wiced_packet_mime_type_t  mime_type;                    /* mime type                        */
     wiced_http_request_type_t request_type;                 /* GET, POST or PUT request         */
 } wiced_http_message_body_t;
+
+typedef struct wiced_http_page_s wiced_http_page_t;
+
+typedef struct
+{
+   wiced_http_page_t* page_found;
+   uint32_t           total_data_remaning;
+} wiced_http_request_info_t;
 
 /**
  * Workspace structure for HTTP server stream
@@ -229,6 +237,12 @@ typedef struct
     wiced_tcp_stream_t tcp_stream;
     wiced_bool_t       chunked_transfer_enabled;
 } wiced_http_response_stream_t;
+
+typedef struct
+{
+    wiced_http_response_stream_t response;
+    wiced_http_request_info_t    request;
+} wiced_http_stream_t;
 
 /**
  * HTTP server socket callback
@@ -243,8 +257,9 @@ typedef int32_t (*url_processor_t)(  const char* url_path, const char* url_query
 
 /**
  * HTTP page list structure
+ * Request with content length more than MTU size is handled for RAW_DYNAMIC_URL_CONTENT and WICED_DYNAMIC_CONTENT type for now.
  */
-typedef struct
+struct wiced_http_page_s
 {
     const char* const url;                     /** String containing the path part of the URL of this page/file */
     const char* const mime_type;               /** String containing the MIME type of this page/file */
@@ -271,7 +286,7 @@ typedef struct
         } static_data;
         const resource_hnd_t* resource_data;   /* A Wiced Resource containing the page / file - Used for WICED_RESOURCE_URL_CONTENT and WICED_RAW_RESOURCE_URL_CONTENT */
     } url_content;
-} wiced_http_page_t;
+};
 
 /**
  * Workspace structure for HTTP server

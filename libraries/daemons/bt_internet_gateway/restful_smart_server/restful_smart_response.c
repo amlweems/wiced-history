@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -912,13 +912,29 @@ wiced_result_t rest_smart_response_write_array_end( wiced_http_response_stream_t
 
 wiced_result_t rest_smart_response_send_notification( wiced_http_response_stream_t* stream, wiced_bt_gatt_data_t* data )
 {
-    CHECK_STREAM( stream );
+     uint32_t a;
+    if ( stream == NULL )
+     {
+        return WICED_ERROR;
+     }
+
+    if ( stream->tcp_stream.socket == NULL )
+     {
+        return WICED_ERROR;
+     }
 
     /* SSE is prefixed with "data: " */
     WICED_VERIFY( wiced_http_response_stream_write( stream, (const void*)EVENT_STREAM_DATA, sizeof( EVENT_STREAM_DATA ) - 1 ) );
 
     /* Send current data back to the client */
-    WICED_VERIFY( wiced_http_response_stream_write( stream, (const void*)data->p_data, (uint32_t)data->len ) );
+    for ( a = 0; a < data->len; a++ )
+    {
+        char value_char[3];
+        memset( value_char, 0, sizeof( value_char ) );
+        unsigned_to_hex_string( data->p_data[a], value_char, 2, 2 );
+        WICED_VERIFY( wiced_http_response_stream_write( stream, value_char, 2 ) );
+    }
+    //WICED_VERIFY( wiced_http_response_stream_write( stream, (const void*)data->p_data, (uint32_t)data->len ) );
 
     /* SSE is ended with two line feeds */
     WICED_VERIFY( wiced_http_response_stream_write( stream, (const void*)LFLF, sizeof( LFLF ) - 1 ) );

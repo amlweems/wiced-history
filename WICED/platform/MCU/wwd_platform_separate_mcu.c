@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -128,7 +128,9 @@ wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac )
 
 wwd_result_t host_platform_deinit_wlan_powersave_clock( void )
 {
+#if defined WICED_USE_WIFI_32K_CLOCK_MCO
     platform_gpio_init( &wifi_control_pins[WWD_PIN_32K_CLK], OUTPUT_PUSH_PULL );
     platform_gpio_output_low( &wifi_control_pins[WWD_PIN_32K_CLK] );
+#endif
     return WWD_SUCCESS;
 }

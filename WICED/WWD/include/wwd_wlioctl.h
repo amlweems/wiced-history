@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -204,6 +204,12 @@ typedef struct wl_rateset
     uint8_t   rates[WL_MAXRATES_IN_SET];  /* rates in 500kbps units w/hi bit set if basic */
 } wl_rateset_t;
 
+typedef struct wl_rateset_args {
+    uint32_t   count;                     /* # rates in this set */
+    uint8_t    rates[WL_MAXRATES_IN_SET]; /* rates in 500kbps units w/hi bit set if basic */
+    uint8_t    mcs[WL_MAXRATES_IN_SET];   /* supported mcs index bit map */
+} wl_rateset_args_t;
+
 typedef struct wl_uint32_list
 {
     uint32_t count;
@@ -387,6 +393,18 @@ typedef struct
 //#define WEP_ENABLED                 0x0001  // moved to wwd_constants.h
 //#define TKIP_ENABLED                0x0002
 //#define AES_ENABLED                 0x0004
+
+typedef enum
+{
+  AUTH_ALGO_80211_OPEN        = 1,
+  AUTH_ALGO_80211_SHARED_KEY  = 2,
+  AUTH_ALGO_WPA               = 3,
+  AUTH_ALGO_WPA_PSK           = 4,
+  AUTH_ALGO_WPA_NONE          = 5,
+  AUTH_ALGO_RSNA              = 6,
+  AUTH_ALGO_RSNA_PSK          = 7,
+} AUTH_ALGORITHM;
+
 #define WSEC_SWFLAG                 0x0008
 #ifdef BCMCCX
 #define CKIP_KP_ENABLED             0x0010
@@ -680,12 +698,14 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_2G_MULTICAST_RATE      "2g_mrate"
 #define IOVAR_STR_2G_RATE                "2g_rate"
 #define IOVAR_STR_MPC                    "mpc"
+#define IOVAR_STR_IBSS_JOIN              "IBSS_join_only"
 #define IOVAR_STR_AMPDU_BA_WINDOW_SIZE   "ampdu_ba_wsize"
 #define IOVAR_STR_AMPDU_MPDU             "ampdu_mpdu"
 #define IOVAR_STR_AMPDU_RX_FACTOR        "ampdu_rx_factor"
 #define IOVAR_STR_MIMO_BW_CAP            "mimo_bw_cap"
 #define IOVAR_STR_RMC_ACKREQ             "rmc_ackreq"
 #define IOVAR_STR_RMC_STATUS             "rmc_status"
+#define IOVAR_STR_RMC_ROLE               "rmc_role"
 #define IOVAR_STR_HT40_INTOLERANCE       "intol40"
 #define IOVAR_STR_RAND                   "rand"
 #define IOVAR_STR_SSID                   "ssid"
@@ -698,6 +718,47 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_NPHY_ANTSEL            "nphy_antsel"
 #define IOVAR_STR_AVB_TIMESTAMP_ADDR     "avb_timestamp_addr"
 #define IOVAR_STR_BSS_MAX_ASSOC          "bss_maxassoc"
+#define IOVAR_STR_RM_REQ                 "rm_req"
+#define IOVAR_STR_RM_REP                 "rm_rep"
+#define IOVAR_STR_PSPRETEND_RETRY_LIMIT  "pspretend_retry_limit"
+#define IOVAR_STR_PSPRETEND_THRESHOLD    "pspretend_threshold"
+#define IOVAR_STR_SWDIV_TIMEOUT          "swdiv_timeout"
+#define IOVAR_STR_RESET_CNTS             "reset_cnts"
+#define IOVAR_STR_PHYRATE_LOG            "phyrate_log"
+#define IOVAR_STR_PHYRATE_LOG_SIZE       "phyrate_log_size"
+#define IOVAR_STR_PHYRATE_LOG_DUMP       "phyrate_dump"
+#define IOVAR_STR_SCAN_ASSOC_TIME        "scan_assoc_time"
+#define IOVAR_STR_SCAN_UNASSOC_TIME      "scan_unassoc_time"
+#define IOVAR_STR_SCAN_PASSIVE_TIME      "scan_passive_time"
+#define IOVAR_STR_SCAN_HOME_TIME         "scan_home_time"
+#define IOVAR_STR_SCAN_NPROBES           "scan_nprobes"
+#define IOVAR_STR_AUTOCOUNTRY            "autocountry"
+
+#define IOVAR_STR_PNO_ON                 "pfn"
+#define IOVAR_STR_PNO_ADD                "pfn_add"
+#define IOVAR_STR_PNO_SET                "pfn_set"
+#define IOVAR_STR_PNO_CLEAR              "pfnclear"
+#define IOVAR_STR_SCAN_CACHE_CLEAR       "scancache_clear"
+#define MCS_SETLEN                       16
+
+#define IOVAR_STR_RRM                    "rrm"
+#define IOVAR_STR_RRM_NOISE_REQ          "rrm_noise_req"
+#define IOVAR_STR_RRM_NBR_REQ            "rrm_nbr_req"
+#define IOVAR_STR_RRM_LM_REQ             "rrm_lm_req"
+#define IOVAR_STR_RRM_STAT_REQ           "rrm_stat_req"
+#define IOVAR_STR_RRM_FRAME_REQ          "rrm_frame_req"
+#define IOVAR_STR_RRM_CHLOAD_REQ         "rrm_chload_req"
+#define IOVAR_STR_RRM_BCN_REQ            "rrm_bcn_req"
+#define IOVAR_STR_RRM_NBR_LIST           "rrm_nbr_list"
+#define IOVAR_STR_RRM_NBR_ADD            "rrm_nbr_add_nbr"
+#define IOVAR_STR_RRM_NBR_DEL            "rrm_nbr_del_nbr"
+
+#define IOVAR_STR_FBT_OVER_DS            "fbtoverds"
+#define IOVAR_STR_FBT_CAPIBILITIES       "fbt_cap"
+
+#define IOVAR_STR_MFP                    "mfp"
+
+#define IOVAR_STR_OTPRAW                 "otpraw"
 
 #define WLC_IOCTL_MAGIC                    ( 0x14e46c77 )
 #define WLC_IOCTL_VERSION                  (          1 )
@@ -1388,8 +1449,7 @@ struct tsinfo_arg
 #define    NFIFO            6
 #define    WL_CNT_T_VERSION    6
 #define    WL_CNT_EXT_T_VERSION    1
-
-
+#define    WL_PHYRATE_LOG_SIZE     1200
 
 typedef struct
 {
@@ -2109,6 +2169,31 @@ typedef struct {
 
 } wl_cnt_ver_eight_t;
 
+/* per-rate receive stat counters subset of full counters */
+typedef struct {
+    uint32_t  rx1mbps;    /* packets rx at 1Mbps */
+    uint32_t  rx2mbps;    /* packets rx at 2Mbps */
+    uint32_t  rx5mbps5;   /* packets rx at 5.5Mbps */
+    uint32_t  rx6mbps;    /* packets rx at 6Mbps */
+    uint32_t  rx9mbps;    /* packets rx at 9Mbps */
+    uint32_t  rx11mbps;   /* packets rx at 11Mbps */
+    uint32_t  rx12mbps;   /* packets rx at 12Mbps */
+    uint32_t  rx18mbps;   /* packets rx at 18Mbps */
+    uint32_t  rx24mbps;   /* packets rx at 24Mbps */
+    uint32_t  rx36mbps;   /* packets rx at 36Mbps */
+    uint32_t  rx48mbps;   /* packets rx at 48Mbps */
+    uint32_t  rx54mbps;   /* packets rx at 54Mbps */
+    uint32_t  rx108mbps;  /* packets rx at 108mbps */
+    uint32_t  rx162mbps;  /* packets rx at 162mbps */
+    uint32_t  rx216mbps;  /* packets rx at 216 mbps */
+    uint32_t  rx270mbps;  /* packets rx at 270 mbps */
+} wiced_phyrate_counters_t;
+
+typedef struct {
+    uint32_t   count;
+    uint8_t    log[WL_PHYRATE_LOG_SIZE];
+}wiced_phyrate_log_t;
+
 typedef struct {
     uint16_t  version;  /* see definition of WL_CNT_T_VERSION */
     uint16_t  length;   /* length of entire structure */
@@ -2643,41 +2728,102 @@ enum
 {
     PFN_LIST_ORDER, PFN_RSSI
 };
-#define SORT_CRITERIA_BIT        0
-#define AUTO_NET_SWITCH_BIT        1
-#define ENABLE_BKGRD_SCAN_BIT    2
-#define IMMEDIATE_SCAN_BIT        3
-#define    AUTO_CONNECT_BIT        4
-#define SORT_CRITERIA_MASK        0x01
+#define SORT_CRITERIA_BIT       0
+#define AUTO_NET_SWITCH_BIT     1
+#define ENABLE_BKGRD_SCAN_BIT   2
+#define IMMEDIATE_SCAN_BIT      3
+#define AUTO_CONNECT_BIT        4
+#define IMMEDIATE_EVENT_BIT     8
+#define SUPPRESS_SSID_BIT       9
+#define ENABLE_NET_OFFLOAD_BIT  10
+#define SORT_CRITERIA_MASK      0x01
 #define AUTO_NET_SWITCH_MASK    0x02
-#define ENABLE_BKGRD_SCAN_MASK    0x04
-#define IMMEDIATE_SCAN_MASK        0x08
-#define    AUTO_CONNECT_MASK        0x10
-#define PFN_VERSION            1
+#define ENABLE_BKGRD_SCAN_MASK  0x04
+#define IMMEDIATE_SCAN_MASK     0x08
+#define AUTO_CONNECT_MASK       0x10
+#define PFN_VERSION             2
+
+/* PFN network info structure */
+typedef struct wl_pfn_subnet_info
+{
+    struct ether_addr BSSID;
+    uint8_t channel; /* channel number only */
+    uint8_t SSID_len;
+    uint8_t SSID[32];
+} wl_pfn_subnet_info_t;
+
+typedef struct wl_pfn_net_info
+{
+    wl_pfn_subnet_info_t pfnsubnet;
+    int16_t  RSSI; /* receive signal strength (in dBm) */
+    uint16_t timestamp; /* age in seconds */
+} wl_pfn_net_info_t;
+
+/* used to report exactly one scan result */
+/* plus reports detailed scan info in bss_info */
+typedef struct wl_pfn_scanresult
+{
+        uint32_t version;
+        uint32_t status;
+        uint32_t count;
+        wl_pfn_net_info_t netinfo;
+        wl_bss_info_t bss_info;
+} wl_pfn_scanresult_t;
+
+/* PFN data structure */
 typedef struct wl_pfn_param
 {
-    int32_t version;
-    int32_t scan_freq;
-    int32_t lost_network_timeout;
-    int16_t flags;
-    int16_t rssi_margin;
+    int32_t version;                  /* PNO parameters version */
+    int32_t scan_freq;                /* Scan frequency */
+    int32_t lost_network_timeout;     /* Timeout in sec. to declare
+                                                            * discovered network as lost
+                                                            */
+    int16_t flags;                    /* Bit field to control features
+                                                    * of PFN such as sort criteria auto
+                                                    * enable switch and background scan
+                                                    */
+    int16_t rssi_margin;              /* Margin to avoid jitter for choosing a
+                                                    * PFN based on RSSI sort criteria
+                                                    */
+    uint8_t bestn; /* number of best networks in each scan */
+    uint8_t mscan; /* number of scans recorded */
+    uint8_t repeat; /* Minimum number of scan intervals
+                                 *before scan frequency changes in adaptive scan
+                                 */
+    uint8_t exp; /* Exponent of 2 for maximum scan interval */
+
+    int32_t slow_freq; /* slow scan period */
 } wl_pfn_param_t;
+
+typedef struct wl_pfn_bssid
+{
+        struct ether_addr  macaddr;
+        /* Bit4: suppress_lost, Bit3: suppress_found */
+        uint16_t             flags;
+} wl_pfn_bssid_t;
+
+typedef struct wl_pfn_cfg
+{
+        uint32_t  reporttype;
+        int32_t   channel_num;
+        uint16_t  channel_list[WL_NUMCHANNELS];
+        uint32_t  flags;
+} wl_pfn_cfg_t;
+
+/* for use with wl_pfn.flags */
+#define WL_PFN_HIDDEN_MASK       0x4
+#define WL_PFN_SUPPRESSLOST_MASK 0x10
+
 typedef struct wl_pfn
 {
-    wlc_ssid_t ssid;
-    int32_t bss_type;
-    int32_t infra;
-    int32_t auth;
-    uint32_t wpa_auth;
-    int32_t wsec;
-#ifdef WLPFN_AUTO_CONNECT
-union
-{
-    wl_wsec_key_t sec_key;
-    wsec_pmk_t wpa_sec_key;
-}pfn_security;
-#endif
+        wlc_ssid_t ssid;                   /* ssid name and its length */
+        int32_t    flags;                  /* bit2: hidden */
+        int32_t    infra;                  /* BSS Vs IBSS */
+        int32_t    auth;                   /* Open Vs Closed */
+        int32_t    wpa_auth;               /* WPA type */
+        int32_t    wsec;                   /* wsec value */
 } wl_pfn_t;
+
 #define TOE_TX_CSUM_OL        0x00000001
 #define TOE_RX_CSUM_OL        0x00000002
 #define TOE_ERRTEST_TX_CSUM    0x00000001
@@ -3082,7 +3228,8 @@ typedef struct wl_p2p_wfds_hash {
 #define WL_RMC_FLAG_INBLACKLIST    (1)
 #define WL_RMC_FLAG_ACTIVEACKER    (2)
 #define WL_RMC_FLAG_RELMCAST       (4)
-#define WL_RMC_MAX_TABLE_ENTRY     (4)
+#define WL_RMC_FLAG_MASTER_TX      (8)
+#define WL_RMC_MAX_TABLE_ENTRY     (8)
 
 #define WL_RMC_VER                 (1)
 #define WL_RMC_INDEX_ACK_ALL       (255)

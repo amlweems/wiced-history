@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -262,6 +262,7 @@ platform_result_t platform_watchdog_init            ( void );
 platform_result_t platform_reinit_wlan_stdio_uart   ( void );
 
 platform_result_t platform_watchdog_force_reset     ( void );
+void              platform_watchdog_disable         ( void );
 void              platform_apps_core_init           ( void );
 platform_result_t platform_filesystem_init          ( void );
 void              platform_sflash_init              ( void );

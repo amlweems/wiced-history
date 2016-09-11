@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -95,6 +95,7 @@ typedef struct mqtt_connection_s
     wiced_mqtt_callback_t           callbacks;
     mqtt_heartbeat_t                heartbeat;
     mqtt_session_t*                 session;
+    uint8_t*                        peer_cn;
 } mqtt_connection_t;
 
 typedef struct mqtt_send_context_t

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -56,6 +56,8 @@ extern wicedfs_filesystem_t resource_fs_handle;
 /* Resource reading */
 extern resource_result_t resource_get_readonly_buffer ( const resource_hnd_t* resource, uint32_t offset, uint32_t maxsize, uint32_t* size_out, const void** buffer );
 extern resource_result_t resource_free_readonly_buffer( const resource_hnd_t* handle, const void* buffer );
+
+extern resource_result_t platform_read_external_resource( const resource_hnd_t* resource, uint32_t offset, uint32_t maxsize, uint32_t* size, void* buffer );
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -113,8 +113,8 @@ int main( void )
  * variables have been initialised, so the following init still needs to be done
  * When using GCC, this is done in crt0_GCC.c
  */
-    init_architecture( );
-    init_platform( );
+    platform_init_mcu_infrastructure( );
+    platform_init_external_devices( );
 #endif /* #elif defined ( __IAR_SYSTEMS_ICC__ ) */
 
 #ifndef WICED_DISABLE_WATCHDOG

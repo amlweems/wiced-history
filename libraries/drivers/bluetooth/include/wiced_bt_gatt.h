@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -697,8 +697,8 @@ typedef union
     wiced_bt_gatt_gap_ble_pref_param_t     conn_param;
     wiced_bt_ble_address_type_t            reconn_bda;
     uint16_t                                icon;
-    uint16_t                               *p_dev_name;
-    uint16_t                                privacy;
+    uint8_t                               *p_dev_name;
+    uint8_t                                addr_resolution;
 }wiced_bt_gatt_gap_ble_attr_value_t;
 
 /**

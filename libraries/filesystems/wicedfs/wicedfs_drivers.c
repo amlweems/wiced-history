@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -254,8 +254,8 @@ static wiced_result_t wicedfs_shim_dir_read         ( wiced_dir_t* dir_handle, c
     details_out->date_time_available   = WICED_FALSE;
     details_out->permissions_available = WICED_FALSE;
 
-    *type = ( tmp_type == WICEDFS_FILE )? WICED_FILESYSTEM_FILE :
-            ( tmp_type == WICEDFS_DIR  )? WICED_FILESYSTEM_DIR  : 0;
+    *type = ( wiced_dir_entry_type_t ) ( ( tmp_type == WICEDFS_FILE ) ? WICED_FILESYSTEM_FILE :
+            ( tmp_type == WICEDFS_DIR  ) ? WICED_FILESYSTEM_DIR  : 0 );
 
     return WICED_SUCCESS;
 }
@@ -297,7 +297,7 @@ static wiced_result_t wicedfs_shim_file_delete      ( wiced_filesystem_t* fs_han
     UNUSED_PARAMETER( fs_handle );
     UNUSED_PARAMETER( filename );
     wiced_assert( "WicedFS is Read-Only!", 1 == 0 );
-    return WICED_FILESYSTEM_ATTRIBUTE_READ_ONLY;
+    return ( wiced_result_t ) WICED_FILESYSTEM_ATTRIBUTE_READ_ONLY;
 }
 
 static wiced_result_t wicedfs_shim_file_write       ( wiced_file_t* file_handle, const void* data, uint64_t bytes_to_write, uint64_t* written_bytes_count )

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,13 +34,50 @@ extern "C"
  *                      Macros
  ******************************************************/
 
-#define PLATFORM_DDR_FUNCNAME(type) platform_ddr_init_##type
-#define PLATFORM_DDR_FUNCDECL(type) platform_result_t PLATFORM_DDR_FUNCNAME(type)( void )
+#define PLATFORM_DDR_FUNCNAME(type)                     platform_ddr_init_##type
+#define PLATFORM_DDR_FUNCDECL(type)                     platform_result_t PLATFORM_DDR_FUNCNAME(type)( void )
+#define PLATFORM_DDR_STR_EXPAND( name )                 #name
 #if PLATFORM_NO_DDR
-#define PLATFORM_DDR_FUNCCALL(type)
+    #define PLATFORM_DDR_FUNCCALL(type)
+    //
+    #define PLATFORM_DDR_BSS_SIZE                       (0x0)
+    #define PLATFORM_DDR_BSS_SECTION(var)               var
+    //
+    #define PLATFORM_DDR_FREE_OFFSET                    (0x0)
 #else
-#define PLATFORM_DDR_FUNCCALL(type) do {PLATFORM_DDR_FUNCDECL(type); PLATFORM_DDR_FUNCNAME(type)();} while (0)
+    #define PLATFORM_DDR_FUNCCALL(type)                 do {PLATFORM_DDR_FUNCDECL(type); PLATFORM_DDR_FUNCNAME(type)();} while (0)
+    //
+    #define PLATFORM_DDR_BSS_SIZE                       ( (unsigned long)&link_ddr_bss_end - (unsigned long)&link_ddr_bss_location )
+    #define PLATFORM_DDR_BSS_SECTION_NAME( name )       ".ddr_bss."PLATFORM_DDR_STR_EXPAND( name )
+    #define PLATFORM_DDR_BSS_SECTION( var )             SECTION( PLATFORM_DDR_BSS_SECTION_NAME( var ) ) var
+    //
+    #if PLATFORM_DDR_HEAP_SIZE_CONFIG
+        #define PLATFORM_DDR_HEAP_SIZE                  ( (unsigned long)&link_ddr_heap_end - (unsigned long)&link_ddr_heap_location )
+        #define PLATFORM_DDR_HEAP_SECTION_NAME( name )  ".ddr_heap."PLATFORM_DDR_STR_EXPAND( name )
+        #define PLATFORM_DDR_HEAP_SECTION( var )        SECTION( PLATFORM_DDR_HEAP_SECTION_NAME( var ) ) var
+    #endif
+    //
+    #if PLATFORM_DDR_CODE_AND_DATA_ENABLE
+        #define PLATFORM_DDR_TEXT_SECTION_NAME( name )  ".ddr_text."PLATFORM_DDR_STR_EXPAND( name )
+        #define PLATFORM_DDR_TEXT_SECTION( var )        SECTION( PLATFORM_DDR_TEXT_SECTION_NAME( var ) ) var
+        #define PLATFORM_DDR_DATA_SECTION_NAME( name )  ".ddr_data."PLATFORM_DDR_STR_EXPAND( name )
+        #define PLATFORM_DDR_DATA_SECTION( var )        SECTION( PLATFORM_DDR_DATA_SECTION_NAME( var ) ) var
+    #endif
+    #define PLATFORM_DDR_FREE_OFFSET                    ( (unsigned long)&link_ddr_free_location - PLATFORM_DDR_BASE(0x0) )
 #endif
+#ifndef PLATFORM_DDR_HEAP_SIZE
+#define PLATFORM_DDR_HEAP_SIZE                          (0x0)
+#endif
+#ifndef PLATFORM_DDR_HEAP_SECTION
+#define PLATFORM_DDR_HEAP_SECTION( var )
+#endif
+#ifndef PLATFORM_DDR_TEXT_SECTION
+#define PLATFORM_DDR_TEXT_SECTION( var )                var
+#endif
+#ifndef PLATFORM_DDR_DATA_SECTION
+#define PLATFORM_DDR_DATA_SECTION( var )                var
+#endif
+
 
 #define PLATFORM_DMA_DESCRIPTORS_STR_EXPAND( name )     #name
 #define PLATFORM_DMA_DESCRIPTORS_SECTION_NAME( name )   ".dma."PLATFORM_DMA_DESCRIPTORS_STR_EXPAND( name )
@@ -50,10 +87,12 @@ extern "C"
 #define PLATFORM_FEATURE_ENAB(_FEATURE_)                (PLATFORM_CAPABILITY_ENAB(PLATFORM_CAPS_##_FEATURE_) && !(PLATFORM_NO_##_FEATURE_))
 
 #if PLATFORM_WLAN_POWERSAVE
+#define PLATFORM_WLAN_POWERSAVE_SET_DELAYED_RELEASE_MS(ms)     platform_wlan_powersave_set_delayed_release_milliseconds(ms)
 #define PLATFORM_WLAN_POWERSAVE_RES_UP()                       platform_wlan_powersave_res_up()
 #define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force ) platform_wlan_powersave_res_down( check_ready, force )
 #define PLATFORM_WLAN_POWERSAVE_IS_RES_UP()                    platform_wlan_powersave_is_res_up()
 #else
+#define PLATFORM_WLAN_POWERSAVE_SET_DELAYED_RELEASE_MS(ms)
 #define PLATFORM_WLAN_POWERSAVE_RES_UP()
 #define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force )
 #define PLATFORM_WLAN_POWERSAVE_IS_RES_UP()                    1
@@ -73,6 +112,14 @@ extern "C"
 #define PLATFORM_ALP_CLOCK_RES_DOWN( check_ready, force )
 #endif
 
+#if PLATFORM_USB_ALP_CLOCK_RES_FIXUP
+#define PLATFORM_USB_ALP_CLOCK_RES_UP()                        PLATFORM_WLAN_POWERSAVE_RES_UP()
+#define PLATFORM_USB_ALP_CLOCK_RES_DOWN( check_ready, force )  PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force )
+#else
+#define PLATFORM_USB_ALP_CLOCK_RES_UP()
+#define PLATFORM_USB_ALP_CLOCK_RES_DOWN( check_ready, force )
+#endif
+
 #ifdef DEBUG
 #define PLATFORM_TIMEOUT_BEGIN( start_var_name ) \
     const uint32_t start_var_name = platform_tick_get_time( PLATFORM_TICK_GET_SLOW_TIME_STAMP ); REFERENCE_DEBUG_ONLY_VARIABLE( start_var_name );
@@ -82,6 +129,19 @@ extern "C"
 #define PLATFORM_TIMEOUT_BEGIN( start_var_name)
 #define PLATFORM_TIMEOUT_SEC_ASSERT( assert_string, start_var_name, good_cond, seconds )
 #endif
+
+#ifdef DEBUG
+#define PLATFORM_EXTERNAL_HEAP_FILENAME                 __FILE__
+#define PLATFORM_EXTERNAL_HEAP_LINE                     __LINE__
+#else
+#define PLATFORM_EXTERNAL_HEAP_FILENAME                 NULL
+#define PLATFORM_EXTERNAL_HEAP_LINE                     0
+#endif
+
+#define  platform_heap_malloc( heap, bytes )            platform_heap_malloc_record_caller( heap, bytes, PLATFORM_EXTERNAL_HEAP_FILENAME, PLATFORM_EXTERNAL_HEAP_LINE )
+#define  platform_heap_memalign( heap, align, bytes )   platform_heap_memalign_record_caller( heap, align, bytes, PLATFORM_EXTERNAL_HEAP_FILENAME, PLATFORM_EXTERNAL_HEAP_LINE )
+#define  platform_heap_realloc( heap, ptr, size )       platform_heap_realloc_record_caller( heap, ptr, size, PLATFORM_EXTERNAL_HEAP_FILENAME, PLATFORM_EXTERNAL_HEAP_LINE )
+#define  platform_heap_free( heap, ptr )                platform_heap_free_record_caller( heap, ptr, PLATFORM_EXTERNAL_HEAP_FILENAME, PLATFORM_EXTERNAL_HEAP_LINE )
 
 /******************************************************
  *                    Constants
@@ -97,13 +157,13 @@ extern "C"
 /* BCM4390x Platform Common Capabilities */
 #define PLATFORM_CAPS_COMMON (PLATFORM_CAPS_I2C | PLATFORM_CAPS_UART | PLATFORM_CAPS_SPI)
 
-/******************************************************
- *                   Enumerations
- ******************************************************/
-
 #define GPIO_TOTAL_PIN_NUMBERS          (32)
 #define PIN_FUNCTION_MAX_COUNT          (12)
 #define PIN_FUNCTION_UNSUPPORTED        (-1)
+
+/******************************************************
+ *                   Enumerations
+ ******************************************************/
 
 /*
  * BCM43909 supports pin multiplexing and function selection
@@ -442,6 +502,12 @@ typedef enum
 
 typedef enum
 {
+    PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_TRIGGER_RISING_EDGE,
+    PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_TRIGGER_FALLING_EDGE,
+} platform_mcu_powersave_gpio_wakeup_trigger_t;
+
+typedef enum
+{
     PLATFORM_GCI_GPIO_IRQ_TRIGGER_FAST_EDGE     = 0x1, /* Please keep elements as power of 2, they can be used to create bit mask */
     PLATFORM_GCI_GPIO_IRQ_TRIGGER_RISING_EDGE   = 0x2,
     PLATFORM_GCI_GPIO_IRQ_TRIGGER_FALLING_EDGE  = 0x4,
@@ -525,6 +591,12 @@ typedef struct
     uint32_t               rx_overflow;
 } platform_uart_driver_t;
 
+typedef enum
+{
+    UART_NO_INTERRUPT = 0,
+    UART_RX_READY     = (1 << 0),
+    UART_TX_READY     = (1 << 1),
+} platform_uart_irq_status_t;
 
 typedef enum
 {
@@ -547,13 +619,23 @@ typedef enum
     BCM4390X_I2C_1 = BCM4390X_GSIO_3,
 } platform_i2c_port_t;
 
+struct spi_driver;
+typedef struct spi_driver spi_driver_t;
+
+/* GSIO SPI bus driver functions */
+extern const spi_driver_t spi_gsio_driver;
+
+/* Bit-Banging SPI bus driver functions */
+extern const spi_driver_t spi_bb_driver;
+
 typedef struct
 {
     platform_spi_port_t                  port;
-    uint8_t                              gpio_alternate_function;
     const platform_gpio_t*               pin_mosi;
     const platform_gpio_t*               pin_miso;
     const platform_gpio_t*               pin_clock;
+    const platform_gpio_t*               pin_cs;
+    const spi_driver_t*                  driver;
 } platform_spi_t;
 
 typedef struct
@@ -578,7 +660,6 @@ extern const i2c_driver_t i2c_bb_driver;
 typedef struct
 {
     platform_i2c_port_t                  port;
-    uint8_t                              gpio_alternate_function;
     const platform_gpio_t*               pin_scl;
     const platform_gpio_t*               pin_sda;
     const i2c_driver_t*                  driver;
@@ -694,11 +775,31 @@ typedef enum
     PLATFORM_RESET_TYPE_RESET
 } platform_reset_type_t;
 
+typedef enum
+{
+    PLATFORM_HEAP_SRAM,
+    PLATFORM_HEAP_DDR
+} platform_heap_type_t;
+
+typedef struct
+{
+    wiced_block_device_write_mode_t write_mode;
+    uint32_t                        offset;
+} ddr_block_device_specific_data_t;
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
 
 extern uint32_t platform_capabilities_word;
+
+extern void*    link_ddr_bss_location;
+extern void*    link_ddr_bss_end;
+extern void*    link_ddr_heap_location;
+extern void*    link_ddr_heap_end;
+extern void*    link_ddr_free_location;
+
+extern const wiced_block_device_driver_t ddr_block_device_driver;
 
 /******************************************************
  *               Function Declarations
@@ -747,7 +848,7 @@ uint32_t          platform_gci_gpiowakemask     ( uint8_t reg_offset, uint32_t c
 /*
  * Return value of specific GCI chipstatus register.
  */
-uint32_t          platform_gci_chipstatus       (uint8_t reg_offset);
+uint32_t          platform_gci_chipstatus       ( uint8_t reg_offset );
 
 /*
  * Set specific PMU chipcontrol register.
@@ -763,19 +864,24 @@ uint32_t          platform_pmu_res_dep_mask     ( uint8_t reg_offset, uint32_t c
  * Set specific PMU regulator register.
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
 */
-uint32_t          platform_pmu_regulatorcontrol (uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+uint32_t          platform_pmu_regulatorcontrol ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
 
 /*
  * Set specific PMU PLL control register.
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
 */
-uint32_t          platform_pmu_pllcontrol       (uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+uint32_t          platform_pmu_pllcontrol       ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+#if defined(PLATFORM_4390X_OVERCLOCK)
+void              platform_pmu_pllcontrol_mdiv_set( uint8_t channel, uint8_t divider );
+uint8_t           platform_pmu_pllcontrol_mdiv_get( uint8_t channel );
+#endif /* PLATFORM_4390X_OVERCLOCK */
 
 /*
  * Modify generic register.
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
  */
-uint32_t          platform_common_chipcontrol   (volatile uint32_t* reg, uint32_t clear_mask, uint32_t set_mask );
+uint32_t          platform_common_chipcontrol   ( volatile uint32_t* reg, uint32_t clear_mask, uint32_t set_mask );
 
 /* Return default PWM clock. Platform code can redefine if want to choose another. */
 platform_clock_t  platform_pwm_getclock         ( void );
@@ -798,7 +904,11 @@ platform_result_t platform_irq_remap_source     ( uint32_t wrapper_addr, uint8_t
 
 platform_result_t platform_irq_remap_sink       ( uint8_t bus_line_num, uint8_t sink_num );
 
-void              platform_cores_powersave_init ( void );
+uint32_t          platform_irq_demuxer_hook     ( uint32_t irq_status );
+
+void              platform_cores_powersave_init       ( void );
+
+void              platform_cores_powersave_deinit     ( void );
 
 platform_result_t platform_mcu_powersave_init         ( void );
 
@@ -824,6 +934,8 @@ platform_tick_powersave_mode_t platform_mcu_powersave_get_tick_mode            (
 
 uint32_t                       platform_mcu_powersave_get_clock_request_counter( platform_mcu_powersave_clock_t clock );
 
+void              platform_wlan_powersave_set_delayed_release_milliseconds( uint32_t time_ms );
+
 wiced_bool_t      platform_wlan_powersave_res_up   ( void );
 
 wiced_bool_t      platform_wlan_powersave_res_down ( wiced_bool_t(*check_ready)(void), wiced_bool_t force );
@@ -835,6 +947,8 @@ void              platform_wlan_powersave_res_event( void );
 uint32_t          platform_wlan_powersave_get_stats( platform_wlan_powersave_stats_t which_counter );
 
 uint32_t          platform_reference_clock_get_freq( platform_reference_clock_t clock );
+
+void              platform_tick_sleep_clear_ext_wake( void );
 
 uint32_t          platform_tick_sleep_rtos      ( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission );
 
@@ -854,14 +968,19 @@ wiced_bool_t      platform_is_init_completed    ( void );
 
 uint32_t          platform_ddr_get_size         ( void );
 
-platform_result_t platform_watchdog_kick_seconds( uint32_t seconds );
+platform_result_t platform_watchdog_kick_milliseconds           ( uint32_t milliseconds );
+platform_result_t platform_watchdog_stop                        ( void );
 
-platform_result_t platform_mcu_powersave_gpio_wakeup_enable     ( platform_mcu_powersave_gpio_wakeup_config_t config );
+platform_result_t platform_mcu_powersave_gpio_wakeup_enable     ( platform_mcu_powersave_gpio_wakeup_config_t config, platform_mcu_powersave_gpio_wakeup_trigger_t trigger );
 void              platform_mcu_powersave_gpio_wakeup_ack        ( void );
 void              platform_mcu_powersave_gpio_wakeup_disable    ( void );
 platform_result_t platform_mcu_powersave_gci_gpio_wakeup_enable ( platform_pin_t gpio_pin, platform_mcu_powersave_gpio_wakeup_config_t config, platform_gci_gpio_irq_trigger_t trigger );
 void              platform_mcu_powersave_gci_gpio_wakeup_disable( platform_pin_t gpio_pin );
-void              platform_mcu_powersave_gci_gpio_wakeup_ack    ( platform_pin_t gpio_pin );
+wiced_bool_t      platform_mcu_powersave_gci_gpio_wakeup_ack    ( platform_pin_t gpio_pin );
+
+void              platform_cpu_core_init        ( void );
+
+void              platform_deep_sleep_init      ( void );
 
 /* Functions related to platform OTP driver */
 platform_result_t platform_otp_init             ( void );
@@ -884,14 +1003,21 @@ platform_result_t platform_otp_dump             ( void );
 platform_result_t platform_otp_dumpstats        ( void );
 #endif
 
-typedef struct
-{
-    wiced_block_device_write_mode_t write_mode;
-} ddr_block_device_specific_data_t;
+void*             platform_heap_malloc_record_caller  ( platform_heap_type_t heap, size_t bytes, const char* filename, int line );
+void*             platform_heap_memalign_record_caller( platform_heap_type_t heap, size_t align, size_t bytes, const char* filename, int line );
+void*             platform_heap_realloc_record_caller ( platform_heap_type_t heap, void* ptr, size_t size, const char* filename, int line );
+void              platform_heap_free_record_caller    ( platform_heap_type_t heap, void* ptr, const char* filename, int line );
 
-extern const wiced_block_device_driver_t ddr_block_device_driver;
+void              platform_udelay                     ( uint32_t usec );
+
+void              platform_uart_toggle_txrx_interrupt ( platform_uart_port_t uart_port, wiced_bool_t tx, wiced_bool_t enable );
+void              platform_uart_receive_byte          ( platform_uart_port_t port, uint8_t* dest );
+wiced_bool_t      platform_uart_txrx_ready            ( platform_uart_port_t uart_port, wiced_bool_t tx );
+wiced_bool_t      platform_uart_transmit_fifo_empty   ( platform_uart_port_t port );
+uint32_t          platform_uart_irq_txrx_ready        ( platform_uart_port_t port );
+
+platform_result_t platform_spi_core_clock_toggle      ( wiced_bool_t request );
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-

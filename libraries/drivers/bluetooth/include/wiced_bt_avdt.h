@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
 
 #include "wiced_bt_types.h"
 #include "bt_target.h"
+#include "wwd_constants.h"
 
 /*****************************************************************************
 **  Constants
@@ -573,10 +574,11 @@ extern "C"
  * @param[in]       p_reg     : AVDT registration parameters
  * @param[in]       p_cback   : Callback for AVDT event notification
  *
- * @return          None
+ * @return          Result code (see @ref AVDT_RESULT "AVDT result codes")
+ *                  AVDT_SUCCESS if successful, otherwise error.
  *
  */
-void wiced_bt_avdt_register(wiced_bt_avdt_reg_t *p_reg, wiced_bt_avdt_ctrl_cback_t *p_cback);
+uint16_t wiced_bt_avdt_register(wiced_bt_avdt_reg_t *p_reg, wiced_bt_avdt_ctrl_cback_t *p_cback);
 
 /**
  *

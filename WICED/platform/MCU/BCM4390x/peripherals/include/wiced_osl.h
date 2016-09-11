@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,12 +21,15 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <bcmdefs.h>
 #include "RTOS/wwd_rtos_interface.h"
 #include "wwd_assert.h"
 #include "wwd_buffer_interface.h"
 
 /* Define OSL assert via WICED assert */
+#ifndef ASSERT
 #define ASSERT(b)               wiced_assert("peripherals", b)
+#endif
 
 /* Misc */
 
@@ -168,9 +171,17 @@ extern void osl_pktfree(void *osh, void *p, bool send);
 #define PKTNEXT(osh, p)                 ({BCM_REFERENCE(osh); host_buffer_get_next_piece(p);})
 #define PKTSETNEXT(osh, p, x)           ({BCM_REFERENCE(osh); BCM_REFERENCE(p); BCM_REFERENCE(x); ASSERT(0);})
 
+#ifndef bcopy
 #define bcopy(src, dst, len)            memcpy((dst), (src), (len))
+#endif /* !bcopy */
+
+#ifndef bcmp
 #define bcmp(b1, b2, len)               memcmp((b1), (b2), (len))
+#endif /* !bcmp */
+
+#ifndef bzero
 #define bzero(b, len)                   memset((b), 0, (len))
+#endif /* !bzero */
 
 /* Backplane Clocks */
 

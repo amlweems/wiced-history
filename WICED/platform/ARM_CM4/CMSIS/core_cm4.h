@@ -83,7 +83,9 @@
 
 #elif defined ( __ICCARM__ )
   #define __ASM            __asm                                      /*!< asm keyword for IAR Compiler          */
+#ifndef __INLINE  
   #define __INLINE         inline                                     /*!< inline keyword for IAR Compiler. Only available in High optimization mode! */
+#endif  
   #define __STATIC_INLINE  static inline
 
 #elif defined ( __TMS470__ )

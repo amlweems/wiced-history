@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -76,8 +76,7 @@ extern void* sram_size_loc;
 
 static inline void __jump_to( uint32_t addr )
 {
-    __asm( "MOV R1, #0x00000001" );
-    __asm( "ORR R0, R1, #0" ); /* Last bit of jump address indicates whether destination is Thumb or ARM code */
+    __asm( "ORR R0, R0, #1" );  /* Last bit of jump address indicates whether destination is Thumb or ARM code */
     __asm( "BX R0" );
 }
 

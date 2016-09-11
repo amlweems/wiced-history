@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,6 +27,7 @@
 #include <reent.h>
 #endif /* #ifdef __GNUC__ */
 #include <tx_api.h>
+#include <tx_thread.h>
 #include "platform/wwd_platform_interface.h"
 #include "platform_config.h"
 
@@ -55,6 +56,8 @@ static TX_MUTEX malloc_mutex;
 static VOID wiced_threadx_stack_error_handler( TX_THREAD * thread );
 #endif /* ifdef DEBUG */
 
+static wwd_result_t host_rtos_create_thread_common( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config );
+
 /**
  * Creates a new thread
  *
@@ -66,23 +69,59 @@ static VOID wiced_threadx_stack_error_handler( TX_THREAD * thread );
  */
 wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority )
 {
-    return host_rtos_create_thread_with_arg( thread, entry_function, name, stack, stack_size, priority, 0 );
+    host_rtos_thread_config_type_t config;
+    config.arg        = 0;
+    config.time_slice = 0;
+
+    return host_rtos_create_thread_common( thread, entry_function, (char*) name, stack, (ULONG) stack_size, (UINT) priority, &config );
 }
 
 wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg )
 {
+    host_rtos_thread_config_type_t config;
+    config.arg        = arg;
+    config.time_slice = 0;
+
+    return host_rtos_create_thread_common(  thread, entry_function, (char*) name, stack, (ULONG) stack_size, (UINT) priority, &config );
+}
+
+/**
+ * Creates a new thread
+ *
+ * @param thread         : pointer to variable which will receive handle of created thread
+ * @param entry_function : main thread function
+ * @param name           : a string thread name used for a debugger
+ * @param config     : os specific thread creation params
+ * @returns WWD_SUCCESS on success, WICED_ERROR otherwise
+ */
+wwd_result_t host_rtos_create_configed_thread(  /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config )
+{
+    return host_rtos_create_thread_common( thread, entry_function, name, stack, stack_size, priority, config );
+}
+
+static wwd_result_t host_rtos_create_thread_common( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config )
+{
     UINT status;
+    ULONG time_slice = TX_NO_TIME_SLICE;
+    uint32_t arg = 0;
     if ( stack == NULL )
     {
         wiced_assert("host_rtos_create_thread: stack is null\n", 0 != 0 );
         return WWD_THREAD_STACK_NULL;
     }
 
+    if ( config != NULL )
+    {
+        time_slice = config->time_slice;
+        arg = config->arg;
+    }
+
 #ifdef DEBUG
     tx_thread_stack_error_notify( wiced_threadx_stack_error_handler );
 #endif /* ifdef DEBUG */
 
-    status = tx_thread_create( thread, (char*) name, (void(*)( ULONG )) entry_function, arg, stack, (ULONG) stack_size, (UINT) priority, (UINT) priority, TX_NO_TIME_SLICE, (UINT) TX_AUTO_START );
+    status = tx_thread_create( thread, (char*) name, (void(*)( ULONG )) entry_function, arg, stack, (ULONG) stack_size, (UINT) priority, (UINT) priority, time_slice, (UINT) TX_AUTO_START );
+
     return ( status == TX_SUCCESS ) ? WWD_SUCCESS : WWD_THREAD_CREATE_FAILED;
 }
 
@@ -127,6 +166,15 @@ wwd_result_t host_rtos_delete_terminated_thread( host_thread_type_t* thread )
  */
 wwd_result_t host_rtos_join_thread( host_thread_type_t* thread )
 {
+    if (thread == NULL || thread->tx_thread_id != TX_THREAD_ID)
+    {
+        /*
+         * Invalid thread pointer.
+         */
+
+        return WWD_BADARG;
+    }
+
     while ( ( thread->tx_thread_state != TX_COMPLETED ) && ( thread->tx_thread_state != TX_TERMINATED ) )
     {
         host_rtos_delay_milliseconds( 10 );

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -43,6 +43,9 @@
 
 #include "cpu.h"
 #include <stdio.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <inttypes.h>
 
 #ifdef WICED_LWIP_DEBUG
 #include "platform_assert.h"
@@ -52,21 +55,23 @@
 extern "C" {
 #endif
 
-typedef unsigned  char   u8_t;
-typedef signed    char   s8_t;
-typedef unsigned  short  u16_t;
-typedef signed    short  s16_t;
-typedef unsigned  long   u32_t;
-typedef signed    long   s32_t;
-typedef u32_t            mem_ptr_t;
+typedef uint8_t          u8_t;
+typedef int8_t           s8_t;
+typedef uint16_t         u16_t;
+typedef int16_t          s16_t;
+typedef uint32_t         u32_t;
+typedef int32_t          s32_t;
+typedef ptrdiff_t        mem_ptr_t;
 typedef int              sys_prot_t;
 
-#define U16_F "hu"
-#define S16_F "hd"
-#define X16_F "hx"
-#define U32_F "lu"
-#define S32_F "ld"
-#define X32_F "lx"
+#define U16_F PRIu16
+#define S16_F PRId16
+#define X16_F PRIx16
+#define U32_F PRIu32
+#define S32_F PRId32
+#define X32_F PRIx32
+
+#define SZT_F "lu"
 
 #ifdef __GNUC__
 #define PACK_STRUCT_BEGIN

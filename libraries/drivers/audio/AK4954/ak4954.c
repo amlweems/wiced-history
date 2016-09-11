@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -988,8 +988,7 @@ wiced_result_t ak4954_hp(ak4954_device_cmn_data_t *ak4954, wiced_bool_t is_pwr_u
     if (is_pwr_up == WICED_TRUE)
     {
         /* Reset l/r volume to default. */
-        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_MUTE) );
-        ak4954->playback_volume = AK4954_DVL_DEFAULT;
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_DEFAULT) );
 
         /* Power-up DAC. */
         WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC) );
@@ -1158,7 +1157,6 @@ static wiced_result_t ak4954_set_playback_volume(void *driver_data, double decib
     uint8_t val;
 
     val = ak4954_double_range_to_index(ak4954, decibels, &ak4954_dbl_range_dvl);
-    ak4954->playback_volume = val;
 
     /* Volume is full width of register. */
     /* Setting left volume also sets right as long as defaults are maintained. */

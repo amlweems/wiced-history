@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -457,19 +457,19 @@ fcontract(u8 *output, limb *input) {
         */
         const s32 mask = (s32)(input[i]) >> 31;
         const s32 carry = -(((s32)(input[i]) & mask) >> 25);
-        input[i] = (s32)(input[i]) + (carry << 25);
+        input[i] = (limb)((input[i]) + ((limb)carry << 25));
         input[i+1] = (s32)(input[i+1]) - carry;
       } else {
         const s32 mask = (s32)(input[i]) >> 31;
         const s32 carry = -(((s32)(input[i]) & mask) >> 26);
-        input[i] = (s32)(input[i]) + (carry << 26);
+        input[i] = (limb)((input[i]) + ((limb)carry << 26));
         input[i+1] = (s32)(input[i+1]) - carry;
       }
     }
     {
       const s32 mask = (s32)(input[9]) >> 31;
       const s32 carry = -(((s32)(input[9]) & mask) >> 25);
-      input[9] = (s32)(input[9]) + (carry << 25);
+      input[9] = (limb)((input[9]) + ((limb)carry << 25));
       input[0] = (s32)(input[0]) - (carry * 19);
     }
   }
@@ -487,7 +487,7 @@ fcontract(u8 *output, limb *input) {
   {
     const s32 mask = (s32)(input[0]) >> 31;
     const s32 carry = -(((s32)(input[0]) & mask) >> 26);
-    input[0] = (s32)(input[0]) + (carry << 26);
+    input[0] = (limb)(input[0] + ((limb)carry << 26));
     input[1] = (s32)(input[1]) - carry;
   }
 

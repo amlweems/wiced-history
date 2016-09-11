@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -44,6 +44,12 @@ typedef enum
     HTTP_DATA_RECEIVED, /* Marks beginning of the header or the beginning of a segment if the header is fragmented over several packets */
 } http_event_t;
 
+typedef enum
+{
+    HTTP_CLIENT_CONFIG_FLAG_SERVER_NAME      = (0x1),
+    HTTP_CLIENT_CONFIG_FLAG_MAX_FRAGMENT_LEN = (0x1 << 1),
+} http_client_configuration_flags_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -54,13 +60,20 @@ typedef enum
 
 typedef struct
 {
+    http_client_configuration_flags_t   flag;
+    uint8_t*                            server_name;            /* server name upto length 256 acceptable and should be null terminated string */
+    wiced_tls_max_fragment_length_t     max_fragment_length;
+} http_client_configuration_info_t;
+
+typedef struct
+{
     wiced_tcp_socket_t    socket;
     wiced_tls_identity_t* tls_identity;
     wiced_tls_context_t*  tls_context;
     uint32_t              event_handler;
     linked_list_t         request_list;
     wiced_worker_thread_t thread;
-    wiced_bool_t          response_received;
+    http_client_configuration_info_t *config;
 } http_client_t;
 
 typedef struct
@@ -68,15 +81,24 @@ typedef struct
     linked_list_node_t node;
     wiced_tcp_stream_t stream;
     http_client_t*     owner;
-} http_request_t;
+    void*              context;
+}http_request_t;
 
 typedef struct
 {
     http_request_t* request;
-    uint8_t*        data;
-    uint16_t        length;
+    uint8_t*        response_hdr;                   /* this contains HTTP response header including status line */
+    uint16_t        response_hdr_length;            /* response_hdr_length is the length of HTTP header. */
+    uint8_t*        payload;                        /* This contains Payload received in response */
+    uint16_t        payload_data_length;            /* this length indicates only payload length */
+    uint16_t        remaining_length;               /* Remaining data for this response. */
 } http_response_t;
 
+
+/* This callback will be invoked when response is received by the library.
+ * Application is expected to preserve data if content length exceeds MTU.
+ * The 'remaining_length' field in http_response_t indicates the data remaining;
+ * remaining length '0' indicates that the response is complete. */
 typedef void (*http_event_handler_t)( http_client_t* client, http_event_t event, http_response_t* response );
 
 /******************************************************
@@ -109,6 +131,19 @@ typedef void (*http_event_handler_t)( http_client_t* client, http_event_t event,
  * @return @ref wiced_result_t
  */
 wiced_result_t http_client_init( http_client_t* client, wiced_interface_t interface, http_event_handler_t event_handler, wiced_tls_identity_t* optional_identity );
+
+/**
+ * Configure HTTP client connection related configuration
+ *
+ * This API needs to be called before http_client_connect API and is configured per connection.
+ * API is optional and need not be called if default values are fine.
+ *
+ * @param[in] client                : HTTP client
+ * @param[in] client_config         : pointer to client configuration info
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t http_client_configure(http_client_t* client, http_client_configuration_info_t* client_config);
 
 /**
  * De-initialize HTTP client

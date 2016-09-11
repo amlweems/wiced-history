@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -70,6 +70,14 @@ extern "C" {
 #define SSL_ALERT_UNRECOGNIZED_NAME    112  // RFC4366
 #define SSL_ALERT_BAD_CERT_STATUS_RESP 113  // RFC4366
 #define SSL_ALERT_BAD_CERT_HASH_VALUE  114  // RFC4366
+
+// Diffie-Hellman Constants
+#define MYKROSSL_ERR_DHM_BAD_INPUT_DATA                    -0x0480
+#define MYKROSSL_ERR_DHM_READ_PARAMS_FAILED                -0x0490
+#define MYKROSSL_ERR_DHM_MAKE_PARAMS_FAILED                -0x04A0
+#define MYKROSSL_ERR_DHM_READ_PUBLIC_FAILED                -0x04B0
+#define MYKROSSL_ERR_DHM_MAKE_PUBLIC_FAILED                -0x04C0
+#define MYKROSSL_ERR_DHM_CALC_SECRET_FAILED                -0x04D0
 
 /******************************************************
  *                   Enumerations

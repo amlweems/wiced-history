@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,7 +10,7 @@
 
 MEMORY
 {
-    AONRAM           (rwx)  : ORIGIN = 0x0069F000, LENGTH = 9K /* Use half of 8K AON memory as hard limit for tiny bootloader */
-    RAM              (rwx)  : ORIGIN = 0x00690000, LENGTH = 60K /* Uses the top 60K of SRAM */
+    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 5K /* Use half of 8K AON memory as hard limit for tiny bootloader */
+    RAM              (rwx)  : ORIGIN = 0x00688000, LENGTH = 77K /* Uses the top 77K of SRAM */
 }
 

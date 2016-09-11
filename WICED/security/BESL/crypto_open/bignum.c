@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -945,7 +945,7 @@ int32_t mpi_div_mpi(mpi *Q, mpi *R, const mpi *A, const mpi *B)
         Z.p[n - t]++;
         MPI_CHK(mpi_sub_mpi(&X, &X, &Y));
     }
-    mpi_shift_r(&Y, biL * (n - t));
+    MPI_CHK(mpi_shift_r(&Y, biL * (n - t)));
 
     for (i = n; i > t; i--) {
         if (X.p[i] >= Y.p[t])
@@ -1030,7 +1030,7 @@ int32_t mpi_div_mpi(mpi *Q, mpi *R, const mpi *A, const mpi *B)
     }
 
     if (Q != NULL) {
-        mpi_copy(Q, &Z);
+        MPI_CHK(mpi_copy(Q, &Z));
         Q->s = A->s * B->s;
     }
 

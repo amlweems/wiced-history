@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,12 +8,12 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Lib_sbc
+NAME :=                 Lib_sbc
 
-GLOBAL_INCLUDES += ../include \
-                   ../BTE/WICED \
-                   ../BTE/Components/stack/include \
-                   ../BTE/Projects/bte/main
+GLOBAL_INCLUDES +=      ../include \
+                        ../BTE/WICED \
+                        ../BTE/Components/stack/include \
+                        ../BTE/Projects/bte/main
 
 
 ifneq ($(wildcard $(CURDIR)sbc.$(RTOS).$(NETWORK).$(HOST_ARCH).release.a),)

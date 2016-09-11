@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -94,6 +94,16 @@ VOID wiced_p2p_netx_duo_driver_entry( NX_IP_DRIVER* driver )
     wiced_netx_driver_entry( driver, WWD_P2P_INTERFACE );
 }
 
+static VOID wiced_netx_multicast_driver_request_to_address( NX_IP_DRIVER* driver, wiced_mac_t* mac )
+{
+    mac->octet[0] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_msw & 0x0000ff00 ) >> 8 );
+    mac->octet[1] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_msw & 0x000000ff ) >> 0 );
+    mac->octet[2] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0xff000000 ) >> 24 );
+    mac->octet[3] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x00ff0000 ) >> 16 );
+    mac->octet[4] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x0000ff00 ) >> 8 );
+    mac->octet[5] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x000000ff ) >> 0 );
+}
+
 static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface )
 {
     NX_PACKET*  packet_ptr;
@@ -151,12 +161,8 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
             break;
 
         case NX_LINK_MULTICAST_JOIN:
-            mac.octet[0] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_msw & 0x0000ff00 ) >> 8 );
-            mac.octet[1] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_msw & 0x000000ff ) >> 0 );
-            mac.octet[2] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0xff000000 ) >> 24 );
-            mac.octet[3] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x00ff0000 ) >> 16 );
-            mac.octet[4] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x0000ff00 ) >> 8 );
-            mac.octet[5] = (uint8_t) ( ( driver->nx_ip_driver_physical_address_lsw & 0x000000ff ) >> 0 );
+
+            wiced_netx_multicast_driver_request_to_address( driver, &mac );
 
             if ( wwd_wifi_register_multicast_address( &mac ) != WWD_SUCCESS )
             {
@@ -166,12 +172,8 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
             break;
 
         case NX_LINK_MULTICAST_LEAVE:
-            mac.octet[0] = 0;
-            mac.octet[1] = 0;
-            mac.octet[2] = 0;
-            mac.octet[3] = 0;
-            mac.octet[4] = 0;
-            mac.octet[5] = 0;
+
+            wiced_netx_multicast_driver_request_to_address( driver, &mac );
 
             if ( wwd_wifi_unregister_multicast_address( &mac ) != WWD_SUCCESS )
             {
@@ -342,7 +344,8 @@ static UINT nx_send_ethernet_packet( NX_IP_DRIVER* driver, USHORT ethertype )
 VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver )
 {
     platform_ethernet_config_t* eth_config;
-    NX_IP*      ip = driver->nx_ip_driver_ptr;
+    NX_IP*                      ip = driver->nx_ip_driver_ptr;
+    wiced_mac_t                 mac;
 
     driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
 
@@ -383,8 +386,27 @@ VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver )
             break;
 
         case NX_LINK_MULTICAST_JOIN:
+            wiced_netx_multicast_driver_request_to_address( driver, &mac );
+            if ( platform_ethernet_add_multicast_address( &mac ) == PLATFORM_SUCCESS )
+            {
+                driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
+            }
+            else
+            {
+                driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
+            }
+            break;
+
         case NX_LINK_MULTICAST_LEAVE:
-            /* TODO: send IGMP packet? instruct Ethernet driver? */
+            wiced_netx_multicast_driver_request_to_address( driver, &mac );
+            if ( platform_ethernet_remove_multicast_address( &mac ) == PLATFORM_SUCCESS )
+            {
+                driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
+            }
+            else
+            {
+                driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
+            }
             break;
 
         case NX_LINK_PACKET_BROADCAST:

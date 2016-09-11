@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -40,8 +40,8 @@ typedef /*@abstract@*/ /*@immutable@*/ struct
 {
     uint8_t*  buffer;
     uint32_t  size;
-    uint32_t  head;
-    uint32_t  tail;
+    volatile uint32_t  head; /* Read from */
+    volatile uint32_t  tail; /* Write to */
 } wiced_ring_buffer_t;
 
 /******************************************************

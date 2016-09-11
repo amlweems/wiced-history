@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,7 +26,10 @@ GLOBAL_DEFINES += $(NAME)_VERSION=$$(SLASH_QUOTE_START)v$(NETX_DUO_VERSION)$$(SL
 # prevent sending reset for non-blocking disconnect
 GLOBAL_DEFINES += NX_INCLUDE_USER_DEFINE_FILE
 GLOBAL_DEFINES += __fd_set_defined
+
+ifneq ($(TOOLCHAIN_NAME),IAR)
 GLOBAL_DEFINES += SYS_TIME_H_AVAILABLE
+endif
 
 GLOBAL_INCLUDES := ver$(NETX_DUO_VERSION) \
                    WICED

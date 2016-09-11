@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,9 +26,10 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
-#define HTTP_CLRF   "\r\n"
-#define HTTP_SPACE  " "
-#define HTTP_COLON  ":"
+#define HTTP_CLRF        "\r\n"
+#define HTTP_CRLF_CRLF   "\r\n\r\n"
+#define HTTP_SPACE       " "
+#define HTTP_COLON       ":"
 
 #define HTTP_VERSION_1_0  "HTTP/1.0"
 #define HTTP_VERSION_1_1  "HTTP/1.1"
@@ -43,9 +44,11 @@ extern "C" {
 #define HTTP_METHOD_TRACE    "TRACE"
 #define HTTP_METHOD_CONNECT  "CONNECT"
 
-#define HTTP_HEADER_HOST            "Host"
-#define HTTP_HEADER_DATE            "Date"
-#define HTTP_HEADER_CONTENT_LENGTH  "Content-Length"
+#define HTTP_HEADER_HOST            "Host: "
+#define HTTP_HEADER_DATE            "Date: "
+#define HTTP_HEADER_CONTENT_LENGTH  "Content-Length: "
+#define HTTP_HEADER_CONTENT_TYPE    "Content-Type: "
+#define HTTP_HEADER_CHUNKED         "Transfer-Encoding: chunked"
 
 /******************************************************
  *                   Enumerations

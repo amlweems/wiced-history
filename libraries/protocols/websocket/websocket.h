@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -117,7 +117,7 @@ typedef struct
     wiced_websocket_callbacks_t  callbacks;
     uint8_t*                     formatted_websocket_frame;
     uint16_t                     formatted_websocket_frame_length;
-    const char                   subprotocol[SUB_PROTOCOL_STRING_LENGTH];
+    char                         subprotocol[SUB_PROTOCOL_STRING_LENGTH];
 } wiced_websocket_t;
 
 typedef struct

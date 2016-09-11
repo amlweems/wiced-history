@@ -507,6 +507,7 @@ VOID    _nx_trace_event_update(TX_TRACE_BUFFER_ENTRY *event, ULONG timestamp, UL
 #define NX_IPv6_UDP_PACKET   (NX_IPv6_PACKET + 8)      /* IPv6 header plus 8 bytes       */   
 #define NX_IPv6_TCP_PACKET   (NX_IPv6_PACKET + 20)     /* IPv6 header plus 20 bytes      */    
 #define NX_IPv6_ICMP_PACKET  (NX_IPv6_PACKET)
+#define NX_IPv6_MLD_PACKET   (NX_IPv6_PACKET)
 #define NX_RECEIVE_PACKET     0                        /* This is for driver receive     */ 
 
 
@@ -1830,6 +1831,7 @@ typedef struct NX_IPV6_MULTICAST_STRUCT
 
     /* Define the MLD registration count.  */
     ULONG       nx_ip_mld_join_count;
+    ULONG       nx_ip_mld_update_time;
 
 } NX_IPV6_MULTICAST_ENTRY;
 
@@ -2102,6 +2104,9 @@ typedef struct NX_IP_STRUCT
     /* Define the MLD join count.  */
     ULONG       nx_ipv6_multicast_groups_joined;
 
+#ifdef NX_IPV6_MLD_MULTICAST_ENABLE
+    void        (*nx_ipv6_mld_periodic_processing)(struct NX_IP_STRUCT *);
+#endif
 #endif /* NX_IPV6_MULTICAST_ENABLE  */
 
     /* Define the ICMP packet receive routine.  This also doubles as a 
@@ -2480,9 +2485,19 @@ typedef struct NX_IP_DRIVER_STRUCT
 #define nxd_ipv6_address_get                    _nxd_ipv6_address_get
 #define nxd_ipv6_address_set                    _nxd_ipv6_address_set
 #define nxd_ipv6_address_delete                 _nxd_ipv6_address_delete
+
 #ifdef NX_IPV6_MULTICAST_ENABLE
 #define nxd_ipv6_multicast_interface_join       _nxd_ipv6_multicast_interface_join
 #define nxd_ipv6_multicast_interface_leave      _nxd_ipv6_multicast_interface_leave
+
+#ifdef NX_IPV6_MLD_MULTICAST_ENABLE
+#define nxd_mld_enable                          _nxd_mld_enable
+#define nxd_mld_multicast_join                  _nxd_mld_multicast_join
+#define nxd_mld_multicast_leave                 _nxd_mld_multicast_leave
+#define nxd_mld_multicast_interface_join        _nxd_mld_multicast_interface_join
+#define nxd_mld_multicast_interface_leave       _nxd_mld_multicast_interface_leave
+#endif
+
 #endif /* NX_IPV6_MULTICAST_ENABLE */
 
 
@@ -2761,6 +2776,16 @@ typedef struct NX_IP_DRIVER_STRUCT
 #ifdef NX_IPV6_MULTICAST_ENABLE
 #define nxd_ipv6_multicast_interface_join       _nxde_ipv6_multicast_interface_join
 #define nxd_ipv6_multicast_interface_leave      _nxde_ipv6_multicast_interface_leave
+
+#ifdef NX_IPV6_MLD_MULTICAST_ENABLE
+#define nxd_mld_enable                          _nxd_mld_enable
+#define nxd_mld_multicast_join                  _nxd_mld_multicast_join
+#define nxd_mld_multicast_leave                 _nxd_mld_multicast_leave
+#define nxd_mld_multicast_interface_join        _nxd_mld_multicast_interface_join
+#define nxd_mld_multicast_interface_leave       _nxd_mld_multicast_interface_leave
+#define nxd_mld_multicast_leave                 _nxd_mld_multicast_leave
+#endif
+
 #endif /* NX_IPV6_MULTICAST_ENABLE */
 
 #endif /* FEATURE_NX_IPV6 */
@@ -3014,6 +3039,17 @@ UINT    nxd_ipv6_stateless_address_autoconfig_disable(NX_IP *ip_ptr, UINT interf
 #ifdef NX_IPV6_MULTICAST_ENABLE
 UINT    nxd_ipv6_multicast_interface_join(NX_IP *ip_ptr, NXD_ADDRESS *group_address, UINT interface_index);
 UINT    nxd_ipv6_multicast_interface_leave(NX_IP *ip_ptr, NXD_ADDRESS *group_address, UINT interface_index);
+
+#ifdef NX_IPV6_MLD_MULTICAST_ENABLE
+UINT  nxd_mld_enable(NX_IP *ip_ptr);
+UINT  nxd_mld_multicast_join(NX_IP *ip_ptr, ULONG* group_address);
+UINT  nxd_mld_multicast_leave(NX_IP *ip_ptr, ULONG* group_address);
+UINT  nxd_mld_multicast_interface_join(NX_IP *ip_ptr, ULONG* group_address, UINT interface_index);
+UINT  nxd_mld_multicast_interface_leave(NX_IP *ip_ptr, ULONG* group_address, UINT interface_index);
+VOID  nxd_mld_periodic_processing(NX_IP *ip_ptr);
+VOID  nxd_mld_packet_process(NX_IP *ip_ptr, NX_PACKET *packet_ptr);
+#endif
+
 #endif /* NX_IPV6_MULTICAST_ENABLE */
 
 

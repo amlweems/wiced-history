@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -44,7 +44,7 @@ extern "C"
  *          DTLS -> Host Function Declarations
  ******************************************************/
 
-extern dtls_result_t dtls_host_create_buffer( dtls_context_t* dtls, uint8_t** buffer, uint16_t buffer_size );
+extern dtls_result_t dtls_host_create_buffer( dtls_context_t* dtls, dtls_peer_t* peer, uint8_t** buffer, uint16_t buffer_size );
 extern dtls_result_t dtls_host_free_packet( uint32_t* packet );
 extern dtls_result_t dtls_host_send_tcp_packet( void* context, uint32_t* packet );
 extern dtls_result_t dtls_host_get_packet_data( dtls_context_t* dtls, uint32_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length );

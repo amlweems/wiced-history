@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,6 +67,20 @@ wwd_result_t host_rtos_create_thread_with_arg( host_thread_type_t* thread, void(
     UNUSED_PARAMETER( stack_size );
     UNUSED_PARAMETER( priority );
     UNUSED_PARAMETER( arg );
+
+    return WWD_SUCCESS;
+}
+
+wwd_result_t host_rtos_create_configed_thread(  /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config )
+{
+    *thread = (unsigned char) 0;
+
+    UNUSED_PARAMETER( entry_function );
+    UNUSED_PARAMETER( name );
+    UNUSED_PARAMETER( stack );
+    UNUSED_PARAMETER( stack_size );
+    UNUSED_PARAMETER( priority );
+    UNUSED_PARAMETER( config );
 
     return WWD_SUCCESS;
 }

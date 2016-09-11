@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -160,7 +160,7 @@ SECTIONS
      */
     ASSERT((. <= BOOTLOADER_SRAM), "Application overflowing to Bootloader SRAM")
 
-    .bss : /* Zero initialised memory used for zero initialised variables */
+    .bss (NOLOAD) : /* Zero initialised memory used for zero initialised variables */
     {
         . = ALIGN(4);
 
@@ -170,7 +170,7 @@ SECTIONS
         link_bss_end = ALIGN(4);
     } > SRAM
 
-    .stack_start :
+    .stack_start (NOLOAD) :
     {
         . = ALIGN(8);
 
@@ -179,14 +179,23 @@ SECTIONS
         link_stack_end = ALIGN(8);
     } > SRAM
 
-    .stack_isr :
+    .stack_isr (NOLOAD) :
     {
         . = ALIGN(8);
 
         link_stack_isr_location = .;
         . = . + link_stack_isr_location + SYS_STACK_SIZE + IRQ_STACK_SIZE + FIQ_STACK_SIZE + 3 * 8;
         link_stack_isr_end = ALIGN(8);
+        /*
+         * Stack is full descending.
+         * Here we give choice to RTOS to pre-allocate frame,
+         * so on entry to ISR sp register points to empty frame.
+         */
+        KEEP(*(.isr_stack_initial_frame))
+        link_heap_start = ALIGN(8);
     } > SRAM
+
+    INCLUDE GCC/ddr.ld
 
     /DISCARD/ :
     {
@@ -211,7 +220,7 @@ SECTIONS
 }
 
 /* Declare libc Heap to start at end of allocated RAM and end at top of RAM, aligned 8 byte */
-PROVIDE( _heap = link_stack_isr_end );
+PROVIDE( _heap = link_heap_start );
 PROVIDE( _eheap = ALIGN( ORIGIN( SRAM ) + LENGTH( SRAM ) - 8, 8 ) );
 
 /* Declare ThreadX free memory (passed to app as tx_application_define() func's argument) */

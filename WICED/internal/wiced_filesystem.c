@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -189,7 +189,7 @@ static wiced_result_t wiced_filesystem_del_mounted_device ( wiced_filesystem_t* 
     shift_up_num = (total_mounted_index - i);
     WPRINT_WICED_INFO( ("Deleting %s in mounted table with index %lu. (shift up %lu)\n", mounted_table[i].name, (unsigned long)i, (unsigned long)shift_up_num) );
 
-    if ( shift_up_num != 0 )
+    if ( ( shift_up_num != 0 ) && ( i < ( WICED_FILESYSTEM_MOUNT_DEVICE_NUM_MAX - 1 ) ) )
     {
         /* If shift up not zero, copy up before clearing the last entry */
         memcpy( (void *) &mounted_table[i], (void *) &mounted_table[i+1], (sizeof(wiced_filesystem_mounted_device_t) * shift_up_num) );

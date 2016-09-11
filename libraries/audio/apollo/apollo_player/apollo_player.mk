@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,8 +27,9 @@ GLOBAL_DEFINES  += WICED_USE_AUDIO
 
 $(NAME)_COMPONENTS += audio/apollo/apollocore
 $(NAME)_COMPONENTS += audio/apollo/audio_render
-$(NAME)_COMPONENTS += audio/apollo/audiopcm
-$(NAME)_COMPONENTS += audio/apollo/audioplc
 $(NAME)_COMPONENTS += audio/apollo/audio_pll_tuner
+
+$(NAME)_COMPONENTS += audio/apollo/audiopcm2
+$(NAME)_COMPONENTS += audio/apollo/audioplc2
 
 $(NAME)_CFLAGS  :=

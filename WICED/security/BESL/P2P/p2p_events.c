@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -318,7 +318,7 @@ void p2p_process_action_frame( p2p_workspace_t* workspace, const uint8_t* data, 
                             tlv16_data_t* device_password_id = tlv_find_tlv16(workspace->wps_data, workspace->wps_data_length, WPS_ID_DEVICE_PWD_ID);
                             if (device_password_id != NULL)
                             {
-                                device->p2p_wps_device_password_id = BESL_READ_16_BE(device_password_id->data);
+                                device->p2p_wps_device_password_id = ( wps_device_password_id_t ) BESL_READ_16_BE(device_password_id->data);
                             }
                         }
 
@@ -701,7 +701,7 @@ void p2p_process_action_frame( p2p_workspace_t* workspace, const uint8_t* data, 
                         discovery_target = p2p_host_find_associated_p2p_device( workspace, (besl_mac_t*)&p2p_tlv->data );
                         if ( discovery_target == NULL ) // XXX or device does not support discoverability
                         {
-                            device->status = 0x01;
+                            device->status = P2P_DEVICE_DISCOVERED;
                             besl_p2p_send_action_frame( workspace, device, p2p_write_device_discoverability_response, (uint32_t)workspace->operating_channel.channel, 2 );
                         }
                         else
@@ -801,7 +801,7 @@ besl_result_t p2p_process_probe_request( p2p_workspace_t* workspace, const uint8
     ieee80211_header_t*      header             = (ieee80211_header_t*) ( data );
     besl_time_t              current_time;
     tlv16_uint16_t*          wps_pwd_id         = NULL;
-    wps_device_password_id_t device_password_id = 0;
+    wps_device_password_id_t device_password_id = WPS_DEFAULT_DEVICEPWDID;
     tlv16_data_t*            device_name_tlv    = NULL;
     besl_result_t            result             = BESL_P2P_ERROR_FAIL;
     p2p_discovered_device_t* device             = NULL;

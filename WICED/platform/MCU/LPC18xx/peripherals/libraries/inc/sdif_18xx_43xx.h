@@ -147,8 +147,9 @@ typedef struct {				/*!< SDMMC Structure        */
 
 /** @brief SDIO card-type register defines
  */
-#define MCI_CTYPE_8BIT          (1 << 16)		/*!< Enable 4-bit mode */
-#define MCI_CTYPE_4BIT          (1 << 0)		/*!< Enable 8-bit mode */
+#define MCI_CTYPE_8BIT          (1 << 16)       /*!< Enable 4-bit mode */
+#define MCI_CTYPE_4BIT          (1 << 0)        /*!< Enable 8-bit mode */
+#define MCI_CTYPE_1BIT          (0)             /*!< Enable 1-bit mode */
 
 /** @brief SDIO Interrupt status & mask register defines
  */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -207,7 +207,7 @@ wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_int
     }
 
     /* start server listen */
-    status = nx_tcp_server_socket_listen( tcp_socket[0].socket.socket.nx_tcp_socket_ip_ptr, tcp_server->port,  &tcp_socket[0].socket.socket, PERSISTANT_TCP_SERVER_TCP_LISTEN_QUEUE_SIZE, internal_nx_tcp_listen_callback );
+    status = netx_returns[ nx_tcp_server_socket_listen( tcp_socket[0].socket.socket.nx_tcp_socket_ip_ptr, tcp_server->port,  &tcp_socket[0].socket.socket, PERSISTANT_TCP_SERVER_TCP_LISTEN_QUEUE_SIZE, internal_nx_tcp_listen_callback ) ];
     if( status != WICED_SUCCESS )
     {
         goto clean_up;
@@ -237,13 +237,13 @@ wiced_result_t wiced_tcp_server_accept( wiced_tcp_server_t* tcp_server, wiced_tc
 
 wiced_result_t wiced_tcp_server_disconnect_socket( wiced_tcp_server_t* tcp_server, wiced_tcp_socket_t* socket)
 {
-    UINT result;
+    wiced_result_t result;
 
     nx_tcp_socket_disconnect( &socket->socket, NX_TIMEOUT(WICED_TCP_DISCONNECT_TIMEOUT) );
 
     nx_tcp_server_socket_unaccept( &socket->socket );
 
-    result = internal_wiced_tcp_server_listen( tcp_server );
+    result = netx_returns[ internal_wiced_tcp_server_listen( tcp_server ) ];
 
     return result;
 }
@@ -337,7 +337,8 @@ void wiced_tcp_set_type_of_service( wiced_tcp_socket_t* socket, uint32_t tos )
 
 wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
 {
-    UINT result;
+    wiced_result_t result = WICED_TCPIP_SUCCESS;
+    UINT net_result;
 
     WICED_LINK_CHECK_TCP_SOCKET( socket );
 
@@ -358,15 +359,15 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
         }
 #endif /* ifndef WICED_DISABLE_TLS */
 
-        result = nx_tcp_server_socket_accept( &socket->socket, NX_TIMEOUT(WICED_TCP_ACCEPT_TIMEOUT) );
-        if ( ( result == NX_NOT_CONNECTED ) || ( result == NX_WAIT_ABORTED ) )
+        net_result = nx_tcp_server_socket_accept( &socket->socket, NX_TIMEOUT(WICED_TCP_ACCEPT_TIMEOUT) );
+        if ( ( net_result == NX_NOT_CONNECTED ) || ( net_result == NX_WAIT_ABORTED ) )
         {
-            return netx_returns[result];
+            return netx_returns[net_result];
         }
-        else if ( result != NX_SUCCESS )
+        else if ( net_result != NX_SUCCESS )
         {
             WPRINT_LIB_INFO( ( "Error accepting connection\n" ) );
-            return netx_returns[result];
+            return netx_returns[net_result];
         }
 
 #ifndef WICED_DISABLE_TLS
@@ -393,12 +394,12 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
             }
 #endif /* ifndef WICED_DISABLE_TLS */
 
-            result = nx_tcp_server_socket_accept( &socket->socket, NX_TIMEOUT(WICED_TCP_ACCEPT_TIMEOUT) );
-            if ( result != NX_SUCCESS )
+            net_result = nx_tcp_server_socket_accept( &socket->socket, NX_TIMEOUT(WICED_TCP_ACCEPT_TIMEOUT) );
+            if ( net_result != NX_SUCCESS )
             {
                 nx_tcp_server_socket_unaccept( &socket->socket );
+                return netx_returns[net_result];
             }
-            result = netx_returns[result];
 
 #ifndef WICED_DISABLE_TLS
             if ( socket->tls_context != NULL )
@@ -654,7 +655,7 @@ wiced_result_t wiced_tcp_disconnect( wiced_tcp_socket_t* socket )
 wiced_result_t wiced_packet_create_tcp( wiced_tcp_socket_t* socket, uint16_t content_length, wiced_packet_t** packet, uint8_t** data, uint16_t* available_space )
 {
     UINT     result;
-    uint16_t maximum_segment_size = (uint16_t)MIN(socket->socket.nx_tcp_socket_mss, socket->socket.nx_tcp_socket_connect_mss);
+    uint16_t maximum_segment_size = (uint16_t)WICED_MAXIMUM_SEGMENT_SIZE(socket);
 
     UNUSED_PARAMETER( content_length );
     result = nx_packet_allocate( &wiced_packet_pools[0], packet, NX_TCP_PACKET, NX_TIMEOUT(WICED_ALLOCATE_PACKET_TIMEOUT) );
@@ -973,13 +974,6 @@ wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_addres
 
     WICED_LINK_CHECK_UDP_SOCKET( socket );
 
-#ifndef WICED_DISABLE_DTLS
-    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER)
-    {
-        wiced_dtls_encrypt_packet( &socket->dtls_context->context, address, port,packet );
-    }
-#endif /* ifndef WICED_DISABLE_DTLS */
-
     result = nx_udp_socket_send(&socket->socket, packet, address->ip.v4, port);
     return netx_returns[result];
 }
@@ -1006,13 +1000,6 @@ wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** p
     UINT result;
 
     WICED_LINK_CHECK_UDP_SOCKET( socket );
-
-#ifndef WICED_DISABLE_DTLS
-    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER )
-    {
-        return wiced_dtls_receive_packet( socket, packet, timeout );
-    }
-#endif
 
     result = nx_udp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
 
@@ -1063,6 +1050,12 @@ wiced_result_t wiced_udp_delete_socket( wiced_udp_socket_t* socket )
         wiced_dtls_close_notify( socket );
 
         wiced_dtls_deinit_context( socket->dtls_context );
+        if ( socket->context_malloced == WICED_TRUE )
+        {
+           free( socket->dtls_context );
+           socket->dtls_context = NULL;
+           socket->context_malloced = WICED_FALSE;
+        }
     }
 #endif /* ifndef WICED_DISABLE_DTLS */
 

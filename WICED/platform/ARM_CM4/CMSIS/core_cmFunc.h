@@ -308,7 +308,10 @@ __STATIC_INLINE void __set_FPSCR(uint32_t fpscr)
 
 #elif defined ( __ICCARM__ ) /*------------------ ICC Compiler -------------------*/
 /* IAR iccarm specific functions */
-
+#include <stdint.h>
+#ifndef __INLINE
+#define __INLINE inline
+#endif
 #include <cmsis_iar.h>
 
 

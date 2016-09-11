@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -37,6 +37,8 @@
 #ifndef SECTOR_SIZE
 #define SECTOR_SIZE ((uint32_t)(2048))
 #endif
+#if !defined(BOOTLOADER)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -118,46 +120,44 @@ wiced_result_t wiced_dct_ota2_save_copy( uint8_t type )
 wiced_result_t wiced_dct_ota2_read_saved_copy( void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
 {
     platform_dct_header_t   dct_header;
+    platform_dct_version_t  dct_version;
+    wiced_dct_sdk_ver_t     sdk_dct_version = DCT_BOOTLOADER_SDK_UNKNOWN;
     sflash_handle_t         sflash_handle;
-    uint32_t                curr_dct, curr_dct_end;
-    wiced_result_t          result = WICED_ERROR;
+    uint32_t                curr_dct;
+    wiced_result_t          result = WICED_ERROR;   /* assume error */
+    int                     retval;
 
-    /* do standard checks to see if the DCT copy before an update is valid */
+    /* do standard checks to see if the DCT copy is valid */
     if (init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED ) != 0)
     {
         return WICED_ERROR;
     }
     curr_dct = (uint32_t) OTA2_IMAGE_APP_DCT_SAVE_AREA_BASE;
-    curr_dct_end = curr_dct + (uint32_t)PLATFORM_DCT_COPY1_SIZE;
-    result = sflash_read( &sflash_handle, curr_dct, &dct_header, sizeof(platform_dct_header_t) );
-    if (result != 0)
+    retval = sflash_read( &sflash_handle, curr_dct, &dct_header, sizeof(platform_dct_header_t) );
+    retval |= sflash_read( &sflash_handle, curr_dct, &dct_version, sizeof(platform_dct_version_t) );
+    deinit_sflash( &sflash_handle);
+
+    if (retval == 0 )
     {
-        deinit_sflash( &sflash_handle);
-        return WICED_ERROR;
+        sdk_dct_version = wiced_dct_validate_and_determine_version(OTA2_IMAGE_APP_DCT_SAVE_AREA_BASE, PLATFORM_DCT_COPY1_SIZE, NULL, NULL);
     }
 
-    if ( ( dct_header.write_incomplete == 0 ) &&
-         ( dct_header.magic_number == BOOTLOADER_MAGIC_NUMBER ) &&
-         ( ((dct_header.initial_write == 1) && (dct_header.crc32 == 0x00)) ||
-           (wiced_dct_ota2_check_crc_valid(curr_dct, curr_dct_end) == WICED_TRUE)) )
+    if ( sdk_dct_version > DCT_BOOTLOADER_SDK_3_5_2)
     {
-        curr_dct = (uint32_t) OTA2_IMAGE_APP_DCT_SAVE_AREA_BASE + DCT_section_offsets[ section ];
+        /* read the portion the caller asked for */
         if (init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED ) != 0)
         {
             return WICED_ERROR;
         }
-        result = sflash_read( &sflash_handle, curr_dct + offset, info_ptr, size );
-        if (result != 0)
-        {
-            deinit_sflash( &sflash_handle);
-            return WICED_ERROR;
-        }
+        curr_dct = (uint32_t) OTA2_IMAGE_APP_DCT_SAVE_AREA_BASE + DCT_section_offsets[ section ];
+        retval = sflash_read( &sflash_handle, curr_dct + offset, info_ptr, size );
         deinit_sflash( &sflash_handle);
-    }
-    else
-    {
-        result = WICED_ERROR;
+        if (retval == 0)
+        {
+            result = WICED_SUCCESS;
+        }
     }
 
     return result;
 }
+#endif  /* !defined(BOOTLOADER) */

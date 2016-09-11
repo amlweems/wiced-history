@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -173,6 +173,65 @@ typedef struct
 #define HT_CAPABILITIES_INFO_40MHZ_INTOLERANT              ( 1 << 14 )
 #define HT_CAPABILITIES_INFO_L_SIG_TXOP_PROTECTION_SUPPORT ( 1 << 15 )
 
+typedef unsigned int uint;
+typedef struct
+{
+    uint buf;
+    uint buf_size;
+    uint idx;
+    uint out_idx; /* output index */
+} hnd_log_t;
+
+#define CBUF_LEN 128
+
+typedef struct
+{
+    /* Virtual UART
+     *   When there is no UART (e.g. Quickturn), the host should write a complete
+     *   input line directly into cbuf and then write the length into vcons_in.
+     *   This may also be used when there is a real UART (at risk of conflicting with
+     *   the real UART).  vcons_out is currently unused.
+     */
+    volatile uint vcons_in;
+    volatile uint vcons_out;
+
+    /* Output (logging) buffer
+     *   Console output is written to a ring buffer log_buf at index log_idx.
+     *   The host may read the output when it sees log_idx advance.
+     *   Output will be lost if the output wraps around faster than the host polls.
+     */
+    hnd_log_t log;
+
+    /* Console input line buffer
+     *   Characters are read one at a time into cbuf until <CR> is received, then
+     *   the buffer is processed as a command line.  Also used for virtual UART.
+     */
+    uint cbuf_idx;
+    char cbuf[ CBUF_LEN ];
+} hnd_cons_t;
+
+typedef struct wifi_console
+{
+    uint count; /* Poll interval msec counter */
+    uint log_addr; /* Log struct address (fixed) */
+    hnd_log_t log; /* Log struct (host copy) */
+    uint bufsize; /* Size of log buffer */
+    char *buf; /* Log buffer (host copy) */
+    uint last; /* Last buffer read index */
+} wifi_console_t;
+
+typedef struct
+{
+    uint flags;
+    uint trap_addr;
+    uint assert_exp_addr;
+    uint assert_file_addr;
+    uint assert_line;
+    uint console_addr;
+    uint msgtrace_addr;
+    uint fwid;
+} wlan_shared_t;
+
 #pragma pack()
 
 /******************************************************
@@ -195,11 +254,12 @@ extern void         wwd_set_country            ( wiced_country_code_t code );
 extern void         wwd_wait_for_wlan_event    ( host_semaphore_type_t* transceive_semaphore );
 
 /* Chip specific functions */
-extern wwd_result_t wwd_allow_wlan_bus_to_sleep( void );
-extern wwd_result_t wwd_ensure_wlan_bus_is_up  ( void );
+extern wwd_result_t wwd_allow_wlan_bus_to_sleep     ( void );
+extern wwd_result_t wwd_ensure_wlan_bus_is_up       ( void );
 
-extern wwd_result_t wwd_chip_specific_init     ( void );
-extern wwd_result_t wwd_disable_sram3_remap    ( void );
+extern wwd_result_t wwd_chip_specific_init          ( void );
+extern wwd_result_t wwd_chip_specific_socsram_init  ( void );
+extern wwd_result_t wwd_wifi_read_wlan_log_unsafe( uint32_t wlan_shared_address, char* buffer, uint32_t buffer_size );
 
 /******************************************************
  *             Global variables

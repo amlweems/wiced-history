@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,6 +31,7 @@
 #define NUM_HTTP_SESSIONS               ( 5 )
 #define TCP_CONNECTION_TIMEOUT          ( 5000 )
 
+#define HTTP_HEADER_STR                 "HTTP/"
 #define CONNECTION_KEEP_ALIVE_STR       "Connection: Keep-Alive\r\n"
 #define CONNECTION_CLOSE_STR            "Connection: Close\r\n"
 #define KEEP_ALIVE_STR                  "Keep-Alive"
@@ -95,7 +96,7 @@ wiced_result_t http_init_stream( http_stream_t* session, wiced_interface_t inter
     uint8_t        count  = 0;
     wiced_result_t result = WICED_ERROR;
 
-    wiced_assert("Bad args", session != NULL);
+    wiced_assert("Bad args", session != NULL );
 
     /* Clear the session object */
     memset(session, 0, sizeof(http_stream_t));
@@ -121,10 +122,14 @@ wiced_result_t http_init_stream( http_stream_t* session, wiced_interface_t inter
         /* copy hostname locally */
         strcpy( session->hostname, host_name );
     }
-    else
+    else if (ip_address != NULL)
     {
         /* otherwise assign IP address */
         SET_IPV4_ADDRESS( session->host_ip, GET_IPV4_ADDRESS((*ip_address)) );
+    }
+    else
+    {
+        return WICED_BADARG;
     }
 
     /* Create a TCP socket */
@@ -273,7 +278,7 @@ wiced_result_t http_send_basic_authorization( http_stream_t* session, char* user
     unsigned int   value_size;
     http_header_t  basic_auth = { AUTHORIZATION_STR, NULL };
 
-    wiced_assert("Bad args", (username_password != NULL));
+    wiced_assert("Bad args", ((session != NULL) && (username_password != NULL)) );
 
     value_size = sizeof( BASIC_STR ) + DIV_ROUND_UP( strlen(username_password) * 4, 3 ) + 1;
 
@@ -313,7 +318,21 @@ wiced_result_t http_extract_headers( wiced_packet_t* packet, http_header_t* head
     wiced_bool_t finished = WICED_FALSE;
     uint16_t matched_headers = 0;
 
-    wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length );
+    wiced_assert("Bad args", (packet != NULL) && (headers != NULL) );
+
+    if (number_of_headers < 1)
+    {
+        return WICED_BADARG;
+    }
+
+    WICED_VERIFY( wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length ) );
+
+    /* verify that it is a packet with HTTP header before checking for headers */
+    if (memcmp( (char*) data, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 ) != 0)
+    {
+        return WICED_NOT_FOUND;
+    }
+
 
     header_location = (char*)data;
     do
@@ -364,9 +383,15 @@ wiced_result_t http_get_body( wiced_packet_t* packet, uint8_t** body, uint32_t* 
 
     WICED_VERIFY( wiced_packet_get_data( packet, 0, &packet_data, &packet_data_length, &available_data_length ) );
 
+    /* verify that it is a packet with HTTP header before checking for body */
+    if (memcmp( (char*) packet_data, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 ) != 0)
+    {
+        return WICED_NOT_FOUND;
+    }
+
     /* Find the first occurrence of "\r\n\r\n", this signifies the end of the headers */
-    start_of_body = strstr( (const char*) packet_data, HTTP_HEADERS_BODY_SEPARATOR );
-    if ( start_of_body == 0 )
+    start_of_body = strnstr( (const char*) packet_data, packet_data_length, HTTP_HEADERS_BODY_SEPARATOR, sizeof(HTTP_HEADERS_BODY_SEPARATOR) - 1);
+    if ( start_of_body == NULL )
     {
         return WICED_NOT_FOUND;
     }
@@ -374,6 +399,12 @@ wiced_result_t http_get_body( wiced_packet_t* packet, uint8_t** body, uint32_t* 
     start_of_body += 4;
 
     *body_length = (uint32_t)( packet_data_length - ( ( start_of_body - (char*) packet_data ) ) );
+
+    if(*body_length  == 0)
+    {
+        *body = NULL;
+        return WICED_SUCCESS;
+    }
     *body        = (uint8_t*) start_of_body;
 
     return WICED_SUCCESS;
@@ -396,11 +427,10 @@ wiced_result_t http_process_response( wiced_packet_t* packet, http_status_code_t
     uint16_t       response_length;
     uint16_t       available_data_length;
 
+    wiced_assert("Bad args", (packet != NULL) && (response_code != NULL));
+
     /* Get pointer to data from a packet */
-    if ( wiced_packet_get_data( packet, 0, &response, &response_length, &available_data_length ) != WICED_SUCCESS )
-    {
-        return WICED_ERROR;
-    }
+    WICED_VERIFY( wiced_packet_get_data( packet, 0, &response, &response_length, &available_data_length ) );
 
     /* Check we have enough data to identify the response number */
     if (response_length < 12)
@@ -408,12 +438,25 @@ wiced_result_t http_process_response( wiced_packet_t* packet, http_status_code_t
         return WICED_ERROR;
     }
 
+    /* verify that it is a packet with HTTP header before checking for body */
+    if (memcmp( (char*) response, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 ) != 0)
+    {
+        return WICED_NOT_FOUND;
+    }
+
     /* Find the HTTP/x.x part*/
-    response_status = strstr( (const char*) response, "HTTP/" );
+    response_status = strnstr( (const char*) response, response_length, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 );
     if (response_status == 0)
     {
         return WICED_ERROR;
     }
+
+    /* Please check we have enough data before dereferencing it */
+    if(((response + response_length) - (uint8_t *)response_status) < 13)
+    {
+       return WICED_ERROR;
+    }
+
     /* Skip the "HTTP/" and the version "x.x"*/
     response_status += 5 + 3;
 
@@ -455,13 +498,20 @@ wiced_result_t http_process_headers_in_place( wiced_packet_t* packet, http_heade
     {
         return WICED_BADARG;
     }
+
     if (*number_of_headers == 0)
     {
         /* no headers in the header struct? */
         return WICED_BADARG;
     }
 
-    wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length );
+    WICED_VERIFY( wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length ) );
+
+    /* verify that it is a packet with HTTP header before checking for body */
+    if (memcmp( (char*) data, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 ) != 0)
+    {
+        return WICED_NOT_FOUND;
+    }
 
     headers_parsed = 0;
     /* first line is the query, we skip that here  */
@@ -534,19 +584,21 @@ http_request_t  http_determine_method(wiced_packet_t* packet)
     uint16_t        data_length;
     uint16_t        available_data_length;
     uint16_t        i;
-    http_request_t  request_type;
-
-    /* assume some error */
-    request_type = HTTP_UNKNOWN;
 
     if (packet == NULL)
     {
-        return request_type;
+        return HTTP_UNKNOWN;
     }
 
     if( wiced_packet_get_data( packet, 0, &data, &data_length, &available_data_length ) != WICED_SUCCESS)
     {
-        return request_type;
+        return HTTP_UNKNOWN;
+    }
+
+    /* verify that it is a packet with HTTP header before checking for body */
+    if (memcmp( (char*) data, HTTP_HEADER_STR, sizeof(HTTP_HEADER_STR) - 1 ) != 0)
+    {
+        return HTTP_UNKNOWN;
     }
 
     for( i=0; i < HTTP_METHODS_MAX; i++ )
@@ -554,10 +606,9 @@ http_request_t  http_determine_method(wiced_packet_t* packet)
         uint16_t method_name_len = sizeof(http_methods[i]);
         if ( strncmp((char *)data, http_methods[i], method_name_len) == 0)
         {
-            request_type = (http_request_t)i;
-            break;
+            return (http_request_t)i;
         }
     }
 
-    return request_type;
+    return HTTP_UNKNOWN;
 }

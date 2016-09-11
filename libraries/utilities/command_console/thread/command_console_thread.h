@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,7 +24,7 @@ extern "C" {
 #define THREAD_COMMANDS \
     { (char*) "thread_list",    thread_list,        0, NULL, NULL, (char*) "",                  (char*) "[ThreadX only] Lists the current running threads"}, \
     { (char*) "thread_kill",    thread_kill,        0, NULL, NULL, (char*) "<thread id>",       (char*) "[ThreadX only] Kills the specified running thread"}, \
-    { (char*) "thread_spawn",   thread_spawn,       0, NULL, NULL, (char*) "[priority] <cmds>", (char*) "[ThreadX only] Spawns a new thread for the specified command. Optionally run at a specific priority."},
+    { (char*) "thread_spawn",   thread_spawn,       0, NULL, NULL, (char*) "[--priority <priority>] [--interval <interval_in_ms>] <cmds>", (char*) "[ThreadX only] Spawns a new thread to execute specified console command. Optional parameter --priority <priority> & --interval <interval_in_ms>"},
 
 /******************************************************
  *                   Enumerations

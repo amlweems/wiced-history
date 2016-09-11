@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,6 +9,7 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
 #include "wwd_management.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "internal/wwd_internal.h"
@@ -16,6 +17,10 @@
 #include "internal/wwd_sdpcm.h"
 #include "chip_constants.h"
 #include "wwd_bcmendian.h"
+#include "wwd_debug.h"
+#include "wiced_deep_sleep.h"
+#include "network/wwd_buffer_interface.h"
+#include "network/wwd_network_constants.h"
 
 /******************************************************
  *             Constants
@@ -28,6 +33,9 @@
 #define AI_RESETCTRL_OFFSET      (0x800)
 #define AIRC_RESET               (1)
 #define WRAPPER_REGISTER_OFFSET  (0x100000)
+
+#define WLAN_SHARED_VERSION_MASK    0x00ff
+#define WLAN_SHARED_VERSION         0x0001
 
 /******************************************************
  *             Structures
@@ -55,6 +63,12 @@ wwd_wlan_status_t wwd_wlan_status =
     .country_code      = WICED_COUNTRY_AUSTRALIA,
     .keep_wlan_awake = 0,
 };
+
+static wifi_console_t *c;
+wifi_console_t console;
+static wlan_shared_t sh;
+static uint console_addr = 0;
+static uint WICED_DEEP_SLEEP_SAVED_VAR(con_lastpos) = 0;
 
 /******************************************************
  *             Static Function Declarations
@@ -271,7 +285,147 @@ wwd_result_t wwd_wlan_armcore_run( device_core_t core_id, wlan_core_flag_t core_
     return result;
 }
 
+wwd_result_t wwd_wifi_read_wlan_log_unsafe( uint32_t wlan_shared_address, char* buffer, uint32_t buffer_size )
+{
+    char ch;
+    uint32_t n;
+    uint32_t index;
+    uint32_t address;
+    wwd_result_t result = WWD_WLAN_ERROR;
 
+    c = &console;
+
+    if ( console_addr == 0 )
+    {
+        uint shared_addr;
+
+        address = wlan_shared_address;
+        result = wwd_bus_read_backplane_value( address, 4, (uint8_t*) &shared_addr );
+        if ( result != WWD_SUCCESS )
+        {
+            goto done;
+        }
+
+        result = wwd_bus_transfer_backplane_bytes( BUS_READ, shared_addr, sizeof(wlan_shared_t), (uint8_t *) &sh);
+        if ( result != WWD_SUCCESS )
+        {
+            goto done;
+        }
+
+        sh.flags            = ltoh32( sh.flags );
+        sh.trap_addr        = ltoh32( sh.trap_addr );
+        sh.assert_exp_addr  = ltoh32( sh.assert_exp_addr );
+        sh.assert_file_addr = ltoh32( sh.assert_file_addr );
+        sh.assert_line      = ltoh32( sh.assert_line );
+        sh.console_addr     = ltoh32( sh.console_addr );
+        sh.msgtrace_addr    = ltoh32( sh.msgtrace_addr );
+
+        if ( ( sh.flags & WLAN_SHARED_VERSION_MASK ) != WLAN_SHARED_VERSION )
+        {
+            WPRINT_APP_INFO( ( "Readconsole: WLAN shared version is not valid\n\r") );
+            result = WWD_WLAN_ERROR;
+            goto done;
+        }
+        console_addr = sh.console_addr;
+    }
+
+    /* Read console log struct */
+    address = console_addr + offsetof( hnd_cons_t, log );
+    result = wwd_bus_transfer_backplane_bytes( BUS_READ, address, sizeof(c->log), (uint8_t*)&c->log );
+    if ( result != WWD_SUCCESS )
+    {
+        goto done;
+    }
+
+    /* Allocate console buffer (one time only) */
+    if ( c->buf == NULL )
+    {
+        c->bufsize = ltoh32( c->log.buf_size );
+        c->buf = malloc( c->bufsize );
+        if ( c->buf == NULL )
+        {
+            result = WWD_WLAN_ERROR;
+            goto done;
+        }
+    }
+
+    /* Retrieve last read position */
+    c->last = con_lastpos;
+
+    index = ltoh32( c->log.idx );
+
+    /* Protect against corrupt value */
+    if ( index > c->bufsize )
+    {
+        result = WWD_WLAN_ERROR;
+        goto done;
+    }
+
+    /* Skip reading the console buffer if the index pointer has not moved */
+    if ( index == c->last )
+    {
+        result = WWD_SUCCESS;
+        goto done;
+    }
+
+    /* Read the console buffer */
+    /* xxx this could optimize and read only the portion of the buffer needed, but
+     * it would also have to handle wrap-around.
+     */
+    address = ltoh32( c->log.buf );
+    result = wwd_bus_transfer_backplane_bytes( BUS_READ, address, c->bufsize, (uint8_t*) c->buf );
+    if ( result != WWD_SUCCESS )
+    {
+        goto done;
+    }
+
+    while ( c->last != index )
+    {
+        for ( n = 0; n < buffer_size - 2; n++ )
+        {
+            if ( c->last == index )
+            {
+                /* This would output a partial line.  Instead, back up
+                 * the buffer pointer and output this line next time around.
+                 */
+                if ( c->last >= n )
+                {
+                    c->last -= n;
+                }
+                else
+                {
+                    c->last = c->bufsize - n;
+                }
+                /* Save last read position */
+                con_lastpos = c->last;
+
+                result = WWD_SUCCESS;
+                goto done;
+            }
+            ch = c->buf[ c->last ];
+            c->last = ( c->last + 1 ) % c->bufsize;
+            if ( ch == '\n' )
+            {
+                break;
+            }
+            buffer[ n ] = ch;
+        }
+
+        if ( n > 0 )
+        {
+            if ( buffer[ n - 1 ] == '\r' )
+                n--;
+            buffer[ n ] = 0;
+            WPRINT_APP_INFO( ("CONSOLE: %s\n", buffer) );
+        }
+    }
+    /* Save last read position */
+    con_lastpos = c->last;
+    result = WWD_SUCCESS;
+
+done:
+    return result;
+}
 
 inline uint16_t bcmswap16( uint16_t val )
 {

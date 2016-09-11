@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -187,10 +187,16 @@ int mcu_powersave_freq_console_command( int argc, char *argv[] )
 {
     int freq_mode_par = atoi( argv[ 1 ] );
     platform_cpu_clock_frequency_t freq_mode = freq_mode_par;
+    wiced_bool_t result;
 
     platform_tick_stop();
-    platform_cpu_clock_init( freq_mode );
+    result = platform_cpu_clock_init( freq_mode );
     platform_tick_start();
+
+    if ( result != WICED_TRUE )
+    {
+        printf( "Failed to set %d frequency mode\n", freq_mode_par );
+    }
 
     return ERR_CMD_OK;
 }
@@ -307,6 +313,11 @@ int mcu_powersave_info_console_command( int argc, char *argv[] )
         printf( "Deep-sleep disabled or not supported.\n" );
     }
 
+    if ( platform_hibernation_is_returned_from( ) )
+    {
+        printf( "Returned from hibernation where spent %u ticks\n", (unsigned)platform_hibernation_get_ticks_spent( ) );
+    }
+
     printf( "MCU powersave is %s now.\n",  platform_mcu_powersave_is_permitted() ? "enabled" : "disabled");
 
     printf( "MCU powersave mode is %d now.\n",  (int)platform_mcu_powersave_get_mode() );
@@ -315,7 +326,7 @@ int mcu_powersave_info_console_command( int argc, char *argv[] )
 
     for ( i = 0; i < PLATFORM_MCU_POWERSAVE_CLOCK_MAX; i++ )
     {
-        printf( "MCU clock %d requested %lu times.\n", i, platform_mcu_powersave_get_clock_request_counter( (platform_mcu_powersave_clock_t)i ) );
+        printf( "MCU clock %d requested %lu times.\n", i, (unsigned long)platform_mcu_powersave_get_clock_request_counter( (platform_mcu_powersave_clock_t)i ) );
     }
 
     return ERR_CMD_OK;
@@ -323,11 +334,13 @@ int mcu_powersave_info_console_command( int argc, char *argv[] )
 
 int mcu_powersave_gpio_wakeup_enable_console_command( int argc, char *argv[] )
 {
-    int                                         gpio_wakeup_config_par = atoi( argv[ 1 ] );
-    platform_mcu_powersave_gpio_wakeup_config_t gpio_wakeup_config     = gpio_wakeup_config_par;
-    platform_result_t                           result;
+    int                                          gpio_wakeup_config_par  = atoi( argv[ 1 ] );
+    int                                          gpio_wakeup_trigger_par = atoi( argv[ 2 ] );
+    platform_mcu_powersave_gpio_wakeup_config_t  gpio_wakeup_config      = gpio_wakeup_config_par;
+    platform_mcu_powersave_gpio_wakeup_trigger_t gpio_wakeup_trigger     = gpio_wakeup_trigger_par;
+    platform_result_t                            result;
 
-    result = platform_mcu_powersave_gpio_wakeup_enable( gpio_wakeup_config );
+    result = platform_mcu_powersave_gpio_wakeup_enable( gpio_wakeup_config, gpio_wakeup_trigger );
     if ( result != PLATFORM_SUCCESS )
     {
         printf( "Enabling failure: %d\n",  result );
@@ -381,8 +394,9 @@ int mcu_powersave_gci_gpio_wakeup_ack_console_command( int argc, char *argv[] )
 {
     int            gpio_pin_par = atoi( argv[ 1 ] );
     platform_pin_t gpio_pin     = gpio_pin_par;
+    wiced_bool_t   res          = platform_mcu_powersave_gci_gpio_wakeup_ack( gpio_pin );
 
-    platform_mcu_powersave_gci_gpio_wakeup_ack( gpio_pin );
+    printf( "Ack %s\n", res ? "SUCCEEDED" : "FAILED" );
 
     return ERR_CMD_OK;
 }
@@ -424,7 +438,7 @@ int mcu_wlan_powersave_stats_console_command( int argc, char *argv[] )
     uint32_t     wait_up_time = platform_wlan_powersave_get_stats( PLATFORM_WLAN_POWERSAVE_STATS_WAIT_UP_TIME );
     wiced_bool_t is_res_up    = platform_wlan_powersave_is_res_up();
 
-    printf( "call_num=%lu up_time=%lu wait_up_time=%lu is_res_up=%d\n", call_num, up_time, wait_up_time, is_res_up );
+    printf( "call_num=%lu up_time=%lu wait_up_time=%lu is_res_up=%d\n", (unsigned long)call_num, (unsigned long)up_time, (unsigned long)wait_up_time, is_res_up );
 #else
     printf( "WLAN powersave is not compiled-in\n" );
 #endif /* PLATFORM_WLAN_POWERSAVE */

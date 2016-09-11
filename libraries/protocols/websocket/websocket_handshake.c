@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -143,7 +143,8 @@ static wiced_result_t wiced_verify_server_handshake(char* server_response)
     start_of_match = strstr( server_response, HTTP_WEBSOCKET_SUB_PROTOCOL_CASE_SENSITIVE_TOKEN );
     if ( start_of_match != NULL )
     {
-        strcpy( sub_protocol_supported, start_of_match );
+        strncpy( sub_protocol_supported, start_of_match, SUB_PROTOCOL_STRING_LENGTH - 1 );
+        sub_protocol_supported [ SUB_PROTOCOL_STRING_LENGTH - 1 ] = '\0';
     }
 
     received_server_key_start_pointer = strstr( server_response, HTTP_WEBSOCKET_ACCEPT_CASE_SENSITIVE_TOKEN );
@@ -265,14 +266,15 @@ wiced_result_t wiced_establish_websocket_handshake( wiced_websocket_t* websocket
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_get_websocket_subprotocol( const char* subprotocol )
+wiced_result_t wiced_get_websocket_subprotocol( char* subprotocol )
 {
     if ( sub_protocol_supported[ 0 ] == 0x0 )
     {
         return WICED_ERROR;
     }
 
-    strncpy( (char*) subprotocol, sub_protocol_supported, SUB_PROTOCOL_STRING_LENGTH - 1 );
+    strncpy( subprotocol, sub_protocol_supported, SUB_PROTOCOL_STRING_LENGTH - 1);
+    subprotocol[SUB_PROTOCOL_STRING_LENGTH - 1] = '\0';
     return WICED_SUCCESS;
 }
 

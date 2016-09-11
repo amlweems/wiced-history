@@ -567,7 +567,9 @@ typedef UINT8 tBT_DEVICE_TYPE;
 #define TRACE_LAYER_CHO             0x002a0000
 #define TRACE_LAYER_NFA             0x002b0000
 #define TRACE_LAYER_HAL             0x002c0000 /*it's overwritten in nfc_types.h*/
-#define TRACE_LAYER_MAX_NUM         0x002d
+#define TRACE_LAYER_AVCT            0x002d0000
+#define TRACE_LAYER_AVDT            0x002e0000
+#define TRACE_LAYER_MAX_NUM         0x002f
 
 
 /* TRACE_ORIGINATOR                 0x0000^^00*/
@@ -620,6 +622,15 @@ typedef UINT8 tBT_DEVICE_TYPE;
 
 
 #define TRACE_TYPE_MAX_NUM          20
+
+/* TRACE_SEGMENT                      0x000000^0*/
+#define TRACE_SEGMENT_MASK          0x00000080
+
+#define TRACE_SEGMENT_FULL          0x00000000
+#define TRACE_SEGMENT_PARTIAL       0x00000080
+
+#define TRACE_SEGMENT_MAX           2
+
 #define TRACE_TYPE_ALL              0xffff
 
 /* Define color for script type */

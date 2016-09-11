@@ -2,10 +2,10 @@
   ******************************************************************************
   * @file    stm32f4xx_exti.c
   * @author  MCD Application Team
-  * @version V1.5.1
-  * @date    22-May-2015
+  * @version V1.7.0
+  * @date    22-April-2016
   * @brief   This file provides firmware functions to manage the following 
-  *          functionalities of the EXTI peripheral:           
+  *          functionalities of the EXTI peripheral:
   *           + Initialization and Configuration
   *           + Interrupts and flags management
   *
@@ -25,6 +25,7 @@
    (#) EXTI line 20 is connected to the USB OTG HS (configured in FS) Wakeup event 
    (#) EXTI line 21 is connected to the RTC Tamper and Time Stamp events
    (#) EXTI line 22 is connected to the RTC Wakeup event
+   (#) EXTI line 23 is connected to the LPTIM Wakeup event 
 
                        ##### How to use this driver #####
  ===============================================================================
@@ -46,7 +47,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT 2015 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT 2016 STMicroelectronics</center></h2>
   *
   * Licensed under MCD-ST Liberty SW License Agreement V2, (the "License");
   * You may not use this file except in compliance with the License.

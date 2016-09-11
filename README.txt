@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.5.2 - README
+Broadcom WICED Software Development Kit 3.7.0 - README
 =====================================================================
 
 The WICED SDK provides a full compliment of application level APIs, 
@@ -27,7 +27,7 @@ Major features of the WICED SDK include ...
   - RTOS & Network abstraction layer with a simple API for UDP, TCP, HTTP, HTTPS communications
   - SSL/TLS Security Library integrated with an HTTPS library for secure web transactions
   - WICED Application Framework including Bootloader, OTA Upgrade and Factory Reset
-    - Second flavor of OTA and Factory Reset (called OTA2) 
+    - Second flavor of OTA and Factory Reset (called OTA2)
   - Automated Wi-Fi Easy Setup using one of several methods
     - SoftAP & Secure HTTP server
     - Wi-Fi Protected Setup
@@ -152,10 +152,12 @@ Networking Features (IPv4 & IPv6)
  * HTTP / HTTPS (Client & Server)
  * SNTP
  * SMTP
+ * SSDP
 
 Application Features
  * Apple AirPlay (requires Apple authentication co-processor; available to Apple MFi licensees *ONLY*) 
  * Apple HomeKit (available to Apple MFi licensees *ONLY*)
+ * Apollo Wireless Audio distribution
  * Bluetooth Audio
  * Peripheral interfaces
    * GPIO
@@ -193,53 +195,70 @@ Hardware Platforms
    * BCM943364WCDA  : Broadcom WICED Module with Atmel SAM4S16B MCU mounted on BCM9WCD1EVAL1
  BCM943341
    * BCM943341WCD1  : Broadcom BCM43341-based WICED Module with STM32F417 MCU mounted on BCM9WCD5EVAL1
+ BCM94343X
+   * BCM943438WCD1  : Broadcom BCM43438-based WICED Module with STM32F411 MCU mounted on BCM9WCD9EVAL1
+   * BCM94343WWCD1  : Broadcom BCM4343W-based WICED Module with STM32F411 MCU mounted on BCM9WCD9EVAL1
+   * BCM94343WWCD2  : Broadcom BCM4343W-based WICED Module with STM32F412 MCU mounted on BCM9WCD9EVAL1
  BCM4390
    * BCM94390WCD2   : Broadcom BCM4390 SiP-based WICED Module on BCM9WCD3EVAL1
- BCM43909
-   * BCM943909WCD1_3     : Broadcom BCM43909 SiP-based WICED Module on BCM943909WCDEVAL_1
+ BCM4390X
+   * BCM943907WAE2_1     : Broadcom BCM43907WCD2 SiP-based WICED Module on BCM943907WAE_1
+   * BCM943909WCD1_3     : Broadcom BCM43909 SiP-based WICED Module on BCM943909WCDEVAL_2
    * BCM943907AEVAL1F_1  : Broadcom BCM43907WLCSPR SiP-based WICED Module on BCM943907AEVAL1F_1
    * BCM943907WAE_1      : Broadcom BCM43907WCD2 SiP-based WICED Module on BCM943907WAE_1
    * BCM943903WCD1_1     : Broadcom BCM43903 SiP-based WICED Module on BCM9WCD8EVAL1
-   
+   * BCM943903PS         : Broadcom BCM43903 Postage Stamp WICED Module on BCM943903WCD2_1
+   * BCM943907WCD1       : Broadcom BCM43907WCD1 SiP-based WICED Module on BCM943909WCDEVAL_2
+   * BCM943907WCD2       : Broadcom BCM43907WCD2 SiP-based WICED Module on BCM943909WCDEVAL_2
+
 Known Limitations & Notes
 ---------------------------------------------------------------------
 
- * Description - WICED_Audio: DUT resets if incoming call received/outgoing call initiated during Airplay streaming.
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - WICED_Audio: Play/Pause/FWD/BCKWD does not work with Mac Book Air and BTW.
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - snip.email: Email is not being send shows error
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - snip.https_server: Showing error in console while opening the webpage
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - snip.ping_webserver" is not working properly in debug mode, giving exceptional error also for snip.https client and demo.appliance apps
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - demo.temp_control: App stuck at the initial phase of booting up 
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - snip.thread_monitor not working properly in both release mode and debug mode
-   Workaround  - No work around
-   Resolution  - Targeting to be fixed in the next SDK release
-
- * Description - Switching from Airplay to Bluetooth may result in silence if Bluetooth connection is established after the Airplay streaming has commenced.
-   Workaround  - Switching back a second time should resolve the issue.
-   Resolution  - Targeting to be fixed in the next SDK release
- 
- * Description - Switching between Bluetooth music and Handsfree voice may fail after a few iterations
+ * Description - WLAN WPS Enrollee association failure
    Workaround  - None
    Resolution  - Targeting to be fixed in the next SDK release
 
- * Features not yet supported in WICED-SDK-3.5.2
+ * Description - Switching back and forth between two A2DP smartphone devices may result in audio not being heard properly
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - With display enabled on 43907WAE running dual_hf_a2dp app, device may reset when selecting a new track from the source playlist during streaming.
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Bluetooth pairing/connection interoperability issues with BTW and Samsung Galaxy S6
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Track info update may not be reliable with A2DP and Airplay streaming on 43907WAE with display enabled
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Intermittent failures during WLAN TCP Tx/Rx throughput tests on BCM94390x platforms
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - TCP Bidirectional WLAN low throughput/stability issues on BCM4343x and 4390x
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - BCM43438 P2P Group Client fails to associate with Group Owner
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Enterprise Security PEAP Authentication failure to IAS and ACS Radius Servers
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Enterprise security not supported on 4390x platforms.
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Factory reset failure after OTA upgrade on 43907 platform
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Features not yet supported in WICED-SDK-3.7.0
    - IAR Embedded Workspace native support
 
    - WAC procedure is not supported for AP mode with WEP security
@@ -257,7 +276,7 @@ Known Limitations & Notes
        Platforms that do not support Wi-Fi powersave (per the table above) are
        not capable of driving the WLAN sleep clock. An external 32kHz clock is 
        required for these platforms.
-  
+
 
  * libc does not include support for printing uint64_t (long long)
    

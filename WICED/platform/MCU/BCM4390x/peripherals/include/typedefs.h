@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -92,6 +92,17 @@ typedef unsigned long long int uintptr;
 #define TYPEDEF_FLOAT_T
 #endif   /* TARGETOS_nucleus */
 
+#if defined(TARGETOS_nuttx)
+/* These float32 and float64 types conflict with the same typedefs in
+** stddef.h. Don't re-typedef them here.
+*/
+#define TYPEDEF_FLOAT32
+#define TYPEDEF_FLOAT64
+/* bool available in stdbool.h. */
+#include <stdbool.h>
+#define TYPEDEF_BOOL
+#endif   /* TARGETOS_nuttx */
+
 #if defined(_NEED_SIZE_T_)
 typedef long unsigned int size_t;
 #endif
@@ -174,7 +185,8 @@ typedef unsigned int socklen_t;
 #if !defined(linux) && !defined(vxworks) && !defined(_WIN32) && !defined(_CFE_) && \
 !defined(_HNDRTE_) && !defined(_MINOSL_) && !defined(__DJGPP__) && \
 !defined(__IOPOS__) && !defined(__ECOS) && !defined(__BOB__) && \
-!defined(TARGETOS_nucleus) && !defined(EFI) && !defined(__FreeBSD__)
+!defined(TARGETOS_nucleus) && !defined(EFI) && !defined(__FreeBSD__) && \
+!defined(TARGETOS_nuttx)
 #define TYPEDEF_UINT
 #define TYPEDEF_USHORT
 #endif
@@ -459,9 +471,4 @@ typedef float64 float_t;
 /* Avoid warning for discarded const or volatile qualifier in special cases (-Wcast-qual) */
 #define DISCARD_QUAL(ptr, type) ((type *)(uintptr)(ptr))
 
-/*
- * Including the bcmdefs.h here, to make sure everyone including typedefs.h
- * gets this automatically
-*/
-#include <bcmdefs.h>
 #endif /* _TYPEDEFS_H_ */

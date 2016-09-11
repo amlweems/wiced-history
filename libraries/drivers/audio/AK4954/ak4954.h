@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -109,7 +109,6 @@ struct ak4954_device_cmn_data
     wiced_i2c_device_t *            i2c_data;
     ak4954_clock_settings_t         ck;
     wiced_gpio_t                    pdn;
-    uint8_t                         playback_volume;
 };
 
 struct ak4954_device_data

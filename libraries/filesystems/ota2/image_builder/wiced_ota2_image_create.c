@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -109,7 +109,6 @@
  */
 
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -117,7 +116,6 @@
 #include <sys/stat.h>
 
 #include "wiced_result.h"
-#include "wiced_utilities.h"
 
 /* Include header for common structure defn between Builder and Extractor */
 
@@ -129,7 +127,11 @@
 /******************************************************
  *                      Macros
  ******************************************************/
-#ifndef _WIN32
+#if defined(OSX)
+
+#define _stati64 stat
+
+#elif !defined(_WIN32)
 /*define_style_exception_start*/
 #define off64_t __off64_t
 #define _stati64 stat64
@@ -169,7 +171,7 @@
  *                   Enumerations
  ******************************************************/
 /* These are based on values in WICED/platform/include/platform_dct.h
- * We use index 0 for the LUT table itself,
+ * We use idx 0 for the LUT table itself,
  * and the other values are the indexes in that file + 1
  */
 typedef enum {
@@ -184,7 +186,7 @@ typedef enum {
     WICED_OTA2_IMAGE_APP2_INDEX              = DCT_APP2_INDEX + 1,
 
     WICED_OTA2_IMAGE_COMPONENT_MAX   /* must be last ! */
-} wiced_ota2_image_image_index_t;
+} wiced_ota2_image_image_idx_t;
 
 #define WICED_OTA2_IMAGE_HEADERS_SIZE_MAX  ((uint32_t)(sizeof(wiced_ota2_image_header_t) + \
                                                        (sizeof(wiced_ota2_image_component_t) * WICED_OTA2_IMAGE_COMPONENT_MAX)))
@@ -367,6 +369,13 @@ int create_wiced_ota2( const char* ota_spec_file, const char* ota2_image_name, i
     if( ota_verify_ota2_image( ota_build_info ) == 0)
     {
         printf( "Verified !!\n" );
+
+        /* report info */
+        if (ota_build_info->verbose != 0)
+        {
+            ota_build_print_info( ota_build_info, "Verified:" );
+        }
+
         return 0;
     }
     else
@@ -384,7 +393,18 @@ int create_wiced_ota2( const char* ota_spec_file, const char* ota2_image_name, i
  *               Static Function Definitions
  ******************************************************/
 
+#if defined(LINUX)
 static int64_t fsize( const char *filename )
+{
+    struct stat st;
+    if (stat(filename, &st) == 0)
+    {
+        return st.st_size;
+    }
+    return -1;
+}
+#else
+ static int64_t fsize( const char *filename )
 {
     struct _stati64 st;
     if (_stati64(filename, &st) == 0)
@@ -392,6 +412,88 @@ static int64_t fsize( const char *filename )
         return st.st_size;
     }
     return -1;
+}
+#endif
+
+ /* Utilities copied from wiced_utilities.c so we do not include that in the build */
+static inline char hexchar_to_nibble( char hexchar, uint8_t* nibble )
+{
+    if ( ( hexchar >= '0' ) && ( hexchar <= '9' ) )
+    {
+        *nibble = (uint8_t)( hexchar - '0' );
+        return 0;
+    }
+    else if ( ( hexchar >= 'A' ) && ( hexchar <= 'F' ) )
+    {
+        *nibble = (uint8_t) ( hexchar - 'A' + 10 );
+        return 0;
+    }
+    else if ( ( hexchar >= 'a' ) && ( hexchar <= 'f' ) )
+    {
+        *nibble = (uint8_t) ( hexchar - 'a' + 10 );
+        return 0;
+    }
+    return -1;
+}
+
+ static size_t string_to_generic( const char* string, size_t str_length,  uint32_t* value_out, uint8_t is_unsigned, uint8_t is_hex )
+ {
+     uint8_t nibble;
+     size_t characters_processed = 0;
+
+     if (( string == NULL ) || (value_out == NULL))
+     {
+         return 0;
+     }
+
+     *value_out = 0;
+
+     while ( ( characters_processed != str_length ) &&
+             ( 0 == hexchar_to_nibble( *string, &nibble ) ) &&
+             ( ( is_hex != 0 ) || ( nibble < 10 ) )
+           )
+     {
+         if ( is_hex != 0 )
+         {
+             if ( ( ( *value_out > ( 0x7fffffff >> 4 ) ) && ( is_unsigned == 0 ) ) ||
+                  ( *value_out > ( 0xffffffff >> 4 ) )
+                )
+             {
+                 break;
+             }
+             *value_out = ( *value_out << 4 ) + nibble;
+         }
+         else
+         {
+             if ( ( ( *value_out > ( 0x7fffffff / 10 ) ) && ( is_unsigned == 0 ) ) ||
+                  ( *value_out > ( 0xffffffff / 10 ) )
+                )
+             {
+                 break;
+             }
+             *value_out = ( *value_out * 10 ) + nibble;
+         }
+         string++;
+         characters_processed++;
+     }
+
+     return characters_processed;
+ }
+
+static uint32_t generic_string_to_unsigned( const char* str )
+{
+    uint32_t val = 0;
+    uint8_t is_hex = 0;
+
+    if ( strncmp( str, "0x", 2 ) == 0 )
+    {
+        is_hex = 1;
+        str += 2;
+    }
+
+    string_to_generic( str, strlen(str),  &val, 1, is_hex );
+
+    return val;
 }
 
 static int ota_build_parse_location(uint8_t* buff, wiced_ota2_image_builder_component_t *info)
@@ -441,6 +543,7 @@ static int ota_build_parse_filepath(uint8_t* buff, wiced_ota2_image_builder_comp
             }
             if ((eol_ptr != NULL) && ((eol_ptr - value_ptr) > 1) && ((eol_ptr - value_ptr) < WICED_OTA_BUILD_MAX_PC_PATH))
             {
+                size_t  name_len;
                 char* fn_ptr;
                 value_ptr++;
 
@@ -457,11 +560,13 @@ static int ota_build_parse_filepath(uint8_t* buff, wiced_ota2_image_builder_comp
                 fn_ptr = eol_ptr;
                 while ((fn_ptr > value_ptr) && (*fn_ptr != '\\') && (*fn_ptr != '/')) fn_ptr--;
                 fn_ptr++;   /* we don't want the slash */
-                if ((eol_ptr - fn_ptr) <WICED_OTA2_IMAGE_COMPONENT_NAME_LEN)
+                memset(info->component.name, 0x00, sizeof(info->component.name));
+                name_len = (size_t)(eol_ptr - fn_ptr);
+                if (name_len >= WICED_OTA2_IMAGE_COMPONENT_NAME_LEN)
                 {
-                    memcpy(info->component.name, fn_ptr, (size_t)(eol_ptr - fn_ptr));
-                    info->component.name[(size_t)(eol_ptr - fn_ptr)] = '\0';
+                    name_len = WICED_OTA2_IMAGE_COMPONENT_NAME_LEN - 1;
                 }
+                memcpy(info->component.name, fn_ptr, name_len);
                 info->present_in_config_file++;
                 return 0;
             }
@@ -498,10 +603,10 @@ static int16_t find_and_parse_int( const char* buffer, const char *tag)
 static int ota_configuration_parse( wiced_ota2_image_builder_info_t *ota_inf )
 {
     size_t      config_file_size;
-    FILE*       config_file_handle;
+    FILE*       config_file_handle = NULL;
     size_t      bytes_read;
     int         retval = -2;    /* assume failure */
-    int         index;
+    int         idx;
     char        *platform_name_string;
 
     if( ota_inf == NULL )
@@ -576,17 +681,17 @@ static int ota_configuration_parse( wiced_ota2_image_builder_info_t *ota_inf )
         }
     }
 
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        ota_build_parse_location(ota_inf->spec_file_buff, &ota_inf->build_components[index] );
-        ota_build_parse_filepath(ota_inf->spec_file_buff, &ota_inf->build_components[index] );
+        ota_build_parse_location(ota_inf->spec_file_buff, &ota_inf->build_components[idx] );
+        ota_build_parse_filepath(ota_inf->spec_file_buff, &ota_inf->build_components[idx] );
 
-        if (ota_inf->build_components[index].present_in_config_file != 2)
+        if (ota_inf->build_components[idx].present_in_config_file != 2)
         {
             if (ota_inf->verbose != 0)
-                printf( "%s Not included in OTA Image\n", ota_inf->build_components[index].file_str );
+                printf( "%s Not included in OTA Image\n", ota_inf->build_components[idx].file_str );
 
-            ota_inf->build_components[index].present_in_config_file = 0;
+            ota_inf->build_components[idx].present_in_config_file = 0;
         }
     }
 
@@ -619,7 +724,7 @@ _parse_exit:
  */
 static int ota_layout_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
 {
-    uint16_t    index, component_count;
+    uint16_t    idx, component_count;
     uint32_t    offset_into_data_area;
 
     if( ota_inf == NULL )
@@ -630,9 +735,9 @@ static int ota_layout_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
 
     /* count the actual components */
     component_count = 0;
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file > 0)
+        if (ota_inf->build_components[idx].present_in_config_file > 0)
             component_count++;
     }
     if ((component_count < 1) || (component_count > WICED_OTA2_IMAGE_COMPONENT_MAX))
@@ -645,31 +750,53 @@ static int ota_layout_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
     offset_into_data_area = 0;                  /* into data area always starts as 0 */
 
     /* build info about the components */
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file > 0)
+        if (ota_inf->build_components[idx].present_in_config_file > 0)
         {
-            ota_inf->build_components[index].component.type = (uint8_t)index;     /* TODO use enum */
-            ota_inf->build_components[index].component.compression = 0;  /* TODO */
+            switch( idx )
+            {
+            case WICED_OTA2_IMAGE_APPS_LUT_INDEX:
+                ota_inf->build_components[idx].component.type = WICED_OTA2_IMAGE_COMPONENT_LUT;
+                break;
 
-            ota_inf->build_components[index].component.source_offset = offset_into_data_area;
-            ota_inf->build_components[index].component.source_size  = ota_inf->build_components[index].pc_fs_size;
+            case WICED_OTA2_IMAGE_DCT_IMAGE_INDEX:
+                ota_inf->build_components[idx].component.type = WICED_OTA2_IMAGE_COMPONENT_DCT;
+                break;
 
-            /* ota_inf->build_components[index].component.destination gathered from spec file */
-            ota_inf->build_components[index].component.destination_size = ota_inf->build_components[index].pc_fs_size;
+            case WICED_OTA2_IMAGE_FILESYSTEM_IMAGE_INDEX:
+                ota_inf->build_components[idx].component.type = WICED_OTA2_IMAGE_COMPONENT_FILESYSTEM;
+                break;
+
+            case WICED_OTA2_IMAGE_APP0_INDEX:
+                ota_inf->build_components[idx].component.type = WICED_OTA2_IMAGE_COMPONENT_APP0;
+                break;
+
+            default:
+                ota_inf->build_components[idx].component.type = (uint8_t)idx;
+                break;
+            }
+
+            ota_inf->build_components[idx].component.compression = 0;  /* TODO */
+
+            ota_inf->build_components[idx].component.source_offset = offset_into_data_area;
+            ota_inf->build_components[idx].component.source_size  = ota_inf->build_components[idx].pc_fs_size;
+
+            /* ota_inf->build_components[idx].component.destination gathered from spec file */
+            ota_inf->build_components[idx].component.destination_size = ota_inf->build_components[idx].pc_fs_size;
 
             /* todo: if we are compressing individual components, we need to compress source before we get here
              * and figure out the crc from the uncompressed source */
-            offset_into_data_area += ota_inf->build_components[index].component.source_size;
+            offset_into_data_area += ota_inf->build_components[idx].component.source_size;
 
-            ota_inf->build_components[index].sector_fill = 0;
+            ota_inf->build_components[idx].sector_fill = 0;
 
             /* Round up to next sector */
             if ((offset_into_data_area % SECTOR_SIZE) != 0)
             {
-                ota_inf->build_components[index].sector_fill = SECTOR_SIZE - (offset_into_data_area % SECTOR_SIZE);
+                ota_inf->build_components[idx].sector_fill = SECTOR_SIZE - (offset_into_data_area % SECTOR_SIZE);
             }
-            offset_into_data_area += ota_inf->build_components[index].sector_fill;    /* round up to 4k sector size */
+            offset_into_data_area += (uint32_t)ota_inf->build_components[idx].sector_fill;    /* round up to 4k sector size */
 
         }
     }
@@ -735,7 +862,7 @@ static size_t  ota2_image_write_ota_header(FILE* outfile, wiced_ota2_image_build
  */
 static size_t  ota2_image_read_component_headers(FILE* infile, wiced_ota2_image_builder_info_t *ota_inf )
 {
-    int index;
+    int idx;
     size_t read_size;
 
     /* seek & read the ota component header data */
@@ -753,9 +880,9 @@ static size_t  ota2_image_read_component_headers(FILE* infile, wiced_ota2_image_
     }
 
     /* network to host */
-    for (index = 0; index < ota_inf->ota_read_ota_header.component_count; index++)
+    for (idx = 0; idx < ota_inf->ota_read_ota_header.component_count; idx++)
     {
-        wiced_ota2_image_component_header_swap_network_order(&ota_inf->ota_read_components[index], WICED_OTA2_IMAGE_SWAP_NETWORK_TO_HOST );
+        wiced_ota2_image_component_header_swap_network_order(&ota_inf->ota_read_components[idx], WICED_OTA2_IMAGE_SWAP_NETWORK_TO_HOST );
     }
     return read_size;
 }
@@ -767,7 +894,7 @@ static size_t  ota2_image_read_component_headers(FILE* infile, wiced_ota2_image_
  */
 static size_t  ota2_image_write_component_headers(FILE* outfile, wiced_ota2_image_builder_info_t *ota_inf)
 {
-    int index;
+    int idx;
     size_t write_size;
 
     /* seek & write the component header data */
@@ -778,9 +905,9 @@ static size_t  ota2_image_write_component_headers(FILE* outfile, wiced_ota2_imag
     }
 
     /* network to host */
-    for (index = 0; index < ota_inf->component_count; index++)
+    for (idx = 0; idx < ota_inf->component_count; idx++)
     {
-        wiced_ota2_image_component_header_swap_network_order(&ota_inf->ota_create_components[index], WICED_OTA2_IMAGE_SWAP_HOST_TO_NETWORK);
+        wiced_ota2_image_component_header_swap_network_order(&ota_inf->ota_create_components[idx], WICED_OTA2_IMAGE_SWAP_HOST_TO_NETWORK);
     }
 
     write_size = sizeof(wiced_ota2_image_component_t) * ota_inf->component_count;
@@ -836,7 +963,7 @@ static OTA2_CRC_VAR ota_compute_ota_header_crc( wiced_ota2_image_builder_info_t 
  */
 static void ota2_image_copy_present_info_to_create_structs(wiced_ota2_image_builder_info_t *ota_inf)
 {
-    uint16_t index, count;
+    uint16_t idx, count;
 
     /* create OTA Image header */
     ota_inf->ota_create_header.ota2_version    = WICED_OTA2_IMAGE_VERSION;
@@ -865,12 +992,12 @@ static void ota2_image_copy_present_info_to_create_structs(wiced_ota2_image_buil
     ota_inf->ota_create_header.data_start = WICED_OTA2_IMAGE_DATA_START_OFFSET;
 
     count = 0;
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file != 0)
+        if (ota_inf->build_components[idx].present_in_config_file != 0)
         {
             memcpy( &ota_inf->ota_create_components[count],
-                    &ota_inf->build_components[index].component, sizeof(wiced_ota2_image_component_t));
+                    &ota_inf->build_components[idx].component, sizeof(wiced_ota2_image_component_t));
             count++;
         }
     }
@@ -893,7 +1020,7 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
 {
     FILE*   component_handle = NULL;
     FILE*   ota_file_handle = NULL;
-    int     retval, index, component_count;
+    int     retval, idx, component_count;
     size_t  ota_header_size, component_header_size;
     size_t  bytes_read, bytes_to_write, total_written, chunk_size;
 
@@ -960,26 +1087,26 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
 
     /* write out individual components */
     component_count = 0;
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file > 0)
+        if (ota_inf->build_components[idx].present_in_config_file > 0)
         {
-            component_handle = fopen( ota_inf->build_components[index].pc_fs_path, "r+b" );
+            component_handle = fopen( ota_inf->build_components[idx].pc_fs_path, "r+b" );
             if ( component_handle == NULL )
             {
-                printf( "ERROR -- Couldn't open component file %s\n", ota_inf->build_components[index].pc_fs_path );
+                printf( "ERROR -- Couldn't open component file %s\n", ota_inf->build_components[idx].pc_fs_path );
                 goto _write_fail_exit;
             }
 
             /* calculate crc on uncompressed data while copying */
-            ota_inf->build_components[index].component.crc = OTA2_CRC_INIT_VALUE;
+            ota_inf->build_components[idx].component.crc = OTA2_CRC_INIT_VALUE;
 
-            bytes_to_write = ota_inf->build_components[index].pc_fs_size;
+            bytes_to_write = ota_inf->build_components[idx].pc_fs_size;
 
             if (ota_inf->verbose != 0)
-                printf( "  OTA Component %d %s\n", bytes_to_write, ota_inf->build_components[index].pc_fs_path );
+                printf( "  OTA Component %d %s\n", bytes_to_write, ota_inf->build_components[idx].pc_fs_path );
 
-            retval = fseek( ota_file_handle, (long int)(WICED_OTA2_IMAGE_DATA_START_OFFSET + ota_inf->build_components[index].component.source_offset), SEEK_SET);
+            retval = fseek( ota_file_handle, (long int)(WICED_OTA2_IMAGE_DATA_START_OFFSET + ota_inf->build_components[idx].component.source_offset), SEEK_SET);
             while (bytes_to_write > 0)
             {
                 /* start with 0x0 */
@@ -994,18 +1121,18 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
                 bytes_read = fread(ota_inf->component_copy_buffer, chunk_size, 1, component_handle);
                 if ( bytes_read != 1 )
                 {
-                    printf( "Error reading component %s\n", ota_inf->build_components[index].pc_fs_path);
+                    printf( "Error reading component %s\n", ota_inf->build_components[idx].pc_fs_path);
                     retval = -2;
                     goto _write_fail_exit;
                 }
 
-                ota_inf->build_components[index].component.crc = OTA2_CRC_FUNCTION(ota_inf->component_copy_buffer, chunk_size,
-                                                                 ota_inf->build_components[index].component.crc);
+                ota_inf->build_components[idx].component.crc = OTA2_CRC_FUNCTION(ota_inf->component_copy_buffer, (uint32_t)chunk_size,
+                                                                 ota_inf->build_components[idx].component.crc);
 
                 retval = (int)fwrite( ota_inf->component_copy_buffer, chunk_size, 1, ota_file_handle );
                 if ( retval != 1)
                 {
-                    printf( "Error writing component %s\n", ota_inf->build_components[index].file_str );
+                    printf( "Error writing component %s\n", ota_inf->build_components[idx].file_str );
                     retval = -2;
                     goto _write_fail_exit;
                 }
@@ -1015,22 +1142,22 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
             } /* while bytes to write */
 
             if (ota_inf->verbose != 0)
-                printf( "  Writing OTA component %d -> %d  ftell():%d %s! \n", ota_inf->build_components[index].pc_fs_size, total_written, ftell(ota_file_handle), ota_inf->build_components[index].file_str);
+                printf( "  Writing OTA component %d -> %d  ftell():%d %s! \n", ota_inf->build_components[idx].pc_fs_size, total_written, ftell(ota_file_handle), ota_inf->build_components[idx].file_str);
 
-            printf( "  Writing OTA component crc:0x%lx %s! \n", ota_inf->build_components[index].component.crc, ota_inf->build_components[index].file_str);
+            printf( "  Writing OTA component crc:0x%lx %s! \n", ota_inf->build_components[idx].component.crc, ota_inf->build_components[idx].file_str);
 
             /* close component file */
             retval = fclose( component_handle );
             if ( retval != 0 )
             {
-                printf( "Error closing component %s\n", ota_inf->build_components[index].file_str);
+                printf( "Error closing component %s\n", ota_inf->build_components[idx].file_str);
             }
             component_handle = NULL;
 
             /* fill in the rest of the sector in the OTA Image File */
             memset(ota_inf->component_copy_buffer, 0, WICED_OTA_COPY_BUFFER_SIZE);
 
-            bytes_to_write = ota_inf->build_components[index].sector_fill;
+            bytes_to_write = ota_inf->build_components[idx].sector_fill;
             if (ota_inf->verbose != 0)
                 printf( "  fill to next sector %d\n", bytes_to_write );
 
@@ -1045,7 +1172,7 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
                 retval = (int)fwrite( ota_inf->component_copy_buffer, chunk_size, 1, ota_file_handle );
                 if ( retval != 1)
                 {
-                    printf( "Error writing sector fill for component %s\n", ota_inf->build_components[index].pc_fs_size );
+                    printf( "Error writing sector fill for component %s\n", ota_inf->build_components[idx].pc_fs_size );
                     retval = -2;
                     goto _write_fail_exit;
                 }
@@ -1054,17 +1181,17 @@ static int ota_write_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
             }
 
             if (ota_inf->verbose != 0)
-                    printf( "    Component %s done size:%d crc:0x%lx\n", ota_inf->build_components[index].component.name,
-                            ota_inf->build_components[index].component.destination_size, ota_inf->build_components[index].component.crc);
+                    printf( "    Component %s done size:%d crc:0x%lx\n", ota_inf->build_components[idx].component.name,
+                            ota_inf->build_components[idx].component.destination_size, ota_inf->build_components[idx].component.crc);
 
             component_count++;
         }   /* if in configuration file */
-    } /* index loop */
+    } /* idx loop */
 
     if (ota_inf->verbose != 0)
     {
         printf( "  Done total:%d \n", total_written);
-        printf( "  Re-Write OTA Header & COmponents total:%d \n", total_written);
+        printf( "  Re-Write OTA Header & Components total:%d \n", total_written);
     }
 
     /* copy any updated info  (like crc) & re-write headers */
@@ -1119,7 +1246,7 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
     FILE*    ota_file_handle;
     FILE*    component_handle;
     size_t   chunk_size, ota_file_size;
-    int      index, component_count, retval;
+    int      idx, component_count, retval;
     size_t   file_size, bytes_to_read;
     size_t   ota_header_size, component_header_size;
     long     offset, ota_offset;
@@ -1182,9 +1309,9 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
     }
     header_crc = OTA2_CRC_INIT_VALUE;
     header_crc = OTA2_CRC_FUNCTION((uint8_t*)&ota_inf->ota_read_ota_header, sizeof(wiced_ota2_image_header_t), header_crc);
-    for (index = 0; index < ota_inf->ota_read_ota_header.component_count; index++)
+    for (idx = 0; idx < ota_inf->ota_read_ota_header.component_count; idx++)
     {
-        header_crc = OTA2_CRC_FUNCTION((uint8_t*)&ota_inf->ota_read_components[index], sizeof(wiced_ota2_image_component_t), header_crc);
+        header_crc = OTA2_CRC_FUNCTION((uint8_t*)&ota_inf->ota_read_components[idx], sizeof(wiced_ota2_image_component_t), header_crc);
     }
     ota_inf->ota_read_ota_header.header_crc = save_header_crc;
 
@@ -1199,29 +1326,29 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
 
     /* go through the components we marked used in creation & check them vs. the output file */
     component_count = 0;
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file > 0)
+        if (ota_inf->build_components[idx].present_in_config_file > 0)
         {
-            if (ota_inf->verbose != 0) printf( "index:%d %d %s\n", index, component_count, ota_inf->build_components[index].file_str);
+            if (ota_inf->verbose != 0) printf( "idx:%d %d %s\n", idx, component_count, ota_inf->build_components[idx].file_str);
             /* verify component file size */
-            file_size = (size_t)fsize( ota_inf->build_components[index].pc_fs_path );
-            if ((file_size != ota_inf->build_components[index].pc_fs_size) ||
+            file_size = (size_t)fsize( ota_inf->build_components[idx].pc_fs_path );
+            if ((file_size != ota_inf->build_components[idx].pc_fs_size) ||
                 (file_size != ota_inf->ota_read_components[component_count].source_size))
             {
                 printf( "ERROR --File size mismatch! PC source:%d build header:%d OTA file:%d %s\n",
                         file_size,
-                        ota_inf->build_components[index].pc_fs_size,
+                        ota_inf->build_components[idx].pc_fs_size,
                         ota_inf->ota_read_components[component_count].source_size,
                         ota_inf->ota2_image_file_path );
             }
 
 
             /* open the source file from the PC */
-            component_handle = fopen( ota_inf->build_components[index].pc_fs_path, "r+b" );
+            component_handle = fopen( ota_inf->build_components[idx].pc_fs_path, "r+b" );
             if ( component_handle == NULL )
             {
-                printf( "ERROR -- Couldn't open component file %s\n", ota_inf->build_components[index].pc_fs_path );
+                printf( "ERROR -- Couldn't open component file %s\n", ota_inf->build_components[idx].pc_fs_path );
                 goto _read_fail_exit;
             }
 
@@ -1238,9 +1365,9 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
             file_crc = OTA2_CRC_INIT_VALUE;
             ota_crc = OTA2_CRC_INIT_VALUE;
 
-            bytes_to_read = ota_inf->build_components[index].pc_fs_size;
+            bytes_to_read = ota_inf->build_components[idx].pc_fs_size;
             if (ota_inf->verbose != 0)
-                printf( "  OTA Component %d %d %s\n", offset, bytes_to_read, ota_inf->build_components[index].pc_fs_path );
+                printf( "  OTA Component %d %d %s\n", offset, bytes_to_read, ota_inf->build_components[idx].pc_fs_path );
 
             while (bytes_to_read > 0)
             {
@@ -1257,14 +1384,14 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
                 retval = fseek( component_handle, offset, SEEK_SET);
                 if ( retval == -1 )
                 {
-                    printf( "Error -- fseek component %s\n", ota_inf->build_components[index].pc_fs_path);
+                    printf( "Error -- fseek component %s\n", ota_inf->build_components[idx].pc_fs_path);
                     retval = -2;
                     goto _read_fail_exit;
                 }
                 retval = (int)fread(ota_inf->component_copy_buffer, chunk_size, 1, component_handle);
                 if ( retval != 1 )
                 {
-                    printf( "Error -- verify read component %s\n", ota_inf->build_components[index].pc_fs_path);
+                    printf( "Error -- verify read component %s\n", ota_inf->build_components[idx].pc_fs_path);
                     retval = -2;
                     goto _read_fail_exit;
                 }
@@ -1273,27 +1400,27 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
                 retval = fseek( ota_file_handle, ota_offset, SEEK_SET);
                 if ( retval == -1 )
                 {
-                    printf( "Error -- fseek component %s\n", ota_inf->build_components[index].pc_fs_path);
+                    printf( "Error -- fseek component %s\n", ota_inf->build_components[idx].pc_fs_path);
                     retval = -2;
                     goto _read_fail_exit;
                 }
                 retval = (int)fread( ota_inf->component_read_buffer, chunk_size, 1, ota_file_handle );
                 if ( retval != 1)
                 {
-                    printf( "Error -- reading component %s\n", ota_inf->build_components[index].pc_fs_size );
+                    printf( "Error -- reading component %s\n", ota_inf->build_components[idx].pc_fs_size );
                     retval = -2;
                     goto _read_fail_exit;
                 }
 
-                file_crc = OTA2_CRC_FUNCTION(ota_inf->component_copy_buffer, chunk_size, file_crc);
-                ota_crc = OTA2_CRC_FUNCTION(ota_inf->component_read_buffer, chunk_size, ota_crc);
+                file_crc = OTA2_CRC_FUNCTION(ota_inf->component_copy_buffer, (uint32_t)chunk_size, file_crc);
+                ota_crc = OTA2_CRC_FUNCTION(ota_inf->component_read_buffer, (uint32_t)chunk_size, ota_crc);
 
                 /* compare the data */
                 if ((memcmp(ota_inf->component_copy_buffer, ota_inf->component_read_buffer, chunk_size) != 0) ||
                     (file_crc != ota_crc))
                 {
                     int i, j;
-                    printf( "Error -- Component mismatch PC file <-> OTA Image file offset:%d(0x%x) ota:%d(0x%x) %s\n", offset, file_crc, ota_offset, ota_crc, ota_inf->build_components[index].pc_fs_path);
+                    printf( "Error -- Component mismatch PC file <-> OTA Image file offset:%d(0x%x) ota:%d(0x%x) %s\n", offset, file_crc, ota_offset, ota_crc, ota_inf->build_components[idx].pc_fs_path);
                     for (i = 0; i < (int)chunk_size; i+= 16)
                     {
                         printf( "PC file : ");
@@ -1330,20 +1457,20 @@ static int ota_verify_ota2_image( wiced_ota2_image_builder_info_t *ota_inf )
             retval = fclose( component_handle );
             if ( retval != 0 )
             {
-                printf( "Error closing component %s\n", ota_inf->build_components[index].pc_fs_size);
+                printf( "Error closing component %s\n", ota_inf->build_components[idx].pc_fs_size);
             }
             component_handle = NULL;
 
             if ((file_crc != ota_crc) ||
                 (ota_inf->ota_read_components[component_count].crc != ota_crc) ||
-                (ota_inf->build_components[index].component.crc != ota_crc))
+                (ota_inf->build_components[idx].component.crc != ota_crc))
             {
                 printf(" ERROR - CRCs do not match! file:0x%lx ota_file:0x%lx comp header:0x%lx build header:0x%x %s %s\n",
                         file_crc, ota_crc,
                         ota_inf->ota_read_components[component_count].crc,
-                        ota_inf->build_components[index].component.crc,
+                        ota_inf->build_components[idx].component.crc,
                         ota_inf->ota_read_components[component_count].name,
-                        ota_inf->build_components[index].component.name );
+                        ota_inf->build_components[idx].component.name );
             }
             component_count++;
         }
@@ -1359,7 +1486,7 @@ _read_fail_exit:
         retval = fclose( component_handle );
         if ( retval != 0 )
         {
-            printf( "Error closing component %s\n", ota_inf->build_components[index].pc_fs_size);
+            printf( "Error closing component %s\n", ota_inf->build_components[idx].pc_fs_size);
         }
     }
     component_handle = NULL;
@@ -1409,7 +1536,7 @@ static void print_ota_header_info(wiced_ota2_image_header_t *ota_header)
 
 static int ota_print_ota_file_header_info( wiced_ota2_image_builder_info_t *ota_inf )
 {
-    int index;
+    int idx;
     if( ota_inf == NULL )
     {
         return -2;
@@ -1418,9 +1545,9 @@ static int ota_print_ota_file_header_info( wiced_ota2_image_builder_info_t *ota_
     printf("OTA Image Information (read from out File): %s\n", ota_inf->ota2_image_file_path);
     print_ota_header_info( &ota_inf->ota_read_ota_header);
 
-    for (index = 0; (index < ota_inf->ota_read_ota_header.component_count) && (index < WICED_OTA2_IMAGE_COMPONENT_MAX); index++)
+    for (idx = 0; (idx < ota_inf->ota_read_ota_header.component_count) && (idx < WICED_OTA2_IMAGE_COMPONENT_MAX); idx++)
     {
-        print_component_info( &ota_inf->ota_read_components[index]);
+        print_component_info( &ota_inf->ota_read_components[idx]);
     }
 
     return 0;
@@ -1429,23 +1556,25 @@ static int ota_print_ota_file_header_info( wiced_ota2_image_builder_info_t *ota_
 
 static int ota_build_print_info( wiced_ota2_image_builder_info_t *ota_inf, const char* message )
 {
-    int index;
+    int idx;
     if( ota_inf == NULL )
     {
         return -2;
     }
 
     printf("OTA Image Information %s: %s\n", ((message != NULL) ? message : " " ), ota_inf->ota2_image_file_path);
+    printf("MAX OTA Header size = (%d) + (8 * %d) = %d\r\n", sizeof(wiced_ota2_image_header_t), sizeof(wiced_ota2_image_component_t),
+            sizeof(wiced_ota2_image_header_t) + (8 * sizeof(wiced_ota2_image_component_t)) );
     print_ota_header_info( &ota_inf->ota_create_header);
 
-    for (index = 0; index < WICED_OTA2_IMAGE_COMPONENT_MAX; index++)
+    for (idx = 0; idx < WICED_OTA2_IMAGE_COMPONENT_MAX; idx++)
     {
-        if (ota_inf->build_components[index].present_in_config_file > 0)
+        if (ota_inf->build_components[idx].present_in_config_file > 0)
         {
-            printf("  component: %s\n", ota_inf->build_components[index].component.name);
-            printf("          path: %s\n", ota_inf->build_components[index].pc_fs_path);
-            printf("       pc size: %8d\n", ota_inf->build_components[index].pc_fs_size);
-            print_component_info( &ota_inf->build_components[index].component);
+            printf("  component: %s\n", ota_inf->build_components[idx].component.name);
+            printf("          path: %s\n", ota_inf->build_components[idx].pc_fs_path);
+            printf("       pc size: %8d\n", ota_inf->build_components[idx].pc_fs_size);
+            print_component_info( &ota_inf->build_components[idx].component);
         }
     }
 

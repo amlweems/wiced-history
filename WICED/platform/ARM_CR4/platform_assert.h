@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -50,9 +50,13 @@ extern /*@noreturn@*/ void WICED_TRIGGER_BREAKPOINT( void );
 
 #define WICED_ASSERTION_FAIL_ACTION() WICED_TRIGGER_BREAKPOINT()
 
+#ifdef WICED_NO_VECTORS
+#define WICED_DISABLE_INTERRUPTS() do { __asm__("" : : : "memory"); } while (0)
+#define WICED_ENABLE_INTERRUPTS() do { __asm__("" : : : "memory"); } while (0)
+#else
 #define WICED_DISABLE_INTERRUPTS() do { __asm__("CPSID i" : : : "memory"); } while (0)
-
 #define WICED_ENABLE_INTERRUPTS() do { __asm__("CPSIE i" : : : "memory"); } while (0)
+#endif
 
 #define CSPR_INTERRUPTS_DISABLED (0x80)
 
@@ -65,7 +69,6 @@ extern /*@noreturn@*/ void WICED_TRIGGER_BREAKPOINT( void );
 #define WICED_ASSERTION_FAIL_ACTION() WICED_TRIGGER_BREAKPOINT()
 
 #define WICED_DISABLE_INTERRUPTS() do { __asm("CPSID i"); } while (0)
-
 #define WICED_ENABLE_INTERRUPTS() do { __asm("CPSIE i"); } while (0)
 
 #endif

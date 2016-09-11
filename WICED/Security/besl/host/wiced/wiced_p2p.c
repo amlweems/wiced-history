@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -77,7 +77,9 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     wiced_buffer_t buffer;
     wiced_buffer_t response;
     uint32_t*      data;
-    wwd_result_t   result;
+    besl_result_t  result = BESL_SUCCESS;
+    wwd_result_t wwd_result = WWD_SUCCESS;
+
     REFERENCE_DEBUG_ONLY_VARIABLE(result);
 
     memset( workspace, 0, sizeof(p2p_workspace_t) );
@@ -90,18 +92,18 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     memcpy( workspace->listen_channel.country_string, &device_details->listen_channel.country_string,  3 );
     memcpy( workspace->device_name, device_details->wps_device_details.device_name, workspace->device_name_length );
 
-    if ( ( result = besl_p2p_check_soft_ap_interface( workspace ) ) != WWD_SUCCESS )
+    if ( ( wwd_result = ( wwd_result_t ) besl_p2p_check_soft_ap_interface( workspace ) ) != WWD_SUCCESS )
     {
-        if ( result != WWD_WLAN_UNSUPPORTED )
+        if ( wwd_result != WWD_WLAN_UNSUPPORTED )
         {
-            return result;
+            return ( besl_result_t ) wwd_result;
         }
     }
 
     /* Save the original STA MAC address */
-    if ( ( result = besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE ) ) != WWD_SUCCESS )
+    if ( ( wwd_result = ( wwd_result_t ) besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE ) ) != WWD_SUCCESS )
     {
-        return result;
+        return ( besl_result_t ) wwd_result;
     }
 
     /* Turn roaming off for P2P */
@@ -132,12 +134,12 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) sizeof(besl_mac_t), "p2p_if" );
     CHECK_IOCTL_BUFFER( data );
     memcpy(data, &workspace->p2p_device_address, sizeof(besl_mac_t));
-    result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
+    wwd_result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
 
-    if ( result != WWD_SUCCESS )
+    if ( wwd_result != WWD_SUCCESS )
     {
         BESL_DEBUG(("Unable to read p2p interface\n"));
-        return (besl_result_t) result;
+        return ( besl_result_t )wwd_result;
     }
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
@@ -560,7 +562,7 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
 
     /* Bring up P2P interface */
     CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer(&buffer, 0 ) );
-    if ( ( result = wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
+    if ( ( result = ( besl_result_t )wwd_sdpcm_send_ioctl(SDPCM_SET, WLC_UP, buffer, NULL, WWD_P2P_INTERFACE ) ) != BESL_SUCCESS )
     {
         BESL_DEBUG(("Unable to read p2p interface\n"));
         p2p_deinit( workspace );
@@ -573,7 +575,7 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     data[0] = bss_index; /* Set the bsscfg index */
     data[1] = MIN( workspace->group_candidate.ssid_length, 32 ); /* Set the ssid length */
     memcpy( &data[2], (uint8_t*)&workspace->group_candidate.ssid, data[1] );
-    if ( ( result = (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
     {
         BESL_DEBUG(("Unable to set P2P SSID\n"));
         p2p_deinit( workspace );
@@ -681,7 +683,7 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     memcpy( &workspace->device_info.p2p_device_address, &workspace->p2p_device_address, sizeof(besl_mac_t) );
 
     /* Bring up IP layer on P2P interface */
-    result = (wwd_result_t) wiced_ip_up( WICED_P2P_INTERFACE, WICED_USE_INTERNAL_DHCP_SERVER, &p2p_ip_settings );
+    result = ( besl_result_t ) wiced_ip_up( WICED_P2P_INTERFACE, WICED_USE_INTERNAL_DHCP_SERVER, &p2p_ip_settings );
     if ( result != BESL_SUCCESS )
     {
         BESL_DEBUG(("Unable to bring up IP layer\n"));
@@ -707,7 +709,7 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     memcpy( workspace->p2p_wps_credential.ssid.value, workspace->group_candidate.ssid, workspace->p2p_wps_credential.ssid.length );
     workspace->p2p_wps_credential.passphrase_length = workspace->p2p_passphrase_length;
     memcpy( workspace->p2p_wps_credential.passphrase, workspace->p2p_passphrase, workspace->p2p_wps_credential.passphrase_length );
-    result = (wwd_result_t) besl_wps_init( workspace->p2p_wps_agent, workspace->wps_device_details, WPS_REGISTRAR_AGENT, WWD_P2P_INTERFACE );
+    result = ( besl_result_t ) besl_wps_init( workspace->p2p_wps_agent, workspace->wps_device_details, WPS_REGISTRAR_AGENT, WWD_P2P_INTERFACE );
     if ( result != BESL_SUCCESS )
     {
         BESL_DEBUG(("besl_p2p_group_owner_start: error besl init %d\n", result));
@@ -831,12 +833,12 @@ void besl_p2p_register_legacy_device_disassociation_callback( p2p_workspace_t* w
 
 void p2p_host_add_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wwd_wifi_manage_custom_ie( interface, WICED_ADD_CUSTOM_IE, (uint8_t*) P2P_OUI, P2P_OUI_SUB_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( ( wwd_interface_t ) interface, WICED_ADD_CUSTOM_IE, (uint8_t*) P2P_OUI, P2P_OUI_SUB_TYPE, data, data_length, packet_mask );
 }
 
 void p2p_host_remove_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
-    wwd_wifi_manage_custom_ie( interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) P2P_OUI, P2P_OUI_SUB_TYPE, data, data_length, packet_mask );
+    wwd_wifi_manage_custom_ie( ( wwd_interface_t ) interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) P2P_OUI, P2P_OUI_SUB_TYPE, data, data_length, packet_mask );
 }
 
 /* If the AP interface is up then return an error. If it is in existence but down then remove it. */
@@ -846,7 +848,7 @@ static besl_result_t besl_p2p_check_soft_ap_interface( p2p_workspace_t* workspac
     uint32_t*      data;
     besl_result_t result = BESL_SUCCESS;
 
-    if ( wiced_network_is_up( WWD_AP_INTERFACE ) )
+    if ( wiced_network_is_up( ( wiced_interface_t ) WWD_AP_INTERFACE ) == WICED_TRUE )
     {
         BESL_DEBUG(( "Error: Soft AP already up\n" ));
         return (besl_result_t)WWD_AP_ALREADY_UP;

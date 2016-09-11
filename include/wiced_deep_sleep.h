@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -54,9 +54,14 @@ typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t
 #endif
 
 #ifndef WICED_DEEP_SLEEP_EVENT_HANDLER
+#ifdef  __IAR_SYSTEMS_ICC__
+#define IAR_ROOT_FUNC __root
+#else
+#define IAR_ROOT_FUNC
+#endif /* __IAR_SYSTEMS_ICC__ */
 #define WICED_DEEP_SLEEP_EVENT_HANDLER( func_name ) \
-    static void MAY_BE_UNUSED func_name( wiced_deep_sleep_event_type_t event )
-#endif
+    static IAR_ROOT_FUNC void MAY_BE_UNUSED func_name( wiced_deep_sleep_event_type_t event )
+#endif /* ndef WICED_DEEP_SLEEP_EVENT_HANDLER */
 
 #ifndef WICED_DEEP_SLEEP_CALL_EVENT_HANDLERS
 #define WICED_DEEP_SLEEP_CALL_EVENT_HANDLERS( cond, event )

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,6 +61,11 @@ extern "C" {
 #define WICED_BT_CFG_DEFAULT_HIGH_DUTY_DIRECTED_ADV_MAX_INTERVAL    800        /**< Tgap(dir_conn_adv_int_min) = 500 ms = 800 * 0.625 ms */
 #define WICED_BT_CFG_DEFAULT_LOW_DUTY_DIRECTED_ADV_MIN_INTERVAL     48         /**< Tgap(adv_fast_interval1) = 30(used) ~ 60 ms  = 48 *0.625 */
 #define WICED_BT_CFG_DEFAULT_LOW_DUTY_DIRECTED_ADV_MAX_INTERVAL     48         /**< Tgap(adv_fast_interval1) = 30(used) ~ 60 ms  = 48 *0.625 */
+
+/* refreshment timing interval of random private address */
+#define WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_CHANGE_TIMEOUT          900        /*< default refreshment timing interval 900secs */
+#define WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_NEVER_CHANGE            0          /*< value for disabling random address refresh */
+
 
 /*****************************************************************************
  * Wiced_bt core stack configuration
@@ -146,6 +151,7 @@ typedef struct
     uint8_t                             client_max_links;               /**< Client config: maximum number of servers that local client can connect to  */
     uint8_t                             server_max_links;               /**< Server config: maximum number of remote clients connections allowed by the local */
     uint16_t                            max_attr_len;                   /**< Maximum attribute length; gki_cfg must have a corresponding buffer pool that can hold this length */
+    uint16_t                            max_mtu_size;                   /**< Maximum MTU size for GATT connections, should be between 23 and (max_attr_len + 5) */
 } wiced_bt_cfg_gatt_settings_t;
 
 /** Settings for application managed L2CAP protocols (optional) */
@@ -172,7 +178,7 @@ typedef struct
 /** Audio/Video Remote Control configuration */
 typedef struct
 {
-    uint8_t                             roles;                         /**< Local roles supported: AVRC_CONN_INITIATOR or AVRC_CONN_ACCEPTOR */
+    uint8_t                             roles;                         /**< 1 if AVRC_CONN_ACCEPTOR is supported */
     uint8_t                             max_links;                     /**< Maximum simultaneous remote control links */
 } wiced_bt_cfg_avrc_t;
 
@@ -215,6 +221,13 @@ typedef struct
 
     /* LE Address Resolution DB size  */
     uint8_t                             addr_resolution_db_size;        /**< LE Address Resolution DB settings - effective only for pre 4.2 controller*/
+
+    /* Maximum number of buffer pools */
+    uint8_t                             max_number_of_buffer_pools;     /**< Maximum number of buffer pools in p_btm_cfg_buf_pools and by wiced_create_pool */
+
+    /* Interval of  random address refreshing */
+    uint16_t                            rpa_refresh_timeout;            /**< Interval of  random address refreshing - secs */
+
 } wiced_bt_cfg_settings_t;
 
 /*****************************************************************************

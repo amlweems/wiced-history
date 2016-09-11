@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,6 +13,7 @@
 #include "wiced_codec_if.h"
 #include "wiced_codec_sbc_params.h"
 #include "sbc_decoder.h"
+#include "wwd_debug.h"
 
 
 
@@ -79,33 +80,25 @@ static int decoder_initialized = 0;
 wiced_codec_status_t sbc_init(wiced_codec_data_transfer_api_t* memory_methods, void* arg)
 {
 
-    if ( memory_methods != NULL )
+    if( (memory_methods == NULL) || (memory_methods->alloc_output_buffer_fp == NULL) ||
+         (memory_methods->read_encoded_data_fp == NULL) || (memory_methods->write_decoded_data_fp == NULL ) )
     {
-        memory_functions.alloc_output_buffer_fp = memory_methods->alloc_output_buffer_fp;
-        memory_functions.read_encoded_data_fp = memory_methods->read_encoded_data_fp;
-        memory_functions.write_decoded_data_fp = memory_methods->write_decoded_data_fp;
-
-        if ( (memory_functions.alloc_output_buffer_fp == NULL) || \
-             (memory_functions.read_encoded_data_fp == NULL) || \
-             (memory_functions.write_decoded_data_fp == NULL ) )
-        {
-            /* this is an error condition */
-            codec_sbc.configured = FALSE;
-        }
-        else
-        {
-            strDecParams.s32StaticMem  = (SINT32 *)SBCStaticMem;
-            strDecParams.s32ScartchMem = (SINT32 *)SBCScratchMem;
-            strDecParams.AllocBufferFP  = memory_functions.alloc_output_buffer_fp;
-            strDecParams.FillBufferFP  = memory_functions.read_encoded_data_fp;
-            strDecParams.EmptyBufferFP = memory_functions.write_decoded_data_fp;
-            codec_sbc.configured = TRUE;
-        }
+        WPRINT_LIB_ERROR( ("%s: Memory methods not initialized\n") );
+        return WICED_BADARG;
     }
-    decoder_initialized = 0;
-    return 0;
 
+    strDecParams.s32StaticMem  = (SINT32 *)SBCStaticMem;
+    strDecParams.s32ScartchMem = (SINT32 *)SBCScratchMem;
+    strDecParams.AllocBufferFP = memory_functions.alloc_output_buffer_fp = memory_methods->alloc_output_buffer_fp;
+    strDecParams.FillBufferFP  = memory_functions.read_encoded_data_fp   = memory_methods->read_encoded_data_fp;
+    strDecParams.EmptyBufferFP = memory_functions.write_decoded_data_fp  = memory_methods->write_decoded_data_fp;
+
+    codec_sbc.configured = TRUE;
+    decoder_initialized = 0;
+
+    return WICED_SUCCESS;
 }
+
 
 /**
  *
@@ -113,9 +106,9 @@ wiced_codec_status_t sbc_init(wiced_codec_data_transfer_api_t* memory_methods, v
  */
 wiced_codec_status_t sbc_close(void)
 {
-
-
-    return 0;
+    decoder_initialized = 0;
+    codec_sbc.configured = FALSE;
+    return WICED_SUCCESS;
 }
 
 
@@ -140,14 +133,13 @@ void sbc_getconfig(void* codec_capabilities, void* codec_preferred_params)
  */
 wiced_codec_status_t sbc_setconfig(void* p_codec_info)
 {
-    wiced_codec_status_t codec_status = 0;
-    uint8_t status = 0;
+    /* TODO: for now, we are not using p_codec_info */
+    UNUSED_PARAMETER(p_codec_info);
 
-    if(status == 1)
-        codec_status = -1;
-
+    /* just reset the decoder flag to make sure decoder is re-initialized before decoding starts again */
     decoder_initialized = 0;
-    return codec_status;
+
+    return WICED_SUCCESS;
 }
 
 /**
@@ -158,24 +150,33 @@ wiced_codec_status_t sbc_setconfig(void* p_codec_info)
 wiced_codec_status_t sbc_decode(void)
 {
 
-    wiced_codec_status_t status = 1;
+    wiced_codec_status_t status = WICED_ERROR;
 
-    if( (!decoder_initialized) && codec_sbc.configured)
+    /* If not configured...DO NOT proceed */
+    if(!codec_sbc.configured)
     {
-        if ( (status = SBC_Decoder_Init(&strDecParams)) != SBC_SUCCESS )
+        WPRINT_LIB_INFO( ( "%s: SBC Decoder not configured(%d)\n",__func__, codec_sbc.configured ) );
+        return status;
+    }
+    /* set-up and initialize the decoder */
+    if( !decoder_initialized )
+    {
+        if ( SBC_SUCCESS != SBC_Decoder_Init(&strDecParams) )
         {
-            /* error */
+            WPRINT_LIB_INFO( ("%s: SBC Decoder Initialization failed\n", __func__) );
+            return status;
         }
         decoder_initialized = 1 ;
         return WICED_SUCCESS;
     }
+
     strDecParams.pcmBuffer = NULL;
-    status = SBC_Decoder(&strDecParams);
-    if (status != SBC_SUCCESS ) {
+    if ( SBC_SUCCESS != SBC_Decoder(&strDecParams) )
+    {
         strDecParams.EmptyBufferFP(strDecParams.pcmBuffer,0);
-        status = WICED_ERROR;
+        return status;
     }
-    return status;
+    return WICED_SUCCESS;
 }
 
 int32_t sbc_get_output_size(void)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -76,3 +76,4 @@ PLATFORM_SET_DEFAULT_ISR( I2S0_ISR         , Unhandled_ISR )
 PLATFORM_SET_DEFAULT_ISR( I2S1_ISR         , Unhandled_ISR )
 PLATFORM_SET_DEFAULT_ISR( USB_HOST_ISR     , Unhandled_ISR )
 PLATFORM_SET_DEFAULT_ISR( SDIO_HOST_ISR    , Unhandled_ISR )
+PLATFORM_SET_DEFAULT_ISR( M2M_ISR          , Unhandled_ISR )

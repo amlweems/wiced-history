@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,10 +29,7 @@ GLOBAL_INCLUDES := . \
                    WAF
 
 # Global defines
-GLOBAL_DEFINES  := USE_STDPERIPH_DRIVER
-GLOBAL_DEFINES  += _$(HOST_MCU_PART_NUMBER)_
-GLOBAL_DEFINES  += _STM3x_
-GLOBAL_DEFINES  += _STM32x_
+GLOBAL_DEFINES  = $(HOST_MCU_PART_NUMBER)
 GLOBAL_DEFINES	+= DCT_HEADER_ALIGN_SIZE=512
 
 # Global flags
@@ -45,7 +42,7 @@ ifeq ($(TOOLCHAIN_NAME),GCC)
 GLOBAL_LDFLAGS  += -nostartfiles
 GLOBAL_LDFLAGS  += -Wl,--defsym,__STACKSIZE__=$$($(RTOS)_START_STACK)
 GLOBAL_LDFLAGS  += -L ./WICED/platform/MCU/$(NAME)/$(TOOLCHAIN_NAME) \
-                   -L ./WICED/platform/MCU/$(NAME)/$(TOOLCHAIN_NAME)/$(HOST_MCU_VARIANT)
+                   -L ./WICED/platform/MCU/$(NAME)/$(TOOLCHAIN_NAME)/$(HOST_MCU_FAMILY)
 else
 ifeq ($(TOOLCHAIN_NAME),IAR)
 GLOBAL_LDFLAGS  += --config_def __STACKSIZE__=$$($(RTOS)_START_STACK)
@@ -69,6 +66,7 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../wiced_apps_common.c	\
                    ../wiced_waf_common.c	\
                    ../wiced_dct_internal_common.c \
+                   ../wiced_dct_update.c \
                    ../platform_nsclock.c \
                    platform_vector_table.c \
                    platform_init.c \

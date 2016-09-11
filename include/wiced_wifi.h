@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,6 +26,7 @@ extern "C" {
 /******************************************************
  *                    Macros
  ******************************************************/
+#define WICED_WIFI_CH_TO_BAND( channel ) ( ( wwd_channel_to_wl_band( channel ) == WL_CHANSPEC_BAND_2G ) ? WICED_802_11_BAND_2_4GHZ : WICED_802_11_BAND_5GHZ )
 
 /******************************************************
  *                    Constants
@@ -87,6 +88,7 @@ typedef enum
     WICED_AP_STA_JOINED_EVENT,
     WICED_AP_STA_LEAVE_EVENT,
 } wiced_wifi_softap_event_t;
+
 
 /******************************************************
  *                 Type Definitions
@@ -219,6 +221,25 @@ extern wiced_result_t wiced_wps_registrar( wiced_wps_mode_t mode, const wiced_wp
  */
 extern wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_handler, void* user_data );
 
+/** Scans for Wi-Fi networks added using wwd_pno_add_network.  Scan will be done in an efficient, power-saving type manner.
+ * @param[in] ssid        : SSID of the AP to search for during offloaded scan
+ * @param[in] security  : security of the network to search for during offloaded scan
+ * @param[in] results_handler  : A function pointer for the handler that will process
+ *                               the network details as they arrive.
+ * @param[in] user_data        : An argument that will be passed to the results_handler function
+ *                               of this device
+ *
+ * @note @li The results_handler and user_data variables will be referenced after the function returns.
+ *           Those variables must remain valid until the scan is complete.
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_pno_start( wiced_ssid_t *ssid, wiced_security_t security, wiced_scan_result_handler_t handler, void *user_data );
+
+/* Halts the preferred network offload scanning process and clears all state associated with it */
+extern wiced_result_t wiced_wifi_pno_stop( void );
+
+
 /** Finds the AP and it's information for the given SSID
  *
  * @param[in] ssid                     : SSID of the access point for which user wants to find information.
@@ -232,6 +253,7 @@ extern wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t resu
  * @return @ref wiced_result_t
  */
 extern wiced_result_t wiced_wifi_find_ap( const char* ssid, wiced_scan_result_t* ap_info, const uint16_t* optional_channel_list);
+
 
 /** Add Wi-Fi custom IE
  *
@@ -387,6 +409,30 @@ extern wiced_result_t wiced_wifi_register_softap_event_handler( wiced_wifi_softa
  * @return @ref wiced_result_t
  */
 extern wiced_result_t wiced_wifi_unregister_softap_event_handler( void );
+
+/** event handler to get RRM event header and RRM event data
+ * @param[out]  const void* event_header :  event header
+ * @param[out]  const uint8_t* event_data: event_data
+ *
+ */
+typedef void (*wiced_wifi_rrm_event_handler_t)( const void* event_header, const uint8_t* event_data );
+
+/* Register RRM event handler
+ * @param[in] wiced_wifi_rrm_event_handler_t : A function pointer to the event handler
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_register_rrm_event_handler( wiced_wifi_rrm_event_handler_t event_handler );
+
+/* DeRegister RRM event handler
+ * @param void:
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_unregister_rrm_event_handler( void );
+
+extern wiced_result_t wiced_wifi_register_pno_callback( wiced_scan_result_handler_t pno_handler, void *user_data );
+extern wiced_result_t wiced_wifi_unregister_pno_callback( void );
 
 /*****************************************************************************/
 /** @addtogroup wifipower       WLAN Power Saving functions

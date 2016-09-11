@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,7 +10,14 @@
 
 NAME := Lib_apollo_streamer
 
-APOLLO_STREAMER_LIBRARY_NAME :=apollo_streamer.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
+ifdef USE_UDC
+APOLLO_STREAMER_LIBRARY_NAME := apollo_streamer.with_udc.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
+
+$(NAME)_COMPONENTS += audio/codec/DD
+
+else
+APOLLO_STREAMER_LIBRARY_NAME := apollo_streamer.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
+endif
 
 ifneq ($(wildcard $(CURDIR)$(APOLLO_STREAMER_LIBRARY_NAME)),)
 $(info Using PREBUILT:  $(APOLLO_STREAMER_LIBRARY_NAME))
@@ -24,17 +31,14 @@ endif # ifneq ($(wildcard $(CURDIR)$(APOLLO_STREAMER_LIBRARY_NAME)),)
 GLOBAL_INCLUDES += .
 
 GLOBAL_DEFINES  += WICED_USE_AUDIO
-GLOBAL_DEFINES  += BUILDCFG
-
-# this needs to be FALSE to allow app to override the BTEWICED
-# linkkey management
-GLOBAL_DEFINES  += BTM_INTERNAL_LINKKEY_STORAGE_INCLUDED=FALSE
 
 $(NAME)_COMPONENTS += audio/apollo/apollocore
 $(NAME)_COMPONENTS += audio/apollo/audio_render
 $(NAME)_COMPONENTS += audio/apollo/802_dot_1as_avb
 $(NAME)_COMPONENTS += audio/apollo/audio_pll_tuner
-$(NAME)_COMPONENTS += libraries/drivers/bluetooth
-$(NAME)_COMPONENTS += libraries/audio/codec/codec_framework
+
+ifndef APOLLO_NO_BT
+$(NAME)_COMPONENTS += audio/apollo/apollo_bt_service
+endif
 
 $(NAME)_CFLAGS  :=

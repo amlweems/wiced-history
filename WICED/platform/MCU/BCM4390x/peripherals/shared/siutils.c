@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,7 +31,7 @@
 #define PMU_CORE_REV            26
 #if ( defined(BCMCHIPREV) && (BCMCHIPREV == 0) )
 #define CC_CORE_REV             50
-#elif ( defined(BCMCHIPREV) && (BCMCHIPREV == 1) )
+#elif ( defined(BCMCHIPREV) && ((BCMCHIPREV == 1) || (BCMCHIPREV == 2)) )
 #define CC_CORE_REV             55
 #else
 #error CC_CORE_REV not defined!
@@ -475,12 +475,57 @@ si_clock_rate(uint32 pll_type, uint32 n, uint32 m)
 
         switch (mc)
         {
-            case CC_MC_BYPASS: return (clock);
-            case CC_MC_M1:     return (clock / m1);
-            case CC_MC_M1M2:   return (clock / (m1 * m2));
-            case CC_MC_M1M2M3: return (clock / (m1 * m2 * m3));
-            case CC_MC_M1M3:   return (clock / (m1 * m3));
-            default:           return (0);
+            case CC_MC_BYPASS:
+            {
+                return (clock);
+            }
+            case CC_MC_M1:
+            {
+                if ( m1 == 0 )
+                {
+                    ASSERT( 0 );
+                    return 0;
+                }
+                return (clock / m1);
+            }
+            case CC_MC_M1M2:
+            {
+                if ( (m1 * m2) == 0 )
+                {
+                    ASSERT( m1 != 0 );
+                    ASSERT( m2 != 0 );
+                    return 0;
+                }
+
+                return (clock / (m1 * m2));
+            }
+            case CC_MC_M1M2M3:
+            {
+                if ( (m1 * m2 * m3) == 0 )
+                {
+                    ASSERT( m1 != 0 );
+                    ASSERT( m2 != 0 );
+                    ASSERT( m3 != 0 );
+                    return 0;
+                }
+
+                return (clock / (m1 * m2 * m3));
+            }
+            case CC_MC_M1M3:
+            {
+                if ( (m1 * m3) == 0 )
+                {
+                    ASSERT( m1 != 0 );
+                    ASSERT( m3 != 0 );
+                    return 0;
+                }
+
+                return (clock / (m1 * m3));
+            }
+            default:
+            {
+                return (0);
+            }
         }
     }
     else

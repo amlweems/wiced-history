@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -50,9 +50,13 @@ extern "C" {
 
 #elif defined ( __IAR_SYSTEMS_ICC__ )
 /* IAR Systems */
+#define PLATFORM_DEFINE_NAKED_ISR( function ) \
+        __root __stackless void function( void ); \
+        __root __stackless void function( void )
+
 #define PLATFORM_DEFINE_ISR( name ) \
-        void name( void ); \
-        __irq __root void name( void )
+        __root void name( void ); \
+        __root void name( void )
 
 #else
 
@@ -106,6 +110,30 @@ extern "C" {
 #define PLATFORM_SET_DEFAULT_ISR( irq_handler, default_handler )
 
 #endif
+
+
+/* Macro for defining the interrupt vector table for ARM Cortex-M.
+ *
+ * @usage:
+ * PLATFORM_DEFINE_INTERRUPT_VECTOR_TABLE_ARRAY( interrupt_vector_table, PLATFORM_INTERRUPT_VECTOR_TABLE_SIZE_VARIABLE )
+ */
+#if defined( __GNUC__ )
+
+#define PLATFORM_DEFINE_INTERRUPT_VECTOR_TABLE_ARRAY(_NAME_, _SIZE_) \
+        const uint32_t _NAME_[_SIZE_]
+
+#elif defined ( __IAR_SYSTEMS_ICC__ )
+
+#define PLATFORM_DEFINE_INTERRUPT_VECTOR_TABLE_ARRAY(_NAME_, _SIZE_) \
+        const uint32_t _NAME_ [_SIZE_] @ ".intvec"
+
+#else
+
+#error "Unsupported toolchain!"
+
+#endif
+
+#define PLATFORM_INTERRUPT_VECTOR_TABLE_HAS_VARIABLE_SIZE
 
 /******************************************************
  *                    Constants

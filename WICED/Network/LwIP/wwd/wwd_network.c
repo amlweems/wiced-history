@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -123,7 +123,7 @@ static void low_level_init( /*@partial@*/ struct netif *netif )
     netif->hwaddr_len = (u8_t) ETHARP_HWADDR_LEN;
 
     /* Setup the physical address of this IP instance. */
-    if ( wwd_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ), (wwd_interface_t) (int) netif->state ) != WWD_SUCCESS )
+    if ( wwd_wifi_get_mac_address( (wiced_mac_t*) ( netif->hwaddr ), (wwd_interface_t) netif->state ) != WWD_SUCCESS )
     {
         WPRINT_NETWORK_DEBUG(("Couldn't get MAC address\n"));
         return;
@@ -163,14 +163,14 @@ static err_t low_level_output( struct netif *netif, /*@only@*/ struct pbuf *p )
     UNUSED_PARAMETER( netif );
     /*@+noeffect@*/
 
-    if ( ( (wiced_interface_t) (int) netif->state  == WICED_ETHERNET_INTERFACE ) ||
-         ( wwd_wifi_is_ready_to_transceive( (wwd_interface_t) (int) netif->state ) == WWD_SUCCESS ) )
+    if ( ( (wiced_interface_t) netif->state  == WICED_ETHERNET_INTERFACE ) ||
+         ( wwd_wifi_is_ready_to_transceive( (wwd_interface_t) netif->state ) == WWD_SUCCESS ) )
     {
         /* Take a reference to this packet */
         pbuf_ref( p );
 
         LWIP_ASSERT( "No chained buffers", ( ( p->next == NULL ) && ( ( p->tot_len == p->len ) ) ) );
-        wwd_network_send_ethernet_data( p, (wwd_interface_t) (int) netif->state );
+        wwd_network_send_ethernet_data( p, (wwd_interface_t) netif->state );
 
         LINK_STATS_INC( link.xmit );
 
@@ -301,7 +301,7 @@ err_t ethernetif_init( /*@partial@*/ struct netif *netif )
 #endif /* LWIP_NETIF_HOSTNAME */
 
     /* Verify the netif is a valid interface */
-    if ( (wwd_interface_t) (int) netif->state > WWD_ETHERNET_INTERFACE )
+    if ( (wwd_interface_t) netif->state > WWD_ETHERNET_INTERFACE )
     {
         return ERR_ARG;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,6 +16,7 @@
 #include "dtls_types.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
+#include "lwip/tcp_impl.h"
 #include "arch/sys_arch.h"
 #include "wiced_result.h"
 #include "wiced_wifi.h"
@@ -55,6 +56,7 @@ extern "C"
 #define WICED_LINK_CHECK( interface )      do { if ( netif_is_up( &IP_HANDLE(interface) ) != 1){ return WICED_NOTUP; }} while(0)
 #define WICED_LINK_CHECK_TCP_SOCKET( socket_in )   WICED_LINK_CHECK((socket_in)->interface)
 #define WICED_LINK_CHECK_UDP_SOCKET( socket_in )   WICED_LINK_CHECK((socket_in)->interface)
+#define WICED_MAXIMUM_SEGMENT_SIZE( socket_in )    MAX_TCP_PAYLOAD_SIZE
 
 /******************************************************
  *                   Enumerations
@@ -132,6 +134,7 @@ struct wiced_udp_socket_struct
     wiced_bool_t                is_bound;
     int                         interface;
     wiced_dtls_context_t*       dtls_context;
+    wiced_bool_t                context_malloced;
     wiced_udp_socket_callback_t receive_callback;
     void*                       callback_arg;
 };

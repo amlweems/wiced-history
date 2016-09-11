@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,7 +8,7 @@
  * written permission of Broadcom Corporation.
  */
 
-BOOTLOADER_SRAM = 0x598000;
+BOOTLOADER_SRAM = 0x597C00;
 
 MEMORY
 {
@@ -18,4 +18,5 @@ MEMORY
     ROM_GLOBALS_SRAM (rw)   : ORIGIN = 0x00696000, LENGTH = 36K
     ROM_JUMPS        (rwx)  : ORIGIN = 0x0069F000, LENGTH = 4K
     AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 8K
+    DDR              (rwx)  : ORIGIN = 0x40000000, LENGTH = 0
 }

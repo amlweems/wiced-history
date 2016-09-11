@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -59,7 +59,6 @@ typedef struct
 {
     int dummy;
 }NOOS_DUMMY;
-typedef NOOS_DUMMY    wiced_udp_socket_t;
 typedef NOOS_DUMMY    wiced_packet_t;
 
 //typedef NOOS_DUMMY wiced_tls_context_type_t;
@@ -72,6 +71,11 @@ typedef NOOS_DUMMY NOOS_TCP_SOCKET;
 /******************************************************
  *                    Structures
  ******************************************************/
+
+typedef struct
+{
+    wiced_dtls_context_t*       dtls_context;
+} wiced_udp_socket_t;
 
 typedef struct
 {

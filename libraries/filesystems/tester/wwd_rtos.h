@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -33,6 +33,11 @@ extern "C"
  * The number of system ticks per second
  */
 #define SYSTICK_FREQUENCY  (1)
+
+typedef struct
+{
+    uint8_t info;    /* not supported yet */
+} host_rtos_thread_config_type_t;
 
 /******************************************************
  *             Structures

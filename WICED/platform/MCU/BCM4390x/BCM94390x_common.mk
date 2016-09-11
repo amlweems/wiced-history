@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,7 +20,7 @@ NETWORK:=NetX_Duo
 endif
 
 # FreeRTOS is not yet supported for Cortex-R4
-VALID_OSNS_COMBOS := ThreadX-NetX ThreadX-NetX_Duo NoOS
+VALID_OSNS_COMBOS := ThreadX-NetX ThreadX-NetX_Duo NoOS NuttX-NuttX_NS
 
 # BCM94390x-specific make targets
 EXTRA_TARGET_MAKEFILES += WICED/platform/MCU/BCM4390x/BCM94390x_targets.mk
@@ -45,22 +45,23 @@ GLOBAL_DEFINES += WICED_SDIO_SUPPORT=1
 endif
 
 # Uses spi_flash interface but implements own functions
-GLOBAL_INCLUDES += $(WICED_BASE)/Library/drivers/spi_flash
+GLOBAL_INCLUDES += $(SOURCE_ROOT)Library/drivers/spi_flash
 
 #GLOBAL_DEFINES += PLATFORM_HAS_OTP
 
-
-VALID_BUSES :=SoC.43909
+ifndef VALID_BUSES
+VALID_BUSES := SoC.43909
+endif
 
 ifndef BUS
 BUS:=SoC.43909
 endif
 
-GLOBAL_INCLUDES  += $(WICED_BASE)/platforms/$(PLATFORM_DIRECTORY)
+GLOBAL_INCLUDES  += $(SOURCE_ROOT)platforms/$(PLATFORM_DIRECTORY)
 GLOBAL_INCLUDES  += $(PLATFORM_SOURCES)
-GLOBAL_INCLUDES  += $(WICED_BASE)/WICED/platform/include
-GLOBAL_INCLUDES  += $(WICED_BASE)/libraries/bluetooth/include
-GLOBAL_INCLUDES  += $(WICED_BASE)/libraries/inputs/gpio_button
+GLOBAL_INCLUDES  += $(SOURCE_ROOT)WICED/platform/include
+GLOBAL_INCLUDES  += $(SOURCE_ROOT)libraries/bluetooth/include
+GLOBAL_INCLUDES  += $(SOURCE_ROOT)libraries/inputs/gpio_button
 
 $(NAME)_LINK_FILES :=
 
@@ -70,12 +71,13 @@ GLOBAL_DEFINES += WICED_DISABLE_CONFIG_TLS
 #GLOBAL_DEFINES += PLATFORM_BCM94390X
 #GLOBAL_DEFINES += WICED_BT_USE_RESET_PIN
 #GLOBAL_DEFINES += GSIO_UART
-GLOBAL_DEFINES += WICED_DCT_INCLUDE_BT_CONFIG
 
 WIFI_IMAGE_DOWNLOAD := buffered
 
 ifneq ($(BUS),SoC.43909)
-$(error This platform only supports SoC.43909 bus protocol. Currently set to "$(BUS)")
+ifneq ($(BUS),SDIO)
+$(error This platform only supports "$(VALID_BUSES)" bus protocol. Currently set to "$(BUS)")
+endif
 endif
 
 ifeq (1, $(SECURE_SFLASH))

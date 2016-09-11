@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -1323,7 +1323,7 @@ const cipher_suite_t TLS_ECDHE_ECDSA_WITH_AES_256_CCM = { 0xC0AD, &ecdhe_ecdsa_k
 #endif /* if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_256_CCM_CIPHER ) && defined( USE_AES_256_CCM_MAC ) */
 
 #if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CCM_8_CIPHER ) && defined( USE_AES_128_CCM_8_MAC )
-const cipher_suite_t TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 = { 0xC0AE, &ecdhe_ecdsa_keyscheme_driver, &aes_128_ccm_8_cipher_driver, &aes_128_ccm_8_mac_driver };
+const cipher_suite_t TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 = { 0xC0AE, &ecdhe_ecdsa_keyscheme_driver, &aes_128_ccm_8_cipher_driver, &null_mac_driver };
 #endif /* if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_128_CCM_8_CIPHER ) && defined( USE_AES_128_CCM_8_MAC ) */
 
 #if defined( USE_ECDHE_ECDSA_KEYSCHEME ) && defined( USE_AES_256_CCM_8_CIPHER ) && defined( USE_AES_256_CCM_8_MAC )

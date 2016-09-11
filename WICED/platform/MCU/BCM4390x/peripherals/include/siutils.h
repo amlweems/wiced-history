@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,8 @@
 
 #ifndef	_siutils_h_
 #define	_siutils_h_
+
+#include <bcmdefs.h>
 
 #ifdef SR_DEBUG
 #include "wlioctl.h"

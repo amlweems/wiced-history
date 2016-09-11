@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -344,7 +344,7 @@ int base64_decode( unsigned char const* src, int32_t src_length, unsigned char* 
 
     if ( BASE64_PAD_BYTE( options ) != 0 )
     {
-        if ( ( ch == BASE64_PAD_BYTE( options ) ) && ( ( src_length < 0 ) || ( src - orig_src < src_length ) ) )
+        if ( ( ch == BASE64_PAD_BYTE( options ) ) && ( ( src_length < 0 ) || ( src - orig_src <= src_length ) ) )
         {
             /* We got a pad char. Skip it, get next */
             ch = *src++;
@@ -557,7 +557,7 @@ int base64_test( void )
         {
             int retval;
 
-            strcpy( correct_output_buffer, base64_test_vectors[ test_num ].base64_coded );
+            strlcpy( correct_output_buffer, base64_test_vectors[ test_num ].base64_coded, output_buffer_length );
 
             char* replace_char = correct_output_buffer;
             while ( ( replace_char = strchr( replace_char, '+' ) ) != NULL )

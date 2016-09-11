@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -570,7 +570,19 @@ platform_mcu_powersave_sleep( uint32_t ticks, platform_tick_sleep_force_interrup
 
     WICED_SAVE_INTERRUPTS( flags );
 
-    platform_watchdog_kick_seconds( 2 * ticks / SYSTICK_FREQUENCY );
+    if ( ticks == 0 )
+    {
+        /*
+         * When ticks is zero, we ask to sleep indefinitely, not wake-up by timer.
+         * We probably don't want be reset via watchdog while sleeping.
+         * If instead want to have watchdog during sleep, then please specify time to sleep, perhaps large one.
+         */
+        platform_watchdog_stop( );
+    }
+    else
+    {
+        platform_watchdog_kick_milliseconds( 2 * ticks / SYSTICK_FREQUENCY * 1000 );
+    }
 
     wiced_time_get_time( &curr_time_ms );
 
@@ -600,6 +612,7 @@ platform_idle_hook( void )
 /*
  * Expect to be called by RTOS with interrupts disabled.
  * Function to be called only if platform_power_down_permission() returned true.
+ * "ticks" parameter is number of ticks after the nearest periodic tick.
  */
 uint32_t
 platform_power_down_hook( uint32_t ticks )
@@ -778,9 +791,15 @@ platform_mcu_powersave_misc_wakeup_config_enable( platform_mcu_powersave_misc_wa
 #endif /* PLATFORM_APPS_POWERSAVE */
 
 platform_result_t
-platform_mcu_powersave_gpio_wakeup_enable( platform_mcu_powersave_gpio_wakeup_config_t config )
+platform_mcu_powersave_gpio_wakeup_enable( platform_mcu_powersave_gpio_wakeup_config_t config, platform_mcu_powersave_gpio_wakeup_trigger_t trigger )
 {
 #if PLATFORM_APPS_POWERSAVE
+    /*
+     * Acking may be required after the wakeup enabled.
+     * This is due to enabling also programs pull up/down, and this may trigger interrupt.
+     * Triggering is driven by ILP clock so some small delay may be seen before interrupt triggered.
+     */
+
     const platform_gpio_t gpio = { POWERSAVE_MCU_GPIO_WAKE_UP_PIN };
     platform_result_t     result;
 
@@ -794,6 +813,25 @@ platform_mcu_powersave_gpio_wakeup_enable( platform_mcu_powersave_gpio_wakeup_co
 
     platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE, WICED_TRUE );
 
+    switch ( trigger )
+    {
+        case PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_TRIGGER_RISING_EDGE:
+            platform_pmu_chipcontrol( PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_REG,
+                                      PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_MASK,
+                                      0x0 );
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_TRIGGER_FALLING_EDGE:
+            platform_pmu_chipcontrol( PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_REG,
+                                      PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_MASK,
+                                      PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_EN );
+            break;
+
+        default:
+            wiced_assert( "unhandled trigger type", 0 );
+            break;
+    }
+
     return PLATFORM_SUCCESS;
 #else
     return PLATFORM_FEATURE_DISABLED;
@@ -804,6 +842,7 @@ void
 platform_mcu_powersave_gpio_wakeup_ack( void )
 {
 #if PLATFORM_APPS_POWERSAVE
+    platform_tick_sleep_clear_ext_wake( );
     PLATFORM_PMU->ext_wakeup_status.bits.gci = 1;
 #endif
 }
@@ -826,6 +865,12 @@ platform_result_t
 platform_mcu_powersave_gci_gpio_wakeup_enable( platform_pin_t gpio_pin, platform_mcu_powersave_gpio_wakeup_config_t config, platform_gci_gpio_irq_trigger_t trigger )
 {
 #if PLATFORM_APPS_POWERSAVE
+    /*
+     * Acking may be required after the wakeup enabled.
+     * This is due to enabling also programs pull up/down, and this may trigger interrupt.
+     * Triggering is driven by ILP clock so some small delay may be seen before interrupt triggered.
+     */
+
     platform_result_t     result;
     const unsigned int    gpio_number     = platform_mcu_powersave_gpio_number( gpio_pin );
     const platform_gpio_t gpio            = { gpio_pin };
@@ -905,18 +950,45 @@ platform_mcu_powersave_gci_gpio_wakeup_disable( platform_pin_t gpio_pin )
 #endif /* PLATFORM_APPS_POWERSAVE */
 }
 
-void
+wiced_bool_t
 platform_mcu_powersave_gci_gpio_wakeup_ack( platform_pin_t gpio_pin )
 {
 #if PLATFORM_APPS_POWERSAVE
-    const unsigned int gpio_number = platform_mcu_powersave_gpio_number( gpio_pin );
+    const unsigned int gpio_number      = platform_mcu_powersave_gpio_number( gpio_pin );
+    const uint32_t     edge_wakeup_mask = platform_gci_gpiowakemask( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ), 0x0, 0x0 ) & GCI_CHIPCONTROL_GPIO_WAKEMASK_ANY_EDGE( gpio_number );
 
+    platform_tick_sleep_clear_ext_wake( );
+
+    /* Need to disable before clearing otherwise falling edge status is not cleared if high voltage applied to pin. */
+    platform_gci_gpiocontrol( GCI_CHIPCONTROL_GPIO_CONTROL_REG( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_MASK( gpio_number ),
+                              0x0 );
+
+    /* Clear status */
+    platform_gci_gpiostatus( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ),
+                             GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ),
+                             GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ) );
+
+    /* Enable back */
+    platform_gci_gpiocontrol( GCI_CHIPCONTROL_GPIO_CONTROL_REG( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_MASK( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SET( gpio_number ) );
+
+    /* Enabling back can cause raising edge triggered, clear it */
     platform_gci_gpiostatus( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ),
                              GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ),
                              GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ) );
 
     PLATFORM_PMU->ext_wakeup_status.bits.gci = 1;
+
+    if ( ( platform_gci_gpiostatus( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ), 0x0, 0x0 ) & edge_wakeup_mask ) != 0 )
+    {
+        /* Failed to acknowledge or re-triggered */
+        return WICED_FALSE;
+    }
 #endif /* PLATFORM_APPS_POWERSAVE */
+
+    return WICED_TRUE;
 }
 
 #if PLATFORM_WLAN_POWERSAVE

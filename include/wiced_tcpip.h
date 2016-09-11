@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -118,6 +118,7 @@ typedef struct
     wiced_tcp_socket_t* socket;
     wiced_packet_t*     tx_packet;
     uint8_t*            tx_packet_data;
+    uint16_t            tx_packet_data_length;
     uint16_t            tx_packet_space_available;
     wiced_packet_t*     rx_packet;
 } wiced_tcp_stream_t;
@@ -769,7 +770,7 @@ wiced_result_t wiced_udp_start_dtls( wiced_udp_socket_t* socket, wiced_ip_addres
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t wiced_generic_start_dtls_with_ciphers( wiced_dtls_context_t* dtls_context, void* referee, wiced_ip_address_t ip, wiced_dtls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], dtls_transport_protocol_t transport_protocol );
+wiced_result_t wiced_generic_start_dtls_with_ciphers( wiced_dtls_context_t* dtls_context, void* referee, wiced_ip_address_t ip, wiced_dtls_endpoint_type_t type, wiced_dtls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], dtls_transport_protocol_t transport_protocol );
 
 
 /** Un-registers all callback functions associated with the indicated UDP socket

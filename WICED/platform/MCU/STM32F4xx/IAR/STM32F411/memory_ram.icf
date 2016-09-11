@@ -1,0 +1,42 @@
+/*
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+/*
+MEMORY
+{
+    SHARED_API (rx)  : ORIGIN = 0x08000200, LENGTH = 512
+    SRAM       (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
+    OTA_HDR    (rx)  : ORIGIN = 0x1FFFFE00, LENGTH = 512
+}
+*/
+
+/* OTA header location, this ia a header of the application not the actual OTA */
+/* starts at 512 bytes before the end of ram - 0x1FFFFE00  */
+define symbol __OTA_App_header_start              = 0x1FFFFE00;
+define symbol __OTA_App_header_length             = 512;
+define symbol __OTA_App_header_end                = (__OTA_App_header_start + __OTA_App_header_length);
+
+
+/* SRAM memory location */
+/* starts at address 0x20000000 ends at address 0x20020000 */
+define symbol __SRAM_start                        = 0x20000000;
+define symbol __SRAM_length                       = 128K;
+define symbol __SRAM_end                          = (__SRAM_start + __SRAM_length);
+
+
+/* place OTA after data_config_section and data_transfer_section */
+/* we assume that data_config_section and data transfer section will never be more that 512 bytes plus the jtag data buffer( this buffer is used by Jtag to */
+/* supply bytes to the serial flash writer ) */
+/* 0x20000000 + 512b = 0x20000200 */
+define symbol __OTA_App_start                     = 0x20000000 + 0x200 + __JTAG_FLASH_WRITER_DATA_BUFFER_SIZE__;
+
+
+/* Bootloader APIs */
+define symbol __Bootloader_apis_start             = 0x08000200;

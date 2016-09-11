@@ -115,7 +115,7 @@ UINT    _ux_host_stack_hcd_register(UCHAR *hcd_name,
                                     UINT (*hcd_init_function)(struct UX_HCD_STRUCT *), ULONG hcd_param1, ULONG hcd_param2);
 VOID    _ux_host_stack_hcd_thread_entry(ULONG input);
 UINT    _ux_host_stack_hcd_transfer_request(UX_TRANSFER *transfer_request);
-UINT    _ux_host_stack_initialize(UINT (*ux_system_host_change_function)(ULONG, UX_HOST_CLASS *, VOID *));
+UINT    _ux_host_stack_initialize(UINT (*ux_system_host_change_function)(ULONG, UX_HOST_CLASS *, VOID *), UX_USER_CONFIG_HOST *user_config_host);   /* #BRCM#: Add argument to get user config from application. */
 UINT    _ux_host_stack_interface_endpoint_get(UX_INTERFACE *interface, UINT endpoint_index, UX_ENDPOINT **endpoint);
 UINT    _ux_host_stack_interface_instance_create(UX_INTERFACE *interface);
 VOID    _ux_host_stack_interface_instance_delete(UX_INTERFACE *interface);

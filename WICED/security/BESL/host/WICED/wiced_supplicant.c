@@ -1,7 +1,7 @@
 /*
  * WICED EAP host implementation
  *
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -98,6 +98,7 @@ besl_result_t supplicant_tls_agent_start( supplicant_workspace_t* workspace )
 {
     besl_host_workspace_t* host_workspace = (besl_host_workspace_t*) workspace->tls_agent.tls_agent_host_workspace;
 
+    workspace->have_packet = 0;
     if ( host_rtos_create_thread_with_arg( &host_workspace->thread, supplicant_tls_agent_thread, "tls_agent", host_workspace->thread_stack, TLS_AGENT_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (wwd_thread_arg_t) workspace ) == WWD_SUCCESS )
     {
         return SUPPLICANT_SUCCESS;
@@ -303,7 +304,7 @@ besl_result_t besl_supplicant_init(supplicant_workspace_t* workspace, eap_type_t
 
     supplicant_host_workspace->host_workspace.interface = interface;
     workspace->interface                                = interface;
-    wwd_wifi_get_mac_address( (wiced_mac_t*)&workspace->supplicant_mac_address, workspace->interface );
+    wwd_wifi_get_mac_address( ( wiced_mac_t* ) &workspace->supplicant_mac_address, ( wwd_interface_t ) workspace->interface );
     workspace->eap_type           = eap_type;
     workspace->supplicant_result  = SUPPLICANT_NOT_STARTED;
     workspace->current_main_stage = SUPPLICANT_INITIALISING;
@@ -420,11 +421,11 @@ besl_result_t besl_supplicant_management_set_event_handler( supplicant_workspace
 
     if ( enable == WICED_TRUE )
     {
-        result = wwd_management_set_event_handler( supplicant_events, supplicant_external_event_handler, workspace, workspace->interface );
+        result = wwd_management_set_event_handler( supplicant_events, supplicant_external_event_handler, workspace, ( wwd_interface_t ) workspace->interface );
     }
     else
     {
-        result = wwd_management_set_event_handler( supplicant_events, NULL, workspace, workspace->interface );
+        result = wwd_management_set_event_handler( supplicant_events, NULL, workspace, ( wwd_interface_t ) workspace->interface );
     }
 
     if ( result != WWD_SUCCESS )
@@ -540,12 +541,12 @@ static void wiced_supplicant_thread_main( wwd_thread_arg_t arg )
     else if ( workspace->supplicant_result == SUPPLICANT_ABORTED )
     {
         SUPPLICANT_INFO(( "Supplicant aborted\r\n" ));
-        besl_host_leave( workspace->interface );
+        besl_host_leave( ( wwd_interface_t ) workspace->interface );
     }
     else
     {
         SUPPLICANT_INFO(( "Supplicant error %u\n", (unsigned int)workspace->supplicant_result ));
-        besl_host_leave( workspace->interface );
+        besl_host_leave( ( wwd_interface_t ) workspace->interface );
     }
 
     if ( besl_supplicant_management_set_event_handler( workspace, WICED_FALSE ) != SUPPLICANT_SUCCESS )

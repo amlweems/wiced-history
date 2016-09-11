@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -36,6 +36,8 @@
 #define NX_DHCP_CLIENT_RESTORE_STATE
 
 #define NX_TCP_ENABLE_KEEPALIVE
+
+#define NX_ARP_UPDATE_RATE 1
 
 #define NX_TCP_MAX_OUT_OF_ORDER_PACKETS
 
@@ -127,7 +129,6 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_ARP_EXPIRATION_RATE
 #undef NX_ARP_MAX_QUEUE_DEPTH
 #undef NX_ARP_MAXIMUM_RETRIES
-#undef NX_ARP_UPDATE_RATE
 #undef NX_AUTO_IP_ANNOUNCE_INTERVAL
 #undef NX_AUTO_IP_ANNOUNCE_NUM
 #undef NX_AUTO_IP_ANNOUNCE_WAIT
@@ -604,7 +605,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_SNTP_UDP_BROADCAST_SERVER_ADDRESSES
 #undef NX_SNTP_UDP_UNICAST_SERVER_ADDRESSES
 #undef NX_SNTP_UPDATE_TIMEOUT_INTERVAL
-#undef NX_TCP_ACK_EVERY_N_PACKETS
+#define NX_TCP_ACK_EVERY_N_PACKETS                      2
 #undef NX_TCP_ACK_TIMER_RATE
 #undef NX_TCP_ENABLE_DEBUG_LOG
 #undef NX_TCP_ENABLE_WINDOW_SCALING

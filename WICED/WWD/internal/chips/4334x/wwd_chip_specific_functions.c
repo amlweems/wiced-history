@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -25,6 +25,8 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+#define PLATFORM_WLAN_RAM_BASE  ( 0x0 )
+#define PLATFORM_WLAN_RAM_SIZE  ( CHIP_RAM_SIZE )
 
 #define WLAN_BUS_UP_ATTEMPTS    ( 1000 )
 #define KSO_WAIT_MS             ( 1 )
@@ -49,7 +51,7 @@
 #ifndef WWD_DISABLE_SAVE_RESTORE
 static wwd_result_t wwd_enable_save_restore( void );
 #endif
-
+static wiced_bool_t wwd_is_fw_sr_capable( void );
 static wwd_result_t wwd_kso_enable( wiced_bool_t enable );
 
 /******************************************************
@@ -65,9 +67,27 @@ static wiced_bool_t save_restore_enable     = WICED_FALSE;
 
 wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
 {
-    UNUSED_PARAMETER(buffer);
-    UNUSED_PARAMETER(buffer_size);
-    return WWD_UNSUPPORTED;
+    wwd_result_t result;
+    uint32_t wlan_shared_address;
+
+    /* Backplane access needs HT clock. So, disabling bus sleep */
+    WWD_WLAN_KEEP_AWAKE();
+
+    /* FW populates the last word of RAM with wlan_shared_t struct address */
+    if ( wwd_is_fw_sr_capable() == WICED_TRUE )
+    {
+        wlan_shared_address = PLATFORM_WLAN_RAM_BASE + PLATFORM_WLAN_RAM_SIZE - SOCSRAM_SRMEM_SIZE - 4;
+    }
+    else
+    {
+        wlan_shared_address = PLATFORM_WLAN_RAM_BASE + PLATFORM_WLAN_RAM_SIZE - 4;
+    }
+
+    result = wwd_wifi_read_wlan_log_unsafe( wlan_shared_address, buffer, buffer_size );
+
+    WWD_WLAN_LET_SLEEP();
+
+    return result;
 }
 
 wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t* country_code )
@@ -85,7 +105,7 @@ wwd_result_t wwd_chip_specific_init( void )
 #endif
 }
 
-wwd_result_t wwd_disable_sram3_remap( void )
+wwd_result_t wwd_chip_specific_socsram_init( void )
 {
     return WWD_SUCCESS;
 }
@@ -162,24 +182,9 @@ wwd_result_t wwd_allow_wlan_bus_to_sleep( void )
 #ifndef WWD_DISABLE_SAVE_RESTORE
 static wwd_result_t wwd_enable_save_restore( void )
 {
-    uint32_t core_capext;
-    uint32_t retention_ctl;
     uint8_t  data;
-    wiced_bool_t save_restore_capable = WICED_FALSE;
 
-    /* check if fw initialized sr engine */
-    VERIFY_RESULT( wwd_bus_read_backplane_value( (uint32_t) CHIPCOMMON_CORE_CAPEXT_ADDR, (uint8_t) 4, (uint8_t*)&core_capext ));
-
-    if (( core_capext & CHIPCOMMON_CORE_CAPEXT_SR_SUPPORTED ) != 0 )
-    {
-        VERIFY_RESULT( wwd_bus_read_backplane_value( (uint32_t) CHIPCOMMON_CORE_RETENTION_CTL, (uint8_t) 4, (uint8_t*)&retention_ctl ));
-        if (( retention_ctl & ( CHIPCOMMON_CORE_RCTL_MACPHY_DISABLE | CHIPCOMMON_CORE_RCTL_LOGIC_DISABLE )) == 0 )
-        {
-            save_restore_capable = WICED_TRUE;
-        }
-    }
-
-    if ( save_restore_capable == WICED_TRUE )
+    if ( wwd_is_fw_sr_capable() == WICED_TRUE )
     {
         /* Configure WakeupCtrl register to set HtAvail request bit in chipClockCSR register
          * after the sdiod core is powered on.
@@ -224,6 +229,26 @@ static wwd_result_t wwd_enable_save_restore( void )
     return WWD_SUCCESS;
 }
 #endif /* #ifndef WWD_DISABLE_SAVE_RESTORE */
+
+static wiced_bool_t wwd_is_fw_sr_capable( void )
+{
+    uint32_t     core_capext;
+    uint32_t     retention_ctl;
+    wiced_bool_t save_restore_capable = WICED_FALSE;
+
+    /* check if fw initialized sr engine */
+    VERIFY_RESULT( wwd_bus_read_backplane_value( (uint32_t) CHIPCOMMON_CORE_CAPEXT_ADDR, (uint8_t) 4, (uint8_t*)&core_capext ));
+
+    if (( core_capext & CHIPCOMMON_CORE_CAPEXT_SR_SUPPORTED ) != 0 )
+    {
+        VERIFY_RESULT( wwd_bus_read_backplane_value( (uint32_t) CHIPCOMMON_CORE_RETENTION_CTL, (uint8_t) 4, (uint8_t*)&retention_ctl ));
+        if (( retention_ctl & ( CHIPCOMMON_CORE_RCTL_MACPHY_DISABLE | CHIPCOMMON_CORE_RCTL_LOGIC_DISABLE )) == 0 )
+        {
+            save_restore_capable = WICED_TRUE;
+        }
+    }
+    return save_restore_capable;
+}
 
 static wwd_result_t wwd_kso_enable (wiced_bool_t enable)
 {

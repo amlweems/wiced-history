@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -79,13 +79,13 @@ wiced_result_t amqp_network_init( const wiced_ip_address_t* server_ip_address, u
 
     if ( security != NULL )
     {
-        result = wiced_tls_init_root_ca_certificates( security->ca_cert );
+        result = wiced_tls_init_root_ca_certificates( security->ca_cert, security->ca_cert_len );
         if ( result != WICED_SUCCESS )
         {
             goto ERROR_CA_CERT_INIT;
         }
 
-        result = wiced_tls_init_identity( &socket->tls_identity, security->key, (const uint8_t*)security->cert, strlen( security->cert ) );
+        result = wiced_tls_init_identity( &socket->tls_identity, security->key,security->key_len, (const uint8_t*)security->cert, security->cert_len  );
         if ( result != WICED_SUCCESS )
         {
             goto ERROR_TLS_INIT;
