@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,6 +21,8 @@ extern "C" {
 #define OFFSETOF( type, member )  ( (uintptr_t)&((type *)0)->member )
 #endif /* OFFSETOF */
 
+#define GET_CURRENT_ADDRESS_FAILED  ((void*)0xffffffff)
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -41,6 +43,8 @@ typedef enum
     DCT_MFG_INFO_SECTION,
     DCT_WIFI_CONFIG_SECTION,
     DCT_INTERNAL_SECTION, /* Do not use in apps */
+    DCT_ETHERNET_CONFIG_SECTION,
+    DCT_NETWORK_CONFIG_SECTION,
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
     DCT_BT_CONFIG_SECTION
 #endif

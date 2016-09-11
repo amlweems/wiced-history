@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,8 +19,13 @@
 #include "RTOS/wwd_rtos_interface.h"
 #include "wiced_utilities.h"
 #include "wwd_debug.h"
+#include "wwd_assert.h"
 #include "internal/wiced_internal_api.h"
 #include "tx_thread.h"
+
+#ifdef TX_ENABLE_EVENT_TRACE
+#include "platform_config.h"  /* pick up platform specific tracex buffer location */
+#endif /* ifdef TX_ENABLE_EVENT_TRACE */
 
 /******************************************************
  *                      Macros
@@ -80,6 +85,21 @@ wiced_worker_thread_t wiced_networking_worker_thread;
 #ifndef WICED_DISABLE_WATCHDOG
 static wiced_thread_t system_monitor_thread_handle;
 #endif /* WICED_DISABLE_WATCHDOG */
+
+#ifdef TX_ENABLE_EVENT_TRACE
+#ifndef WICED_TRACEX_BUFFER_SIZE
+#define WICED_TRACEX_BUFFER_SIZE       (0x10000)
+#endif /* ifndef WICED_TRACEX_BUFFER_SIZE */
+#ifndef WICED_TRACEX_OBJECT_COUNT
+#define WICED_TRACEX_OBJECT_COUNT      (100)
+#endif /* ifndef WICED_TRACEX_OBJECT_COUNT */
+#ifndef WICED_TRACEX_BUFFER_ADDRESS
+static uint8_t tracex_buffer[WICED_TRACEX_BUFFER_SIZE];
+#define WICED_TRACEX_BUFFER_ADDRESS          (tracex_buffer)
+#endif /* ifndef WICED_TRACEX_BUFFER_ADDRESS */
+#endif /* ifdef TX_ENABLE_EVENT_TRACE */
+
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -89,6 +109,7 @@ static wiced_thread_t system_monitor_thread_handle;
  *  Called from the crt0 _start function
  *
  */
+#ifndef ALTERNATE_MAIN
 int main( void )
 {
 #if defined ( __IAR_SYSTEMS_ICC__ )
@@ -105,6 +126,8 @@ int main( void )
     tx_kernel_enter( );
     return 0;
 }
+#endif /* ifdef ALTERNATE_MAIN */
+
 
 /**
  *  Application Define function - creates and starts the application thread
@@ -118,6 +141,17 @@ void tx_application_define( void *first_unused_memory )
     char*      app_thread_stack;
 
     UNUSED_PARAMETER(first_unused_memory);
+
+#ifdef TX_ENABLE_EVENT_TRACE
+    {
+        UINT tx_result;
+        wiced_assert( "Bad TraceX Params", ( WICED_TRACEX_BUFFER_ADDRESS != NULL ) && ( WICED_TRACEX_BUFFER_SIZE != 0 ) );
+
+        tx_result = tx_trace_enable( WICED_TRACEX_BUFFER_ADDRESS, WICED_TRACEX_BUFFER_SIZE, WICED_TRACEX_OBJECT_COUNT );
+        wiced_assert( "TraceX enable failed", tx_result == TX_SUCCESS );
+        REFERENCE_DEBUG_ONLY_VARIABLE( tx_result );
+    }
+#endif /* TX_ENABLE_EVENT_TRACE */
 
     /* Create the application thread.  */
     app_thread_handle = (TX_THREAD*)MALLOC_OBJECT("app thread", TX_THREAD);
@@ -166,7 +200,7 @@ wiced_result_t wiced_rtos_create_thread( wiced_thread_t* thread, uint8_t priorit
     }
     malloc_transfer_to_curr_thread( thread->stack );
 
-    result = host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, thread->stack, stack_size, priority, (uint32_t)arg );
+    result = (wiced_result_t) host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, thread->stack, stack_size, priority, (uint32_t)arg );
 
     if ( result != WICED_WWD_SUCCESS )
     {
@@ -182,14 +216,14 @@ wiced_result_t wiced_rtos_create_thread_with_stack( wiced_thread_t* thread, uint
     wiced_result_t result;
 
     memset(thread, 0, sizeof(wiced_thread_t));
-    result = host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, stack, stack_size, priority, (uint32_t)arg );
+    result =  (wiced_result_t) host_rtos_create_thread_with_arg( WICED_GET_THREAD_HANDLE( thread ), function, name, stack, stack_size, priority, (uint32_t)arg );
 
     return result;
 }
 
 wiced_result_t wiced_rtos_delete_thread( wiced_thread_t* thread )
 {
-    wiced_result_t result = host_rtos_finish_thread( WICED_GET_THREAD_HANDLE( thread ) );
+    wiced_result_t result =  (wiced_result_t) host_rtos_finish_thread( WICED_GET_THREAD_HANDLE( thread ) );
 
     if ( result != WICED_WWD_SUCCESS )
     {
@@ -200,7 +234,7 @@ wiced_result_t wiced_rtos_delete_thread( wiced_thread_t* thread )
 
     malloc_leak_check( &thread->handle, LEAK_CHECK_THREAD );
 
-    result = host_rtos_delete_terminated_thread( WICED_GET_THREAD_HANDLE( thread ) );
+    result =  (wiced_result_t) host_rtos_delete_terminated_thread( WICED_GET_THREAD_HANDLE( thread ) );
 
     if ( result == WICED_WWD_SUCCESS )
     {
@@ -324,7 +358,7 @@ wiced_result_t wiced_rtos_init_queue( wiced_queue_t* queue, const char* name, ui
     }
     malloc_transfer_to_curr_thread( queue->buffer );
 
-    result = host_rtos_init_queue( WICED_GET_QUEUE_HANDLE( queue ), queue->buffer, queue_size, message_size );
+    result =  (wiced_result_t) host_rtos_init_queue( WICED_GET_QUEUE_HANDLE( queue ), queue->buffer, queue_size, message_size );
 
     if ( result != WICED_WWD_SUCCESS )
     {
@@ -342,7 +376,7 @@ wiced_result_t wiced_rtos_deinit_queue( wiced_queue_t* queue )
 
     malloc_transfer_to_curr_thread( queue->buffer );
 
-    result = host_rtos_deinit_queue( WICED_GET_QUEUE_HANDLE( queue ) );
+    result =  (wiced_result_t) host_rtos_deinit_queue( WICED_GET_QUEUE_HANDLE( queue ) );
 
     if ( result == WICED_WWD_SUCCESS )
     {

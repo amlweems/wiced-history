@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 #include "wiced_result.h"
+#include "wiced_rtos.h"
+#include "nfc_queue.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,10 +51,7 @@ typedef struct
 /* wiced_nfc structure for send NDEF messages */
 typedef struct
 {
-    uint8_t*      read_buffer_ptr;
-    uint32_t*     read_length_ptr;
-    uint8_t*      write_buffer_ptr;
-    uint32_t      write_length;
+    nfc_rw_pointer_struct_t rw;
     wiced_queue_t queue;
 } wiced_nfc_workspace_t;
 

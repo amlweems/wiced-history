@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
 #include "wwd_debug.h"
 #include "wiced_tcpip.h"
 #include "platform_resource.h"
+#include "wiced_wifi.h"
 
 /******************************************************
  *                      Macros
@@ -95,6 +96,31 @@ static uint8_t string_to_generic( const char* string, uint8_t str_length,  uint3
     }
 
     return characters_processed;
+}
+
+/*!
+ ******************************************************************************
+ * Convert a decimal or hexidecimal string to an integer.
+ *
+ * @param[in] str  The string containing the value.
+ *
+ * @return    The value represented by the string.
+ */
+
+uint32_t generic_string_to_unsigned( const char* str )
+{
+    uint32_t val = 0;
+    uint8_t is_hex = 0;
+
+    if ( strncmp( str, "0x", 2 ) == 0 )
+    {
+        is_hex = 1;
+        str += 2;
+    }
+
+    string_to_unsigned( str, (uint8_t)strlen(str), &val, is_hex );
+
+    return val;
 }
 
 /**
@@ -336,14 +362,110 @@ void print_scan_result( wiced_scan_result_t* record )
         WPRINT_APP_INFO( ( "%.1f ", (double) (record->max_data_rate / 1000.0) ) );
     }
     WPRINT_APP_INFO( ( " %3d  ", record->channel ) );
-    WPRINT_APP_INFO( ( "%-10s ", ( record->security == WICED_SECURITY_OPEN ) ? "Open" :
-                                 ( record->security == WICED_SECURITY_WEP_PSK ) ? "WEP" :
-                                 ( record->security == WICED_SECURITY_WPA_TKIP_PSK ) ? "WPA TKIP" :
-                                 ( record->security == WICED_SECURITY_WPA_AES_PSK ) ? "WPA AES" :
-                                 ( record->security == WICED_SECURITY_WPA2_AES_PSK ) ? "WPA2 AES" :
-                                 ( record->security == WICED_SECURITY_WPA2_TKIP_PSK ) ? "WPA2 TKIP" :
-                                 ( record->security == WICED_SECURITY_WPA2_MIXED_PSK ) ? "WPA2 Mixed" :
-                                 "Unknown" ) );
+    WPRINT_APP_INFO( ( "%-15s ", ( record->security == WICED_SECURITY_OPEN             ) ? "Open                 " :
+                                 ( record->security == WICED_SECURITY_WEP_PSK          ) ? "WEP                  " :
+                                 ( record->security == WICED_SECURITY_WPA_TKIP_PSK     ) ? "WPA  TKIP  PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_AES_PSK      ) ? "WPA  AES   PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_MIXED_PSK    ) ? "WPA  Mixed PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_AES_PSK     ) ? "WPA2 AES   PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_TKIP_PSK    ) ? "WPA2 TKIP  PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA2_MIXED_PSK   ) ? "WPA2 Mixed PSK       " :
+                                 ( record->security == WICED_SECURITY_WPA_TKIP_ENT     ) ? "WPA  TKIP  Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA_AES_ENT      ) ? "WPA  AES   Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA_MIXED_ENT    ) ? "WPA  Mixed Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_TKIP_ENT    ) ? "WPA2 TKIP  Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_AES_ENT     ) ? "WPA2 AES   Enterprise" :
+                                 ( record->security == WICED_SECURITY_WPA2_MIXED_ENT   ) ? "WPA2 Mixed Enterprise" :
+                                                                                         "Unknown              " ) );
     WPRINT_APP_INFO( ( " %-32s ", record->SSID.value ) );
     WPRINT_APP_INFO( ( "\n" ) );
+}
+
+/*
+ ******************************************************************************
+ * Convert an ipv4 string to a uint32_t.
+ *
+ * @param     arg  The string containing the value.
+ * @param     arg  The structure which will receive the IP address
+ *
+ * @return    0 if read successfully
+ */
+int str_to_ip( const char* arg, wiced_ip_address_t* address )
+{
+    uint32_t* addr = &address->ip.v4;
+    uint8_t num = 0;
+
+    arg--;
+
+    *addr = 0;
+
+    do
+    {
+        uint32_t tmp_val = 0;
+        *addr = *addr << 8;
+        string_to_unsigned( ++arg, 3, &tmp_val, 0 );
+        *addr += (uint32_t) tmp_val;
+        while ( ( *arg != '\x00' ) && ( *arg != '.' ) )
+        {
+            arg++;
+        }
+        num++;
+    } while ( ( num < 4 ) && ( *arg != '\x00' ) );
+    if ( num == 4 )
+    {
+
+        address->version = WICED_IPV4;
+        return 0;
+    }
+    return -1;
+}
+
+
+void format_wep_keys( char* wep_key_ouput, const char* wep_key_data, uint8_t* wep_key_length, wep_key_format_t wep_key_format )
+{
+    int              a;
+    uint8_t          wep_key_entry_size;
+    wiced_wep_key_t* wep_key = (wiced_wep_key_t*)wep_key_ouput;
+
+    /* Setup WEP key 0 */
+    wep_key[0].index  = 0;
+
+    if ( wep_key_format == WEP_KEY_HEX_FORMAT )
+    {
+        wep_key[0].length = *wep_key_length >> 1;
+        for ( a = 0; a < wep_key[0].length; ++a )
+        {
+            uint8_t nibble1 = 0;
+            uint8_t nibble2 = 0;
+            if ( hexchar_to_nibble( wep_key_data[a*2],     &nibble1 ) == -1 ||
+                 hexchar_to_nibble( wep_key_data[a*2 + 1], &nibble2 ) == -1    )
+            {
+                WPRINT_APP_INFO( ( "Error - invalid hex character function: %s line: %u ", __FUNCTION__, __LINE__ ) );
+            }
+            wep_key[0].data[a] = (uint8_t)(( nibble1 << 4 ) | nibble2);
+        }
+    }
+    else
+    {
+        wep_key[0].length = *wep_key_length;
+        memcpy( wep_key[0].data, wep_key_data, *wep_key_length );
+    }
+
+    /* Calculate the size of each WEP key entry */
+    wep_key_entry_size = (uint8_t) ( 2 + *wep_key_length );
+
+    /* Duplicate WEP key 0 for keys 1 to 3 */
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
+    wep_key->index = 1;
+
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
+    wep_key->index = 2;
+
+    wep_key = (wiced_wep_key_t*)((char*)wep_key + wep_key_entry_size);
+    memcpy( wep_key, wep_key_ouput, wep_key_entry_size );
+    wep_key->index = 3;
+
+    *wep_key_length = (uint8_t) ( 4 * wep_key_entry_size );
 }

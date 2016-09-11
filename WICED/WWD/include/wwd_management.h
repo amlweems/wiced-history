@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -75,7 +75,6 @@ wwd_result_t wwd_management_wifi_on( void );
  * - De-Initialises the required parts of the hardware platform
  *   i.e. pins for SDIO/SPI, interrupt, reset, power etc.
  *
- * - Bring the Wireless interface "Down"
  * - De-Initialises the Wiced thread which arbitrates access
  *   to the SDIO/SPI bus
  *

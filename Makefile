@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,7 +13,7 @@ default: Help
 export SOURCE_ROOT:=$(dir $(word $(words $(MAKEFILE_LIST)), $(MAKEFILE_LIST)))
 export MAKEFILES_PATH := $(SOURCE_ROOT)tools/makefiles
 
-MAKEFILE_TARGETS := clean test testlist iar_project
+MAKEFILE_TARGETS := clean test testlist iar_project release
 
 include $(MAKEFILES_PATH)/wiced_toolchain_common.mk
 
@@ -137,14 +137,19 @@ clean:
 	$(QUIET)$(RM) -rf .gdbinit
 	$(QUIET)$(ECHO) Done
 
-
+ifneq (,$(filter test,$(MAKECMDGOALS)))
+BUILD_STRING :=
 test:
-	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_test.mk test
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/../release/wiced_test.mk $(filter-out test,$(MAKECMDGOALS))
 
-testlist:
-	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_test.mk testlist
+endif
 
+ifneq (,$(filter release,$(MAKECMDGOALS)))
+BUILD_STRING :=
+release:
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/../release/release.mk $(filter-out release,$(MAKECMDGOALS))
 
+endif
 
 # Processing of factory_reset_dct
 ifneq (,$(findstring factory_reset_dct,$(MAKECMDGOALS)))
@@ -176,20 +181,29 @@ endif
 
 PASSDOWN_TARGETS := $(strip $(filter-out $(MAKEFILE_TARGETS) $(BUILD_STRING),$(MAKECMDGOALS)))
 
-$(BUILD_STRING): main_app $(if $(SFLASH),sflash_image) copy_elf_for_eclipse
+$(BUILD_STRING): main_app $(if $(SFLASH),sflash_image) copy_elf_for_eclipse  $(if $(SUB_BUILD),,.gdbinit)
 
 $(PASSDOWN_TARGETS):
 	@:
 
-main_app: build/$(CLEANED_BUILD_STRING)/config.mk $(WICED_SDK_PRE_APP_BUILDS) $(MAKEFILES_PATH)/wiced_elf.mk $(if $(SUB_BUILD),,.gdbinit)
+main_app: build/$(CLEANED_BUILD_STRING)/config.mk $(WICED_SDK_PRE_APP_BUILDS) $(MAKEFILES_PATH)/wiced_elf.mk
 	$(QUIET)$(COMMON_TOOLS_PATH)mkdir -p $(OUTPUT_DIR)/binary $(OUTPUT_DIR)/modules $(OUTPUT_DIR)/libraries $(OUTPUT_DIR)/resources
 	$(QUIET)$(MAKE) -r $(JOBSNO) $(SILENT) -f $(MAKEFILES_PATH)/wiced_elf.mk $(DIR_BUILD_STRING) $(PASSDOWN_TARGETS)
 	$(QUIET)$(ECHO) Build complete
 
-.gdbinit: build/$(CLEANED_BUILD_STRING)/config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk
-	$(QUIET)$(ECHO) Making .gdbinit
-	$(QUIET)$(ECHO) set remotetimeout 20 > .gdbinit
-	$(QUIET)$(ECHO) $(GDBINIT_STRING) >> .gdbinit
+ifeq ($(SUB_BUILD),)
+.gdbinit: build/$(CLEANED_BUILD_STRING)/config.mk $(MAKEFILES_PATH)/wiced_toolchain_common.mk main_app
+	$(QUIET)$(ECHO) Making $@
+	$(QUIET)$(ECHO) set remotetimeout 20 > $@
+	$(QUIET)$(ECHO) $(GDBINIT_STRING) >> $@
+endif
+
+# The 'add-sym' command in .gdbinit_platform won't work here because it runs
+# before Eclipse executes the 'symbol-file' or 'load' command
+# What's more, executing the commands in this order causes GDB to lose the symbols for the
+# file that you are debugging
+# TODO: find a better way to do this - possibly via a function that is called from the Eclipse commands window
+#	$(if $(wildcard .gdbinit_platform),$(QUIET)$(ECHO) source .gdbinit_platform >> $@)
 
 
 ifneq ($(SFLASH),)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -293,7 +293,7 @@ static int extract_directory( const char* dir_name, const char* root_output_dire
 
 
             /* Loop through chunks of the the file */
-            for( file_pos = 0; file_pos < (wicedfs_usize_t)file_size; file_pos += sizeof(transfer_buffer) )
+            for( file_pos = 0; file_pos < (wicedfs_usize_t)file_size; file_pos = (wicedfs_usize_t) ( file_pos + sizeof(transfer_buffer) ) )
             {
                 wicedfs_usize_t read_size;
                 wicedfs_usize_t num_read;
@@ -409,5 +409,5 @@ static wicedfs_usize_t hostfile_wicedfs_read( void* user_param, void* buf, wiced
     }
 
     /* Read the requested data from the image file */
-    return fread( buf, 1, (size_t)size, (FILE*)user_param );
+    return (wicedfs_usize_t) fread( buf, 1, (size_t)size, (FILE*)user_param );
 }

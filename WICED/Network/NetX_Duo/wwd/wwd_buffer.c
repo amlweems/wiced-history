@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,13 +9,13 @@
  */
 
 #include "nx_api.h"
-#include "wwd_network_constants.h"
 
 #ifndef WICED_CUSTOM_NX_USER_H
 #error NetX has been installed incorrectly - /network/NetX/verX.X/nx_user.h has been overwritten, please restore WICED nx_user.h
 #endif /* ifndef WICED_LINK_MTU */
 
 #include "network/wwd_buffer_interface.h"
+#include "network/wwd_network_constants.h"
 #include "platform/wwd_bus_interface.h"
 #include "wwd_assert.h"
 #include "wwd_bus_protocol.h"
@@ -23,11 +23,9 @@
 static NX_PACKET_POOL* rx_pool = NULL;
 static NX_PACKET_POOL* tx_pool = NULL;
 
-static NX_PACKET_POOL * application_defined_rx_pool = NULL;
-static NX_PACKET_POOL * application_defined_tx_pool = NULL;
+static NX_PACKET_POOL* application_defined_rx_pool = NULL;
+static NX_PACKET_POOL* application_defined_tx_pool = NULL;
 
-
-uint32_t packet_unavailable_time[2];
 
 wwd_result_t host_buffer_init( void * pools_in )
 {
@@ -61,6 +59,7 @@ wwd_result_t host_buffer_check_leaked( void )
 wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait )
 {
     volatile UINT status;
+    ULONG wait_option = ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT;
     NX_PACKET **nx_buffer = (NX_PACKET **) buffer;
     NX_PACKET_POOL* pool = ( direction == WWD_NETWORK_TX ) ? tx_pool : rx_pool;
     wiced_assert("Error: pools have not been set up\n", pool != NULL);
@@ -70,49 +69,33 @@ wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t directio
         WPRINT_NETWORK_DEBUG(("Attempt to allocate a buffer larger than the MTU of the link\n"));
         return WWD_BUFFER_UNAVAILABLE_PERMANENT;
     }
-    if ( NX_SUCCESS != ( status = nx_packet_allocate( pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
+
+    status = nx_packet_allocate( pool, nx_buffer, 0, wait_option );
+
+    if( status == NX_NO_PACKET )
     {
-        /* If there is no packet in the system TX pool, check whether there is any packet available in the application defined tx pool */
+        /* If there is no packet in the system pool, check whether there is any packet available in the application defined pool */
         /* and try to allocate from there */
-        if( status == NX_NO_PACKET )
+        pool = ( direction == WWD_NETWORK_TX ) ? application_defined_tx_pool : application_defined_rx_pool;
+        if ( pool != NULL )
         {
-            if( ( direction == WWD_NETWORK_TX ) && ( application_defined_tx_pool != NULL ) )
-            {
-                if ( NX_SUCCESS != ( status = nx_packet_allocate( application_defined_tx_pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
-                {
-                    return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
-                }
-                else
-                {
-                    ( *nx_buffer )->nx_packet_length = size;
-                    ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
-                }
-            }
-            else if( ( direction == WWD_NETWORK_RX ) && ( application_defined_rx_pool != NULL ) )
-            {
-                if ( NX_SUCCESS != ( status = nx_packet_allocate( application_defined_rx_pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
-                {
-                    return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
-                }
-                else
-                {
-                    ( *nx_buffer )->nx_packet_length = size;
-                    ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
-                }
-            }
-            else
-            {
-                return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
-            }
-        }
-        else
-        {
-            return WWD_BUFFER_ALLOC_FAIL;
+            status = nx_packet_allocate( pool, nx_buffer, 0, wait_option );
         }
     }
+
+    /* No packet available from any pool */
+    if ( status == NX_NO_PACKET )
+    {
+        return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
+    }
+
+    if ( status != NX_SUCCESS )
+    {
+        return WWD_BUFFER_ALLOC_FAIL;
+    }
+
     ( *nx_buffer )->nx_packet_length = size;
     ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
-
     return WWD_SUCCESS;
 }
 
@@ -129,9 +112,9 @@ void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
          * Return prepend pointer to the original location which the stack expects (the start of IP header).
          * For other packets, resetting prepend pointer isn't required.
          */
-        if ( nx_buffer->nx_packet_length > sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_TX_LENGTH + WICED_ETHERNET_SIZE )
+        if ( nx_buffer->nx_packet_length > sizeof(wwd_buffer_header_t) + MAX_SDPCM_HEADER_LENGTH + WICED_ETHERNET_SIZE )
         {
-            if ( host_buffer_add_remove_at_front( &buffer, sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_TX_LENGTH + WICED_ETHERNET_SIZE ) != WWD_SUCCESS )
+            if ( host_buffer_add_remove_at_front( &buffer, sizeof(wwd_buffer_header_t) + MAX_SDPCM_HEADER_LENGTH + WICED_ETHERNET_SIZE ) != WWD_SUCCESS )
             {
                 WPRINT_NETWORK_DEBUG(("Could not move packet pointer\r\n"));
             }
@@ -139,7 +122,7 @@ void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
 
         if ( NX_SUCCESS != nx_packet_transmit_release( nx_buffer ) )
         {
-            WPRINT_NETWORK_ERROR( ("Could not release packet - leaking buffer\n") );
+            WPRINT_NETWORK_ERROR(("Could not release packet - leaking buffer\n"));
         }
     }
     else
@@ -147,7 +130,7 @@ void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
         NX_PACKET *nx_buffer = (NX_PACKET *) buffer;
         if ( NX_SUCCESS != nx_packet_release( nx_buffer ) )
         {
-            WPRINT_NETWORK_ERROR( ("Could not release packet - leaking buffer\n") );
+            WPRINT_NETWORK_ERROR(("Could not release packet - leaking buffer\n"));
         }
     }
 }
@@ -263,6 +246,7 @@ wwd_result_t host_buffer_set_size( wiced_buffer_t buffer, unsigned short size )
     return WWD_SUCCESS;
 }
 
+
 void packet_release_notify( void* pool )
 {
 #ifdef PLAT_NOTIFY_FREE
@@ -278,3 +262,5 @@ void packet_release_notify( void* pool )
 
     UNUSED_PARAMETER( pool );
 }
+
+

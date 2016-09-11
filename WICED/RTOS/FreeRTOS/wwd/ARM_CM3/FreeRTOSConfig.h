@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,6 @@
 #include "platform_config.h"
 #include "wwd_FreeRTOS_systick.h"
 #include "wwd_assert.h"
-#include "platform/wwd_bus_interface.h"
 
 #ifdef ENABLE_TASK_TRACE
 #include "FreeRTOS_trace.h"
@@ -120,13 +119,12 @@ extern "C" {
 #endif /* ifdef WICED_DISABLE_MCU_POWERSAVE */
 
 
-#ifdef PLAT_NOTIFY_FREE
+#ifdef NETWORK_NOTIFY_RELEASED_PACKETS
 
 #define MEMP_FREE_NOTIFY
-#define memp_free_notify( type )   { if ( type == MEMP_PBUF_POOL_TX) { host_platform_bus_buffer_freed( WWD_NETWORK_TX ); } \
-                                     else if ( type == MEMP_PBUF_POOL_RX ) { host_platform_bus_buffer_freed( WWD_NETWORK_RX ); } }
+extern void memp_free_notify( unsigned int type );
 
-#endif /* ifdef PLAT_NOTIFY_FREE */
+#endif /* ifdef NETWORK_NOTIFY_RELEASED_PACKETS */
 
 
 #ifdef __cplusplus

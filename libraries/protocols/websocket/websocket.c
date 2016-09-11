@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,6 +16,7 @@
 #include "wwd_debug.h"
 #include "wwd_crypto.h"
 #include "wiced_utilities.h"
+#include "wwd_assert.h"
 
 /*  Websocket packet format
  *
@@ -42,14 +43,18 @@
  *                      Macros
  ******************************************************/
 
-#define IF_ERROR_RECORD_AND_EXIT( GENERIC_ERROR, WEBSOCKET_ERROR ) \
-    {                                                               \
-        if( GENERIC_ERROR != WICED_SUCCESS )                          \
-        {                                                           \
-            websocket->error_type=WEBSOCKET_ERROR;                  \
-            websocket->callbacks->on_error(websocket);              \
-            return GENERIC_ERROR;                                   \
-        }                                                           \
+#define IF_ERROR_RECORD_AND_EXIT( GENERIC_ERROR, WEBSOCKET_ERROR )            \
+    {                                                                         \
+        if( GENERIC_ERROR != WICED_SUCCESS )                                  \
+        {                                                                     \
+            websocket->error_type=WEBSOCKET_ERROR;                            \
+            if( websocket->callbacks.on_error != NULL )                       \
+            {                                                                 \
+                websocket->callbacks.on_error(websocket);                     \
+            }                                                                 \
+            unlock_websocket_mutex();                                         \
+            return GENERIC_ERROR;                                             \
+        }                                                                     \
     }
 
 /******************************************************
@@ -63,7 +68,6 @@
 #define MAX_HEADER_SIZE         (MASKING_KEY_BYTES + MAX_PAYLOAD_FIELD_BYTES + CONTROL_FIELD_BYTES)
 #define MAX_PAYLOAD             (MAX_FRAME_BYTES-MAX_HEADER_SIZE)
 #define MAX_CONTROL_FRAME       125
-#define MAX_SOCKETS             10
 
 /* Websocket frame control byte mask */
 #define FIN_MASK                         0x80
@@ -85,7 +89,12 @@
 /******************************************************
  *                   Enumerations
  ******************************************************/
-
+typedef enum
+{
+    MUTEX_UNINITIALISED,
+    MUTEX_LOCKED,
+    MUTEX_UNLOCKED
+}websocket_mutex_state_t;
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -105,43 +114,40 @@ typedef enum
 
 typedef struct
 {
-    wiced_websocket_t* application_websocket[MAX_SOCKETS]; /* the application websocket interface */
-    int                index;
-} wiced_websocket_manager_t;
+    wiced_mutex_t           handshake_lock;
+    websocket_mutex_state_t mutex_state;
+} wiced_websocket_mutex_t;
 
 /******************************************************
  *               Static Function Declarations
  ******************************************************/
 
-static wiced_result_t websocket_common_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header_fields, wiced_bool_t use_secure_connection);
-static wiced_result_t websocket_connect       ( wiced_websocket_t* websocket, wiced_ip_address_t* address );
-static wiced_result_t websocket_tls_connect   ( wiced_websocket_t* websocket, wiced_ip_address_t* address );
-static wiced_result_t mask_unmask_frame_data  ( uint8_t* data_in, uint8_t* data_out, uint16_t data_length, uint8_t* mask );
-static uint8_t        get_websocket_index     ( wiced_websocket_t* websocket );
-static wiced_result_t update_socket_state     ( wiced_websocket_t* websocket, wiced_websocket_state_t state);
-static wiced_result_t register_websocket      ( wiced_websocket_t* websocket );
-static wiced_result_t deregister_websocket    ( wiced_websocket_t* websocket );
-
-static wiced_result_t on_close_callback   ( void* websocket );
-static wiced_result_t on_message_callback ( void* websocket );
+static wiced_result_t websocket_common_connect     ( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header_fields, wiced_bool_t use_secure_connection);
+static wiced_result_t websocket_connect            ( wiced_websocket_t* websocket, wiced_ip_address_t* address );
+static wiced_result_t websocket_tls_connect        ( wiced_websocket_t* websocket, wiced_ip_address_t* address );
+static wiced_result_t mask_unmask_frame_data       ( uint8_t* data_in, uint8_t* data_out, uint16_t data_length, uint8_t* mask );
+static wiced_result_t update_socket_state          ( wiced_websocket_t* websocket, wiced_websocket_state_t state);
+static wiced_result_t on_websocket_close_callback  ( wiced_tcp_socket_t* socket, void* websocket );
+static wiced_result_t on_websocket_message_callback( wiced_tcp_socket_t* socket, void* websocket );
+static void           lock_websocket_mutex         ( void );
+static void           unlock_websocket_mutex       ( void );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
 static wiced_tls_simple_context_t  websocket_tls_context;
-static wiced_mutex_t               handshake_lock;
-static wiced_bool_t                mutex_initialised  = WICED_FALSE;
-static wiced_websocket_manager_t   websocket_manager  = { .index = 0 };
 uint8_t                            websocket_frame[MAX_FRAME_BYTES];
-
+static wiced_websocket_mutex_t     websocket_mutex =
+{
+    .mutex_state = MUTEX_UNINITIALISED
+};
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header, const wiced_websocket_callbacks_t* callbacks )
+wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header )
 {
-    websocket->callbacks = callbacks;
 
     if ( websocket_common_connect( websocket, websocket_header, WICED_FALSE ) != WICED_SUCCESS )
     {
@@ -152,10 +158,8 @@ wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wice
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_websocket_secure_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header, const wiced_websocket_callbacks_t* callbacks )
+wiced_result_t wiced_websocket_secure_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header  )
 {
-    websocket->callbacks = callbacks;
-
     if ( websocket_common_connect( websocket, websocket_header, WICED_TRUE ) != WICED_SUCCESS )
     {
         wiced_websocket_close( websocket, NULL );
@@ -172,23 +176,13 @@ static wiced_result_t websocket_common_connect( wiced_websocket_t* websocket, co
 
     if ( websocket != NULL )
     {
-        if ( mutex_initialised == WICED_FALSE )
-        {
-            /* create handhsake mutex. There can only be one connection in a connecting state*/
-            wiced_rtos_init_mutex( &handshake_lock );
-            mutex_initialised = WICED_TRUE;
-        }
 
         /* as per rfc 6455 specification, there can not be more then one socket in a connecting state*/
-        wiced_rtos_lock_mutex( &handshake_lock );
+        lock_websocket_mutex();
 
         /* perform DNS lookup*/
         result = wiced_hostname_lookup( websocket_header_fields->host, &address, 10000 );
         IF_ERROR_RECORD_AND_EXIT( result, WEBSOCKET_DNS_RESOLVE_ERROR );
-
-        /* register websocket*/
-        result = register_websocket( websocket );
-        IF_ERROR_RECORD_AND_EXIT( result, WEBSOCKET_NO_AVAILABLE_SOCKET );
 
         update_socket_state( websocket, WEBSOCKET_CONNECTING );
 
@@ -213,13 +207,16 @@ static wiced_result_t websocket_common_connect( wiced_websocket_t* websocket, co
             IF_ERROR_RECORD_AND_EXIT( result, WEBSOCKET_SUBPROTOCOL_NOT_SUPPORTED );
         }
 
-        wiced_tcp_register_callbacks( &websocket->socket, NULL, on_message_callback, on_close_callback );
-
         update_socket_state( websocket, WEBSOCKET_OPEN );
-        websocket->callbacks->on_open( websocket );
+        if( websocket->callbacks.on_open != NULL )
+        {
+            websocket->callbacks.on_open( websocket );
+        }
 
-        /* release handshake mutex. There can only be one connection in a connecting state*/
-        wiced_rtos_unlock_mutex( &handshake_lock );
+        /*Once the communication with server is established, register for the message callback and close callback */
+        wiced_tcp_register_callbacks( &websocket->socket, NULL, on_websocket_message_callback, on_websocket_close_callback, websocket );
+
+        unlock_websocket_mutex();
     }
 
     return result;
@@ -234,8 +231,6 @@ static wiced_result_t websocket_tls_connect( wiced_websocket_t* websocket, wiced
 
     WICED_VERIFY( wiced_tcp_create_socket( &websocket->socket, WICED_STA_INTERFACE ) );
 
-    wiced_tcp_register_callbacks( &websocket->socket, websocket->callbacks->on_open, NULL, websocket->callbacks->on_close );
-
     wiced_tcp_enable_tls( &websocket->socket, &websocket_tls_context );
 
     wiced_tcp_bind( &websocket->socket, 443 );
@@ -244,7 +239,10 @@ static wiced_result_t websocket_tls_connect( wiced_websocket_t* websocket, wiced
     if ( result != WICED_SUCCESS )
     {
         websocket->error_type = WEBSOCKET_CLIENT_CONNECT_ERROR;
-        websocket->callbacks->on_error( websocket );
+        if( websocket->callbacks.on_error != NULL )
+        {
+            websocket->callbacks.on_error( websocket );
+        }
         wiced_tcp_delete_socket( &websocket->socket );
         return result;
     }
@@ -258,15 +256,16 @@ static wiced_result_t websocket_connect( wiced_websocket_t* websocket, wiced_ip_
 
     WICED_VERIFY( wiced_tcp_create_socket( &websocket->socket, WICED_STA_INTERFACE ) );
 
-    wiced_tcp_register_callbacks( &websocket->socket, websocket->callbacks->on_open, NULL, websocket->callbacks->on_close );
-
     wiced_tcp_bind( &websocket->socket, 80 );
 
     result = wiced_tcp_connect( &websocket->socket, address, 80, 10000 );
     if ( result != WICED_SUCCESS )
     {
         websocket->error_type = WEBSOCKET_CLIENT_CONNECT_ERROR;
-        websocket->callbacks->on_error( websocket );
+        if( websocket->callbacks.on_error != NULL )
+        {
+            websocket->callbacks.on_error( websocket );
+        }
         wiced_tcp_delete_socket( &websocket->socket );
         return result;
     }
@@ -274,7 +273,7 @@ static wiced_result_t websocket_connect( wiced_websocket_t* websocket, wiced_ip_
     return result;
 }
 
-wiced_result_t wiced_websocket_send( wiced_websocket_t* websocket, wiced_websocket_frame_t* tx_frame )
+wiced_result_t wiced_websocket_send( wiced_websocket_t* websocket )
 {
     wiced_result_t result = WICED_ERROR;
     uint8_t additional_bytes_to_represent_length;
@@ -284,13 +283,13 @@ wiced_result_t wiced_websocket_send( wiced_websocket_t* websocket, wiced_websock
     memset( websocket_frame, 0x00, MAX_FRAME_BYTES );
 
     /* Set FIN, RSV and opcode fields of Byte 0 */
-    websocket_frame[ 0 ] = (uint8_t) ( FIN_MASK | ( (int) tx_frame->payload_type & OPCODE_MASK ) );
+    websocket_frame[ 0 ] = (uint8_t) ( FIN_MASK | ( (int) websocket->tx_frame.payload_type & OPCODE_MASK ) );
 
     /* Before setting payload, need to find out if extended bits of frame are required */
-    if ( tx_frame->payload_length < 126 )
+    if ( websocket->tx_frame.payload_length < 126 )
     {
         /* In this case, payload length is represented with 1 byte, and bytes extended payload is not used*/
-        websocket_frame[ 1 ] = (uint8_t) ( PAYLOAD_MASK | tx_frame->payload_length );
+        websocket_frame[ 1 ] = (uint8_t) ( PAYLOAD_MASK | websocket->tx_frame.payload_length );
 
         additional_bytes_to_represent_length = 0;
     }
@@ -300,11 +299,11 @@ wiced_result_t wiced_websocket_send( wiced_websocket_t* websocket, wiced_websock
          * Check we can buffer the data for sending (needed due to masking). Also ensure its not a control frame,
          * as they have a maximum size limit of 125
          */
-        if ( ( tx_frame->payload_length <= MAX_PAYLOAD ) | ( tx_frame->payload_type < WEBSOCKET_CONNECTION_CLOSE ) )
+        if ( ( websocket->tx_frame.payload_length <= MAX_PAYLOAD ) | ( websocket->tx_frame.payload_type < WEBSOCKET_CONNECTION_CLOSE ) )
         {
             websocket_frame[ 1 ] = (uint8_t) ( PAYLOAD_MASK | 126 );
-            websocket_frame[ 2 ] = (uint8_t) ( tx_frame->payload_length >> 8 );
-            websocket_frame[ 3 ] = (uint8_t) ( tx_frame->payload_length );
+            websocket_frame[ 2 ] = (uint8_t) ( websocket->tx_frame.payload_length >> 8 );
+            websocket_frame[ 3 ] = (uint8_t) ( websocket->tx_frame.payload_length );
             additional_bytes_to_represent_length = 2;
         }
         else /* payload > MAX_PAYLOAD */
@@ -321,16 +320,16 @@ wiced_result_t wiced_websocket_send( wiced_websocket_t* websocket, wiced_websock
     wwd_wifi_get_random( &websocket_frame[ masking_key_byte_offset ], 4 );
 
     /* use algorithm of RFC6455, 5.3 to mask the payload only, not the header*/
-    mask_unmask_frame_data( tx_frame->payload, &websocket_frame[ masking_key_byte_offset + MASKING_KEY_BYTES ], tx_frame->payload_length, &websocket_frame[ masking_key_byte_offset ] );
+    mask_unmask_frame_data( websocket->tx_frame.payload, &websocket_frame[ masking_key_byte_offset + MASKING_KEY_BYTES ], websocket->tx_frame.payload_length, &websocket_frame[ masking_key_byte_offset ] );
 
     /* Send frame to server */
-    result = wiced_tcp_send_buffer( &websocket->socket, websocket_frame, (uint16_t) ( tx_frame->payload_length + masking_key_byte_offset + MASKING_KEY_BYTES ) );
+    result = wiced_tcp_send_buffer( &websocket->socket, websocket_frame, (uint16_t) ( websocket->tx_frame.payload_length + masking_key_byte_offset + MASKING_KEY_BYTES ) );
     IF_ERROR_RECORD_AND_EXIT( result, WEBSOCKET_FRAME_SEND_ERROR );
 
     return result;
 }
 
-wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_websocket_frame_t* rx_frame )
+wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket )
 {
     wiced_result_t                      result                  = WICED_SUCCESS;
     uint16_t                            payload_length          = 0;
@@ -338,20 +337,18 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
     uint32_t                            bytes_read              = 0;
     const char*                         connection_close_string = NULL;
     uint16_t                            total_received_bytes    = 0;
-    uint8_t                             frame_control_bytes[2];
-    uint8_t                             frame_length_bytes[2];
-    wiced_websocket_frame_t             respond_frame;
     wiced_packet_t*                     tcp_reply_packet;
     uint16_t                            tcp_data_available;
     uint8_t*                            received_data;
 
-    memset( frame_control_bytes, 0x0, sizeof( frame_control_bytes ) );
-    memset( frame_length_bytes, 0x0, sizeof( frame_length_bytes ) );
+    /*Clear rx buffer */
+    memset( websocket->rx_frame.payload, 0x0, websocket->rx_frame.payload_buffer_size );
+    websocket->rx_frame.payload_length = 0;
 
     /* Unpack websocket frame */
     while ( read_state != ( READ_COMPLETED_SUCCESSFULLY ) || ( read_state == READ_FRAME_ERROR ) )
     {
-        result = wiced_tcp_receive( &websocket->socket, &tcp_reply_packet, WICED_WAIT_FOREVER );
+        result = wiced_tcp_receive( &websocket->socket, &tcp_reply_packet, WICED_NO_WAIT );
         wiced_packet_get_data( tcp_reply_packet, 0, (uint8_t**) &received_data, &total_received_bytes, &tcp_data_available );
 
         if ( result != WICED_SUCCESS )
@@ -363,7 +360,7 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
         switch ( read_state )
         {
             case READ_CONTROL_BYTES:
-                rx_frame->final_frame = ( received_data[ 0 ] & FIN_MASK ) ? WICED_TRUE : WICED_FALSE;
+                websocket->rx_frame.final_frame = ( received_data[ 0 ] & FIN_MASK ) ? WICED_TRUE : WICED_FALSE;
 
                 /* read RSV bits. Note RSV and extension negotiations are not supported*/
                 if ( received_data[ 0 ] & ( RSV1_MASK | RSV2_MASK | RSV3_MASK ) )
@@ -374,8 +371,8 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
                 }
 
                 /* Read the payload type and pass to the application. Note any ping/pong or close action if required*/
-                rx_frame->payload_type = (wiced_websocket_payload_type_t) ( received_data[ 0 ] & OPCODE_MASK );
-                if ( ( ( rx_frame->payload_type >= WEBSOCKET_RESERVED_3 ) && ( rx_frame->payload_type <= WEBSOCKET_RESERVED_7 ) ) || ( ( rx_frame->payload_type >= WEBSOCKET_RESERVED_B ) ) )
+                websocket->rx_frame.payload_type = (wiced_websocket_payload_type_t) ( received_data[ 0 ] & OPCODE_MASK );
+                if ( ( ( websocket->rx_frame.payload_type >= WEBSOCKET_RESERVED_3 ) && ( websocket->rx_frame.payload_type <= WEBSOCKET_RESERVED_7 ) ) || ( ( websocket->rx_frame.payload_type >= WEBSOCKET_RESERVED_B ) ) )
                 {
                     connection_close_string = PAYLOAD_TYPE_ERROR_SHUTDOWN_MESSAGE;
                     read_state = READ_FRAME_ERROR;
@@ -431,7 +428,7 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
                         /* break out of switch and wait for get more data*/
                         break;
                     }
-                    mask_unmask_frame_data( &received_data[ bytes_read + MASKING_KEY_BYTES ], rx_frame->payload, payload_length, &received_data[ bytes_read ] );
+                    mask_unmask_frame_data( &received_data[ bytes_read + MASKING_KEY_BYTES ], websocket->rx_frame.payload, payload_length, &received_data[ bytes_read ] );
                 }
                 else if ( total_received_bytes - bytes_read < (uint16_t) payload_length )
                 {
@@ -440,7 +437,12 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
                 }
                 else
                 {
-                    memcpy( rx_frame->payload, &received_data[ bytes_read ], payload_length );
+                    if(  websocket->rx_frame.payload_buffer_size < payload_length )
+                    {
+                        memcpy( websocket->rx_frame.payload, &received_data[ bytes_read ], websocket->rx_frame.payload_buffer_size );
+                        wiced_assert("RX Buffer is too small !", websocket->rx_frame.payload_buffer_size >= payload_length );
+                    }
+                    memcpy( websocket->rx_frame.payload, &received_data[ bytes_read ], payload_length );
                 }
                 read_state++;
                 /* Fall through */
@@ -455,6 +457,9 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
                 read_state = READ_FRAME_ERROR;
                 break;
         }
+
+        wiced_packet_delete( tcp_reply_packet );
+
     }
 
     /* Check if unpack failed, close connection*/
@@ -463,25 +468,19 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
         wiced_websocket_close( websocket, connection_close_string );
         result = WICED_ERROR;
     }
-    else if ( rx_frame->payload_type == WEBSOCKET_PING )
+    else if ( websocket->rx_frame.payload_type == WEBSOCKET_PING )
     {
         /* pong back with the data received*/
-        respond_frame.final_frame    = WICED_TRUE;
-        respond_frame.payload_type   = WEBSOCKET_PONG;
-        respond_frame.payload_length = payload_length;
-        respond_frame.payload        = rx_frame->payload;
-        wiced_websocket_send( websocket, &respond_frame );
+        wiced_websocket_initialise_tx_frame( websocket, WICED_TRUE, WEBSOCKET_PONG, payload_length, websocket->rx_frame.payload, websocket->rx_frame.payload_buffer_size );
+        wiced_websocket_send( websocket );
     }
-    else if ( rx_frame->payload_type == WEBSOCKET_CONNECTION_CLOSE )
+    else if ( websocket->rx_frame.payload_type == WEBSOCKET_CONNECTION_CLOSE )
     {
         /* Did I send a connection close string*/
-        respond_frame.final_frame    = WICED_TRUE;
-        respond_frame.payload_type   = WEBSOCKET_CONNECTION_CLOSE;
-        respond_frame.payload_length = payload_length;
-        respond_frame.payload        = (char*) CLOSE_REQUEST_SHUTDOWN_MESSAGE;
-        wiced_websocket_send( websocket, &respond_frame );
         wiced_websocket_close( websocket, NULL );
     }
+
+    websocket->rx_frame.payload_length = payload_length;
 
     return result;
 }
@@ -489,7 +488,6 @@ wiced_result_t wiced_websocket_receive( wiced_websocket_t* websocket, wiced_webs
 wiced_result_t wiced_websocket_close( wiced_websocket_t* websocket, const char* optional_close_message )
 {
     wiced_result_t          result = WICED_SUCCESS;
-    wiced_websocket_frame_t frame;
 
     if ( websocket->state != WEBSOCKET_CLOSED )
     {
@@ -497,24 +495,16 @@ wiced_result_t wiced_websocket_close( wiced_websocket_t* websocket, const char* 
 
         if ( optional_close_message != NULL )
         {
-            frame.payload = (char*) optional_close_message;
-            frame.payload_length = (uint16_t) strlen( optional_close_message );
-            frame.payload_type = WEBSOCKET_CONNECTION_CLOSE;
-            wiced_websocket_send( websocket, &frame );
+            wiced_websocket_initialise_tx_frame( websocket, WICED_TRUE, WEBSOCKET_CONNECTION_CLOSE, (uint16_t)strlen( optional_close_message ), (char*) optional_close_message, (uint16_t)strlen( optional_close_message ) );
+            wiced_websocket_send( websocket );
         }
 
-        wiced_rtos_unlock_mutex( &handshake_lock );
+        unlock_websocket_mutex();
 
         wiced_tcp_disconnect( &websocket->socket );
 
-        if ( &websocket->socket != NULL )
-        {
-            result = wiced_tcp_delete_socket( &websocket->socket );
-        }
-
         update_socket_state( websocket, WEBSOCKET_CLOSED );
 
-        deregister_websocket( websocket );
     }
 
     return result;
@@ -533,80 +523,110 @@ static wiced_result_t mask_unmask_frame_data( uint8_t* data_in, uint8_t* data_ou
     return result;
 }
 
-static wiced_result_t register_websocket( wiced_websocket_t* websocket )
-{
-    if ( ( websocket_manager.application_websocket[ websocket_manager.index ] == NULL ) && ( websocket_manager.index < MAX_SOCKETS ) )
-    {
-        websocket_manager.application_websocket[ websocket_manager.index ] = websocket;
-        websocket_manager.index++;
-    }
-    else
-    {
-        return WICED_ERROR;
-    }
-
-    return WICED_SUCCESS;
-}
-
-static wiced_result_t deregister_websocket( wiced_websocket_t* websocket )
-{
-    uint8_t index = get_websocket_index( websocket );
-
-    websocket_manager.application_websocket[ index ] = NULL;
-    if ( websocket_manager.index > 0 )
-    {
-        websocket_manager.index--;
-    }
-
-    return WICED_SUCCESS;
-}
 
 static wiced_result_t update_socket_state( wiced_websocket_t* websocket, wiced_websocket_state_t state )
 {
-    uint8_t websocket_index = get_websocket_index( websocket );
-
-    if ( websocket_index >= MAX_SOCKETS )
-    {
-        return WICED_BADARG;
-    }
-    else
-    {
-        websocket->state = state;
-        return WICED_SUCCESS;
-    }
+    websocket->state = state;
+    return WICED_SUCCESS;
 }
 
-static uint8_t get_websocket_index( wiced_websocket_t* websocket )
-{
-    uint8_t websocket_index = MAX_SOCKETS;
-    uint8_t i;
-
-    for ( i = 0; i < MAX_SOCKETS; i++ )
-    {
-        if ( websocket_manager.application_websocket[ i ] == websocket )
-        {
-            websocket_index = i;
-        }
-    }
-    return websocket_index;
-}
-
-static wiced_result_t on_close_callback( void* websocket )
+static wiced_result_t on_websocket_close_callback(  wiced_tcp_socket_t* socket, void* websocket )
 {
     wiced_websocket_t* websocket_ptr = websocket;
 
-    websocket_ptr->callbacks->on_close( websocket );
+    UNUSED_PARAMETER(socket);
 
-    deregister_websocket( websocket );
+    if( websocket_ptr->callbacks.on_close != NULL )
+    {
+        websocket_ptr->callbacks.on_close( websocket_ptr );
+    }
 
     return WICED_SUCCESS;
 }
 
-static wiced_result_t on_message_callback( void* websocket )
+static wiced_result_t on_websocket_message_callback( wiced_tcp_socket_t* socket, void* websocket )
 {
     wiced_websocket_t* websocket_ptr = websocket;
 
-    websocket_ptr->callbacks->on_message( websocket );
+    UNUSED_PARAMETER(socket);
+
+    if( websocket_ptr->callbacks.on_message != NULL )
+    {
+        websocket_ptr->callbacks.on_message( websocket_ptr );
+    }
+
+    return WICED_SUCCESS;
+}
+
+static void lock_websocket_mutex( void )
+{
+    if ( websocket_mutex.mutex_state == MUTEX_UNINITIALISED )
+    {
+        /* create handhsake mutex. There can only be one connection in a connecting state*/
+        wiced_rtos_init_mutex( &websocket_mutex.handshake_lock );
+        websocket_mutex.mutex_state = MUTEX_UNLOCKED;
+    }
+
+    if ( websocket_mutex.mutex_state == MUTEX_UNLOCKED )
+    {
+        wiced_rtos_lock_mutex( &websocket_mutex.handshake_lock );
+        websocket_mutex.mutex_state = MUTEX_LOCKED;
+    }
+
+}
+
+static void unlock_websocket_mutex( void )
+{
+    if ( websocket_mutex.mutex_state == MUTEX_LOCKED )
+    {
+        wiced_rtos_unlock_mutex( &websocket_mutex.handshake_lock );
+        websocket_mutex.mutex_state = MUTEX_UNLOCKED;
+    }
+}
+
+wiced_result_t wiced_websocket_register_callbacks ( wiced_websocket_t* websocket, wiced_websocket_callback_t on_open_callback, wiced_websocket_callback_t on_close_callback, wiced_websocket_callback_t on_message_callback, wiced_websocket_callback_t on_error_callback )
+{
+    websocket->callbacks.on_open    = on_open_callback;
+    websocket->callbacks.on_close   = on_close_callback;
+    websocket->callbacks.on_error   = on_error_callback;
+    websocket->callbacks.on_message = on_message_callback;
+
+    return WICED_SUCCESS;
+}
+
+void wiced_websocket_unregister_callbacks ( wiced_websocket_t* websocket )
+{
+    websocket->callbacks.on_open    = NULL;
+    websocket->callbacks.on_close   = NULL;
+    websocket->callbacks.on_error   = NULL;
+    websocket->callbacks.on_message = NULL;
+}
+
+wiced_result_t wiced_websocket_initialise_tx_frame( wiced_websocket_t* websocket, wiced_bool_t final_frame, wiced_websocket_payload_type_t payload_type, uint16_t payload_length, void* payload_buffer, uint16_t payload_buffer_size )
+{
+    if( payload_buffer == NULL )
+    {
+        return WICED_BADARG;
+    }
+
+    websocket->tx_frame.final_frame         = final_frame;
+    websocket->tx_frame.payload_type        = payload_type;
+    websocket->tx_frame.payload_length      = payload_length;
+    websocket->tx_frame.payload             = payload_buffer;
+    websocket->tx_frame.payload_buffer_size = payload_buffer_size;
+
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_websocket_initialise_rx_frame( wiced_websocket_t* websocket, void* payload_buffer, uint16_t payload_buffer_size )
+{
+    if( payload_buffer == NULL )
+    {
+        return WICED_BADARG;
+    }
+
+    websocket->rx_frame.payload             = payload_buffer;
+    websocket->rx_frame.payload_buffer_size = payload_buffer_size;
 
     return WICED_SUCCESS;
 }

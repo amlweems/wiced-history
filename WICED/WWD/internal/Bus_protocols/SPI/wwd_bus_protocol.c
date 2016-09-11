@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -683,9 +683,9 @@ static wwd_result_t wwd_download_firmware( void )
     wwd_result_t result;
     uint32_t loop_count = 0;
 
-    VERIFY_RESULT( wwd_disable_device_core(ARM_CORE) );
-    VERIFY_RESULT( wwd_disable_device_core(SOCRAM_CORE) );
-    VERIFY_RESULT( wwd_reset_device_core(SOCRAM_CORE) );
+    VERIFY_RESULT( wwd_disable_device_core( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
+    VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
+    VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
 
 #ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
     VERIFY_RESULT( external_write_wifi_firmware_and_nvram_image( ) );
@@ -695,8 +695,8 @@ static wwd_result_t wwd_download_firmware( void )
 #endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
 
     /* Take the ARM core out of reset */
-    VERIFY_RESULT( wwd_reset_device_core( ARM_CORE ) );
-    result = wwd_device_core_is_up( ARM_CORE );
+    VERIFY_RESULT( wwd_reset_device_core( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
+    result = wwd_device_core_is_up( WLAN_ARM_CORE );
     if ( result != WWD_SUCCESS )
     {
         WPRINT_WWD_DEBUG(("Could not bring ARM core up\n"));

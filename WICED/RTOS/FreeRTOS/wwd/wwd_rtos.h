@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -40,61 +40,6 @@ extern void xPortSysTickHandler( void );
 #define SYSTICK_irq xPortSysTickHandler
 
 
-/* Use this macro to define an RTOS-aware interrupt handler where RTOS
- * primitives can be safely accessed
- *
- * @usage:
- * WWD_RTOS_DEFINE_ISR( my_irq_handler )
- * {
- *     // Do something here
- * }
- */
-#if defined( __GNUC__ )
-
-#define WWD_RTOS_DEFINE_ISR( function ) \
-        void function( void ); \
-        __attribute__(( interrupt, used, section(IRQ_SECTION) )) void function( void )
-
-#elif defined ( __IAR_SYSTEMS_ICC__ )
-
-#define WWD_RTOS_DEFINE_ISR( function ) \
-        void function( void ); \
-        __irq __root void function( void )
-
-#else
-
-#define WWD_RTOS_DEFINE_ISR( function ) \
-        void function( void );
-
-#endif
-
-
-/* Macro for mapping a function defined using WWD_RTOS_DEFINE_ISR
- * to an interrupt handler declared in
- * <Wiced-SDK>/WICED/platform/<Arch>/<Family>/platform_irq_handlers.h
- *
- * @usage:
- * WWD_RTOS_MAP_ISR( my_irq, USART1_irq )
- */
-#if defined( __GNUC__ )
-
-#define WWD_RTOS_MAP_ISR( function, isr ) \
-        extern void isr( void ); \
-        __attribute__(( alias( #function ))) void isr ( void );
-
-#elif defined ( __IAR_SYSTEMS_ICC__ )
-
-#define WWD_RTOS_MAP_ISR( function, isr ) \
-        extern void isr( void ); \
-        _Pragma( TO_STRING( weak isr=function ) )
-
-#else
-
-#define WWD_RTOS_MAP_ISR( function, isr )
-
-#endif
-
-
 #define RTOS_HIGHER_PRIORTIY_THAN(x)     (x < RTOS_HIGHEST_PRIORITY ? x+1 : RTOS_HIGHEST_PRIORITY)
 #define RTOS_LOWER_PRIORTIY_THAN(x)      (x > RTOS_LOWEST_PRIORITY ? x-1 : RTOS_LOWEST_PRIORITY)
 #define RTOS_LOWEST_PRIORITY             (0)
@@ -103,14 +48,15 @@ extern void xPortSysTickHandler( void );
 
 #define RTOS_USE_DYNAMIC_THREAD_STACK
 
-#define malloc_get_current_thread( ) xTaskGetCurrentTaskHandle()
-typedef xTaskHandle malloc_thread_handle;
-
+#ifndef WWD_LOGGING_UART_ENABLE
 #ifdef DEBUG
-#define WWD_THREAD_STACK_SIZE        (732)   /* Stack checking requires a larger stack */
+#define WWD_THREAD_STACK_SIZE        (732 + 1400)   /* Stack checking requires a larger stack */
 #else /* ifdef DEBUG */
-#define WWD_THREAD_STACK_SIZE        (544)
+#define WWD_THREAD_STACK_SIZE        (544 + 1400)
 #endif /* ifdef DEBUG */
+#else /* if WWD_LOGGING_UART_ENABLE */
+#define WWD_THREAD_STACK_SIZE        (544 + 4096 + 1400) /* WWD_LOG uses printf and requires a minimum of 4K stack */
+#endif /* WWD_LOGGING_UART_ENABLE */
 
 /******************************************************
  *             Structures

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -23,7 +23,13 @@
 #include "wwd_assert.h"
 #include "wwd_buffer_interface.h"
 #include "besl_host_interface.h"
+#include "wiced_security.h"
+#include "internal/wiced_internal_api.h"
 
+
+#ifndef DISABLE_EAP_TLS
+#include "wiced_supplicant.h"
+#endif /* DISABLE_EAP_TLS */
 
 /******************************************************
  *                      Macros
@@ -45,7 +51,7 @@
 #define SESSION_CAN_BE_RESUMED   1
 #define SESSION_NO_TIMEOUT       0
 
-#define MAX_HANDSHAKE_WAIT  10000
+#define MAX_HANDSHAKE_WAIT  20000
 
 /******************************************************
  *                   Enumerations
@@ -69,43 +75,6 @@ static wiced_result_t tls_packetize_buffered_data( wiced_tls_context_t* context,
 
 static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const char* cert_string );
 static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string );
-
-extern int32_t x509parse_crt( x509_cert *chain, const unsigned char *buf, uint32_t buflen );
-extern int32_t x509parse_crtfile( x509_cert *chain, const char *path );
-extern int32_t x509parse_key( rsa_context *rsa, const unsigned char *buf, uint32_t buflen, const unsigned char *pwd, uint32_t pwdlen );
-extern int32_t x509parse_keyfile( rsa_context *rsa, const char *path, const char *pwd );
-extern int32_t x509parse_dn_gets( char *buf, char *end, const x509_name *dn );
-extern char *x509parse_cert_info( const char *prefix, const x509_cert *crt );
-extern int32_t x509parse_expired( const x509_cert *crt );
-extern int32_t x509parse_verify( const x509_cert *crt, const x509_cert *trust_ca, const char *cn, int32_t *flags );
-extern void x509_free( x509_cert *crt );
-
-extern void rsa_free( rsa_context *ctx );
-
-extern tls_result_t ssl_init( ssl_context *ssl );
-extern void ssl_set_rng( ssl_context *ssl, int32_t (*f_rng)( void * ), void *p_rng );
-extern void ssl_set_session( ssl_context *ssl, int32_t resume, int32_t timeout, ssl_session *session );
-extern void ssl_free( ssl_context *ssl );
-extern void ssl_set_endpoint( ssl_context *ssl, int32_t endpoint );
-extern void ssl_set_ca_chain( ssl_context *ssl, x509_cert *ca_chain, const char *peer_cn );
-extern void ssl_set_authmode( ssl_context *ssl, int32_t authmode );
-extern void ssl_set_own_cert( ssl_context *ssl, x509_cert *own_cert, rsa_context *rsa_key );
-extern tls_result_t ssl_handshake_server_async( ssl_context *ssl );
-extern tls_result_t ssl_handshake_client_async( ssl_context *ssl );
-extern tls_result_t ssl_set_dh_param( ssl_context *ssl, const unsigned char *dhm_P, int P_len, const unsigned char *dhm_G, int G_len );
-extern int32_t ssl_close_notify( ssl_context *ssl );
-extern tls_result_t tls_encrypt_record( ssl_context *ssl, tls_record_t* record, uint32_t message_length );
-extern tls_result_t tls_decrypt_record( wiced_tls_context_t *ssl, tls_record_t* record );
-
-extern void md5_update( md5_context *ctx, const unsigned char *input, int32_t ilen );
-extern void sha1_update( sha1_context *ctx, const unsigned char *input, int32_t ilen );
-
-extern void microrng_init( microrng_state *state);
-extern int32_t microrng_rand( void *p_state);
-
-/* Extern network functions */
-extern wiced_result_t network_tcp_receive (wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
-extern wiced_result_t network_tcp_send_packet   ( wiced_tcp_socket_t* socket, wiced_packet_t*  packet );
 
 /******************************************************
  *               Variable Definitions
@@ -190,7 +159,7 @@ tls_result_t tls_host_create_buffer( ssl_context* ssl, uint8_t** buffer, uint16_
     buffer_size = (uint16_t) ROUND_UP(buffer_size, 64);
 
     /* Check if requested buffer fits within a single MTU */
-    if (buffer_size < 1300) /* TODO: Fix this */
+    if ( ( buffer_size < 1300) && ( ssl->transport_protocol == TLS_TCP_TRANSPORT ) ) /* TODO: Fix this */
     {
         uint16_t actual_packet_size;
         if ( wiced_packet_create_tcp( ssl->send_context, buffer_size, (wiced_packet_t**) &ssl->outgoing_packet, buffer, &actual_packet_size ) != WICED_SUCCESS )
@@ -207,29 +176,51 @@ tls_result_t tls_host_create_buffer( ssl_context* ssl, uint8_t** buffer, uint16_
     }
     else
     {
+        /* Requested size bigger than a MTU or TLS_EAP_TRANSPORT */
         /* Malloc space */
         *buffer = tls_host_malloc("tls", buffer_size);
+        if ( *buffer == NULL )
+        {
+            return TLS_ERROR_OUT_OF_MEMORY;
+        }
+        memset( *buffer, 0, buffer_size );
         ssl->out_buffer_size = buffer_size;
     }
 
     return 0;
 }
 
-
-tls_result_t tls_host_get_packet_data( tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length )
+tls_result_t tls_host_get_packet_data( ssl_context* ssl, tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length )
 {
     uint16_t temp_length;
     uint16_t temp_available_length;
-    if ( wiced_packet_get_data((wiced_packet_t*)packet, (uint16_t)offset, data, &temp_length, &temp_available_length) == WICED_SUCCESS)
+
+    if ( ssl->transport_protocol == TLS_TCP_TRANSPORT )
     {
+        wiced_result_t result = wiced_packet_get_data((wiced_packet_t*)packet, (uint16_t)offset, data, &temp_length, &temp_available_length);
+        if ( result != WICED_SUCCESS)
+        {
+            return (tls_result_t) result;
+        }
         *data_length = temp_length;
         *available_data_length = temp_available_length;
-        return WICED_SUCCESS;
+        return TLS_SUCCESS;
     }
-    else
+#ifndef DISABLE_EAP_TLS
+    else if ( ssl->transport_protocol == TLS_EAP_TRANSPORT )
     {
-        return TLS_ERROR_BAD_INPUT_DATA;
+        besl_result_t result = supplicant_host_get_tls_data( (besl_packet_t) packet, (uint16_t)offset, data, &temp_length, &temp_available_length );
+        if ( result != BESL_SUCCESS )
+        {
+            return (tls_result_t) result;
+        }
+
+        *data_length = temp_length;
+        *available_data_length = temp_available_length;
+        return TLS_SUCCESS;
     }
+#endif /* DISABLE_EAP_TLS */
+    return TLS_ERROR_BAD_INPUT_DATA;
 }
 
 void* tls_host_malloc( const char* name, uint32_t size)
@@ -240,7 +231,7 @@ void* tls_host_malloc( const char* name, uint32_t size)
 
 void tls_host_free(void* p)
 {
-    besl_host_free( p );
+    free( p );
 }
 
 void* tls_host_get_defragmentation_buffer ( uint16_t size )
@@ -258,46 +249,58 @@ void  tls_host_free_defragmentation_buffer( void* buffer )
  */
 tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t length )
 {
-    if (ssl->outgoing_packet != NULL)
+    if ( ssl->transport_protocol == TLS_TCP_TRANSPORT )
     {
-        wiced_packet_set_data_end((wiced_packet_t*)ssl->outgoing_packet, buffer + length);
-        tls_host_send_packet(ssl->send_context, ssl->outgoing_packet);
-        ssl->outgoing_packet = NULL;
-        ssl->out_buffer_size = 0;
-    }
-    else
-    {
-        uint16_t      actual_packet_size;
-        tls_packet_t* temp_packet;
-        uint8_t*      packet_buffer;
-        uint8_t*      data = buffer;
-
-        while (length != 0)
+        if (ssl->outgoing_packet != NULL)
         {
-            uint16_t amount_to_copy;
-            if ( wiced_packet_create_tcp( ssl->send_context, (uint16_t)length, (wiced_packet_t**) &temp_packet, &packet_buffer, &actual_packet_size ) != WICED_SUCCESS )
-            {
-                tls_host_free(buffer);
-                return 1;
-            }
-            if ( ssl->state == SSL_HANDSHAKE_OVER )
-            {
-                /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
-                packet_buffer -= sizeof(tls_record_header_t);
-                wiced_packet_set_data_start((wiced_packet_t*) temp_packet, packet_buffer);
-            }
-            amount_to_copy = (uint16_t) MIN(length, actual_packet_size);
-            packet_buffer = MEMCAT(packet_buffer, data, amount_to_copy);
-            data   += amount_to_copy;
-            length -= amount_to_copy;
-            wiced_packet_set_data_end((wiced_packet_t*)temp_packet, packet_buffer );
-            tls_host_send_packet(ssl->send_context, temp_packet);
+            wiced_packet_set_data_end((wiced_packet_t*)ssl->outgoing_packet, buffer + length);
+            tls_host_send_tcp_packet(ssl->send_context, ssl->outgoing_packet);
+            ssl->outgoing_packet = NULL;
+            ssl->out_buffer_size = 0;
         }
+        else
+        {
+            uint16_t      actual_packet_size;
+            tls_packet_t* temp_packet;
+            uint8_t*      packet_buffer;
+            uint8_t*      data = buffer;
 
-        tls_host_free(buffer);
+            while (length != 0)
+            {
+                uint16_t amount_to_copy;
+                if ( wiced_packet_create_tcp( ssl->send_context, (uint16_t)length, (wiced_packet_t**) &temp_packet, &packet_buffer, &actual_packet_size ) != WICED_SUCCESS )
+                {
+                    tls_host_free(buffer);
+                    return 1;
+                }
+                if ( ssl->state == SSL_HANDSHAKE_OVER )
+                {
+                    /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
+                    packet_buffer -= sizeof(tls_record_header_t);
+                    wiced_packet_set_data_start((wiced_packet_t*) temp_packet, packet_buffer);
+                }
+                amount_to_copy = (uint16_t) MIN(length, actual_packet_size);
+                packet_buffer = MEMCAT(packet_buffer, data, amount_to_copy);
+                data   += amount_to_copy;
+                length -= amount_to_copy;
+                wiced_packet_set_data_end((wiced_packet_t*)temp_packet, packet_buffer );
+                tls_host_send_tcp_packet(ssl->send_context, temp_packet);
+            }
+
+            tls_host_free(buffer);
+        }
     }
+#ifndef DISABLE_EAP_TLS
+    else if ( ssl->transport_protocol == TLS_EAP_TRANSPORT )
+    {
+        supplicant_host_send_eap_tls_fragments( (supplicant_workspace_t*) ssl->send_context, buffer, length );
+        ssl->out_buffer_size = 0;
+        tls_host_free( buffer );
+        buffer = NULL;
+    }
+#endif /* DISABLE_EAP_TLS */
 
-    return( 0 );
+    return TLS_SUCCESS;
 }
 
 uint64_t tls_host_get_time_ms( void )
@@ -463,13 +466,13 @@ wiced_result_t wiced_tls_init_advanced_context( wiced_tls_advanced_context_t* co
     memset( context, 0, sizeof(wiced_tls_advanced_context_t) );
     context->context_type = WICED_TLS_ADVANCED_CONTEXT;
 
-    result = wiced_tls_load_certificate( &context->certificate, certificate );
+    result = (wiced_result_t) wiced_tls_load_certificate( &context->certificate, certificate );
     if ( result != WICED_SUCCESS )
     {
         return result;
     }
 
-    result = wiced_tls_load_key( &context->key, key );
+    result = (wiced_result_t) wiced_tls_load_key( &context->key, key );
     if ( result != WICED_SUCCESS )
     {
         return result;
@@ -511,7 +514,7 @@ wiced_result_t wiced_tls_init_root_ca_certificates( const char* trusted_ca_certi
 
     memset(root_ca_certificates, 0, sizeof(wiced_tls_certificate_t));
 
-    result = wiced_tls_load_certificate( root_ca_certificates, trusted_ca_certificates );
+    result = (wiced_result_t) wiced_tls_load_certificate( root_ca_certificates, trusted_ca_certificates );
     if ( result != WICED_SUCCESS )
     {
         tls_host_free( root_ca_certificates );
@@ -539,21 +542,39 @@ wiced_result_t wiced_tcp_enable_tls( wiced_tcp_socket_t* socket, void* context )
     return WICED_SUCCESS;
 }
 
+
 wiced_result_t wiced_tcp_start_tls( wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification )
 {
-    return wiced_tcp_start_tls_with_ciphers( socket, type, verification, my_ciphers );
+    return wiced_generic_start_tls_with_ciphers( (wiced_tls_simple_context_t*)socket->tls_context, socket, type, verification, my_ciphers, TLS_TCP_TRANSPORT );
 }
 
-wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[] )
+#ifndef DISABLE_EAP_TLS
+wiced_result_t wiced_supplicant_start_tls( supplicant_workspace_t* supplicant, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification )
+{
+    host_rtos_delay_milliseconds( 10 );
+    return wiced_generic_start_tls_with_ciphers( (wiced_tls_simple_context_t*)supplicant->tls_context, supplicant, type, verification, my_ciphers, TLS_EAP_TRANSPORT );
+}
+
+wiced_result_t wiced_supplicant_enable_tls( supplicant_workspace_t* supplicant, void* context )
+{
+    supplicant->tls_context = context;
+    return WICED_SUCCESS;
+}
+
+#endif /* DISABLE_EAP_TLS */
+
+wiced_result_t wiced_generic_start_tls_with_ciphers( wiced_tls_simple_context_t* tls_context, void* referee, wiced_tls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], tls_transport_protocol_t transport_protocol )
 {
     microrng_state              rngstate;
-    wiced_tls_simple_context_t* tls_context = (wiced_tls_simple_context_t*)socket->tls_context;
     int                         prev_state;
     uint64_t                    start_time;
     tls_result_t                result;
 
     /* Initialize the session data */
-    memset( &tls_context->session, 0, sizeof(wiced_tls_session_t) );
+    if ( transport_protocol != TLS_EAP_TRANSPORT )
+    {
+        memset( &tls_context->session, 0, sizeof(wiced_tls_session_t) );
+    }
     memset( &tls_context->context, 0, sizeof(wiced_tls_context_t) );
 
     /* Prepare session and entropy */
@@ -564,22 +585,24 @@ wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wic
     if ( ssl_init( &tls_context->context ) != 0 )
     {
         wiced_assert("Error initialising SSL", 0!=0 );
-        return TLS_INIT_FAIL;
+        return WICED_TLS_INIT_FAIL;
     }
+
+    tls_context->context.transport_protocol = transport_protocol;
 
     microrng_init( &rngstate );
 
     ssl_set_endpoint( &tls_context->context, type );
     ssl_set_rng     ( &tls_context->context, microrng_rand, &rngstate );
-    tls_context->context.receive_context = socket;
-    tls_context->context.send_context    = socket;
+    tls_context->context.receive_context = referee;
+    tls_context->context.send_context    = referee;
     tls_context->context.get_session     = tls_get_session;
     tls_context->context.set_session     = tls_set_session;
     tls_context->context.ciphers         = cipher_list;
-    ssl_set_session ( &tls_context->context, SESSION_CAN_BE_RESUMED, SESSION_NO_TIMEOUT, &tls_context->session );
+    ssl_set_session ( &tls_context->context, SESSION_CAN_BE_RESUMED, 1000000, &tls_context->session );
 
     /* Assert if user has not created correct TLS context for the TLS endpoint type */
-    wiced_assert("TLS servers must have an advanced TLS context", !((type == WICED_TLS_AS_SERVER) && (socket->tls_context->context_type != WICED_TLS_ADVANCED_CONTEXT)));
+    wiced_assert("TLS servers must have an advanced TLS context", !((type == WICED_TLS_AS_SERVER) && (tls_context->context_type != WICED_TLS_ADVANCED_CONTEXT)));
 
     if ( root_ca_certificates != NULL )
     {
@@ -591,12 +614,12 @@ wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wic
         ssl_set_authmode( &tls_context->context, SSL_VERIFY_NONE );
     }
 
-    if ( socket->tls_context->context_type == WICED_TLS_ADVANCED_CONTEXT )
+    if ( tls_context->context_type == WICED_TLS_ADVANCED_CONTEXT )
     {
         wiced_tls_advanced_context_t* advanced_context = (wiced_tls_advanced_context_t*)tls_context;
         ssl_set_own_cert( &advanced_context->context, &advanced_context->certificate, &advanced_context->key );
 
-        ssl_set_dh_param( &socket->tls_context->context, diffie_hellman_prime_P, sizeof( diffie_hellman_prime_P ), diffie_hellman_prime_G, sizeof( diffie_hellman_prime_G ) );
+        ssl_set_dh_param( &tls_context->context, diffie_hellman_prime_P, sizeof( diffie_hellman_prime_P ), diffie_hellman_prime_G, sizeof( diffie_hellman_prime_G ) );
     }
 
     prev_state = 0;
@@ -609,7 +632,7 @@ wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wic
             result = ssl_handshake_server_async( &tls_context->context );
             if ( result != TLS_SUCCESS )
             {
-                WPRINT_SECURITY_INFO(( "Error with TLS handshake\n" ));
+                WPRINT_SECURITY_INFO(( "Error with TLS server handshake\n" ));
                 goto exit_with_inited_context;
             }
         }
@@ -618,7 +641,7 @@ wiced_result_t wiced_tcp_start_tls_with_ciphers( wiced_tcp_socket_t* socket, wic
             result = ssl_handshake_client_async( &tls_context->context );
             if ( result != TLS_SUCCESS )
             {
-                WPRINT_SECURITY_INFO(( "Error with TLS handshake\n" ));
+                WPRINT_SECURITY_INFO(( "Error with TLS client handshake %u\n", (unsigned int)result ));
                 goto exit_with_inited_context;
             }
         }
@@ -651,34 +674,27 @@ exit_with_inited_context:
     return (wiced_result_t) result;
 }
 
-wiced_result_t wiced_tls_calculate_overhead( wiced_tls_context_t* context, uint16_t content_length, uint16_t* header, uint16_t* footer )
+wiced_result_t wiced_tls_calculate_overhead( wiced_tls_context_t* context, uint16_t available_space, uint16_t* header, uint16_t* footer )
 {
     *header = 0;
     *footer = 0;
     if ( context != NULL && context->state == SSL_HANDSHAKE_OVER )
     {
-        int padlen;
-
+        /* Add TLS record header */
         *header = sizeof(tls_record_header_t);
 
+        /* Compensate for padding */
         if ( context->ivlen != 0 )
         {
-            /* Padding */
-            padlen = context->ivlen - ( content_length +context->maclen + 1 ) % context->ivlen;
-            if ( padlen == context->ivlen )
-            {
-                padlen = 0;
-            }
-
-            *footer += padlen + 1;
+            /* Note: There must be at least one byte of padding so align to block size and add an extra 1 */
+            *footer += ( available_space - *header - *footer ) % context->ivlen + 1;
         }
-
 
         /* MAC */
         *footer += context->maclen;
 
         /* TLS 1.1+ uses explicit IV in footer */
-        if( context->minor_ver > 1 )
+        if ( context->minor_ver > 1 )
         {
             *footer += context->ivlen;
         }
@@ -696,7 +712,7 @@ wiced_result_t wiced_tls_encrypt_packet( wiced_tls_context_t* context, wiced_pac
 
     wiced_packet_get_data(packet, 0, &data, &length, &available);
     data -= sizeof(tls_record_header_t);
-    result = tls_host_set_packet_start((tls_packet_t*)packet, data);
+    result = (wiced_result_t) tls_host_set_packet_start((tls_packet_t*)packet, data);
     if ( result != WICED_SUCCESS)
     {
         return result;
@@ -708,7 +724,7 @@ wiced_result_t wiced_tls_encrypt_packet( wiced_tls_context_t* context, wiced_pac
     record->minor_version = (uint8_t)context->minor_ver;
     record->length        = htobe16( length );
 
-    result = tls_encrypt_record( context, record, length );
+    result = (wiced_result_t) tls_encrypt_record( context, record, length );
     if ( result != WICED_SUCCESS )
     {
         return result;
@@ -733,6 +749,8 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
     wiced_result_t result;
     wiced_tls_context_t* context = &socket->tls_context->context;
 
+    wiced_assert("Bad args", (socket != NULL) && (packet != NULL));
+
 
     /* Check if we already have a record which should only happen if it was larger than a packet which means it's stored in the defragmentation buffer */
     if ( context->current_record != NULL )
@@ -743,7 +761,7 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
     else
     {
         tls_record_t* record;
-        result = tls_get_next_record( context, &record, timeout, TLS_RECEIVE_PACKET_IF_NEEDED );
+        result = (wiced_result_t) tls_get_next_record( context, &record, timeout, TLS_RECEIVE_PACKET_IF_NEEDED );
         if ( result != WICED_SUCCESS )
         {
             return result;
@@ -861,25 +879,44 @@ wiced_bool_t wiced_tls_is_encryption_enabled( wiced_tcp_socket_t* socket )
 tls_result_t tls_host_free_packet( tls_packet_t* packet )
 {
     wiced_packet_delete((wiced_packet_t*)packet);
-    return WICED_SUCCESS;
+    return TLS_SUCCESS;
 }
 
-tls_result_t tls_host_send_packet(void* context, tls_packet_t* packet)
+tls_result_t tls_host_send_tcp_packet( void* context, tls_packet_t* packet )
 {
     if ( network_tcp_send_packet( (wiced_tcp_socket_t*)context, (wiced_packet_t*)packet) != WICED_SUCCESS )
     {
         wiced_packet_delete((wiced_packet_t*)packet);
     }
-    return WICED_SUCCESS;
+    return TLS_SUCCESS;
 }
 
-tls_result_t tls_host_receive_packet(void* context, tls_packet_t** packet, uint32_t timeout)
+tls_result_t tls_host_receive_packet(ssl_context* ssl, tls_packet_t** packet, uint32_t timeout)
 {
-    return network_tcp_receive( (wiced_tcp_socket_t*) context, (wiced_packet_t**) packet, timeout );
+    tls_result_t              result = TLS_RECEIVE_FAILED;
+    switch(ssl->transport_protocol)
+    {
+        case TLS_TCP_TRANSPORT:
+            result = (tls_result_t) network_tcp_receive( (wiced_tcp_socket_t*) ssl->receive_context, (wiced_packet_t**) packet, timeout );
+            break;
+
+        case TLS_EAP_TRANSPORT:
+#ifndef DISABLE_EAP_TLS
+            result = (tls_result_t) supplicant_receive_eap_tls_packet( ssl->receive_context, packet, timeout );
+            break;
+#endif /* DISABLE_EAP_TLS */
+
+        case TLS_UDP_TRANSPORT:
+        default:
+            wiced_assert( "unknown transport", 1 == 0 );
+            break;
+    }
+
+    return result;
 }
 
 tls_result_t tls_host_set_packet_start( tls_packet_t* packet, uint8_t* start )
 {
     wiced_packet_set_data_start((wiced_packet_t*)packet, start);
-    return WICED_SUCCESS;
+    return TLS_SUCCESS;
 }

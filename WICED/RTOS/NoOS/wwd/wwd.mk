@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,7 +17,15 @@ $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
 ifneq ($(filter $(HOST_ARCH), ARM_CM3 ARM_CM4),)
 NOOS_ARCH:=Cortex_M3_M4
+else
+ifneq ($(filter $(HOST_ARCH), ARM_CR4),)
+NOOS_ARCH:=Cortex_R4
 endif
+endif
+
+GLOBAL_INCLUDES += $(NOOS_ARCH)
+
+GLOBAL_INCLUDES += $(NOOS_ARCH)
 
 $(NAME)_SOURCES  += $(NOOS_ARCH)/noos.c
 

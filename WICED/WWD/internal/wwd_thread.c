@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -41,7 +41,9 @@
 #include "internal/wwd_internal.h"
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 
+#ifndef WWD_THREAD_POLL_TIMEOUT
 #define WWD_THREAD_POLL_TIMEOUT      (NEVER_TIMEOUT)
+#endif
 
 #ifdef RTOS_USE_STATIC_THREAD_STACK
 static uint8_t wwd_thread_stack[WWD_THREAD_STACK_SIZE];
@@ -59,11 +61,11 @@ static uint8_t wwd_thread_stack[WWD_THREAD_STACK_SIZE];
  *             Static Variables
  ******************************************************/
 
-static wiced_bool_t          wwd_thread_quit_flag = WICED_FALSE;
+static volatile wiced_bool_t wwd_thread_quit_flag = WICED_FALSE;
 static wiced_bool_t          wwd_inited           = WICED_FALSE;
 static host_thread_type_t    wwd_thread;
 static host_semaphore_type_t wwd_transceive_semaphore;
-static wiced_bool_t          wwd_bus_interrupt = WICED_FALSE;
+static volatile wiced_bool_t wwd_bus_interrupt = WICED_FALSE;
 
 /******************************************************
  *             Static Function Prototypes
@@ -320,6 +322,8 @@ static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals kill
             /* Keep poking the WLAN until it gives us more credits */
             result = wwd_bus_poke_wlan( );
             wiced_assert( "Poking failed!", result == WWD_SUCCESS );
+            REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
             result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) 100, WICED_FALSE );
         }
         else
@@ -329,8 +333,8 @@ static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals kill
             {
                 result = wwd_bus_allow_wlan_bus_to_sleep( );
                 wiced_assert( "Error setting wlan sleep", result == WWD_SUCCESS );
+                REFERENCE_DEBUG_ONLY_VARIABLE( result );
             }
-
             result = host_rtos_get_semaphore( &wwd_transceive_semaphore, (uint32_t) WWD_THREAD_POLL_TIMEOUT, WICED_FALSE );
         }
         REFERENCE_DEBUG_ONLY_VARIABLE(result);

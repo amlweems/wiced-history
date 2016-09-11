@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,6 +67,7 @@ typedef struct
     uint32_t os_version;
     uint16_t authentication_type_flags;
     uint16_t encryption_type_flags;
+    uint8_t  add_config_methods_to_probe_resp;
 } besl_wps_device_detail_t;
 
 typedef struct
@@ -94,8 +95,7 @@ typedef enum
     BESL_WPS_CONFIG_PHYSICAL_DISPLAY_PIN  = 0x4008
 } besl_wps_configuration_method_t;
 
-typedef void*                  wps_eapol_packet_t;
-typedef wiced_scan_result_t      wps_ap_t;
+
 
 /******************************************************
  *             Function declarations

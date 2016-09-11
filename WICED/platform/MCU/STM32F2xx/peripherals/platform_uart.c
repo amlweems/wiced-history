@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -159,7 +159,7 @@ platform_result_t platform_uart_init( platform_uart_driver_t* driver, const plat
             break;
 
         default:
-            return WICED_BADARG;
+            return PLATFORM_BADARG;
     }
 
     switch ( config->flow_control )
@@ -181,7 +181,7 @@ platform_result_t platform_uart_init( platform_uart_driver_t* driver, const plat
             break;
 
         default:
-            return WICED_BADARG;
+            return PLATFORM_BADARG;
     }
 
 
@@ -507,7 +507,7 @@ static platform_result_t receive_bytes( platform_uart_driver_t* driver, void* da
 
     if ( timeout > 0 )
     {
-        result = host_rtos_get_semaphore( &driver->rx_complete, timeout, WICED_TRUE );
+        result = (platform_result_t) host_rtos_get_semaphore( &driver->rx_complete, timeout, WICED_TRUE );
     }
 
     return result;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,6 @@
 #pragma once
 #include "platform_cmsis.h"
 #include "platform_constants.h"
-#include "platform_peripheral.h"
 #include "stm32f4xx_adc.h"
 #include "stm32f4xx_dma.h"
 #include "stm32f4xx_exti.h"

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -51,6 +51,13 @@ extern "C" {
  * @return period in millisecond the MCU has slept
  */
 extern uint32_t platform_power_down_hook( uint32_t sleep_ms );
+
+/**
+ * Hook for RTOS to ask MCU whether it want to enter power-down mode
+ *
+ * @return non-zero if MCU want RTOS enter power down mode
+ */
+extern int platform_power_down_permission( void );
 
 /**
  * Hook for RTOS for entering idle mode

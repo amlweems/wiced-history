@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,12 +9,15 @@
  */
 
 #include "network/wwd_buffer_interface.h"
+#include "platform/wwd_bus_interface.h"
 #include "lwip/netbuf.h"
 #include "FreeRTOS.h"
 #include "lwip/memp.h"
 #include "task.h"
 #include <string.h> /* for NULL */
 #include "wwd_assert.h"
+
+void memp_free_notify( unsigned int type );
 
 wwd_result_t host_buffer_init( /*@null@*/ /*@unused@*/ void * native_arg )
 {
@@ -122,4 +125,17 @@ wwd_result_t host_buffer_set_size( /*@temp@*/ wiced_buffer_t buffer, unsigned sh
          buffer->len = size;
 
          return WWD_SUCCESS;
+}
+
+
+void memp_free_notify( unsigned int type )
+{
+    if ( type == MEMP_PBUF_POOL_TX )
+    {
+        host_platform_bus_buffer_freed( WWD_NETWORK_TX );
+    }
+    else if ( type == MEMP_PBUF_POOL_RX )
+    {
+        host_platform_bus_buffer_freed( WWD_NETWORK_RX );
+    }
 }

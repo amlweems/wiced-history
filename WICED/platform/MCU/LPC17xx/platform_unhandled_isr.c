@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,7 @@
 #include "platform_isr.h"
 #include "platform_isr_interface.h"
 #include "wwd_rtos.h"
+#include "platform_peripheral.h"
 
 /******************************************************
  *                      Macros
@@ -60,6 +61,9 @@ PLATFORM_DEFINE_ISR( UnhandledInterrupt )
     /* This variable tells you which interrupt vector is currently active */
     (void)active_interrupt_vector;
     WICED_TRIGGER_BREAKPOINT( );
+
+    /* reset the processor immeditly if not debug */
+    platform_mcu_reset( );
 
     while( 1 )
     {

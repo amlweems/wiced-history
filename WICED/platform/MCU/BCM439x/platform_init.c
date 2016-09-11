@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -33,6 +33,18 @@
  *                    Constants
  ******************************************************/
 
+#define WATCHDOG_TIMEOUT_MULTIPLIER     ( 0x1745D17 )
+
+#ifndef MAX_WATCHDOG_TIMEOUT_SECONDS
+#define MAX_WATCHDOG_TIMEOUT_SECONDS    ( 22 )
+#endif
+
+#ifdef APPLICATION_WATCHDOG_TIMEOUT_SECONDS
+#define WATCHDOG_TIMEOUT                ( APPLICATION_WATCHDOG_TIMEOUT_SECONDS * WATCHDOG_TIMEOUT_MULTIPLIER )
+#else
+#define WATCHDOG_TIMEOUT                ( MAX_WATCHDOG_TIMEOUT_SECONDS * WATCHDOG_TIMEOUT_MULTIPLIER )
+#endif /* APPLICATION_WATCHDOG_TIMEOUT_SECONDS */
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -55,6 +67,9 @@
 
 char bcm439x_platform_inited = 0;
 
+/* This variable is used internally to set the watchdog timeout */
+const uint32_t watchdog_timeout = WATCHDOG_TIMEOUT;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -73,10 +88,13 @@ char bcm439x_platform_inited = 0;
 
 void platform_mcu_reset( void )
 {
-
     /*if BCM439x platform do Forcibly  reset the watchdog*/
-     platform_watchdog_force_reset();
+    platform_watchdog_force_reset( );
 
+    /* Loop forever */
+    while ( 1 )
+    {
+    }
 }
 
 /* BCM439x common clock initialisation function

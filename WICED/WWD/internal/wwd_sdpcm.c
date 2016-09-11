@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -271,7 +271,6 @@ static wwd_wifi_raw_packet_processor_t       wwd_sdpcm_raw_packet_processor = NU
 
 /* QoS related variables */
 uint8_t sdpcm_highest_rx_tos = 0; // XXX remove later, currently used by 11n certification test applications
-extern uint8_t wwd_tos_map[8];
 
 /******************************************************
  *             SDPCM Logging
@@ -532,25 +531,6 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     packet->bdc_header.flags2   = (uint8_t) ( interface&3 );
     packet->bdc_header.data_offset = 0;
 
-    /* If it's an IPv4 packet set the BDC header priority based on the DSCP field */
-    if ( ( ether_type == WICED_ETHERTYPE_IPv4 ) && ( dscp != NULL ) )
-    {
-        if ( *dscp != 0 ) /* If it's equal 0 then it's best effort traffic and nothing needs to be done */
-        {
-            priority = wwd_map_dscp_to_priority( *dscp );
-        }
-    }
-
-    /* If it's for the STA interface then re-map priority to the priority allowed by the AP, regardless of whether it's an IPv4 packet */
-    if ( interface == WWD_STA_INTERFACE )
-    {
-        packet->bdc_header.priority = wwd_tos_map[ priority ];
-    }
-    else
-    {
-        packet->bdc_header.priority = priority;
-    }
-
     /* Add the length of the BDC header and pass "down" */
     wwd_sdpcm_send_common( buffer, DATA_HEADER );
 }
@@ -618,24 +598,24 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
         return;
     }
 
-    /* Check whether the size is big enough to contain the SDPCM header */
-    if ( size < (uint16_t) 12 )
+    /* Check whether the packet is big enough to contain the SDPCM header (or) it's too big to handle */
+    if ( ( size < (uint16_t) SDPCM_HEADER_LEN ) || ( size > (uint16_t) WICED_LINK_MTU ) )
     {
-        WPRINT_WWD_DEBUG(("Received a packet that is too small to contain anything useful\n"));
+        wiced_assert( "Packet size invalid", 0 == 1 );
+        WPRINT_WWD_DEBUG(("Received a packet that is too small to contain anything useful (or) too big. Packet Size = [%d]\n", size));
         host_buffer_release( buffer, WWD_NETWORK_RX );
         return;
     }
 
     wwd_sdpcm_update_credit((uint8_t*)&packet->sdpcm_header.frametag);
 
-    if ( size == (uint16_t) 12 )
+    if ( size == (uint16_t) SDPCM_HEADER_LEN )
     {
         /* This is a flow control update packet with no data - release it. */
         host_buffer_release( buffer, WWD_NETWORK_RX );
         return;
     }
 
-    wiced_assert( "Packet too big", size <= (uint16_t) WICED_LINK_MTU );
     /* Check the SDPCM channel to decide what to do with packet. */
     switch ( packet->sdpcm_header.sw_header.channel_and_flags & 0x0f )
     {
@@ -776,6 +756,14 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 wwd_event->reason     = (wwd_event_reason_t)   NTOH32( wwd_event->reason     );
                 wwd_event->auth_type  =                        NTOH32( wwd_event->auth_type  );
                 wwd_event->datalen    =                        NTOH32( wwd_event->datalen    );
+                /* Ensure data length is correct */
+                if ( wwd_event->datalen > (uint32_t)( size - ((char *)DATA_AFTER_HEADER( event ) - (char *)&packet->sdpcm_header ) ) )
+                {
+                    WPRINT_WWD_DEBUG(("Error - (data length received [%d] > expected data length [%d]). SDPCM packet size = [%d]. Ignoring the packet\n",
+                            (int)wwd_event->datalen, size - ((char *)DATA_AFTER_HEADER( event ) - (char *)&packet->sdpcm_header ), size));
+                    host_buffer_release( buffer, WWD_NETWORK_RX );
+                    break;
+                }
                 wwd_event->interface  = ( event->event.raw.ifidx & 3);
 
 
@@ -813,7 +801,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 }
 
                 add_sdpcm_log_entry( LOG_RX, EVENT, host_buffer_get_current_piece_size( buffer ), (char*) host_buffer_get_current_piece_data_pointer( buffer ) );
-                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: Evnt %d (%d bytes)\n", (unsigned int)buffer, (int)event->event.event_type, size ) );
+                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: Evnt %d (%d bytes)\n", (unsigned int)buffer, (int)event->event.raw.event_type, size ) );
 
                 /* Release the event packet buffer */
                 host_buffer_release( buffer, WWD_NETWORK_RX );
@@ -893,17 +881,16 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     /* Prepare the CDC header */
     send_packet->cdc_header.cmd    = command;
     send_packet->cdc_header.len    = data_length;
-    send_packet->cdc_header.flags  = ( ( (uint32_t) ++wwd_sdpcm_requested_ioctl_id << CDCF_IOC_ID_SHIFT ) & CDCF_IOC_ID_MASK ) | type | (uint32_t) interface_val << 12;
+    send_packet->cdc_header.flags  = ( ( (uint32_t) ++wwd_sdpcm_requested_ioctl_id << CDCF_IOC_ID_SHIFT ) & CDCF_IOC_ID_MASK ) | type | (uint32_t) interface_val << CDCF_IOC_IF_SHIFT;
     send_packet->cdc_header.status = 0;
 
     /* Manufacturing test can receive big buffers, but sending big buffers causes a wlan firmware error */
     if ( host_buffer_get_current_piece_size( send_buffer_hnd ) > 1500 )
     {
         host_buffer_set_size( send_buffer_hnd, 1500 );
-        data_length = host_buffer_get_current_piece_size( send_buffer_hnd ) - sizeof(sdpcm_common_header_t) - sizeof(sdpcm_cdc_header_t);
     }
 
-    WWD_LOG( ( "Wcd:> IOCTL pkt 0x%08X: cmd %d, len %d\n", (unsigned int)send_buffer_hnd, (int)command, data_length ) );
+    WWD_LOG( ( "Wcd:> IOCTL pkt 0x%08X: cmd %d, len %d\n", (unsigned int)send_buffer_hnd, (int)command, (int)data_length ) );
 
     /* Store the length of the data and the IO control header and pass "down" */
     wwd_sdpcm_send_common( send_buffer_hnd, CONTROL_HEADER );

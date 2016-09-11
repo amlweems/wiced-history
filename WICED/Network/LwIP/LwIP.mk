@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -70,7 +70,7 @@ $(NAME)_SOURCES :=  ver$(VERSION)/src/api/api_lib.c \
                     ver$(VERSION)/src/core/tcp_in.c \
                     ver$(VERSION)/src/core/tcp_out.c \
                     ver$(VERSION)/src/core/udp.c \
-                    ver$(VERSION)/src/netif/etharp.c \
+                    ver$(VERSION)/src/netif/etharp.c
 
 #                    ver$(VERSION)/src/core/ipv6/icmp6.c \
 #                    ver$(VERSION)/src/core/ipv6/inet6.c \

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,6 +12,7 @@
  *
  */
 #include "wiced.h"
+#include "besl_host_rtos_structures.h"
 #include "p2p_structures.h"
 #include "wiced_p2p.h"
 #include "p2p_host_interface.h"
@@ -21,12 +22,15 @@
 #include "internal/wiced_internal_api.h"
 #include "wps_p2p_interface.h"
 #include "p2p_frame_writer.h"
+#include "wwd_buffer_interface.h"
+#include "wiced_utilities.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
 
 #define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) {  wiced_assert("Allocation failed\n", 0 == 1); return BESL_BUFFER_ALLOC_FAIL; }
+#define CHECK_RETURN( expr )  { besl_result_t check_res = (expr); if ( check_res != BESL_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1); return check_res; } }
 
 /******************************************************
  *                    Constants
@@ -64,7 +68,7 @@ typedef struct
 
 static void           p2p_thread_main                 ( uint32_t arg );
 static besl_result_t  p2p_scan                        ( p2p_workspace_t* workspace, uint16_t scan_action, wiced_bool_t all_channels );
-static wwd_result_t   p2p_set_discovery_state         ( p2p_discovery_state_t state, uint32_t channel );
+static besl_result_t  p2p_set_discovery_state         ( p2p_discovery_state_t state, uint32_t channel );
 static void           p2p_discover                    ( p2p_workspace_t* workspace );
 static besl_result_t  p2p_start_client                ( p2p_workspace_t* workspace );
 static besl_result_t  p2p_group_owner_stop            ( p2p_workspace_t* workspace );
@@ -81,7 +85,15 @@ void                  p2p_wps_internal_result_callback( wps_result_t* result );
 static host_thread_type_t p2p_thread;
 static host_queue_type_t  p2p_message_queue;
 static p2p_message_t      p2p_message_queue_buffer        [ MAX_NUMBER_OF_P2P_MESSAGES ];
+#ifdef RTOS_USE_STATIC_THREAD_STACK
 static uint8_t            p2p_thread_stack                [ P2P_THREAD_STACK_SIZE ];
+#else
+#define p2p_thread_stack (NULL)
+#endif /* ifdef RTOS_USE_STATIC_THREAD_STACK */
+static const wwd_event_num_t p2p_group_client_events[] = { WLC_E_ESCAN_RESULT, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_NONE };
+
+const wwd_event_num_t p2p_discovery_events[]    = { WLC_E_ESCAN_RESULT, WLC_E_P2P_DISC_LISTEN_COMPLETE, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_NONE };
+const wwd_event_num_t p2p_group_owner_events[]  = { WLC_E_ACTION_FRAME, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_PROBREQ_MSG, WLC_E_NONE };
 
 /******************************************************
  *               Function Definitions
@@ -95,7 +107,9 @@ void p2p_thread_start( p2p_workspace_t* workspace )
 
     /* Create the P2P thread */
     workspace->p2p_initialised = 1;
+#ifdef RTOS_USE_STATIC_THREAD_STACK
     memset( p2p_thread_stack, 0, P2P_THREAD_STACK_SIZE );
+#endif /* ifdef RTOS_USE_STATIC_THREAD_STACK */
     host_rtos_create_thread_with_arg( &p2p_thread, p2p_thread_main, "p2p_thread", p2p_thread_stack, P2P_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (uint32_t)workspace );
 }
 
@@ -190,7 +204,7 @@ static void p2p_thread_main( uint32_t arg )
                             {
                                 memcpy(&workspace->group_candidate.operating_channel, &workspace->candidate_device->operating_channel, sizeof(p2p_channel_info_t));
                                 memcpy(&workspace->group_candidate.bssid, &workspace->candidate_device->p2p_interface_address, sizeof(besl_mac_t));
-                                besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_provision_discovery_request, (uint32_t)workspace->candidate_device->operating_channel.channel, WICED_P2P_INTERFACE, 500 );
+                                besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_provision_discovery_request, (uint32_t)workspace->candidate_device->operating_channel.channel, WWD_P2P_INTERFACE, 500 );
                             }
                             else
                             {
@@ -231,7 +245,9 @@ static void p2p_thread_main( uint32_t arg )
             case P2P_EVENT_START_REQUESTED:
                 workspace->p2p_current_state = P2P_STATE_DISCOVERY;
                 p2p_set_discovery_state( P2P_DISCOVERY_STATE_LISTEN, 0 );
-                result = p2p_scan( workspace, WL_SCAN_ACTION_START, WICED_TRUE ); /* Scan social channels or scan all channels? GOs may not be on social channels. */
+                result = (wwd_result_t) p2p_scan( workspace, WL_SCAN_ACTION_START, WICED_TRUE ); /* Scan social channels or scan all channels? GOs may not be on social channels. */
+                wiced_assert("scan failed", result == WWD_SUCCESS);
+                REFERENCE_DEBUG_ONLY_VARIABLE( result );
                 break;
 
             case P2P_EVENT_START_NEGOTIATION:
@@ -264,6 +280,8 @@ static void p2p_thread_main( uint32_t arg )
                     if ( workspace->current_channel != 0 )
                     {
                         result = wwd_wifi_set_channel( WWD_STA_INTERFACE, workspace->current_channel );
+                        wiced_assert("set channel failed", result == WWD_SUCCESS);
+                        REFERENCE_DEBUG_ONLY_VARIABLE( result );
                     }
                 }
                 /* Send the packet */
@@ -286,7 +304,8 @@ static void p2p_thread_main( uint32_t arg )
 
                 /*  Remove P2P event handler */
                 result = wwd_management_set_event_handler( p2p_discovery_events, NULL, workspace, WWD_STA_INTERFACE );
-                wiced_assert("", result == WWD_SUCCESS);
+                wiced_assert("set handler failed", result == WWD_SUCCESS);
+                REFERENCE_DEBUG_ONLY_VARIABLE( result );
 
                 p2p_abort_scan( workspace ); /* Abort scan or the GO may not be able to come up */
                 p2p_remove_ies( workspace );
@@ -354,7 +373,7 @@ static void p2p_thread_main( uint32_t arg )
                 if ( ( ( workspace->sent_negotiation_confirm == 1 ) || ( workspace->sent_negotiation_request == 1 ) ) && ( workspace->p2p_current_state == P2P_STATE_NEGOTIATING ) )
                 {
                     workspace->sent_negotiation_confirm = 0;
-                    besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_negotiation_request, (uint32_t)workspace->candidate_device->listen_channel, WICED_P2P_INTERFACE, 2 );
+                    besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_negotiation_request, (uint32_t)workspace->candidate_device->listen_channel, WWD_P2P_INTERFACE, 2 );
                 }
                 else if ( workspace->sent_go_discoverability_request == 1 )
                 {
@@ -363,7 +382,7 @@ static void p2p_thread_main( uint32_t arg )
                 }
                 else if ( workspace->sent_provision_discovery_request == 1 )
                 {
-                    besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_provision_discovery_request, (uint32_t)workspace->candidate_device->operating_channel.channel, WICED_P2P_INTERFACE, 500 );
+                    besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_provision_discovery_request, (uint32_t)workspace->candidate_device->operating_channel.channel, WWD_P2P_INTERFACE, 500 );
                 }
                 else if ( workspace->sent_invitation_request == 1)
                 {
@@ -384,7 +403,7 @@ static void p2p_thread_main( uint32_t arg )
             case P2P_EVENT_FOUND_TARGET_DEVICE:
                 workspace->p2p_current_state = P2P_STATE_NEGOTIATING;
                 BESL_DEBUG(("Device listen channel %u\n", (unsigned int)workspace->candidate_device->listen_channel));
-                besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_negotiation_request, (uint32_t)workspace->candidate_device->listen_channel, WICED_P2P_INTERFACE, 2 );
+                besl_p2p_send_action_frame( workspace, workspace->candidate_device, p2p_write_negotiation_request, (uint32_t)workspace->candidate_device->listen_channel, WWD_P2P_INTERFACE, 2 );
                 workspace->candidate_device->status = P2P_DEVICE_WAS_INVITED_TO_FORM_GROUP;
                 break;
 
@@ -413,7 +432,7 @@ static void p2p_thread_main( uint32_t arg )
                     wps_register_result_callback( workspace->p2p_wps_agent, workspace->p2p_wps_result_callback );
                 }
 
-                wps_internal_init( workspace->p2p_wps_agent, WWD_P2P_INTERFACE, workspace->p2p_wps_mode, workspace->p2p_wps_pin, &workspace->p2p_wps_credential, 1 );
+                wps_internal_init( workspace->p2p_wps_agent, WWD_P2P_INTERFACE, (besl_wps_mode_t) workspace->p2p_wps_mode, workspace->p2p_wps_pin, &workspace->p2p_wps_credential, 1 );
                 p2p_write_probe_response_ie( workspace ); // Re-add the p2p IE after the WPS IE
                 workspace->p2p_wps_agent->device_password_id = workspace->p2p_wps_device_password_id;
 
@@ -488,6 +507,11 @@ static void p2p_thread_main( uint32_t arg )
                 {
                     if ( workspace->p2p_current_state == P2P_STATE_GROUP_OWNER )
                     {
+                        /* If the current enrollee is disassociating then reset the registrar state machine */
+                        if ( workspace->p2p_wps_agent != NULL )
+                        {
+                            besl_wps_reset_registrar( workspace->p2p_wps_agent, (besl_mac_t*)message.data );
+                        }
                         /* If it's an associated P2P device then clear the entry in the associated P2P device list and rewrite the P2P IE in probe responses */
                         associated_device = p2p_host_find_associated_p2p_device( workspace, message.data );
                         if ( associated_device != NULL )
@@ -557,12 +581,18 @@ static void p2p_thread_main( uint32_t arg )
     /*  Remove P2P event handler */
     if ( workspace->group_owner_is_up == 1 )
     {
-        result = wwd_management_set_event_handler( p2p_group_owner_events, NULL, workspace, WICED_P2P_INTERFACE );
+        result = wwd_management_set_event_handler( p2p_group_owner_events, NULL, workspace, WWD_P2P_INTERFACE );
+        wiced_assert("set handler failed", result == WWD_SUCCESS);
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
         p2p_group_owner_stop( workspace );
     }
     else if ( workspace->group_client_is_up == 1 )
     {
-        result = wwd_management_set_event_handler( p2p_group_client_events, NULL, workspace, WICED_P2P_INTERFACE );
+        result = wwd_management_set_event_handler( p2p_group_client_events, NULL, workspace, WWD_P2P_INTERFACE );
+        wiced_assert("set handler failed", result == WWD_SUCCESS);
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
         /* If the WPS handshake failed then we end up here */
         if ( workspace->p2p_result == BESL_P2P_ERROR_FAIL )
         {
@@ -589,7 +619,7 @@ static void p2p_thread_main( uint32_t arg )
             return;
         }
         *data = 0;
-        result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WICED_STA_INTERFACE);
+        result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
         if (result != WWD_SUCCESS)
         {
             BESL_DEBUG(("P2P client: Unable to disable discovery\r\n"));
@@ -600,7 +630,9 @@ static void p2p_thread_main( uint32_t arg )
             workspace->p2p_group_formation_result_callback( workspace );
         }
 
-        result = wwd_management_set_event_handler( p2p_discovery_events, NULL, workspace, WICED_STA_INTERFACE );
+        result = wwd_management_set_event_handler( p2p_discovery_events, NULL, workspace, WWD_STA_INTERFACE );
+        wiced_assert("set handler failed", result == WWD_SUCCESS);
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
     }
     wiced_assert("", result == WWD_SUCCESS);
     p2p_clear_event_queue();
@@ -654,23 +686,21 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
     workspace->group_client_is_up = 1;
 
     /* Turn off all the other Wi-Fi interfaces */
-    wiced_network_down( WWD_STA_INTERFACE );
-    wiced_network_down( WWD_AP_INTERFACE );
+    wiced_network_down( WICED_STA_INTERFACE );
+    wiced_network_down( WICED_AP_INTERFACE );
 
     /* Query the AP interface to ensure that it is up */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 36, IOVAR_STR_BSSCFG_SSID );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 36 );
     data[ 0 ] = (uint32_t) WWD_AP_INTERFACE;
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-    wiced_assert("", result == WWD_SUCCESS);
+    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
     /* Override MAC address */
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(besl_mac_t), "p2p_da_override" );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, sizeof(besl_mac_t) );
-    result = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-    wiced_assert("", result == WWD_SUCCESS);
+    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
 
     /* Create P2P interface */
     wl_p2p_if_t* p2p_if = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_p2p_if_t), "p2p_ifadd" );
@@ -693,7 +723,7 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
     if ( result != WWD_SUCCESS )
     {
         BESL_DEBUG(("unable to read p2p interface\r\n"));
-        return result;
+        return (besl_result_t) result;
     }
 
     data = (uint32_t*) host_buffer_get_current_piece_data_pointer( response );
@@ -712,7 +742,7 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
         workspace->p2p_wps_agent->is_p2p_enrollee = 1;
         besl_wps_init( workspace->p2p_wps_agent, workspace->wps_device_details, WPS_ENROLLEE_AGENT, workspace->p2p_interface);
         BESL_DEBUG(("past wps init\r\n"));
-        wps_internal_init(workspace->p2p_wps_agent, workspace->p2p_interface, workspace->p2p_wps_mode, workspace->p2p_wps_pin, &workspace->wps_credential, 1);
+        wps_internal_init(workspace->p2p_wps_agent, workspace->p2p_interface, (besl_wps_mode_t) workspace->p2p_wps_mode, workspace->p2p_wps_pin, &workspace->wps_credential, 1);
         BESL_DEBUG(("past wps internal init\r\n"));
         wps_register_result_callback( workspace->p2p_wps_agent, workspace->p2p_wps_result_callback );
 
@@ -723,15 +753,15 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
         p2p_write_association_request_ie( workspace );
 
         /*  Create the AP details */
-        workspace->group_owner.channel = workspace->group_candidate.operating_channel.channel;
+        workspace->group_owner.scan_result.channel = workspace->group_candidate.operating_channel.channel;
         workspace->current_channel     = (uint32_t)workspace->group_candidate.operating_channel.channel;
         memcpy( &workspace->operating_channel, &workspace->group_candidate.operating_channel, sizeof( p2p_channel_info_t ) );
         BESL_DEBUG( ("GO operating channel %u\r\n", (unsigned int)workspace->group_candidate.operating_channel.channel) );
-        memcpy(&workspace->group_owner.BSSID, &workspace->group_candidate.bssid, sizeof(besl_mac_t));
-        workspace->group_owner.SSID.length = workspace->group_candidate.ssid_length;
-        memcpy(workspace->group_owner.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
-        workspace->group_owner.security = WICED_SECURITY_WPS_SECURE;
-        workspace->group_owner.band = WICED_802_11_BAND_2_4GHZ;
+        memcpy(&workspace->group_owner.scan_result.BSSID, &workspace->group_candidate.bssid, sizeof(besl_mac_t));
+        workspace->group_owner.scan_result.SSID.length = workspace->group_candidate.ssid_length;
+        memcpy(workspace->group_owner.scan_result.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
+        workspace->group_owner.scan_result.security = WICED_SECURITY_WPS_SECURE;
+        workspace->group_owner.scan_result.band = WICED_802_11_BAND_2_4GHZ;
         workspace->p2p_wps_agent->directed_wps_max_attempts = 0xFFFFFFFF;
         workspace->p2p_wps_agent->ap = &workspace->group_owner;
 
@@ -743,15 +773,15 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
     }
     else
     {
-        workspace->group_owner.channel = workspace->group_candidate.operating_channel.channel;
+        workspace->group_owner.scan_result.channel = workspace->group_candidate.operating_channel.channel;
         workspace->current_channel = (uint32_t)workspace->group_candidate.operating_channel.channel;
-        memcpy(&workspace->group_owner.BSSID, &workspace->group_candidate.bssid, sizeof(besl_mac_t));
-        workspace->group_owner.SSID.length = workspace->group_candidate.ssid_length;
-        memcpy(workspace->group_owner.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
-        workspace->group_owner.band = WICED_802_11_BAND_2_4GHZ;
-        result = p2p_join_group_owner(  workspace );
+        memcpy(&workspace->group_owner.scan_result.BSSID, &workspace->group_candidate.bssid, sizeof(besl_mac_t));
+        workspace->group_owner.scan_result.SSID.length = workspace->group_candidate.ssid_length;
+        memcpy(workspace->group_owner.scan_result.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
+        workspace->group_owner.scan_result.band = WICED_802_11_BAND_2_4GHZ;
+        result = (wwd_result_t) p2p_join_group_owner( workspace );
     }
-    return result;
+    return (besl_result_t) result;
 }
 
 static besl_result_t p2p_join_group_owner( p2p_workspace_t* workspace )
@@ -771,13 +801,13 @@ static besl_result_t p2p_join_group_owner( p2p_workspace_t* workspace )
     p2p_write_probe_request_ie( workspace );
 
     /* Try a few times to join the AP with the credentials we've just received */
-    workspace->group_owner.security = WICED_SECURITY_WPA2_AES_PSK;
-    result = WICED_PENDING;
+    workspace->group_owner.scan_result.security = WICED_SECURITY_WPA2_AES_PSK;
+    result = WWD_PENDING;
     BESL_INFO( ("About to join group owner using join specific\r\n") );
 
     for ( a = 0; a < 3 && result != WWD_SUCCESS; ++a )
     {
-        result = wwd_wifi_join_specific( &workspace->group_owner, workspace->p2p_passphrase, workspace->p2p_passphrase_length, NULL, workspace->p2p_interface );
+        result = wwd_wifi_join_specific( &workspace->group_owner.scan_result, workspace->p2p_passphrase, workspace->p2p_passphrase_length, NULL, workspace->p2p_interface );
     }
 
     if ( result == WWD_SUCCESS )
@@ -804,7 +834,7 @@ static besl_result_t p2p_join_group_owner( p2p_workspace_t* workspace )
             workspace->p2p_current_state = P2P_STATE_GROUP_CLIENT;
 
             /*  Add P2P event handler */
-            result = wwd_management_set_event_handler( p2p_group_client_events, p2p_event_handler, workspace, WICED_P2P_INTERFACE );
+            result = wwd_management_set_event_handler( p2p_group_client_events, p2p_event_handler, workspace, WWD_P2P_INTERFACE );
             if ( result != WWD_SUCCESS )
             {
                 BESL_DEBUG(("Unable to set group client event handler\r\n"));
@@ -830,17 +860,16 @@ static besl_result_t p2p_join_group_owner( p2p_workspace_t* workspace )
 
 static void p2p_discover( p2p_workspace_t* workspace )
 {
-    wiced_result_t result;
-
-    REFERENCE_DEBUG_ONLY_VARIABLE(result);
+    besl_result_t result;
 
     result = p2p_set_discovery_state( P2P_DISCOVERY_STATE_LISTEN, workspace->listen_channel.channel );
-    wiced_assert("", result == WICED_SUCCESS);
+    wiced_assert("", result == BESL_SUCCESS);
+    REFERENCE_DEBUG_ONLY_VARIABLE(result);
 }
 
 besl_result_t p2p_host_send_message( p2p_message_t* message, uint32_t timeout_ms )
 {
-    return host_rtos_push_to_queue( &p2p_message_queue, message, timeout_ms );
+    return (besl_result_t) host_rtos_push_to_queue( &p2p_message_queue, message, timeout_ms );
 }
 
 static besl_result_t p2p_scan( p2p_workspace_t* workspace, uint16_t scan_action, wiced_bool_t all_channels )
@@ -897,7 +926,7 @@ static besl_result_t p2p_scan( p2p_workspace_t* workspace, uint16_t scan_action,
 }
 
 
-static wwd_result_t p2p_set_discovery_state( p2p_discovery_state_t state, uint32_t channel )
+static besl_result_t p2p_set_discovery_state( p2p_discovery_state_t state, uint32_t channel )
 {
     uint32_t*      data;
     wiced_buffer_t buffer;
@@ -922,7 +951,7 @@ static wwd_result_t p2p_set_discovery_state( p2p_discovery_state_t state, uint32
     data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wl_p2p_disc_st_t), "p2p_state");
     CHECK_IOCTL_BUFFER( data );
     memcpy( data, &discovery_mode, sizeof(wl_p2p_disc_st_t) );
-    return wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
+    return (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
 }
 
 static besl_result_t p2p_group_owner_stop( p2p_workspace_t* workspace )
@@ -935,6 +964,9 @@ static besl_result_t p2p_group_owner_stop( p2p_workspace_t* workspace )
     wiced_network_down( WICED_P2P_INTERFACE );
     host_rtos_delay_milliseconds( 10 );
 
+    /* Restore original MAC address */
+    besl_host_set_mac_address(&workspace->original_mac_address, WICED_STA_INTERFACE );
+
     /* Query bss state (does it exist? if so is UP?) */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
@@ -944,7 +976,7 @@ static besl_result_t p2p_group_owner_stop( p2p_workspace_t* workspace )
          ( result != WWD_WLAN_NOTFOUND ) )
     {
         BESL_ERROR( ("p2p interface not found\n") );
-        return result;
+        return (besl_result_t) result;
     }
 
     if ( result == WWD_WLAN_NOTFOUND )
@@ -995,7 +1027,7 @@ static besl_result_t p2p_group_client_stop( p2p_workspace_t* workspace )
     data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_mac_t), "p2p_ifdel" );
     CHECK_IOCTL_BUFFER( data );
     memcpy( data, &workspace->p2p_interface_address, sizeof(wiced_mac_t) );
-    result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WICED_STA_INTERFACE);
+    result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
     wiced_assert("", result == WWD_SUCCESS);
 
     if ( result != WWD_SUCCESS )
@@ -1067,7 +1099,7 @@ besl_result_t p2p_deinit( p2p_workspace_t* workspace )
 
     /* Delete the message queue and clean up */
     host_rtos_deinit_queue( &p2p_message_queue );
-    memset(p2p_message_queue_buffer, 0, sizeof (host_queue_type_t) * MAX_NUMBER_OF_P2P_MESSAGES );
+    memset(p2p_message_queue_buffer, 0, sizeof (p2p_message_t) * MAX_NUMBER_OF_P2P_MESSAGES );
     memset(&p2p_thread, 0, sizeof(p2p_thread));
     memset(workspace, 0, sizeof(p2p_workspace_t));
     host_rtos_delay_milliseconds( 10 ); // Delay to allow the WPS and P2P threads to complete

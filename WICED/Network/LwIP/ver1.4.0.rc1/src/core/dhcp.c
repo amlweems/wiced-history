@@ -188,9 +188,9 @@ dhcp_handle_nak(struct netif *netif)
   /* Set the interface down since the address must no longer be used, as per RFC2131 */
   netif_set_down(netif);
   /* remove IP address from interface */
-  netif_set_ipaddr(netif, IP_ADDR_ANY);
   netif_set_gw(netif, IP_ADDR_ANY);
   netif_set_netmask(netif, IP_ADDR_ANY); 
+  netif_set_ipaddr(netif, IP_ADDR_ANY);
   /* Change to a defined state */
   dhcp_set_state(dhcp, DHCP_BACKING_OFF);
   /* We can immediately restart discovery */
@@ -978,15 +978,16 @@ dhcp_bind(struct netif *netif)
   }
 #endif /* LWIP_DHCP_AUTOIP_COOP */
 
-  LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_STATE, ("dhcp_bind(): IP: 0x%08"X32_F"\n",
-    ip4_addr_get_u32(&dhcp->offered_ip_addr)));
-  netif_set_ipaddr(netif, &dhcp->offered_ip_addr);
+
   LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_STATE, ("dhcp_bind(): SN: 0x%08"X32_F"\n",
     ip4_addr_get_u32(&sn_mask)));
   netif_set_netmask(netif, &sn_mask);
   LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_STATE, ("dhcp_bind(): GW: 0x%08"X32_F"\n",
     ip4_addr_get_u32(&gw_addr)));
   netif_set_gw(netif, &gw_addr);
+  LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_STATE, ("dhcp_bind(): IP: 0x%08"X32_F"\n",
+    ip4_addr_get_u32(&dhcp->offered_ip_addr)));
+  netif_set_ipaddr(netif, &dhcp->offered_ip_addr);
   /* bring the interface up */
   netif_set_up(netif);
   /* netif is now bound to DHCP leased address */
@@ -1203,9 +1204,9 @@ dhcp_release(struct netif *netif)
   /* bring the interface down */
   netif_set_down(netif);
   /* remove IP address from interface */
-  netif_set_ipaddr(netif, IP_ADDR_ANY);
   netif_set_gw(netif, IP_ADDR_ANY);
   netif_set_netmask(netif, IP_ADDR_ANY);
+  netif_set_ipaddr(netif, IP_ADDR_ANY);
   
   return result;
 }

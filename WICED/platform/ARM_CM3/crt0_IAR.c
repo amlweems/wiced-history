@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -35,8 +35,9 @@ int __low_level_init( void );
      SCB->VTOR = (unsigned long )__section_begin(".intvec");
 
      /* Enable CPU Cycle counting */
-     DWT->CYCCNT = 0;
-     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; /* Global Enable for DWT */
+     DWT->CYCCNT = 0;                                /* Reset the counter */
+     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;            /* Enable cycle counter */
 
      init_clocks();
      init_memory();

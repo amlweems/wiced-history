@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -278,6 +278,7 @@ wwd_result_t wwd_bus_init( void )
         if ( loop_count >= (uint32_t) F0_WORKING_TIMEOUT_MS )
         {
             /* If the system fails here, check the high frequency crystal is working */
+            WPRINT_WWD_ERROR(("Timeout while setting block size\n"));
             return WWD_TIMEOUT;
         }
     }
@@ -320,6 +321,7 @@ wwd_result_t wwd_bus_init( void )
     }
     if ( loop_count >= (uint32_t) F1_AVAIL_TIMEOUT_MS )
     {
+        WPRINT_WWD_ERROR(("Timeout while waiting for backplane to be ready\n"));
         return WWD_TIMEOUT;
     }
     VERIFY_RESULT( result );
@@ -337,6 +339,7 @@ wwd_result_t wwd_bus_init( void )
     }
     if ( loop_count >= (uint32_t) ALP_AVAIL_TIMEOUT_MS )
     {
+        WPRINT_WWD_ERROR(("Timeout while waiting for alp clock\n"));
         return WWD_TIMEOUT;
     }
     VERIFY_RESULT( result );
@@ -504,6 +507,8 @@ wwd_result_t wwd_bus_read_frame( /*@out@*/ wiced_buffer_t* buffer )
         }
         result = wwd_bus_sdio_abort_read( WICED_FALSE );
         wiced_assert( "Read-abort failed", result==WWD_SUCCESS );
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
         wwd_sdpcm_update_credit( (uint8_t *)hwtag );
         return WWD_RX_BUFFER_ALLOC_FAIL;
     }
@@ -655,9 +660,9 @@ static wwd_result_t wwd_bus_sdio_download_firmware( void )
     wwd_result_t result;
     uint32_t loop_count;
 
-    VERIFY_RESULT( wwd_disable_device_core( ARM_CORE ) );
-    VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE ) );
-    VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE ) );
+    VERIFY_RESULT( wwd_disable_device_core( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
+    VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
+    VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
 
 #if 0
     /* 43362 specific: Remap JTAG pins to UART output */
@@ -677,9 +682,9 @@ static wwd_result_t wwd_bus_sdio_download_firmware( void )
 #endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
 
     /* Take the ARM core out of reset */
-    VERIFY_RESULT( wwd_reset_device_core( ARM_CORE ) );
+    VERIFY_RESULT( wwd_reset_device_core( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
 
-    result = wwd_device_core_is_up( ARM_CORE );
+    result = wwd_device_core_is_up( WLAN_ARM_CORE );
     if ( result != WWD_SUCCESS )
     {
         WPRINT_WWD_ERROR(("Could not bring ARM core up\n"));

@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -36,14 +36,17 @@ $(NAME)_INCLUDES :=  Components/gki/wiced \
                      Projects/bte/build \
                      Projects/bte/main
 
-ifneq ($(wildcard $(CURDIR)Lib_NFC.$(HOST_ARCH).release.a),)
+NFC_LIBRARY_NAME :=nfc.$(HOST_ARCH).release.a
+
+ifneq ($(wildcard $(CURDIR)$(NFC_LIBRARY_NAME)),)
 # Architecture specific prebuilt library
-$(NAME)_PREBUILT_LIBRARY := Lib_NFC.$(HOST_ARCH).release.a
+$(NAME)_PREBUILT_LIBRARY :=$(NFC_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
 include $(CURDIR)nfc_src.mk
-endif # ifneq ($(wildcard $(CURDIR)ThreadX.$(HOST_ARCH).release.a),)
+endif # ifneq ($(wildcard $(CURDIR)$(NFC_LIBRARY_NAME)),)
 
+$(NAME)_DEFINES += GKI_MAX_TASKS=4
 GLOBAL_DEFINES += WICED_NFC
 GLOBAL_DEFINES += BUILDCFG \
                   __linux__

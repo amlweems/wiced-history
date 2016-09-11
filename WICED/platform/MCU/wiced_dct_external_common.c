@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -57,6 +57,8 @@ static const uint32_t DCT_section_offsets[ ] =
     [DCT_SECURITY_SECTION]      = OFFSETOF( platform_dct_data_t, security_credentials ),
     [DCT_MFG_INFO_SECTION]      = OFFSETOF( platform_dct_data_t, mfg_info ),
     [DCT_WIFI_CONFIG_SECTION]   = OFFSETOF( platform_dct_data_t, wifi_config ),
+    [DCT_ETHERNET_CONFIG_SECTION] = OFFSETOF( platform_dct_data_t, ethernet_config ),
+    [DCT_NETWORK_CONFIG_SECTION]  = OFFSETOF( platform_dct_data_t, network_config ),
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
     [DCT_BT_CONFIG_SECTION] = OFFSETOF( platform_dct_data_t, bt_config ),
 #endif
@@ -72,7 +74,14 @@ void* wiced_dct_get_current_address( dct_section_t section )
     uint32_t sector_num;
 
     const platform_dct_header_t hdr =
-    { .write_incomplete = 0, .is_current_dct = 1, .app_valid = 1, .mfg_info_programmed = 0, .magic_number = BOOTLOADER_MAGIC_NUMBER, .load_app_func = NULL };
+    {
+        .write_incomplete    = 0,
+        .is_current_dct      = 1,
+        .app_valid           = 1,
+        .mfg_info_programmed = 0,
+        .magic_number        = BOOTLOADER_MAGIC_NUMBER,
+        .load_app_func       = NULL
+    };
 
     platform_dct_header_t  dct1_val;
     platform_dct_header_t  dct2_val;
@@ -82,18 +91,24 @@ void* wiced_dct_get_current_address( dct_section_t section )
 
     if ( init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED ) != 0 )
     {
-        return (void*) WICED_ERROR;
+        return GET_CURRENT_ADDRESS_FAILED;
     }
     sflash_read( &sflash_handle, PLATFORM_DCT_COPY1_START_ADDRESS, dct1, sizeof(platform_dct_header_t) );
     sflash_read( &sflash_handle, PLATFORM_DCT_COPY2_START_ADDRESS, dct2, sizeof(platform_dct_header_t) );
 
-    if ( ( dct1->is_current_dct == 1 ) && ( dct1->write_incomplete == 0 ) && ( dct1->magic_number == BOOTLOADER_MAGIC_NUMBER ) )
+    if ( ( dct1->is_current_dct == 1 ) &&
+         ( dct1->write_incomplete == 0 ) &&
+         ( dct1->magic_number == BOOTLOADER_MAGIC_NUMBER ) )
     {
+        deinit_sflash( &sflash_handle );
         return (void*) ( PLATFORM_DCT_COPY1_START_ADDRESS + DCT_section_offsets[ section ] );
     }
 
-    if ( ( dct2->is_current_dct == 1 ) && ( dct2->write_incomplete == 0 ) && ( dct2->magic_number == BOOTLOADER_MAGIC_NUMBER ) )
+    if ( ( dct2->is_current_dct == 1 ) &&
+         ( dct2->write_incomplete == 0 ) &&
+         ( dct2->magic_number == BOOTLOADER_MAGIC_NUMBER ) )
     {
+        deinit_sflash( &sflash_handle );
         return (void*) ( PLATFORM_DCT_COPY2_START_ADDRESS + DCT_section_offsets[ section ] );
     }
 
@@ -109,6 +124,7 @@ void* wiced_dct_get_current_address( dct_section_t section )
 
     sflash_write( &sflash_handle, PLATFORM_DCT_COPY1_START_ADDRESS, (uint8_t*) &hdr, sizeof( hdr ) );
 
+    deinit_sflash( &sflash_handle );
     return (void*) ( PLATFORM_DCT_COPY1_START_ADDRESS + DCT_section_offsets[ section ] );
 }
 
@@ -122,6 +138,7 @@ wiced_result_t wiced_dct_read_with_copy( void* info_ptr, dct_section_t section, 
         init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
 
         sflash_read( &sflash_handle, curr_dct + offset, info_ptr, size );
+        deinit_sflash( &sflash_handle);
     }
 
     return WICED_SUCCESS;
@@ -134,8 +151,8 @@ static void copy_sflash( const sflash_handle_t* sflash_handle, uint32_t dest_loc
     while ( size > 0 )
     {
         uint32_t write_size = MIN( sizeof(buff), size);
-        sflash_read( sflash_handle, src_loc, buff, write_size );
-        sflash_write( sflash_handle, dest_loc, buff, write_size );
+        sflash_read( sflash_handle, src_loc, (unsigned char*)buff, write_size );
+        sflash_write( sflash_handle, dest_loc, (unsigned char*)buff, write_size );
 
         src_loc  += write_size;
         dest_loc += write_size;
@@ -210,6 +227,7 @@ static int wiced_dct_update_boot( const boot_detail_t* boot_detail )
     sflash_write( &sflash_handle, new_dct + OFFSETOF(platform_dct_header_t,write_incomplete), &zero_byte, sizeof( zero_byte ) );
     sflash_write( &sflash_handle, (unsigned long) curr_dct + OFFSETOF(platform_dct_header_t,is_current_dct), &zero_byte, sizeof( zero_byte ) );
 
+    deinit_sflash( &sflash_handle );
     return 0;
 }
 
@@ -266,6 +284,7 @@ static int wiced_dct_update_app_header_locations( uint32_t offset, const image_l
     sflash_write( &sflash_handle, new_dct + OFFSETOF(platform_dct_header_t,write_incomplete), &zero_byte, sizeof( zero_byte ) );
     sflash_write( &sflash_handle, (unsigned long) curr_dct + OFFSETOF(platform_dct_header_t,is_current_dct), &zero_byte, sizeof( zero_byte ) );
 
+    deinit_sflash( &sflash_handle );
     return 0;
 }
 
@@ -274,8 +293,6 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     uint32_t               new_dct;
     platform_dct_header_t  curr_dct_header;
     uint32_t               bytes_after_data;
-    uint8_t*               new_app_data_addr  = NULL;
-    uint8_t*               curr_app_data_addr = NULL;
     platform_dct_header_t* curr_dct           = &( (platform_dct_data_t*) wiced_dct_get_current_address( DCT_INTERNAL_SECTION ) )->dct_header;
     char                   zero_byte          = 0;
     sflash_handle_t        sflash_handle;
@@ -296,7 +313,7 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
 
     /* Erase the non-current DCT */
-    if ( curr_dct == PLATFORM_DCT_COPY1_START_ADDRESS )
+    if ( curr_dct == (platform_dct_header_t*) PLATFORM_DCT_COPY1_START_ADDRESS )
     {
         new_dct = PLATFORM_DCT_COPY2_START_ADDRESS;
         erase_dct_copy( &sflash_handle, 2 );
@@ -319,14 +336,11 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     if ( bytes_after_data != 0 )
     {
         /* There is data after end of requested write - copy it from old DCT to new DCT */
-        new_app_data_addr  += data_length;
-        curr_app_data_addr += data_length;
-
         copy_sflash( &sflash_handle, new_dct + data_start_offset + data_length, (uint32_t) curr_dct + data_start_offset + data_length, bytes_after_data );
     }
 
     /* read the header from the old DCT */
-    sflash_read( &sflash_handle, (uint32_t) curr_dct, &curr_dct_header, sizeof( curr_dct_header ) );
+    sflash_read( &sflash_handle, (uint32_t) curr_dct, (unsigned char*)&curr_dct_header, sizeof(curr_dct_header) );
 
     /* Copy values from old DCT header to new DCT header */
     hdr.full_size = curr_dct_header.full_size;
@@ -354,6 +368,7 @@ static int wiced_write_dct( uint32_t data_start_offset, const void* data, uint32
     sflash_write( &sflash_handle, new_dct + OFFSETOF(platform_dct_header_t,write_incomplete), &zero_byte, sizeof( zero_byte ) );
     sflash_write( &sflash_handle, (unsigned long) curr_dct + OFFSETOF(platform_dct_header_t,is_current_dct), &zero_byte, sizeof( zero_byte ) );
 
+    deinit_sflash( &sflash_handle );
     return 0;
 }
 
@@ -409,6 +424,7 @@ static wiced_result_t wiced_dct_load( const image_location_t* dct_location )
 
     if ( header.program_header_entry_count != 1 )
     {
+        deinit_sflash( &sflash_handle );
         return WICED_ERROR;
     }
 
@@ -428,6 +444,7 @@ static wiced_result_t wiced_dct_load( const image_location_t* dct_location )
         size     -= write_size;
     }
 
+    deinit_sflash( &sflash_handle );
     return WICED_SUCCESS;
 }
 

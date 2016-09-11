@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,6 +31,7 @@ extern "C"
 extern VOID wiced_sta_netx_driver_entry( NX_IP_DRIVER* driver );
 extern VOID wiced_ap_netx_driver_entry ( NX_IP_DRIVER* driver );
 extern VOID wiced_p2p_netx_driver_entry( NX_IP_DRIVER* driver );
+extern VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver );
 
 #ifdef __cplusplus
 } /* extern "C" */

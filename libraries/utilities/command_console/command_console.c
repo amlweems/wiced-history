@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,7 +22,6 @@
 extern "C" {
 #endif
 
-
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -30,10 +29,16 @@ extern "C" {
 /******************************************************
  *                    Constants
  ******************************************************/
-#define MAX_LINE_LENGTH    (128)
-#define MAX_HISTORY_LENGTH (20)
-#define DELIMIT            ((char*) " ")
-#define MAX_PARAMS         (16)
+
+#define MAX_PARAMS             (16)
+#define MAX_LOOP_CMDS          (16)
+#define MAX_LOOP_LINE_LENGTH   (128)
+#define MAX_NUM_COMMAND_TABLE  (8)
+#define MIN_NUM_COMMAND_TABLE  (1)
+
+#ifndef CONSOLE_THREAD_STACK_SIZE
+#define CONSOLE_THREAD_STACK_SIZE    (6*1024)
+#endif
 
 /******************************************************
  *                   Enumerations
@@ -42,28 +47,32 @@ extern "C" {
 /******************************************************
  *                 Type Definitions
  ******************************************************/
+
 typedef struct
 {
 
     wiced_bool_t        quit;
     wiced_uart_t        uart;
-
-    const command_t*    command_table;
+    const command_t*    console_command_table_array[MAX_NUM_COMMAND_TABLE];
+    int                 command_table_count;
     uint32_t            console_line_len;
-    uint8_t*            console_buffer;
+    char*               console_buffer;
     uint32_t            console_cursor_position;
     uint32_t            console_current_line;
     wiced_bool_t        console_in_esc_seq;
     char                console_esc_seq_last_char;
-    uint8_t*            history_buffer;
+    char*               history_buffer;
     uint32_t            history_length;
     uint32_t            history_num_lines;
     uint32_t            history_newest_line;
     wiced_ring_buffer_t console_rx_ring_buffer;
     wiced_thread_t      console_thread;
+    wiced_bool_t        console_thread_is_running;
     wiced_semaphore_t   console_quit_semaphore;
     wiced_bool_t        in_process_char;
     wiced_bool_t        console_in_tab_tab;
+    const char*         console_delimit_string;
+    const char*         console_prompt_string;
 } command_console_t;
 
 /******************************************************
@@ -73,11 +82,11 @@ typedef struct
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
 static void         history_load_line         ( uint32_t line, char* buffer );
 static void         history_store_line        ( char* buffer );
 static uint32_t     history_get_num_lines     ( void );
 static wiced_bool_t console_process_esc_seq   ( char c );
-static cmd_err_t    console_parse_cmd         ( char* line );
 static void         console_load_line         ( uint32_t new_line );
 static void         console_insert_char       ( char c );
 static void         console_remove_char       ( void );
@@ -96,17 +105,19 @@ static cmd_err_t console_do_enter( void );
 static cmd_err_t console_do_newline_without_command_repeat( void );
 
 static void send_char( char c );
-static void send_str( char* s );
-static void send_charstr( char* s );
+static void send_str( const char* s );
+static void send_charstr( const char* s );
 static cmd_err_t console_process_char(char c);
+static int loop_command( const char * line );
 static int help_command( int argc, char* argv[] );
-
 
 /******************************************************
  *               Variables Definitions
  ******************************************************/
+
 /* default error strings */
-static const char* const console_default_error_strings[] = {
+static const char* const console_default_error_strings[] =
+{
     (char*) "OK",
     (char*) "Unknown Error",
     (char*) "Unknown Command",
@@ -116,7 +127,8 @@ static const char* const console_default_error_strings[] = {
     (char*) "No Command Entered"
 };
 
-wiced_uart_config_t uart_console_config = {
+wiced_uart_config_t uart_console_config =
+{
     .baud_rate    = 115200,
     .data_width   = DATA_WIDTH_8BIT,
     .parity       = NO_PARITY,
@@ -124,22 +136,86 @@ wiced_uart_config_t uart_console_config = {
     .flow_control = FLOW_CONTROL_DISABLED,
 };
 
+static const command_t commands[] =
+{
+    { (char*) "?",      help_command, 0, NULL, NULL, NULL, NULL},
+    { (char*) "help",   help_command, 0, NULL, NULL, (char*) "[<command> [<example_num>]]", "Print help message or command example."},
+    { (char*) "loop",   NULL,         0, NULL, NULL, (char*) " <times> [ <semicolon_separated_commands_list> ]", "Loops the commands inside [ ] for specified number of times."},
+    CMD_TABLE_END
+};
+
 static const char* const *console_error_strings = console_default_error_strings;
-static char* console_bell_string = (char*) "\a";
-static char* console_delimit_string = DELIMIT;
-static char* console_prompt_string = (char*) "> ";
+static const char* console_encapsulate_string[] = { (char*) "\"", (char*) "\'" };
+static const char* console_bell_string = (char*) "\a";
 
 static void (*tab_handling_func)( void ) = console_do_tab;
 static cmd_err_t (*newline_handling_func)( void ) = console_do_newline_without_command_repeat;
 
-uint8_t console_rx_ring_data[64];
+static uint8_t console_rx_ring_data[64];
 extern const platform_uart_config_t stdio_config;
-command_console_t cons;
-
+static command_console_t cons;
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
+
+int console_add_cmd_table(const command_t* commands)
+{
+    int i;
+
+    /* Only allow command table being changed when console thread is not running */
+    if (cons.console_thread_is_running == WICED_TRUE)
+        return WICED_ERROR;
+
+    if ( cons.command_table_count >= MAX_NUM_COMMAND_TABLE )
+        return WICED_ERROR;
+
+    for ( i = 0; i < cons.command_table_count; i++ )
+    {
+        if (cons.console_command_table_array[i] == commands )
+        {
+            /* The command table is ready added */
+            return WICED_ERROR;
+        }
+    }
+    cons.console_command_table_array[cons.command_table_count++] = commands;
+
+    return WICED_SUCCESS;
+}
+
+int console_del_cmd_table(const command_t *commands)
+{
+    int i;
+
+    /* Only allow command table being changed when console thread is not running */
+    if (cons.console_thread_is_running == WICED_TRUE)
+        return WICED_ERROR;
+
+    if ( cons.command_table_count <= MIN_NUM_COMMAND_TABLE )
+        return WICED_ERROR;
+
+    /* Skip the base command table (index 0) */
+    for ( i = MIN_NUM_COMMAND_TABLE; i < cons.command_table_count; i++ )
+    {
+        if ( cons.console_command_table_array[i] == commands )
+        {
+            int j;
+
+            /* Found the command table to be removed */
+            /* Move the rest command table up */
+            for ( j = i; j < ( cons.command_table_count - 1 ); j++ )
+            {
+                cons.console_command_table_array[j] = cons.console_command_table_array[j+1];
+            }
+            cons.console_command_table_array[cons.command_table_count-1] = NULL;
+            cons.command_table_count --;
+            return WICED_SUCCESS;
+        }
+    }
+
+    return WICED_ERROR;
+}
+
 
 
 /*!
@@ -163,7 +239,7 @@ static void history_load_line( uint32_t line, char* buffer )
     else
     {
         uint32_t actual_line = ( cons.history_newest_line + cons.history_length - line ) % cons.history_length;
-        strncpy( buffer, &cons.history_buffer[actual_line * cons.console_line_len], cons.console_line_len );
+        strncpy( buffer, (char*)&cons.history_buffer[actual_line * cons.console_line_len], cons.console_line_len );
     }
 }
 
@@ -182,7 +258,7 @@ static void history_store_line( char* buffer )
     if ( cons.history_length > 0 )
     {
         cons.history_newest_line = ( cons.history_newest_line + 1 ) % cons.history_length;
-        strncpy( &cons.history_buffer[cons.history_newest_line * cons.console_line_len], buffer, cons.console_line_len );
+        strncpy( (char*)&cons.history_buffer[cons.history_newest_line * cons.console_line_len], buffer, cons.console_line_len );
         if ( cons.history_num_lines < cons.history_length )
         {
             cons.history_num_lines++;
@@ -216,8 +292,9 @@ static uint32_t history_get_num_lines( void )
 static void send_char( char c )
 {
     wiced_result_t result;
-    result = wiced_uart_transmit_bytes( cons.uart, c, 1 );
+    result = wiced_uart_transmit_bytes( cons.uart, &c, 1 );
     wiced_assert("", result == WICED_SUCCESS);
+    REFERENCE_DEBUG_ONLY_VARIABLE( result );
 }
 
 /*!
@@ -229,11 +306,16 @@ static void send_char( char c )
  * @return  void
  */
 
-static void send_str( char* s )
+static void send_str( const char* s )
 {
-    wiced_result_t result;
-    result = wiced_uart_transmit_bytes( cons.uart, s, strlen(s) );
-    wiced_assert("", result == WICED_SUCCESS);
+    uint32_t length = strlen(s);
+    if ( length > 0 )
+    {
+        wiced_result_t result;
+        result = wiced_uart_transmit_bytes( cons.uart, s, length );
+        wiced_assert("", result == WICED_SUCCESS);
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
+    }
 }
 
 /*!
@@ -245,12 +327,14 @@ static void send_str( char* s )
  * @return  void
  */
 
-static void send_charstr( char* s )
+static void send_charstr( const char* s )
 {
-    wiced_result_t result;
     while ( *s != 0 )
     {
-        result = wiced_uart_transmit_bytes( cons.uart, *s, 1 );
+        wiced_result_t result;
+        result = wiced_uart_transmit_bytes( cons.uart, s, 1 );
+        wiced_assert("", result == WICED_SUCCESS );
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
         s++;
     }
 }
@@ -262,6 +346,12 @@ void console_thread_func( uint32_t arg )
     wiced_result_t result;
     uint8_t received_character;
     UNUSED_PARAMETER(result);
+
+    /* turn off buffers, so IO occurs immediately */
+    setvbuf( stdin, NULL, _IONBF, 0 );
+    setvbuf( stdout, NULL, _IONBF, 0 );
+    setvbuf( stderr, NULL, _IONBF, 0 );
+
     for(;;)
     {
         result = wiced_uart_receive_bytes( cons.uart, &received_character, 1, 1000 );
@@ -280,12 +370,14 @@ void console_thread_func( uint32_t arg )
     }
 }
 
-wiced_result_t command_console_init( wiced_uart_t uart, const command_t* command_table, uint32_t line_len, char* buffer, uint32_t history_len, char* history_buffer_ptr )
+wiced_result_t command_console_init( wiced_uart_t uart, uint32_t line_len, char* buffer, uint32_t history_len, char* history_buffer_ptr, const char* delimiter_string )
 {
     wiced_result_t result;
     UNUSED_PARAMETER(result);
 
-    cons.command_table  = command_table;
+    cons.uart = uart;
+
+    cons.command_table_count = 0;
     cons.console_line_len   = line_len;
     cons.console_buffer = buffer;
 
@@ -300,6 +392,13 @@ wiced_result_t command_console_init( wiced_uart_t uart, const command_t* command
     cons.history_num_lines = 0;
     cons.history_newest_line = 0;
     cons.quit = WICED_FALSE;
+    cons.console_delimit_string = delimiter_string;
+    cons.console_prompt_string = "> ";
+
+    cons.console_thread_is_running = WICED_FALSE;
+
+    console_add_cmd_table( commands );
+
 
     if( uart != STDIO_UART )
     {
@@ -310,10 +409,10 @@ wiced_result_t command_console_init( wiced_uart_t uart, const command_t* command
 
     wiced_rtos_init_semaphore(&cons.console_quit_semaphore);
 
-    WPRINT_APP_INFO(("%s", console_prompt_string));
+    send_str(cons.console_prompt_string);
 
     /* create a console thread */
-    result = wiced_rtos_create_thread( &cons.console_thread, 3, "console", console_thread_func, 4096, NULL);
+    result = wiced_rtos_create_thread( &cons.console_thread, WICED_DEFAULT_LIBRARY_PRIORITY, "console", console_thread_func, CONSOLE_THREAD_STACK_SIZE, NULL);
 
     return result;
 
@@ -372,7 +471,7 @@ static void console_load_line( uint32_t new_line )
     send_char('\r');
 
     /* print out the prompt and new line */
-    send_str( console_prompt_string );
+    send_str( cons.console_prompt_string );
     send_str( cons.console_buffer );
 
     /* write spaces over the rest of the old line */
@@ -471,7 +570,7 @@ static void console_do_home( void )
 {
     cons.console_cursor_position = 0;
     send_char('\r');
-    send_str(console_prompt_string);
+    send_str(cons.console_prompt_string);
 }
 
 /*!
@@ -626,7 +725,7 @@ cmd_err_t console_do_enter( void )
 
     if ( strlen( cons.console_buffer ) ) /* if theres something in the buffer */
     {
-        if ( strlen( cons.console_buffer ) > strspn( cons.console_buffer, console_delimit_string ) ) /* and it's not just delimit characters */
+        if ( strlen( cons.console_buffer ) > strspn( cons.console_buffer, cons.console_delimit_string ) ) /* and it's not just delimit characters */
         {
             /* store it and invoke the command parser */
             history_store_line( cons.console_buffer );
@@ -646,7 +745,7 @@ cmd_err_t console_do_enter( void )
     /* prepare for a new line of entry */
     cons.console_buffer[0] = 0;
     cons.console_cursor_position = 0;
-    send_str( console_prompt_string );
+    send_str( cons.console_prompt_string );
 
     return err;
 }
@@ -736,6 +835,27 @@ wiced_bool_t console_process_esc_seq( char c )
     return still_in_esc_seq;
 }
 
+
+const command_t* console_lookup_command( const char *command_name )
+{
+    int i;
+    const command_t* cmd_ptr;
+
+    for ( i = 0; i < cons.command_table_count ; i++ )
+    {
+        for ( cmd_ptr = cons.console_command_table_array[i]; cmd_ptr->name != NULL; cmd_ptr++ )
+        {
+            if ( strcmp( command_name, cmd_ptr->name ) == 0 )
+            {
+                return cmd_ptr;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+
 /*!
  ******************************************************************************
  * Break an input line into command and arguments and invoke it.
@@ -745,16 +865,21 @@ wiced_bool_t console_process_esc_seq( char c )
  * @return    Console error code indicating if the command was parsed correctly.
  */
 
-cmd_err_t console_parse_cmd( char* line )
+cmd_err_t console_parse_cmd( const char* line )
 {
     const command_t* cmd_ptr = NULL;
     char* params[MAX_PARAMS];
     uint32_t param_cnt = 0;
+    char* saveptr = NULL;
+    char copy[strlen(line) + 1];
+
+    /* Copy original buffer into local buffer, as tokenize will change the original string */
+    strcpy( copy, line );
 
     cmd_err_t err = ERR_CMD_OK;
 
     /* First call to strtok. */
-    params[param_cnt++] = strtok( line, console_delimit_string );
+    params[param_cnt++] = strtok_r( copy, cons.console_delimit_string, &saveptr );
 
     if ( params[0] == NULL ) /* no command entered */
     {
@@ -763,40 +888,82 @@ cmd_err_t console_parse_cmd( char* line )
     else
     {
         /* find the command */
-        for ( cmd_ptr = cons.command_table; cmd_ptr->name != NULL; cmd_ptr++ )
-        {
-            if ( strcmp( params[0], cmd_ptr->name ) == 0 )
-            {
-                break;
-            }
-        }
-
-        if ( cmd_ptr->name == NULL )
+        if ( (cmd_ptr = console_lookup_command(params[0])) == NULL )
         {
             err = ERR_UNKNOWN_CMD;
         }
+        else if ( strcmp(cmd_ptr->name, "loop") == 0 )
+        {
+            loop_command( line );
+        }
         else
         {
+            uint32_t i = 0;
             /* determine argument delimit string */
-            char* delimit;
+            const char* delimit;
             if ( cmd_ptr->delimit != NULL )
             {
                 delimit = cmd_ptr->delimit;
             }
             else
             {
-                delimit = console_delimit_string;
+                delimit = cons.console_delimit_string;
             }
 
             /* parse arguments */
-            while ( ( ( params[param_cnt] = strtok( NULL, delimit ) ) != NULL ) )
+            while ( saveptr != NULL && saveptr[ 0 ] != '\0' )
             {
-                param_cnt++;
-                if ( param_cnt > ( MAX_PARAMS - 1 ) )
+                wiced_bool_t encap_flag = WICED_FALSE;
+
+                /* Check for delimiters first */
+                while ( saveptr[ 0 ] != '\0' )
                 {
-                    err = ERR_TOO_MANY_ARGS;
-                    break;
+                    wiced_bool_t delimiter_flag = WICED_FALSE;
+
+                    for ( i = 0; i < strlen( delimit ); i++ )
+                    {
+                        if ( saveptr[ 0 ] == delimit[ i ] )
+                        {
+                            saveptr++;
+                            delimiter_flag = WICED_TRUE;
+                            break;
+                        }
+                    }
+                    if ( delimiter_flag == WICED_FALSE )
+                    {
+                        break;
+                    }
                 }
+                /* Then check for encapsulation */
+                for ( i = 0; i < ( sizeof( console_encapsulate_string ) / sizeof( console_encapsulate_string[ 0 ] ) ); i++ )
+                {
+                    /* If encapsulated, get encapsulated token */
+                    if ( saveptr[ 0 ] == console_encapsulate_string[ i ][ 0 ] )
+                    {
+                        encap_flag = WICED_TRUE;
+                        params[ param_cnt ] = strtok_r( NULL, (char *) console_encapsulate_string[ i ], &saveptr );
+                        break;
+                    }
+                }
+                /* Else not encapsulated, check for token */
+                if ( encap_flag == WICED_FALSE )
+                {
+                    params[ param_cnt ] = strtok_r( NULL, (char *) delimit, &saveptr );
+                }
+
+                if ( params[ param_cnt ] != NULL )
+                {
+                    param_cnt++;
+                    if ( param_cnt > ( MAX_PARAMS - 1 ) )
+                    {
+                        err = ERR_TOO_MANY_ARGS;
+                        break;
+                    }
+                }
+            }
+            if ( err == ERR_CMD_OK )
+            {
+                params[ param_cnt ] = NULL;
             }
 
             /* check arguments */
@@ -808,11 +975,7 @@ cmd_err_t console_parse_cmd( char* line )
             /* run command */
             if ( ( err == ERR_CMD_OK ) && ( cmd_ptr->command != NULL ) )
             {
-//                platform_enable_mcu_powersave();
-
                 err = (cmd_err_t) cmd_ptr->command( param_cnt, params );
-
-//                platform_disable_mcu_powersave();
             }
         }
 
@@ -835,58 +998,59 @@ cmd_err_t console_parse_cmd( char* line )
 
 
 
-/* default help function */
-int help_command_default( int argc, char* argv[] )
+/* help function */
+static int help_command( int argc, char* argv[] )
 {
     const command_t* cmd_ptr;
     cmd_err_t err = ERR_CMD_OK;
     uint32_t eg_sel = 0;
+    int table_index;
 
     switch ( argc )
     {
         case 0:
         case 1:
-            printf( "Console Commands:\r\n" );
-            for ( cmd_ptr = cons.command_table; cmd_ptr->name != NULL; cmd_ptr++ )
+            printf( "Console Commands:\n" );
+            for ( table_index = 0; table_index < cons.command_table_count; table_index ++ )
             {
-                if ( ( cmd_ptr->format != NULL ) || ( cmd_ptr->brief != NULL ) )
+                for ( cmd_ptr = cons.console_command_table_array[table_index]; cmd_ptr->name != NULL; cmd_ptr++ )
                 {
-                    if ( cmd_ptr->format != NULL )
+                    if ( ( cmd_ptr->format != NULL ) || ( cmd_ptr->brief != NULL ) )
                     {
-                        printf( "    %s%c%s\r\n", cmd_ptr->name, console_delimit_string[0], cmd_ptr->format );
-                    }
-                    else
-                    {
-                        printf( "    %s\r\n", cmd_ptr->name );
-                    }
+                        if ( cmd_ptr->format != NULL )
+                        {
+                            printf( "    %s%c%s\n", cmd_ptr->name, cons.console_delimit_string[0], cmd_ptr->format );
+                        }
+                        else
+                        {
+                            printf( "    %s\n", cmd_ptr->name );
+                        }
 
-                    if ( cmd_ptr->brief != NULL )
-                    {
-                        printf( "        - %s\r\n", cmd_ptr->brief );
+                        if ( cmd_ptr->brief != NULL )
+                        {
+                            printf( "        - %s\n", cmd_ptr->brief );
+                        }
                     }
                 }
             }
             break;
         default: /* greater than 2 */
-            eg_sel = str_to_int( argv[2] );
+            eg_sel = generic_string_to_unsigned( argv[2] );
             /* Disables Eclipse static analysis warning */
             /* Intentional drop through */
             /* no break */
         case 2:
             err = ERR_UNKNOWN_CMD;
-            for ( cmd_ptr = cons.command_table; cmd_ptr->name != NULL; cmd_ptr++ )
+            if ( (cmd_ptr = console_lookup_command(argv[1])) != NULL)
             {
-                if ( strcmp( argv[1], cmd_ptr->name ) == 0 )
+                if ( cmd_ptr->help_example != NULL )
                 {
-                    if ( cmd_ptr->help_example != NULL )
-                    {
-                        err = cmd_ptr->help_example( argv[1], eg_sel );
-                    }
-                    else
-                    {
-                        err = ERR_CMD_OK;
-                        printf( "No example available for %s\r\n\r\n", argv[1] );
-                    }
+                    err = cmd_ptr->help_example( argv[1], eg_sel );
+                }
+                else
+                {
+                    err = ERR_CMD_OK;
+                    printf( "No example available for %s\n\n", argv[1] );
                 }
             }
             break;
@@ -895,6 +1059,53 @@ int help_command_default( int argc, char* argv[] )
     return err;
 }
 
+/*!
+ ******************************************************************************
+ * Loop function : Loops a command or series of commands specified for the no. of times specified
+ *
+ * @param[in] argc  The number of arguments.
+ * @param[in] argv  The arguments.
+ *
+ * @return    Console error code indicating if the command ran correctly.
+ */
+int loop_command( const char * line )
+{
+    int         i, j, times = 0, numcmds = 0;
+    cmd_err_t   err = ERR_CMD_OK;
+    char        *token;
+    char        cmdline[MAX_LOOP_CMDS][MAX_LOOP_LINE_LENGTH];
+    char        copy[strlen(line) + 1];
+
+    strcpy( copy, line );
+
+    /* Parse copy of line to extract repeat count */
+    token = strtok( copy, cons.console_delimit_string );
+    token = strtok( NULL, cons.console_delimit_string );
+
+    times = generic_string_to_unsigned( token );
+
+    /* Tokenize original line according to ';' to extract individual cmds to repeat */
+    token = strtok( copy, ";" );
+
+    while ( (token = strtok( NULL, ";" )) )
+    {
+        strcpy( cmdline[numcmds], token );
+        numcmds++;
+    }
+
+    for ( i = 0; i < times; i++)
+    {
+        for ( j = 0; j < numcmds; j++)
+        {
+            err = console_parse_cmd( cmdline[j] );
+
+            if ( err != ERR_CMD_OK )
+                return err;
+        }
+    }
+
+    return err;
+}
 /*!
  ******************************************************************************
  * Handle a character or escape sequence representing a tab completion operation.
@@ -906,6 +1117,7 @@ void console_do_tab( void )
 {
     uint32_t buf_len = strlen( cons.console_buffer );
     const command_t* cmd_ptr = NULL;
+    int table_index;
 
     console_do_end( );
 
@@ -916,27 +1128,30 @@ void console_do_tab( void )
         uint32_t len = 0;
 
         /* for each where the buffer matches it's start */
-        for ( cmd_ptr = cons.command_table; cmd_ptr->name != NULL; cmd_ptr++ )
+        for ( table_index = 0; table_index < cons.command_table_count ; table_index++ )
         {
-            if ( strncmp( cmd_ptr->name, cons.console_buffer, buf_len ) == 0 )
+            for ( cmd_ptr = cons.console_command_table_array[table_index]; cmd_ptr->name != NULL; cmd_ptr++ )
             {
-                /* if we already have one or more matches then the completion is the longest common prefix */
-                if ( src )
+                if ( strncmp( cmd_ptr->name, cons.console_buffer, buf_len ) == 0 )
                 {
-                    single_match = WICED_FALSE;
-                    uint32_t i = buf_len;
-                    while ( ( i < len ) && ( src[i] == cmd_ptr->name[i] ) )
+                    /* if we already have one or more matches then the completion is the longest common prefix */
+                    if ( src )
                     {
-                        i++;
+                        single_match = WICED_FALSE;
+                        uint32_t i = buf_len;
+                        while ( ( i < len ) && ( src[i] == cmd_ptr->name[i] ) )
+                        {
+                            i++;
+                        }
+                        len = i;
                     }
-                    len = i;
-                }
-                /* for the first match the completion is the whole command */
-                else
-                {
-                    single_match = WICED_TRUE;
-                    src = cmd_ptr->name;
-                    len = strlen( cmd_ptr->name );
+                    /* for the first match the completion is the whole command */
+                    else
+                    {
+                        single_match = WICED_TRUE;
+                        src = cmd_ptr->name;
+                        len = strlen( cmd_ptr->name );
+                    }
                 }
             }
         }
@@ -963,26 +1178,29 @@ void console_do_tab( void )
     {
         uint32_t cnt = 0;
 
-        for ( cmd_ptr = cons.command_table; cmd_ptr->name != NULL; cmd_ptr++ )
+        for ( table_index = 0; table_index < cons.command_table_count ; table_index++ )
         {
-            if ( ( strncmp( cmd_ptr->name, cons.console_buffer, buf_len ) == 0 ) && ( strcmp( cmd_ptr->name, "" ) != 0 ) )
-            {
-                if ( ( cnt % 4 ) == 0 )
+            for ( cmd_ptr = cons.console_command_table_array[table_index]; cmd_ptr->name != NULL; cmd_ptr++ )
+             {
+                if ( ( strncmp( cmd_ptr->name, cons.console_buffer, buf_len ) == 0 ) && ( strcmp( cmd_ptr->name, "" ) != 0 ) )
                 {
-                    send_str( (char*) "\r\n" );
+                    if ( ( cnt % 4 ) == 0 )
+                    {
+                        send_str( (char*) "\r\n" );
+                    }
+                    else
+                    {
+                        send_char( ' ' );
+                    }
+                    printf( "%-19.19s", cmd_ptr->name );
+                    cnt++;
                 }
-                else
-                {
-                    send_char( ' ' );
-                }
-                printf( "%-19.19s", cmd_ptr->name );
-                cnt++;
             }
         }
         if ( cnt )
         {
             send_str( (char*) "\r\n" );
-            send_str( console_prompt_string );
+            send_str( cons.console_prompt_string );
             send_str( cons.console_buffer );
         }
         cons.console_in_tab_tab = WICED_FALSE;
@@ -1009,7 +1227,7 @@ cmd_err_t console_do_newline_without_command_repeat( void )
         cons.console_buffer[0] = 0;
         cons.console_cursor_position = 0;
         send_str( (char*) "\r\n" );
-        send_str( console_prompt_string );
+        send_str( cons.console_prompt_string );
     }
     return err;
 }
@@ -1107,5 +1325,66 @@ cmd_err_t console_process_char( char c )
 
     cons.in_process_char = WICED_FALSE;
     return err;
+}
+
+
+
+
+/*!
+ ******************************************************************************
+ * Convert a hexidecimal string to an integer.
+ *
+ * @param[in] hex_str  The string containing the hex value.
+ *
+ * @return    The value represented by the string.
+ */
+
+int hex_str_to_int( const char* hex_str )
+{
+    int n = 0;
+    uint32_t value = 0;
+    int shift = 7;
+    while ( hex_str[n] != '\0' && n < 8 )
+    {
+        if ( hex_str[n] > 0x21 && hex_str[n] < 0x40 )
+        {
+            value |= ( hex_str[n] & 0x0f ) << ( shift << 2 );
+        }
+        else if ( ( hex_str[n] >= 'a' && hex_str[n] <= 'f' ) || ( hex_str[n] >= 'A' && hex_str[n] <= 'F' ) )
+        {
+            value |= ( ( hex_str[n] & 0x0f ) + 9 ) << ( shift << 2 );
+        }
+        else
+        {
+            break;
+        }
+        n++;
+        shift--;
+    }
+
+    return ( value >> ( ( shift + 1 ) << 2 ) );
+}
+
+/*!
+ ******************************************************************************
+ * Convert a decimal or hexidecimal string to an integer.
+ *
+ * @param[in] str  The string containing the value.
+ *
+ * @return    The value represented by the string.
+ */
+
+int str_to_int( const char* str )
+{
+    uint32_t val = 0;
+    if ( strncmp( str, "0x", 2 ) == 0 )
+    {
+        val = hex_str_to_int( str + 2 );
+    }
+    else
+    {
+        val = atoi( str );
+    }
+    return val;
 }
 

@@ -183,6 +183,13 @@ PRIVILEGED_DATA static xList * volatile pxDelayedTaskList;				/*< Points to the 
 PRIVILEGED_DATA static xList * volatile pxOverflowDelayedTaskList;		/*< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
 PRIVILEGED_DATA static xList xPendingReadyList;							/*< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
+/*********/
+/* This variable allows OpenOCD to read the thread lists properly */
+
+PRIVILEGED_DATA static unsigned portBASE_TYPE uxTopUsedPriority = configMAX_PRIORITIES;
+
+/*********/
+
 #if ( INCLUDE_vTaskDelete == 1 )
 
 	PRIVILEGED_DATA static xList xTasksWaitingTermination;				/*< Tasks that have been deleted - but the their memory not yet freed. */
@@ -2404,7 +2411,7 @@ static void prvInitialiseTCBVariables( tskTCB *pxTCB, const signed char * const 
 
 	/* This is used as an array index so must ensure it's not too large.  First
 	remove the privilege bit if one is present. */
-	if( uxPriority >= ( unsigned portBASE_TYPE ) configMAX_PRIORITIES )
+	if( uxPriority >= ( unsigned portBASE_TYPE ) uxTopUsedPriority )  /* WICED: Changed to uxTopUsedPriority from configMAX_PRIORITIES to ensure the uxTopUsedPriority is always linked - enabling OpenOCD to work properly */
 	{
 		uxPriority = ( unsigned portBASE_TYPE ) configMAX_PRIORITIES - ( unsigned portBASE_TYPE ) 1U;
 	}

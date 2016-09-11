@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,7 +21,7 @@
 #include "platform_peripheral.h"
 #include "platform_isr_interface.h"
 #include "platform_sleep.h"
-#include "wwd_rtos.h"
+#include "wwd_rtos_isr.h"
 #include "wiced_defaults.h"
 
 /******************************************************

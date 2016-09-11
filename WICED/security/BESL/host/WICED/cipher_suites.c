@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,80 +13,9 @@
 
 /* This prevents the linker from pulling in code for unused ciphers */
 
-struct cipher_api_t;
-
-extern const struct cipher_api_t null_cipher_driver;
-extern const struct cipher_api_t rc4_40_cipher_driver;
-extern const struct cipher_api_t rc4_128_cipher_driver;
-extern const struct cipher_api_t rc2_cbc_40_cipher_driver;
-extern const struct cipher_api_t idea_cbc_cipher_driver;
-extern const struct cipher_api_t des40_cbc_cipher_driver;
-extern const struct cipher_api_t des_cbc_cipher_driver;
-extern const struct cipher_api_t des_cbc_40_cipher_driver;
-extern const struct cipher_api_t triple_des_ede_cbc_cipher_driver;
-extern const struct cipher_api_t aes_128_cbc_cipher_driver;
-extern const struct cipher_api_t aes_256_cbc_cipher_driver;
-extern const struct cipher_api_t aes_128_gcm_cipher_driver;
-extern const struct cipher_api_t aes_256_gcm_cipher_driver;
-extern const struct cipher_api_t aes_128_ccm_cipher_driver;
-extern const struct cipher_api_t aes_256_ccm_cipher_driver;
-extern const struct cipher_api_t aes_128_ccm_8_cipher_driver;
-extern const struct cipher_api_t aes_256_ccm_8_cipher_driver;
-extern const struct cipher_api_t camellia_128_cbc_cipher_driver;
-extern const struct cipher_api_t camellia_256_cbc_cipher_driver;
-extern const struct cipher_api_t camellia_128_gcm_cipher_driver;
-extern const struct cipher_api_t camellia_256_gcm_cipher_driver;
-extern const struct cipher_api_t seed_cbc_cipher_driver;
-extern const struct cipher_api_t aria_128_cbc_cipher_driver;
-extern const struct cipher_api_t aria_256_cbc_cipher_driver;
-extern const struct cipher_api_t aria_128_gcm_cipher_driver;
-extern const struct cipher_api_t aria_256_gcm_cipher_driver;
-extern const struct cipher_api_t chacha20_poly1305_cipher_driver;
-
-extern const struct keyscheme_api_t null_keyscheme_driver;
-extern const struct keyscheme_api_t krb5_keyscheme_driver;
-extern const struct keyscheme_api_t krb5_export_keyscheme_driver;
-extern const struct keyscheme_api_t rsa_export_keyscheme_driver;
-extern const struct keyscheme_api_t dh_dss_export_keyscheme_driver;
-extern const struct keyscheme_api_t dhe_rsa_export_keyscheme_driver;
-extern const struct keyscheme_api_t dh_anon__keyscheme_driver;
-extern const struct keyscheme_api_t dh_anon_export_keyscheme_driver;
-extern const struct keyscheme_api_t dh_rsa_export_keyscheme_driver;
-extern const struct keyscheme_api_t dhe_dss_export_keyscheme_driver;
-extern const struct keyscheme_api_t ecdh_anon_keyscheme_driver;
-extern const struct keyscheme_api_t rsa_keyscheme_driver;
-extern const struct keyscheme_api_t dh_dss_keyscheme_driver;
-extern const struct keyscheme_api_t dh_rsa_keyscheme_driver;
-extern const struct keyscheme_api_t dhe_dss_keyscheme_driver;
-extern const struct keyscheme_api_t dhe_rsa_keyscheme_driver;
-extern const struct keyscheme_api_t ecdh_ecdsa_keyscheme_driver;
-extern const struct keyscheme_api_t ecdh_rsa_keyscheme_driver;
-extern const struct keyscheme_api_t ecdhe_rsa_keyscheme_driver;
-extern const struct keyscheme_api_t ecdhe_ecdsa_keyscheme_driver;
-extern const struct keyscheme_api_t psk_keyscheme_driver;
-extern const struct keyscheme_api_t rsa_psk_keyscheme_driver;
-extern const struct keyscheme_api_t dhe_psk_keyscheme_driver;
-extern const struct keyscheme_api_t ecdhe_psk_keyscheme_driver;
-extern const struct keyscheme_api_t srp_sha_keyscheme_driver;
-extern const struct keyscheme_api_t srp_sha_rsa_keyscheme_driver;
-extern const struct keyscheme_api_t srp_sha_dss_keyscheme_driver;
-
-extern const struct mac_api_t null_mac_driver;
-extern const struct mac_api_t md5_mac_driver;
-extern const struct mac_api_t sha_mac_driver;
-extern const struct mac_api_t sha256_mac_driver;
-extern const struct mac_api_t sha384_mac_driver;
-extern const struct mac_api_t aes_128_ccm_mac_driver;
-extern const struct mac_api_t aes_256_ccm_mac_driver;
-extern const struct mac_api_t aes_128_8_ccm_mac_driver;
-extern const struct mac_api_t aes_256_ccm_8_mac_driver;
-
-
-struct ssl3_driver;
 
 #ifdef USE_SSL3
 
-extern const struct ssl3_driver ssl3_driver_impl;
 const struct ssl3_driver*       ssl3_driver       = &ssl3_driver_impl;
 
 tls_version_num_t tls_minimum_version = SSL3_0;

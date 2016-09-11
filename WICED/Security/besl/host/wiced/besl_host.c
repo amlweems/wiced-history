@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,24 +11,31 @@
 /** @file
  *
  */
-#include "wiced_result.h"
+
+#include <string.h>
+
+#include <stdarg.h>
 #include "besl_host_interface.h"
 #include "wwd_structures.h"
 #include "wiced_utilities.h"
 #include "wwd_wifi.h"
 #include "wwd_crypto.h"
+#include "wwd_network_constants.h"
 #include "internal/wwd_sdpcm.h"
-#include "besl_host.h"
-#include "internal/wwd_bcmendian.h"
-#include <string.h>
+#include "besl_host_rtos_structures.h"
+#include "RTOS/wwd_rtos_interface.h"
+#include "network/wwd_network_interface.h"
 #include "network/wwd_buffer_interface.h"
 #include "wwd_assert.h"
+#include "internal/wwd_internal.h"
+#include "supplicant_structures.h"
+#include "wwd_network_constants.h"
+#include "besl_host_rtos_structures.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
 
-#define is_digit(c) ((c >= '0') && (c <= '9'))
 #define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) {  wiced_assert("Allocation failed\n", 0 == 1); return BESL_BUFFER_ALLOC_FAIL; }
 
 /******************************************************
@@ -59,13 +66,13 @@
  *               Function Definitions
  ******************************************************/
 
-void* besl_host_malloc( char* name, uint32_t size )
+void* besl_host_malloc( const char* name, uint32_t size )
 {
-    BESL_DEBUG(("besl_host_malloc: %s %u\r\n", name, (unsigned int)size));
+    BESL_DEBUG(("besl_host_malloc: %s %u\n", name, (unsigned int)size));
     return malloc_named( name, size );
 }
 
-void* besl_host_calloc( char* name, uint32_t num, uint32_t size )
+void* besl_host_calloc( const char* name, uint32_t num, uint32_t size )
 {
     void *ptr;
     ptr = besl_host_malloc( name, num * size );
@@ -101,7 +108,7 @@ besl_result_t besl_host_get_mac_address(besl_mac_t* address, uint32_t interface 
     memcpy( address, host_buffer_get_current_piece_data_pointer( response ), sizeof(wiced_mac_t) );
     host_buffer_release( response, WWD_NETWORK_RX );
 
-    return WICED_SUCCESS;
+    return BESL_SUCCESS;
 }
 
 besl_result_t besl_host_set_mac_address(besl_mac_t* address, uint32_t interface )
@@ -132,37 +139,9 @@ uint32_t besl_host_hton32(uint32_t intlong)
     return htobe32(intlong);
 }
 
-uint16_t besl_host_htol16(uint16_t intshort)
-{
-    return intshort;
-}
-
-uint16_t besl_host_hton16_ptr(uint8_t * in, uint8_t * out)
-{
-    uint16_t temp;
-    temp = BESL_READ_16(in);
-    temp = htobe16(temp);
-    BESL_WRITE_16(out, temp);
-    return temp;
-}
-
 uint16_t besl_host_hton16(uint16_t intshort)
 {
     return htobe16(intshort);
-}
-
-uint16_t besl_host_ltoh16(uint16_t intshort)
-{
-    return ntoh16(intshort);
-}
-
-uint32_t besl_host_hton32_ptr(uint8_t * in, uint8_t * out)
-{
-    uint32_t temp;
-    temp = BESL_READ_32(in);
-    temp = htobe32(temp);
-    BESL_WRITE_32(out, temp);
-    return temp;
 }
 
 
@@ -198,4 +177,126 @@ void besl_host_hex_bytes_to_chars( char* cptr, const uint8_t* bptr, uint32_t ble
         i++;
         j+=2;
     }
+}
+
+void besl_unit_printf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+}
+
+besl_result_t besl_host_create_packet( besl_packet_t* packet, uint16_t size )
+{
+    wwd_result_t result;
+    result = host_buffer_get( (wiced_buffer_t*) packet, WWD_NETWORK_TX, size + WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX, WICED_TRUE );
+    if ( result != WWD_SUCCESS )
+    {
+        *packet = 0;
+        return (besl_result_t) result;
+    }
+    host_buffer_add_remove_at_front( (wiced_buffer_t*) packet, WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX );
+
+    return (besl_result_t) result;
+}
+
+void besl_host_consume_bytes( besl_packet_t* packet, int32_t number_of_bytes )
+{
+    host_buffer_add_remove_at_front( (wiced_buffer_t*) packet, number_of_bytes );
+}
+
+uint8_t* besl_host_get_data( besl_packet_t packet )
+{
+    return host_buffer_get_current_piece_data_pointer( packet );
+}
+
+besl_result_t besl_host_set_packet_size( besl_packet_t packet, uint16_t packet_length )
+{
+    return (besl_result_t) host_buffer_set_size( (wiced_buffer_t) packet, packet_length );
+}
+
+uint16_t besl_host_get_packet_size( besl_packet_t packet )
+{
+    return host_buffer_get_current_piece_size( packet );
+}
+
+void besl_host_free_packet( besl_packet_t packet )
+{
+    host_buffer_release( (wiced_buffer_t) packet, WWD_NETWORK_RX );
+}
+
+void besl_host_send_packet( void* workspace, besl_packet_t packet, uint16_t size )
+{
+    besl_host_workspace_t* host = (besl_host_workspace_t*) workspace;
+    host_buffer_set_size( (wiced_buffer_t) packet, size );
+    wwd_network_send_ethernet_data( packet, host->interface );
+}
+
+besl_result_t besl_host_leave( wwd_interface_t interface )
+{
+    wwd_wifi_leave( interface );
+    return BESL_SUCCESS;
+}
+
+void besl_host_start_timer( void* workspace, uint32_t timeout )
+{
+    besl_host_workspace_t* host = (besl_host_workspace_t*) workspace;
+    host->timer_reference = host_rtos_get_time( );
+    host->timer_timeout = timeout;
+}
+
+void besl_host_stop_timer( void* workspace )
+{
+    besl_host_workspace_t* host = (besl_host_workspace_t*) workspace;
+    host->timer_timeout = 0;
+}
+
+uint32_t besl_host_get_current_time( void )
+{
+    return host_rtos_get_time();
+}
+
+uint32_t besl_host_get_timer( void* workspace )
+{
+    besl_host_workspace_t* host = (besl_host_workspace_t*)workspace;
+    return host->timer_timeout;
+}
+
+besl_result_t besl_queue_message_packet( void* workspace, besl_event_t type, besl_packet_t packet )
+{
+    besl_result_t result;
+    supplicant_workspace_t* temp = (supplicant_workspace_t*)workspace;
+    besl_host_workspace_t* host_workspace = (besl_host_workspace_t*)temp->supplicant_host_workspace;
+    besl_event_message_t   message;
+    message.event_type = type;
+    message.data.packet = packet;
+    result = (besl_result_t) host_rtos_push_to_queue( &host_workspace->event_queue, &message, WICED_NEVER_TIMEOUT );
+    if ( result != BESL_SUCCESS )
+    {
+        host_buffer_release( (wiced_buffer_t) packet, WWD_NETWORK_RX );
+    }
+    return result;
+}
+
+besl_result_t besl_queue_message_uint( void* workspace, besl_event_t type, uint32_t value )
+{
+    besl_host_workspace_t* host_workspace = (besl_host_workspace_t*)workspace;
+    besl_event_message_t   message;
+    message.event_type = type;
+    message.data.value = value;
+    return (besl_result_t) host_rtos_push_to_queue( &host_workspace->event_queue, &message, WICED_NEVER_TIMEOUT );
+}
+
+
+
+void besl_get_bssid( besl_mac_t* mac )
+{
+    wwd_wifi_get_bssid( (wiced_mac_t*)mac );
+}
+
+
+besl_result_t besl_set_passphrase( const uint8_t* security_key, uint8_t key_length )
+{
+    return (besl_result_t)wwd_wifi_set_passphrase( security_key, key_length, WWD_STA_INTERFACE );
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,7 +17,8 @@
 #include "platform_constants.h"
 #include "platform_isr.h"
 #include "platform_isr_interface.h"
-#include "wwd_rtos.h"
+#include "wwd_rtos_isr.h"
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -25,18 +26,18 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+
 #ifndef SVC_irq
-#define SVC_irq UnhandledInterrupt
+#error SVC_irq not defined - this will probably cause RTOS to fail to run
 #endif
 
 #ifndef PENDSV_irq
-#define PENDSV_irq UnhandledInterrupt
+#error PENDSV_irq not defined - this will probably cause RTOS to fail to run
 #endif
 
 #ifndef SYSTICK_irq
-#define SYSTICK_irq UnhandledInterrupt
+#error SYSTICK_irq not defined - this will probably cause RTOS to fail to run
 #endif
-
 
 /******************************************************
  *                   Enumerations

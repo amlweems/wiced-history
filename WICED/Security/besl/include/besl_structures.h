@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -23,6 +23,8 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
+#define BESL_ETHERNET_ADDRESS_LENGTH      (6)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -37,6 +39,7 @@ extern "C" {
 #define WPS_BESL_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                    0 ),   /**< Success */          \
     RESULT_ENUM( prefix, TIMEOUT,                                    2 ),   /**< Timeout */          \
+    RESULT_ENUM( prefix, BADARG,                                     5 ),   /**< Bad Arguments */    \
     RESULT_ENUM( prefix, UNPROCESSED,                             3001 ),   /**<  */                 \
     RESULT_ENUM( prefix, IN_PROGRESS,                             3002 ),   /**< In progress */      \
     RESULT_ENUM( prefix, COMPLETE,                                3003 ),   /**<   */ \
@@ -73,10 +76,11 @@ extern "C" {
     RESULT_ENUM( prefix, ERROR_DEVICE_LIST_FIND,                  3037 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_NO_P2P_TLV,                        3038 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_ALREADY_STARTED,                   3039 ),   /**<   */ \
-    RESULT_ENUM( prefix, BUFFER_ALLOC_FAIL,                       3040 ),   /**<   */ \
-    RESULT_ENUM( prefix, OTHER_ENROLLEE,                          3041 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_RECEIVED_INVALID_CREDENTIALS,      3042 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,                   3043 ),   /**<   */
+    RESULT_ENUM( prefix, ERROR_HANDLER_ALREADY_REGISTERED,        3040 ),   /**<   */ \
+    RESULT_ENUM( prefix, BUFFER_ALLOC_FAIL,                       3041 ),   /**<   */ \
+    RESULT_ENUM( prefix, OTHER_ENROLLEE,                          3042 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_RECEIVED_INVALID_CREDENTIALS,      3043 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,                   3044 ),   /**<   */
 
 #define TLS_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
@@ -125,6 +129,22 @@ extern "C" {
     RESULT_ENUM( prefix, NO_DATA,                             5042 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_UNSUPPORTED_EXTENSION,         5043 ),   /**<   */
 
+
+    #define SUPPLICANT_RESULT_LIST( prefix ) \
+    RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
+    RESULT_ENUM( prefix, TIMEOUT,                                2 ),   /**<   */ \
+    RESULT_ENUM( prefix, IN_PROGRESS,                         6001 ),   /**<   */ \
+    RESULT_ENUM( prefix, ABORTED,                             6002 ),   /**<   */ \
+    RESULT_ENUM( prefix, NOT_STARTED,                         6003 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_STACK_MALLOC_FAIL,             6004 ),   /**<   */ \
+    RESULT_ENUM( prefix, OUT_OF_HEAP_SPACE,                   6005 ),   /**<   */ \
+    RESULT_ENUM( prefix, COMPLETE,                            6006 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_AT_THREAD_START,               6007 ),   /**<   */ \
+    RESULT_ENUM( prefix, UNPROCESSED,                         6008 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_CREATING_EAPOL_PACKET,         6009 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_READING_BSSID,                 6010 ),   /**<   */ \
+    RESULT_ENUM( prefix, FAIL,                                6011 ),   /**<   */
+
 #define P2P_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
     RESULT_ENUM( prefix, TIMEOUT,                                2 ),   /**<   */ \
@@ -150,6 +170,7 @@ typedef enum
 {
     WPS_BESL_RESULT_LIST( BESL_ )
     TLS_RESULT_LIST( BESL_TLS_ )
+    SUPPLICANT_RESULT_LIST( SUPPLICANT_ )
     P2P_RESULT_LIST( BESL_P2P_ )
 } besl_result_t;
 
@@ -162,22 +183,88 @@ typedef uint8_t   besl_bool_t;
 typedef uint32_t  besl_time_t;
 
 /******************************************************
- *                    Structures
+ *                 Packed Structures
  ******************************************************/
 
 #pragma pack(1)
 
 typedef struct
 {
-    uint8_t octet[6];
+    uint8_t octet[BESL_ETHERNET_ADDRESS_LENGTH];
 } besl_mac_t;
 
 typedef struct
 {
     uint8_t* data;
-    uint32_t length;
+    uint16_t length;
     uint32_t packet_mask;
 } besl_ie_t;
+
+typedef struct
+{
+    uint8_t   ether_dhost[BESL_ETHERNET_ADDRESS_LENGTH];
+    uint8_t   ether_shost[BESL_ETHERNET_ADDRESS_LENGTH];
+    uint16_t  ether_type;
+} ether_header_t;
+
+typedef struct
+{
+    uint8_t  version;
+    uint8_t  type;
+    uint16_t length;
+} eapol_header_t;
+
+typedef struct
+{
+    ether_header_t  ethernet;
+    eapol_header_t  eapol;
+} eapol_packet_header_t;
+
+typedef struct
+{
+    ether_header_t  ethernet;
+    eapol_header_t  eapol;
+    uint8_t         data[1];
+} eapol_packet_t;
+
+typedef struct
+{
+    uint8_t  code;
+    uint8_t  id;
+    uint16_t length;
+    uint8_t  type;
+} eap_header_t;
+
+typedef struct
+{
+    ether_header_t  ethernet;
+    eapol_header_t  eapol;
+    eap_header_t    eap;
+    uint8_t         data[1];
+} eap_packet_t;
+
+typedef struct
+{
+    uint8_t  vendor_id[3];
+    uint32_t vendor_type;
+    uint8_t  op_code;
+    uint8_t  flags;
+} eap_expanded_header_t;
+
+typedef struct
+{
+    uint8_t  flags;
+} eap_tls_header_t;
+
+typedef struct
+{
+    ether_header_t        ethernet;
+    eapol_header_t        eapol;
+    eap_header_t          eap;
+    eap_tls_header_t      eap_tls;
+    uint8_t               data[1]; // Data starts with a length of TLS data field or TLS data depending on the flags field
+} eap_tls_packet_t;
+
 
 #pragma pack()
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,8 @@
 #include "wiced_result.h"
 #include "wiced_platform.h"
 #include "platform_config.h"
+#include "wiced_time.h"
+#include "platform_mcu_peripheral.h"
 
 /******************************************************
  *                      Macros
@@ -106,6 +108,11 @@ wiced_result_t wiced_gpio_init( wiced_gpio_t gpio, wiced_gpio_config_t configura
     return (wiced_result_t) platform_gpio_init( &platform_gpio_pins[gpio], configuration );
 }
 
+wiced_result_t wiced_gpio_deinit( wiced_gpio_t gpio )
+{
+    return (wiced_result_t) platform_gpio_deinit( &platform_gpio_pins[gpio] );
+}
+
 wiced_result_t wiced_gpio_output_high( wiced_gpio_t gpio )
 {
     return (wiced_result_t) platform_gpio_output_high( &platform_gpio_pins[gpio] );
@@ -131,7 +138,7 @@ wiced_result_t wiced_gpio_input_irq_disable( wiced_gpio_t gpio )
     return (wiced_result_t) platform_gpio_irq_disable( &platform_gpio_pins[gpio] );
 }
 
-wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device )
+wiced_result_t wiced_i2c_init( const wiced_i2c_device_t* device )
 {
     platform_i2c_config_t config;
     wiced_result_t result;
@@ -155,7 +162,7 @@ wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device )
     return result;
 }
 
-wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device )
+wiced_result_t wiced_i2c_deinit( const wiced_i2c_device_t* device )
 {
     platform_i2c_config_t config;
 
@@ -169,7 +176,7 @@ wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device )
     return (wiced_result_t) platform_i2c_deinit( &platform_i2c_peripherals[device->port], &config );
 }
 
-wiced_bool_t wiced_i2c_probe_device( wiced_i2c_device_t* device, int retries )
+wiced_bool_t wiced_i2c_probe_device( const wiced_i2c_device_t* device, int retries )
 {
     platform_i2c_config_t config;
 
@@ -196,7 +203,7 @@ wiced_result_t wiced_i2c_init_combined_message( wiced_i2c_message_t* message, co
     return (wiced_result_t) platform_i2c_init_combined_message( message, tx_buffer, rx_buffer, tx_buffer_length, rx_buffer_length, retries, disable_dma );
 }
 
-wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message_t* messages, uint16_t number_of_messages )
+wiced_result_t wiced_i2c_transfer( const wiced_i2c_device_t* device, wiced_i2c_message_t* messages, uint16_t number_of_messages )
 {
     platform_i2c_config_t config;
 
@@ -261,14 +268,7 @@ wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi )
 
 wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi )
 {
-    platform_spi_config_t config;
-
-    config.chip_select = &platform_gpio_pins[spi->chip_select];
-    config.speed       = spi->speed;
-    config.mode        = spi->mode;
-    config.bits        = spi->bits;
-
-    return (wiced_result_t) platform_spi_init( &platform_spi_peripherals[spi->port], &config );
+    return (wiced_result_t) platform_spi_deinit( &platform_spi_peripherals[spi->port] );
 }
 
 wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments )
@@ -364,4 +364,20 @@ void wiced_reset_nanosecond_clock( void )
 void wiced_init_nanosecond_clock( void )
 {
     platform_init_nanosecond_clock( );
+}
+
+wiced_result_t wiced_time_enable_8021as(void)
+{
+    return platform_time_enable_8021as();
+}
+
+wiced_result_t wiced_time_disable_8021as(void)
+{
+    return platform_time_disable_8021as();
+}
+
+wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                      uint32_t *local_secs, uint32_t *local_nanosecs)
+{
+    return platform_time_read_8021as(master_secs, master_nanosecs, local_secs, local_nanosecs);
 }

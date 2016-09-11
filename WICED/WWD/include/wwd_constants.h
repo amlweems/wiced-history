@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,12 +61,15 @@ extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that
 #define WICED_VERSION "Unknown"
 #endif /* ifndef WICED_VERSION */
 
+#define WIFI_IE_OUI_LENGTH    (3)
 
 /** @cond !ADDTHIS*/
-#define SHARED_ENABLED  0x00008000
-#define WPA_SECURITY    0x00200000
-#define WPA2_SECURITY   0x00400000
-#define WPS_ENABLED     0x10000000
+#define SHARED_ENABLED     0x00008000
+#define WPA_SECURITY       0x00200000
+#define WPA2_SECURITY      0x00400000
+#define ENTERPRISE_ENABLED 0x02000000
+#define WPS_ENABLED        0x10000000
+#define IBSS_ENABLED       0x20000000
 /** @endcond */
 
 /** Enumeration of WICED interfaces. \n
@@ -74,9 +77,12 @@ extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that
  */
 typedef enum
 {
-    WWD_STA_INTERFACE = 0, /**< STA or Client Interface  */
-    WWD_AP_INTERFACE  = 1,  /**< softAP Interface         */
-    WWD_P2P_INTERFACE = 2, /**< P2P Interface         */
+    WWD_STA_INTERFACE      = 0, /**< STA or Client Interface  */
+    WWD_AP_INTERFACE       = 1, /**< softAP Interface         */
+    WWD_P2P_INTERFACE      = 2, /**< P2P Interface         */
+    WWD_ETHERNET_INTERFACE = 3, /**< Ethernet Interface         */
+
+    WWD_INTERFACE_MAX,       /** DO NOT USE - MUST BE LAST - used for counting interfaces */
 } wwd_interface_t;
 
 /**
@@ -84,23 +90,31 @@ typedef enum
  */
 typedef enum
 {
-    WICED_SECURITY_OPEN           = 0,                                                /**< Open security                           */
-    WICED_SECURITY_WEP_PSK        = WEP_ENABLED,                                      /**< WEP Security with open authentication   */
-    WICED_SECURITY_WEP_SHARED     = ( WEP_ENABLED | SHARED_ENABLED ),                 /**< WEP Security with shared authentication */
-    WICED_SECURITY_WPA_TKIP_PSK   = ( WPA_SECURITY  | TKIP_ENABLED ),                 /**< WPA Security with TKIP                  */
-    WICED_SECURITY_WPA_AES_PSK    = ( WPA_SECURITY  | AES_ENABLED ),                  /**< WPA Security with AES                   */
-    WICED_SECURITY_WPA2_AES_PSK   = ( WPA2_SECURITY | AES_ENABLED ),                  /**< WPA2 Security with AES                  */
-    WICED_SECURITY_WPA2_TKIP_PSK  = ( WPA2_SECURITY | TKIP_ENABLED ),                 /**< WPA2 Security with TKIP                 */
-    WICED_SECURITY_WPA2_MIXED_PSK = ( WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED ),   /**< WPA2 Security with AES & TKIP           */
+    WICED_SECURITY_OPEN           = 0,                                                                   /**< Open security                                         */
+    WICED_SECURITY_WEP_PSK        = WEP_ENABLED,                                                         /**< WEP PSK Security with open authentication             */
+    WICED_SECURITY_WEP_SHARED     = ( WEP_ENABLED   | SHARED_ENABLED ),                                  /**< WEP PSK Security with shared authentication           */
+    WICED_SECURITY_WPA_TKIP_PSK   = ( WPA_SECURITY  | TKIP_ENABLED ),                                    /**< WPA PSK Security with TKIP                            */
+    WICED_SECURITY_WPA_AES_PSK    = ( WPA_SECURITY  | AES_ENABLED ),                                     /**< WPA PSK Security with AES                             */
+    WICED_SECURITY_WPA_MIXED_PSK  = ( WPA_SECURITY  | AES_ENABLED | TKIP_ENABLED ),                      /**< WPA PSK Security with AES & TKIP                      */
+    WICED_SECURITY_WPA2_AES_PSK   = ( WPA2_SECURITY | AES_ENABLED ),                                     /**< WPA2 PSK Security with AES                            */
+    WICED_SECURITY_WPA2_TKIP_PSK  = ( WPA2_SECURITY | TKIP_ENABLED ),                                    /**< WPA2 PSK Security with TKIP                           */
+    WICED_SECURITY_WPA2_MIXED_PSK = ( WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED ),                      /**< WPA2 PSK Security with AES & TKIP                     */
 
-    WICED_SECURITY_WPS_OPEN       = ( WPS_ENABLED ),                                      /**< WPS with open security                  */
-    WICED_SECURITY_WPS_SECURE     = ( WPS_ENABLED | AES_ENABLED),                      /**< WPS with AES security                   */
+    WICED_SECURITY_WPA_TKIP_ENT   = ( ENTERPRISE_ENABLED | WPA_SECURITY  | TKIP_ENABLED ),               /**< WPA Enterprise Security with TKIP                     */
+    WICED_SECURITY_WPA_AES_ENT    = ( ENTERPRISE_ENABLED | WPA_SECURITY  | AES_ENABLED ),                /**< WPA Enterprise Security with AES                      */
+    WICED_SECURITY_WPA_MIXED_ENT  = ( ENTERPRISE_ENABLED | WPA_SECURITY  | AES_ENABLED | TKIP_ENABLED ), /**< WPA Enterprise Security with AES & TKIP               */
+    WICED_SECURITY_WPA2_TKIP_ENT  = ( ENTERPRISE_ENABLED | WPA2_SECURITY | TKIP_ENABLED ),               /**< WPA2 Enterprise Security with TKIP                    */
+    WICED_SECURITY_WPA2_AES_ENT   = ( ENTERPRISE_ENABLED | WPA2_SECURITY | AES_ENABLED ),                /**< WPA2 Enterprise Security with AES                     */
+    WICED_SECURITY_WPA2_MIXED_ENT = ( ENTERPRISE_ENABLED | WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED ), /**< WPA2 Enterprise Security with AES & TKIP              */
 
-    WICED_SECURITY_UNKNOWN        = -1,                                               /**< May be returned by scan function if security is unknown. Do not pass this to the join function! */
+    WICED_SECURITY_IBSS_OPEN      = ( IBSS_ENABLED ),                                  /**< Open security on IBSS ad-hoc network         */
+    WICED_SECURITY_WPS_OPEN       = ( WPS_ENABLED ),                                                     /**< WPS with open security                                */
+    WICED_SECURITY_WPS_SECURE     = ( WPS_ENABLED | AES_ENABLED),                                        /**< WPS with AES security                                 */
 
-    WICED_SECURITY_FORCE_32_BIT   = 0x7fffffff                                        /**< Exists only to force wiced_security_t type to 32 bits */
+    WICED_SECURITY_UNKNOWN        = -1,                                                                  /**< May be returned by scan function if security is unknown. Do not pass this to the join function! */
+
+    WICED_SECURITY_FORCE_32_BIT   = 0x7fffffff                                                           /**< Exists only to force wiced_security_t type to 32 bits */
 } wiced_security_t;
-
 
 /**
  * Enumeration of methods of scanning
@@ -226,6 +240,20 @@ typedef enum
     WICED_SCAN_ABORTED,
 } wiced_scan_status_t;
 
+/** List of HT modes supported */
+typedef enum
+{
+    WICED_HT_MODE_HT20      = 0,        /**< HT20 mode is set on the band */
+    WICED_HT_MODE_HT40      = 1,        /**< HT40 mode is set on the band */
+    WICED_HT_MODE_HT_MIX    = 2         /**< HT20 mode is set for 2.4 band and HT40 is set for 5 GHz band */
+} wiced_ht_mode_t;
+
+typedef enum
+{
+    WICED_11N_SUPPORT_DISABLED = 0,
+    WICED_11N_SUPPORT_ENABLED  = 1,
+} wiced_11n_support_t;
+
 #ifndef RESULT_ENUM
 #define RESULT_ENUM( prefix, name, value )  prefix ## name = (value)
 #endif /* ifndef RESULT_ENUM */
@@ -239,6 +267,7 @@ typedef enum
     RESULT_ENUM( prefix, SUCCESS,                         0 ),   /**< Success */                           \
     RESULT_ENUM( prefix, PENDING,                         1 ),   /**< Pending */                           \
     RESULT_ENUM( prefix, TIMEOUT,                         2 ),   /**< Timeout */                           \
+    RESULT_ENUM( prefix, BADARG,                          5 ),   /**< Bad Arguments */                     \
     RESULT_ENUM( prefix, PARTIAL_RESULTS,              1003 ),   /**< Partial results */                   \
     RESULT_ENUM( prefix, INVALID_KEY,                  1004 ),   /**< Invalid key */                       \
     RESULT_ENUM( prefix, DOES_NOT_EXIST,               1005 ),   /**< Does not exist */                    \
@@ -247,7 +276,6 @@ typedef enum
     RESULT_ENUM( prefix, IOCTL_FAIL,                   1008 ),   /**< IOCTL fail */                        \
     RESULT_ENUM( prefix, BUFFER_UNAVAILABLE_TEMPORARY, 1009 ),   /**< Buffer unavailable temporarily */    \
     RESULT_ENUM( prefix, BUFFER_UNAVAILABLE_PERMANENT, 1010 ),   /**< Buffer unavailable permanently */    \
-    RESULT_ENUM( prefix, WPS_PBC_OVERLAP,              1011 ),   /**< WPS PBC overlap */                   \
     RESULT_ENUM( prefix, CONNECTION_LOST,              1012 ),   /**< Connection lost */                   \
     RESULT_ENUM( prefix, OUT_OF_EVENT_HANDLER_SPACE,   1013 ),   /**< Cannot add extra event handler */    \
     RESULT_ENUM( prefix, SEMAPHORE_ERROR,              1014 ),   /**< Error manipulating a semaphore */    \
@@ -293,7 +321,9 @@ typedef enum
     RESULT_ENUM( prefix, WAIT_ABORTED,                 1054 ),   /**< Semaphore/mutex wait has been aborted */ \
     RESULT_ENUM( prefix, SET_BLOCK_ACK_WINDOW_FAIL,    1055 ),   /**< Failed to set block ack window */ \
     RESULT_ENUM( prefix, DELAY_TOO_SHORT,              1056 ),   /**< Requested delay is too short */ \
-    RESULT_ENUM( prefix, INVALID_INTERFACE,            1057 ),   /**< Invalid interface provided */
+    RESULT_ENUM( prefix, INVALID_INTERFACE,            1057 ),   /**< Invalid interface provided */ \
+    RESULT_ENUM( prefix, WEP_KEYLEN_BAD,               1058 ),   /**< WEP / WEP_SHARED key length must be 5 & 13 bytes */ \
+    RESULT_ENUM( prefix, HANDLER_ALREADY_REGISTERED,   1059 ),   /**< EAPOL handler already registered*/
 
 
 /* These Enum result values are returned directly from the WLAN during an ioctl or iovar call.

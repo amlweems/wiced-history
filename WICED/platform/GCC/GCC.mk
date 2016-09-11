@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,6 +13,9 @@ NAME := common_GCC
 $(NAME)_SOURCES = mem_newlib.c \
                   math_newlib.c \
                   cxx_funcs.c
+
+
+GLOBAL_INCLUDES :=  .
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := mem_newlib.o

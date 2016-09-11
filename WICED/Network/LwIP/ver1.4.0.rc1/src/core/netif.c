@@ -66,6 +66,12 @@
 #define NETIF_STATUS_CALLBACK(n)
 #endif /* LWIP_NETIF_STATUS_CALLBACK */ 
 
+#if LWIP_NETIF_IP_CHANGE_CALLBACK
+#define NETIF_IPCHANGE_CALLBACK(netif, ip) do{ if (netif->ipchange_callback) { (netif->ipchange_callback)(netif, ip); }}while(0)
+#else
+#define NETIF_IPCHANGE_CALLBACK(netif, ip)
+#endif /* LWIP_NETIF_IP_CHANGE_CALLBACK */
+
 #if LWIP_NETIF_LINK_CALLBACK
 #define NETIF_LINK_CALLBACK(n) do{ if (n->link_callback) { (n->link_callback)(n); }}while(0)
 #else
@@ -166,6 +172,9 @@ netif_add(struct netif *netif, ip_addr_t *ipaddr, ip_addr_t *netmask,
 #if LWIP_NETIF_STATUS_CALLBACK
   netif->status_callback = NULL;
 #endif /* LWIP_NETIF_STATUS_CALLBACK */
+#if LWIP_NETIF_IP_CHANGE_CALLBACK
+  netif->ipchange_callback = NULL;
+#endif /* LWIP_NETIF_IP_CHANGE_CALLBACK */
 #if LWIP_NETIF_LINK_CALLBACK
   netif->link_callback = NULL;
 #endif /* LWIP_NETIF_LINK_CALLBACK */
@@ -231,9 +240,9 @@ void
 netif_set_addr(struct netif *netif, ip_addr_t *ipaddr, ip_addr_t *netmask,
     ip_addr_t *gw)
 {
-  netif_set_ipaddr(netif, ipaddr);
   netif_set_netmask(netif, netmask);
   netif_set_gw(netif, gw);
+  netif_set_ipaddr(netif, ipaddr);
 }
 
 /**
@@ -379,6 +388,8 @@ netif_set_ipaddr(struct netif *netif, ip_addr_t *ipaddr)
     ip4_addr2_16(&netif->ip_addr),
     ip4_addr3_16(&netif->ip_addr),
     ip4_addr4_16(&netif->ip_addr)));
+
+  NETIF_IPCHANGE_CALLBACK( netif, ipaddr );
 }
 
 /**
@@ -515,6 +526,18 @@ void netif_set_status_callback(struct netif *netif, netif_status_callback_fn sta
   }
 }
 #endif /* LWIP_NETIF_STATUS_CALLBACK */
+
+#if LWIP_NETIF_IP_CHANGE_CALLBACK
+/**
+ * Set callback to be called when interface changes address
+ */
+void netif_set_ipchange_callback(struct netif *netif, netif_ipchange_callback_fn ipchange_callback)
+{
+  if (netif) {
+    netif->ipchange_callback = ipchange_callback;
+  }
+}
+#endif /* LWIP_NETIF_IP_CHANGE_CALLBACK */
 
 /**
  * Called by a driver when its link goes up

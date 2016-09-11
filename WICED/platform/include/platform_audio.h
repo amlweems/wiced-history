@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,8 +10,6 @@
 /** @file
  */
 #pragma once
-
-#include "platform_i2s.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,8 +44,7 @@ extern "C" {
  ******************************************************/
 
 extern platform_result_t platform_init_audio( void );
-
-extern platform_result_t wiced_platform_notify_audio_transfer_complete( platform_i2s_transfer_t* transfer );
+extern platform_result_t platform_deinit_audio( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

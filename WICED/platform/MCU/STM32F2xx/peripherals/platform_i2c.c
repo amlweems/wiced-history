@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -389,7 +389,7 @@ static platform_result_t i2c_dma_config_and_execute( const platform_i2c_t* i2c, 
 
 static platform_result_t i2c_dma_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
 {
-    platform_result_t result;
+    platform_result_t result = PLATFORM_SUCCESS;
 
     if ( message->tx_buffer != NULL )
     {
@@ -471,7 +471,7 @@ static platform_result_t i2c_tx_with_dma( const platform_i2c_t* i2c, const platf
 
 static platform_result_t i2c_transfer_message_no_dma( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* message )
 {
-    platform_result_t result;
+    platform_result_t result = PLATFORM_SUCCESS;
 
     if ( message->tx_buffer != NULL )
     {

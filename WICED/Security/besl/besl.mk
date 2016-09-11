@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -32,21 +32,25 @@ $(NAME)_SOURCES += host/WICED/besl_host.c \
                    host/WICED/wiced_wps.c \
                    host/WICED/wiced_p2p.c \
                    host/WICED/cipher_suites.c \
-                   host/WICED/p2p_internal.c
+                   host/WICED/p2p_internal.c \
+                   host/WICED/wiced_supplicant.c
 
 
 GLOBAL_INCLUDES := host/WICED \
                    TLS \
                    crypto \
-                   TLV \
                    WPS \
                    include \
                    P2P \
-                   crypto/srp \
-                   crypto/ed25519
+                   crypto/homekit_srp \
+                   crypto/ed25519 \
+                   supplicant
 
-GLOBAL_DEFINES  := ADD_LWIP_EAPOL_SUPPORT  NXD_EXTENDED_BSD_SOCKET_SUPPORT OPENSSL STDC_HEADERS USE_SRP_SHA_512
+GLOBAL_DEFINES  := ADD_LWIP_EAPOL_SUPPORT  NXD_EXTENDED_BSD_SOCKET_SUPPORT OPENSSL STDC_HEADERS
 
 $(NAME)_COMPONENTS += utilities/base64
+$(NAME)_COMPONENTS += utilities/TLV
+
+$(NAME)_COMPONENTS += BESL/crypto_open
 
 endif # ifneq ($(NETWORK),NoNS)

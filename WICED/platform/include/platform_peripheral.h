@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,11 +15,13 @@
 #pragma once
 #include "stdint.h"
 #include "platform_mcu_peripheral.h" /* Include MCU-specific types */
+#include "platform_toolchain.h"
 #include "ring_buffer.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 /*
 ------------------------------------------------------------------------------------------------------------
 Porting Notes
@@ -64,8 +66,8 @@ Porting Notes
 
 /* I2C flags constants */
 #define I2C_DEVICE_DMA_MASK_POSN ( 0 )
-#define I2C_DEVICE_NO_DMA        ( 0 << I2C_DEVICE_DMA_MASK_POSN )
-#define I2C_DEVICE_USE_DMA       ( 1 << I2C_DEVICE_DMA_MASK_POSN )
+#define I2C_DEVICE_NO_DMA        ( 1 << I2C_DEVICE_DMA_MASK_POSN )
+#define I2C_DEVICE_USE_DMA       ( 0 << I2C_DEVICE_DMA_MASK_POSN )
 
 /******************************************************
  *                   Enumerations
@@ -92,6 +94,8 @@ typedef enum
     IRQ_TRIGGER_RISING_EDGE  = 0x1, /* Interrupt triggered at input signal's rising edge  */
     IRQ_TRIGGER_FALLING_EDGE = 0x2, /* Interrupt triggered at input signal's falling edge */
     IRQ_TRIGGER_BOTH_EDGES   = IRQ_TRIGGER_RISING_EDGE | IRQ_TRIGGER_FALLING_EDGE,
+    IRQ_TRIGGER_LEVEL_HIGH   = 0x4, /* Interrupt triggered when input signal's level is high */
+    IRQ_TRIGGER_LEVEL_LOW    = 0x8, /* Interrupt triggered when input signal's level is low  */
 } platform_gpio_irq_trigger_t;
 
 /**
@@ -275,7 +279,6 @@ typedef struct
     uint16_t     retries;    /* Number of times to retry the message */
     uint8_t      flags;      /* MESSAGE_DISABLE_DMA : if set, this flag disables use of DMA for the message */
 } platform_i2c_message_t;
-
 /**
  * RTC time
  */
@@ -301,8 +304,7 @@ typedef struct
 /**
  * performs complete reset operation
  */
-
-void platform_mcu_reset( void );
+void platform_mcu_reset( void ) NORETURN;
 
 
 /**
@@ -766,6 +768,72 @@ void platform_reset_nanosecond_clock( void );
  */
 void platform_init_nanosecond_clock( void );
 
+/**
+ * Enter hibernation
+ *
+ * @param[in] ticks_to_wakeup : how many ticks to spend in hibernation
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_hibernation_start( uint32_t ticks_to_wakeup );
+
+/**
+ * Return WICED_TRUE if returned from hibernation
+ *
+ * @return @ref wiced_bool_t
+ */
+wiced_bool_t platform_hibernation_is_returned_from( void );
+
+/**
+ * Return number of ticks system spent in hibernation mode
+ *
+ * @return @ref uint32_t
+ */
+uint32_t platform_hibernation_get_ticks_spent( void );
+
+/**
+ * Return hibernation timer frequency
+ *
+ * @return @ref uint32_t
+ */
+uint32_t platform_hibernation_get_clock_freq( void );
+
+/**
+ * Return maximum ticks number hibernation timer can use
+ *
+ * @return @ref uint32_t
+ */
+uint32_t platform_hibernation_get_max_ticks( void );
+
+/**
+ * Enable the 802.1AS time functionality.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t platform_time_enable_8021as(void);
+
+
+/**
+ * Disable the 802.1AS time functionality.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t platform_time_disable_8021as(void);
+
+
+/**
+ * Read the 802.1AS time.
+ *
+ * Retrieve the origin timestamp in the last sync message, correct for the
+ * intervening interval and return the corrected time in seconds + nanoseconds.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t platform_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                         uint32_t *local_secs, uint32_t *local_nanosecs);
 #ifdef __cplusplus
 } /*"C" */
 #endif

@@ -137,7 +137,6 @@ static err_t update_arp_entry(struct netif *netif, ip_addr_t *ipaddr, struct eth
   #error "ARP_TABLE_SIZE must fit in an s8_t, you have to reduce it in your lwipopts.h"
 #endif
 
-
 #if ARP_QUEUEING
 /**
  * Free a complete queue of etharp entries
@@ -161,7 +160,7 @@ free_etharp_q(struct etharp_q_entry *q)
 #endif /* ARP_QUEUEING */
 
 /** Clean up ARP table entries */
-static void
+void
 free_entry(int i)
 {
   /* remove from SNMP ARP index tree */

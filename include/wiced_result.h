@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,7 +19,7 @@
 #include "security/BESL/include/besl_structures.h"
 #include "platform_constants.h"
 #include "wiced_constants.h"
-#include "../libraries/bluetooth/include/wiced_bt_constants.h"
+#include "../libraries/drivers/bluetooth/include/wiced_bt_constants.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,7 +67,9 @@ extern "C" {
     RESULT_ENUM( prefix, CORRUPT_PACKET_BUFFER,         27 ),   /**< Packet buffer is corrupted */     \
     RESULT_ENUM( prefix, UNKNOWN_NETWORK_STACK_ERROR,   28 ),   /**< Unknown network stack error */    \
     RESULT_ENUM( prefix, NO_STORED_AP_IN_DCT,           29 ),   /**< DCT contains no AP credentials */ \
-    RESULT_ENUM( prefix, STA_JOIN_FAILED,               30 ),   /**< Join failed */
+    RESULT_ENUM( prefix, STA_JOIN_FAILED,               30 ),   /**< Join failed */                    \
+    RESULT_ENUM( prefix, PACKET_BUFFER_OVERFLOW,        31 ),   /**< Packet buffer overflow */         \
+    RESULT_ENUM( prefix, ALREADY_INITIALIZED,           32 ),   /**< Module has already been inited */
 
 /******************************************************
  * @endcond    Enumerations

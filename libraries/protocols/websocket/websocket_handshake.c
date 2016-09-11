@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -83,7 +83,7 @@ static wiced_result_t wiced_generate_client_websocket_key( uint8_t* websocket_ke
     }
 
     /* Now we base64 encode the 16 byte key, as required by the RFC6455 specification */
-    if ( base64_encode( client_websocket_key, WEBSOCKET_KEY_LENGTH, websocket_key_base64_ptr, CLIENT_WEBSOCKET_BASE64_KEY_LENGTH, BASE64_ENC_STANDARD ) == 0 )
+    if ( base64_encode( client_websocket_key, WEBSOCKET_KEY_LENGTH, websocket_key_base64_ptr, CLIENT_WEBSOCKET_BASE64_KEY_LENGTH, BASE64_STANDARD ) == 0 )
     {
         return WICED_ERROR;
     }
@@ -189,7 +189,7 @@ static wiced_result_t wiced_generate_server_websocket_key( uint8_t* server_webso
     sha1( websocket_concatenated_key, (int32_t) strlen( (char*) websocket_concatenated_key ), websocket_key_sha1 );
 
     /* Base64 Encode the SHA1 value*/
-    if ( base64_encode( websocket_key_sha1, SHA_LENGTH, server_websocket_key, SERVER_WEBSOCKET_BASE64_SHA1_KEY_LENGTH, BASE64_ENC_STANDARD ) == 0 )
+    if ( base64_encode( websocket_key_sha1, SHA_LENGTH, server_websocket_key, SERVER_WEBSOCKET_BASE64_SHA1_KEY_LENGTH, BASE64_STANDARD ) == 0 )
     {
         return WICED_ERROR;
     }

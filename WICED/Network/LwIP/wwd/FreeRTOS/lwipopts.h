@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -163,7 +163,7 @@ extern "C" {
  */
 #define ETH_PAD_SIZE                   (0)
 
-#define SUB_ETHERNET_HEADER_SPACE      (WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME)
+#define SUB_ETHERNET_HEADER_SPACE      (WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME_MAX)
 
 
 /**
@@ -254,7 +254,7 @@ extern "C" {
  * MEMP_NUM_NETCONN: the number of struct netconns.
  * (only needed if you use the sequential API, like api_lib.c)
  */
-#define MEMP_NUM_NETCONN               (8)
+#define MEMP_NUM_NETCONN               (18)
 
 /**
  * LWIP_SO_RCVTIMEO==1: Enable SO_RCVTIMEO processing.
@@ -309,6 +309,10 @@ extern "C" {
  * outgoing connections
  */
 #define LWIP_RANDOM_INITIAL_TCP_PORT
+
+
+/* Enable IP address change notification */
+#define LWIP_NETIF_IP_CHANGE_CALLBACK (1)
 
 /**
  * Debug printing

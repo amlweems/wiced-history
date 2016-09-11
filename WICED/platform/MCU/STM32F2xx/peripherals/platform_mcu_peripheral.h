@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,6 @@
 #pragma once
 #include "platform_cmsis.h"
 #include "platform_constants.h"
-#include "platform_peripheral.h"
 #include "stm32f2xx_adc.h"
 #include "stm32f2xx_dma.h"
 #include "stm32f2xx_exti.h"
@@ -217,6 +216,8 @@ void              platform_uart_tx_dma_irq            ( platform_uart_driver_t* 
 void              platform_uart_rx_dma_irq            ( platform_uart_driver_t* driver );
 
 uint8_t           platform_spi_get_port_number        ( platform_spi_port_t* spi );
+
+platform_result_t platform_filesystem_init            ( void );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -414,8 +414,8 @@ typedef struct
 #define true      1
 #endif
 #endif
-#define PASS      0
-#define FAIL      1
+#define SAM4S_PASS      0
+#define SAM4S_FAIL      1
 #define LOW       0
 #define HIGH      1
 //! @}

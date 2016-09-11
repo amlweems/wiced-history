@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -62,8 +62,9 @@ void _start( void )
     SCB->VTOR = (unsigned long) &link_interrupt_vectors_location;
 
     /* Enable CPU Cycle counting */
-    DWT->CYCCNT = 0;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; /* Global Enable for DWT */
+    DWT->CYCCNT = 0;                                /* Reset the counter */
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;            /* Enable cycle counter */
 
     /* Copy from flash any code to be run from RAM. Setup .fastcode section first in case init_clocks() needs it */
     if ( ( &link_run_from_ram_code_ram_location != &link_run_from_ram_code_flash_location ) && ( link_run_from_ram_code_size != 0 ) )

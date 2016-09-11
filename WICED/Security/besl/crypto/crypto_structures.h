@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -41,6 +41,28 @@ typedef enum
     AES_ENCRYPT = 1,
 } aes_mode_type_t;
 
+typedef enum
+{
+    DES_ENCRYPT     = 1,
+    DES_DECRYPT     = 0,
+} des_mode_t;
+
+/*
+ * PKCS#1 constants
+ */
+typedef enum
+{
+    RSA_RAW         =  0,
+    RSA_MD2         =  2,
+    RSA_MD4         =  3,
+    RSA_MD5         =  4,
+    RSA_SHA1        =  5,
+    RSA_SHA224      = 10,
+    RSA_SHA256      = 11,
+    RSA_SHA384      = 12,
+    RSA_SHA512      = 13,
+} rsa_hash_id_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -62,31 +84,6 @@ typedef struct
     int32_t n;
     uint32_t *p;
 } mpi;
-
-typedef struct bignum_st
-{
-    unsigned long* d;
-    int top;
-    int dmax;
-    int neg;
-    int flags;
-} BIGNUM;
-
-typedef struct dh_st
-{
-    BIGNUM *p;
-    BIGNUM *g;
-    long length;
-    BIGNUM *pub_key;
-    BIGNUM *priv_key;
-    int flags;
-    char *method_mont_p;
-    BIGNUM *q;
-    BIGNUM *j;
-    unsigned char *seed;
-    int seedlen;
-    BIGNUM *counter;
-} DH;
 
 typedef struct
 {
@@ -122,12 +119,18 @@ typedef struct
     uint32_t num[48];
 } wps_NN_t;
 
+typedef enum
+{
+    RSA_PKCS_V15    = 0,
+    RSA_PKCS_V21    = 1,
+} rsa_pkcs_padding_t;
+
 typedef struct
 {
     int32_t ver;
     int32_t len;
 
-    mpi nN;
+    mpi N;
     mpi E;
 
     mpi D;
@@ -141,11 +144,17 @@ typedef struct
     mpi RP;
     mpi RQ;
 
-    int32_t padding;
+    rsa_pkcs_padding_t padding;
     int32_t hash_id;
     int32_t (*f_rng)( void * );
     void *p_rng;
 } rsa_context;
+
+typedef enum
+{
+    RSA_PUBLIC      = 0,
+    RSA_PRIVATE     = 1,
+} rsa_mode_t;
 
 typedef struct _x509_buf
 {
@@ -319,7 +328,7 @@ typedef struct
 
 typedef struct {
     int nr;         /*!<  number of rounds  */
-    unsigned long rk[68];   /*!<  CAMELLIA round keys    */
+    uint32_t rk[68];   /*!<  CAMELLIA round keys    */
 } camellia_context;
 
 typedef struct {

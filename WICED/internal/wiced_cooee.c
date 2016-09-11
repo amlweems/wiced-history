@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -82,7 +82,6 @@ static void cooee_scan_callback( wiced_scan_result_t** result_ptr, void* user_da
 
 static void process_packet(wiced_buffer_t buffer);
 static void cooee_process_raw_packet( wiced_buffer_t buffer, wwd_interface_t interface );
-extern int rijndaelKeySetupEnc(uint32_t rk[], const uint8_t cipherKey[], int keyBits);
 
 /******************************************************
  *               Variable Definitions

@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,7 +21,6 @@ $(NAME)_SOURCES := platform_adc.c \
                    platform_mcu_powersave.c \
                    platform_pwm.c \
                    platform_rtc.c \
-                   platform_nsclock.c \
                    platform_spi.c \
                    platform_uart.c \
                    platform_watchdog.c \

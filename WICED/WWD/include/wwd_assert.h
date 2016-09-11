@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,6 +38,19 @@ extern "C"
     #define wiced_assert( error_string, assertion )
 #endif
 
+#ifdef __GNUC__
+#define WICED_UNUSED_VAR __attribute__ ((unused))
+#else
+#define WICED_UNUSED_VAR
+#endif
+
+#define wiced_static_assert( descr, expr ) \
+{ \
+    /* Make sure the expression is constant. */ \
+    typedef enum { _STATIC_ASSERT_NOT_CONSTANT = (expr) } _static_assert_e WICED_UNUSED_VAR; \
+    /* Make sure the expression is true. */ \
+    typedef char STATIC_ASSERT_FAIL_##descr[(expr) ? 1 : -1] WICED_UNUSED_VAR; \
+}
 
 /** @endcond */
 

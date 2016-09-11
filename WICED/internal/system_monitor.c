@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,7 @@
 #include "wiced_rtos.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "wiced_management.h"
+#include "wiced_framework.h"
 
 /******************************************************
  *                      Macros
@@ -23,9 +24,14 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+#ifndef MAX_WAKE_FROM_SLEEP_DELAY_TICKS
+#define MAX_WAKE_FROM_SLEEP_DELAY_TICKS (100)
+#endif
 
 #ifdef APPLICATION_WATCHDOG_TIMEOUT_SECONDS
-#define DEFAULT_SYSTEM_MONITOR_PERIOD   (APPLICATION_WATCHDOG_TIMEOUT_SECONDS*1000 - 100)
+#define APPLICATION_WATCHDOG_TIMEOUT_MILLISECONDS  (APPLICATION_WATCHDOG_TIMEOUT_SECONDS * 1000)
+/* Set the system monitor thread delay time to 20% less than the watchdog timer to fit both actual and debug/shadow watchdog timeout */
+#define DEFAULT_SYSTEM_MONITOR_PERIOD ( APPLICATION_WATCHDOG_TIMEOUT_MILLISECONDS * 8/10 - MAX_WAKE_FROM_SLEEP_DELAY_TICKS)
 #else
 #ifndef DEFAULT_SYSTEM_MONITOR_PERIOD
 #define DEFAULT_SYSTEM_MONITOR_PERIOD   (5000)
@@ -93,12 +99,11 @@ void system_monitor_thread_main( void* arg )
             {
                 if ((current_time - system_monitors[a]->last_update) > system_monitors[a]->longest_permitted_delay)
                 {
-                    /* A system monitor update period has been missed */
-                    while(1);
+                    /* A system monitor update period has been missed and hence explicitly resetting the MCU rather than waiting for the watchdog to bite */
+                    wiced_framework_reboot();
                 }
             }
         }
-
         wiced_watchdog_kick();
         wiced_rtos_delay_milliseconds(DEFAULT_SYSTEM_MONITOR_PERIOD);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -43,9 +43,17 @@ extern "C"
 //#define WPRINT_ENABLE_RTOS_DEBUG
 //#define WPRINT_ENABLE_RTOS_ERROR
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+//#define WPRINT_ENABLE_SECURITY_INFO    /* Security stack prints */
+//#define WPRINT_ENABLE_SECURITY_DEBUG
+//#define WPRINT_ENABLE_SECURITY_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_WPS_INFO           /* WPS stack prints */
 //#define WPRINT_ENABLE_WPS_DEBUG
 //#define WPRINT_ENABLE_WPS_ERROR
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+#define WPRINT_ENABLE_SUPPLICANT_INFO    /* Supplicant stack prints */
+#define WPRINT_ENABLE_SUPPLICANT_DEBUG
+#define WPRINT_ENABLE_SUPPLICANT_ERROR
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_WICED_INFO         /* Wiced internal prints */
 //#define WPRINT_ENABLE_WICED_DEBUG
@@ -72,6 +80,7 @@ extern "C"
 #define WICED_TLS_RECEIVE_TIMEOUT                 (5000)
 #define WICED_TLS_TRANSMIT_TIMEOUT                (5000)
 #define WICED_DHCP_IP_ADDRESS_RESOLUTION_TIMEOUT (15000)
+#define WICED_AUTO_IP_ADDRESS_RESOLUTION_TIMEOUT (15000)
 
 
 /************************************************************************
@@ -103,9 +112,13 @@ extern "C"
  * WICED TCP Options */
 #define WICED_TCP_WINDOW_SIZE                 (7 * 1024)
 #define WICED_DEFAULT_TCP_LISTEN_QUEUE_SIZE   (5)
-#define WICED_DEFAULT_TCP_TX_DEPTH_QUEUE      (5)
-#define WICED_DEFAULT_TCP_RX_DEPTH_QUEUE      (5)
+#define WICED_DEFAULT_TCP_TX_DEPTH_QUEUE      (3)
+#define WICED_DEFAULT_TCP_RX_DEPTH_QUEUE      (3)
 #define WICED_DEFAULT_TCP_TX_RETRIES          (10)
+
+/************************************************************************
+ * WICED UDP Options */
+#define WICED_DEFAULT_UDP_QUEUE_SIZE          (5)
 
 /************************************************************************
  * WICED Join Options */
@@ -134,13 +147,25 @@ extern "C"
 
 /************************************************************************
  * WICED Connectivity Options */
-#define WICED_WIFI_USE_STA_INTERFACE
-#define WICED_WIFI_USE_AP_INTERFACE
-//#define WICED_WIFI_USE_P2P_INTERFACE
+#define WICED_USE_WIFI_STA_INTERFACE
+#define WICED_USE_WIFI_AP_INTERFACE
+//#define WICED_USE_WIFI_P2P_INTERFACE
+//#define WICED_USE_ETHERNET_INTERFACE
+
+/************************************************************************
+ * WICED WiFi Roaming related options (for STA interface)
+ * See wiced_wifi_set_roam_trigger() for details */
+#define WICED_WIFI_ROAMING_TRIGGER_MODE             ( WICED_WIFI_OPTIMIZE_BANDWIDTH_ROAMING_TRIGGER )
+#define WICED_WIFI_ROAMING_TRIGGER_DELTA_IN_DBM     ( 5 )
+#define WICED_WIFI_ROAMING_SCAN_PERIOD_IN_SECONDS   ( 10 )
 
 /************************************************************************
  * Uncomment to "hide" the soft AP */
 //#define WICED_DISABLE_SSID_BROADCAST
+
+/************************************************************************
+ * Uncomment to prevent soft AP clients from communicating with each other */
+//#define WICED_WIFI_ISOLATE_AP_CLIENTS
 
 /************************************************************************
  * Uncomment to disable AMPDU transmission */

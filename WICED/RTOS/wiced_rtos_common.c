@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -103,24 +103,25 @@ wiced_result_t wiced_rtos_deinit( void )
 
 wiced_result_t wiced_rtos_thread_join( wiced_thread_t* thread )
 {
-    return host_rtos_join_thread( WICED_GET_THREAD_HANDLE( thread ) );
+    return (wiced_result_t) host_rtos_join_thread( WICED_GET_THREAD_HANDLE( thread ) );
 }
 
 wiced_result_t wiced_rtos_delay_milliseconds( uint32_t milliseconds )
 {
-    return host_rtos_delay_milliseconds( milliseconds );
+    return (wiced_result_t) host_rtos_delay_milliseconds( milliseconds );
 }
 
 wiced_result_t wiced_rtos_delay_microseconds( uint32_t microseconds )
 {
     uint32_t current_time;
-    uint32_t end_time;
+    uint32_t duration;
+    uint32_t elapsed_time = 0;
 
     current_time = host_platform_get_cycle_count( );
-    end_time     = current_time + ( microseconds * CPU_CYCLES_PER_MICROSECOND );
-    while ( current_time < end_time )
+    duration     = ( microseconds * CPU_CYCLES_PER_MICROSECOND );
+    while ( elapsed_time < duration )
     {
-        current_time = host_platform_get_cycle_count( );
+        elapsed_time = host_platform_get_cycle_count( ) - current_time;
     }
 
     return WICED_SUCCESS;
@@ -128,32 +129,32 @@ wiced_result_t wiced_rtos_delay_microseconds( uint32_t microseconds )
 
 wiced_result_t wiced_rtos_init_semaphore( wiced_semaphore_t* semaphore )
 {
-    return host_rtos_init_semaphore( (host_semaphore_type_t*) semaphore );
+    return (wiced_result_t) host_rtos_init_semaphore( (host_semaphore_type_t*) semaphore );
 }
 
 wiced_result_t wiced_rtos_set_semaphore( wiced_semaphore_t* semaphore )
 {
-    return host_rtos_set_semaphore( (host_semaphore_type_t*) semaphore, host_platform_is_in_interrupt_context( ) );
+    return (wiced_result_t) host_rtos_set_semaphore( (host_semaphore_type_t*) semaphore, host_platform_is_in_interrupt_context( ) );
 }
 
 wiced_result_t wiced_rtos_get_semaphore( wiced_semaphore_t* semaphore, uint32_t timeout_ms )
 {
-    return host_rtos_get_semaphore( (host_semaphore_type_t*) semaphore, timeout_ms, WICED_FALSE );
+    return (wiced_result_t) host_rtos_get_semaphore( (host_semaphore_type_t*) semaphore, timeout_ms, WICED_FALSE );
 }
 
 wiced_result_t wiced_rtos_deinit_semaphore( wiced_semaphore_t* semaphore )
 {
-    return host_rtos_deinit_semaphore( (host_semaphore_type_t*) semaphore );
+    return (wiced_result_t) host_rtos_deinit_semaphore( (host_semaphore_type_t*) semaphore );
 }
 
 wiced_result_t wiced_rtos_push_to_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
 {
-    return host_rtos_push_to_queue( WICED_GET_QUEUE_HANDLE( queue ), message, timeout_ms );
+    return (wiced_result_t) host_rtos_push_to_queue( WICED_GET_QUEUE_HANDLE( queue ), message, timeout_ms );
 }
 
 wiced_result_t wiced_rtos_pop_from_queue( wiced_queue_t* queue, void* message, uint32_t timeout_ms )
 {
-    return host_rtos_pop_from_queue( WICED_GET_QUEUE_HANDLE( queue ), message, timeout_ms );
+    return (wiced_result_t) host_rtos_pop_from_queue( WICED_GET_QUEUE_HANDLE( queue ), message, timeout_ms );
 }
 
 static void worker_thread_main( uint32_t arg )

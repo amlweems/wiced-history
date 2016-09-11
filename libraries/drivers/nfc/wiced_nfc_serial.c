@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,7 +21,7 @@
  *                      Macros
  ******************************************************/
 
-#define EVENT_MASK(evt)       ((UINT16)(0x0001 << (evt)))
+#define EVENT_MASK(evt)       ((uint16_t)(0x0001 << (evt)))
 
 /******************************************************
  *                    Constants
@@ -91,8 +91,8 @@ typedef enum
  *                 Type Definitions
  ******************************************************/
 
-typedef UINT8 tUSERIAL_OP;
-typedef UINT8 tUSERIAL_FEATURE;
+typedef uint8_t tUSERIAL_OP;
+typedef uint8_t tUSERIAL_FEATURE;
 
 /******************************************************
  *                    Structures
@@ -106,12 +106,12 @@ typedef struct
 /* Union used to pass ioctl arguments */
 typedef union
 {
-    UINT16 fmt;
-    UINT8  baud;
-    UINT8  fc;
-    UINT8  sigs;
+    uint16_t fmt;
+    uint8_t  baud;
+    uint8_t  fc;
+    uint8_t  sigs;
 #if (defined LINUX_OS) && (LINUX_OS == TRUE)
-    UINT16 sco_handle;
+    uint16_t sco_handle;
 #endif
 } tUSERIAL_IOCTL_DATA;
 
@@ -143,14 +143,6 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-extern void GKI_enqueue( BUFFER_Q *p_q, void *p_buf );
-extern void GKI_init_q( BUFFER_Q *p_q );
-extern void *GKI_getbuf( UINT16 size );
-extern void GKI_freebuf( void *p_buf );
-extern UINT8 GKI_send_event( UINT8 task_id, UINT16 event );
-extern void *GKI_dequeue( BUFFER_Q *p_q );
-
-
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -158,9 +150,9 @@ extern void *GKI_dequeue( BUFFER_Q *p_q );
 BUFFER_Q Userial_in_q;
 static BT_HDR *pbuf_USERIAL_Read = NULL;
 tUSERIAL_CB userial_cb;
-UINT8 g_readThreadAlive = 1;
+uint8_t g_readThreadAlive = 1;
 
-static UINT32 userial_baud_tbl[] =
+static uint32_t userial_baud_tbl[] =
 {
     300, /* USERIAL_BAUD_300       */
     600, /* USERIAL_BAUD_600       */
@@ -204,7 +196,7 @@ void USERIAL_Open( tUSERIAL_PORT port, tUSERIAL_OPEN_CFG *p_cfg, tUSERIAL_CBACK 
 wiced_result_t nfc_hci_transport_driver_bus_read_handler( BT_HDR* packet )
 {
     hci_packet_type_t packet_type = HCI_UNINITIALIZED;
-    UINT8 *current_packet;
+    uint8_t *current_packet;
 
     if ( packet == NULL )
     {
@@ -213,7 +205,7 @@ wiced_result_t nfc_hci_transport_driver_bus_read_handler( BT_HDR* packet )
 
     packet->offset = 0;
     packet->layer_specific = 0;
-    current_packet = (UINT8 *) ( packet + 1 );
+    current_packet = (uint8_t *) ( packet + 1 );
 
     // Read 1 byte:
     //    packet_type
@@ -352,7 +344,7 @@ void USERIAL_ReadBuf(void)
 }
 
 
-UINT16 USERIAL_Write( tUSERIAL_PORT port, UINT8 *p_data, UINT16 len )
+uint16_t USERIAL_Write( tUSERIAL_PORT port, uint8_t *p_data, uint16_t len )
 {
     wiced_result_t result;
 
@@ -386,17 +378,17 @@ void USERIAL_Close( tUSERIAL_PORT port )
     }
 }
 
-UINT16 USERIAL_Read( tUSERIAL_PORT port, UINT8* p_data, UINT16 len )
+uint16_t USERIAL_Read( tUSERIAL_PORT port, uint8_t* p_data, uint16_t len )
 {
-    UINT16 total_len = 0;
-    UINT16 copy_len = 0;
-    UINT8* current_packet = NULL;
+    uint16_t total_len = 0;
+    uint16_t copy_len = 0;
+    uint8_t* current_packet = NULL;
 
     do
     {
         if ( pbuf_USERIAL_Read != NULL )
         {
-            current_packet = ( (UINT8 *) ( pbuf_USERIAL_Read + 1 ) ) + ( pbuf_USERIAL_Read->offset );
+            current_packet = ( (uint8_t *) ( pbuf_USERIAL_Read + 1 ) ) + ( pbuf_USERIAL_Read->offset );
 
             if ( ( pbuf_USERIAL_Read->len ) <= ( len - total_len ) )
                 copy_len = pbuf_USERIAL_Read->len;
@@ -429,11 +421,11 @@ UINT16 USERIAL_Read( tUSERIAL_PORT port, UINT8* p_data, UINT16 len )
 void USERIAL_Ioctl( tUSERIAL_PORT port, tUSERIAL_OP op, tUSERIAL_IOCTL_DATA *p_data )
 {
     // Options for baud rate change
-    UINT8 baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x00, 0x09, 0x3D, 0x00 }; // 4Mbit
-    //UINT8 baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0xC0, 0xC6, 0x2D, 0x00 }; // 3Mbit
-    //UINT8 baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x80, 0x84, 0x1E, 0x00 }; // 2Mbit
-    //UINT8 baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x60, 0xE3, 0x16, 0x00 }; // 1.5 Mbit
-    //UINT8 baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x00, 0xC2, 0x01, 0x00 }; // 115200
+    uint8_t baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x00, 0x09, 0x3D, 0x00 }; // 4Mbit
+    //uint8_t baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0xC0, 0xC6, 0x2D, 0x00 }; // 3Mbit
+    //uint8_t baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x80, 0x84, 0x1E, 0x00 }; // 2Mbit
+    //uint8_t baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x60, 0xE3, 0x16, 0x00 }; // 1.5 Mbit
+    //uint8_t baudRateCmd[] = { 0x01, 0x18, 0xFC, 0x06, 0x00, 0x00, 0x00, 0xC2, 0x01, 0x00 }; // 115200
 
     switch ( op )
     {
@@ -455,14 +447,10 @@ void USERIAL_Ioctl( tUSERIAL_PORT port, tUSERIAL_OP op, tUSERIAL_IOCTL_DATA *p_d
     return;
 }
 
-BOOLEAN USERIAL_Feature( tUSERIAL_FEATURE feature )
-{
-    return FALSE;
-}
 
-UINT8 USERIAL_GetBaud( UINT32 line_speed )
+uint8_t USERIAL_GetBaud( uint32_t line_speed )
 {
-    UINT8 i;
+    uint8_t i;
     for ( i = USERIAL_BAUD_300; i <= USERIAL_BAUD_4M; i++ )
     {
         if ( userial_baud_tbl[i - USERIAL_BAUD_300] == line_speed )
@@ -472,7 +460,7 @@ UINT8 USERIAL_GetBaud( UINT32 line_speed )
     return USERIAL_BAUD_AUTO;
 }
 
-UINT32 USERIAL_GetLineSpeed( UINT8 baud )
+uint32_t USERIAL_GetLineSpeed( uint8_t baud )
 {
     if ( baud <= USERIAL_BAUD_4M )
         return ( userial_baud_tbl[baud - USERIAL_BAUD_300] );

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include "platform_dct.h"
 #include "wiced_result.h"
+#include "wiced_utilities.h"
 #include "wiced_dct_common.h"
 #include "wiced_waf_common.h"
 
@@ -238,12 +239,11 @@ static inline wiced_result_t wiced_framework_app_open( uint8_t app_id, wiced_app
  *
  * @warning Applications must be closed after all write and read operations.
  *
- * @param[in] app_id   : Application ID.
- * @param[inout] app   : Application handler.
+ * @param[in] app   : Application handler.
  *
  * @return Wiced reuslt code
  */
-static inline wiced_result_t wiced_framework_app_open( uint8_t app_id, wiced_app_t* app );
+static inline wiced_result_t wiced_framework_app_close( wiced_app_t* app );
 
 /** Erases the application from external flash.
  *
@@ -454,52 +454,52 @@ extern wiced_result_t DEPRECATE( wiced_dct_write_app_section( const void* app_dc
 /**  Implementations of inline functions                                    **/
 /*****************************************************************************/
 
-static inline  wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
+static inline ALWAYS_INLINE wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
 {
     return wiced_dct_update( info_ptr, section, offset, size );
 }
 
-static inline wiced_result_t wiced_framework_set_boot( uint8_t app_id, char load_once)
+static inline ALWAYS_INLINE wiced_result_t wiced_framework_set_boot( uint8_t app_id, char load_once)
 {
     return wiced_waf_app_set_boot( app_id, load_once );
 }
 
-static inline void wiced_framework_reboot( void )
+static inline ALWAYS_INLINE void wiced_framework_reboot( void )
 {
     wiced_waf_reboot( );
 }
 
-static inline wiced_result_t wiced_framework_app_open( uint8_t app_id, wiced_app_t* app )
+static inline ALWAYS_INLINE wiced_result_t wiced_framework_app_open( uint8_t app_id, wiced_app_t* app )
 {
     return wiced_waf_app_open( app_id, app );
 }
 
-static inline wiced_result_t wiced_framework_app_erase( wiced_app_t* app )
+static inline ALWAYS_INLINE wiced_result_t wiced_framework_app_erase( wiced_app_t* app )
 {
     return wiced_waf_app_erase( app );
 }
 
-static inline wiced_result_t  wiced_framework_app_write_chunk( wiced_app_t* app, const uint8_t* data, uint32_t size )
+static inline ALWAYS_INLINE wiced_result_t  wiced_framework_app_write_chunk( wiced_app_t* app, const uint8_t* data, uint32_t size )
 {
     return wiced_waf_app_write_chunk( app, data, size);
 }
 
-static inline wiced_result_t  wiced_framework_app_read_chunk( wiced_app_t* app, uint32_t offset, uint8_t* data, uint32_t size )
+static inline ALWAYS_INLINE wiced_result_t  wiced_framework_app_read_chunk( wiced_app_t* app, uint32_t offset, uint8_t* data, uint32_t size )
 {
     return wiced_waf_app_read_chunk( app, offset, data, size);
 }
 
-static inline wiced_result_t  wiced_framework_app_get_size( wiced_app_t* app, uint32_t* size )
+static inline ALWAYS_INLINE wiced_result_t  wiced_framework_app_get_size( wiced_app_t* app, uint32_t* size )
 {
     return wiced_waf_app_get_size( app, size);
 }
 
-static inline wiced_result_t  wiced_framework_app_set_size( wiced_app_t* app, uint32_t size )
+static inline ALWAYS_INLINE wiced_result_t  wiced_framework_app_set_size( wiced_app_t* app, uint32_t size )
 {
     return wiced_waf_app_set_size( app, size);
 }
 
-static inline wiced_result_t wiced_framework_app_close( wiced_app_t* app )
+static inline ALWAYS_INLINE wiced_result_t wiced_framework_app_close( wiced_app_t* app )
 {
     return wiced_waf_app_close( app );
 }

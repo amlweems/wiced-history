@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -91,7 +91,9 @@ void HardFaultException_handler( uint32_t MSP, uint32_t PSP, uint32_t LR );
  *               Function Definitions
  ******************************************************/
 
-PLATFORM_DEFINE_ISR( HardFaultException )
+
+#ifdef DEBUG_HARDFAULT
+PLATFORM_DEFINE_NAKED_ISR( HardFaultException )
 {
     __ASM("MRS R0, MSP" );
     __ASM("MRS R1, PSP" );
@@ -99,8 +101,6 @@ PLATFORM_DEFINE_ISR( HardFaultException )
     __ASM("B HardFaultException_handler");
 }
 
-
-#ifdef DEBUG_HARDFAULT
 #if defined( __GNUC__ ) && ( ! defined( __clang__ ) )
 #pragma GCC optimize ("O0")
 #endif /* if defined( __GNUC__ ) && ( ! defined( __clang__ ) ) */
@@ -278,15 +278,6 @@ void HardFaultException_handler( uint32_t MSP, uint32_t PSP, uint32_t LR )
 #if defined( __GNUC__ ) && ( ! defined( __clang__ ) )
 #pragma GCC reset_options
 #endif /* if defined( __GNUC__ ) && ( ! defined( __clang__ ) ) */
-
-#else /* ifdef DEBUG_HARDFAULT */
-
-void HardFaultException_handler( uint32_t MSP, uint32_t PSP, uint32_t LR )
-{
-    (void) MSP;
-    (void) PSP;
-    (void) LR;
-}
 
 #endif /* ifdef DEBUG_HARDFAULT */
 

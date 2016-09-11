@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,16 +9,21 @@
  */
 
 #include "dns.h"
+#include "dns_internal.h"
 #include "string.h"
 #include "wiced_network.h"
 #include "wiced_tcpip.h"
 #include "wwd_debug.h"
 #include <wiced_utilities.h>
 #include "wiced_time.h"
+#include "wwd_assert.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
+#define DNS_NAME_SIZE(name)                         (strlen((name)) + 1 + 1) /* one byte for a string length and one byte is a string null-terminator */
+#define A_RECORD_RDATA_SIZE                         (4)
+#define AAAA_RECORD_RDATA_SIZE                      (16)
 
 /******************************************************
  *                    Constants
@@ -118,6 +123,8 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
                 goto exit;
             }
 
+            iter.max_size = available_space;
+            iter.current_size = 0;
             iter.iter = (uint8_t*) ( iter.header ) + sizeof(dns_message_header_t);
             dns_write_header( &iter, 0, 0x100, 1, 0, 0, 0 );
             dns_write_question( &iter, temp_hostname, RR_CLASS_IN, RR_TYPE_A );
@@ -337,46 +344,80 @@ wiced_result_t dns_client_hostname_lookup( const char* hostname, wiced_ip_addres
 /*********************************
  * DNS packet creation functions
  *********************************/
-/*
- * Writes the question header using the provided iterator
- * @param iter    Pointer to the iterator where to write the data
- * @param target  The name of the object or service being queried for, e.g. "device_name.local"
- * @param class   The class of the query, e.g. RR_CLASS_IN
- * @param type    The type of the query, e.g. RR_QTYPE_ANY
- */
-void dns_write_question(dns_message_iterator_t* iter, const char* target, uint16_t class, uint16_t type)
+
+
+wiced_result_t dns_write_question(dns_message_iterator_t* iter, const char* target, uint16_t class, uint16_t type)
 {
+    wiced_result_t result;
+
     /* Write target name, type and class */
-    iter->iter = dns_write_name(iter->iter, target);
-    dns_write_uint16(iter, type);
-    dns_write_uint16(iter, class);
+    result = dns_write_name( iter, target );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    result = dns_write_uint16( iter, type );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    result = dns_write_uint16( iter, class );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    return WICED_SUCCESS;
+error_exit:
+    wiced_assert("Write DNS question failed, potential packet buffer overflow", 0!=0);
+    return result;
 }
 
-void dns_write_uint16(dns_message_iterator_t* iter, uint16_t data)
+wiced_result_t dns_write_uint16 ( dns_message_iterator_t* iter, uint16_t data )
 {
-    /* We cannot assume the uint8_t alignment of iter->iter so we can't just type cast and assign */
-    iter->iter[0] = (uint8_t) ( data >> 8 );
-    iter->iter[1] = (uint8_t) ( data & 0xFF );
-    iter->iter += 2;
+    if ( ( iter->current_size + 2 ) <= iter->max_size )
+    {
+        /* We cannot assume the uint8_t alignment of iter->iter so we can't just type cast and assign */
+        iter->iter[ 0 ]    = (uint8_t) ( data >> 8 );
+        iter->iter[ 1 ]    = (uint8_t) ( data & 0xFF );
+        iter->iter         += 2;
+        iter->current_size = (uint16_t) ( iter->current_size + 2 );
+        return WICED_SUCCESS;
+    }
+    else
+    {
+        return WICED_PACKET_BUFFER_OVERFLOW;
+    }
 }
 
-void dns_write_uint32(dns_message_iterator_t* iter, uint32_t data)
+wiced_result_t dns_write_uint32 ( dns_message_iterator_t* iter, uint32_t data )
 {
-    iter->iter[0] = (uint8_t) ( data >> 24 );
-    iter->iter[1] = (uint8_t) ( data >> 16 );
-    iter->iter[2] = (uint8_t) ( data >>  8 );
-    iter->iter[3] = (uint8_t) ( data & 0xFF);
-    iter->iter += 4;
+    if ( ( iter->current_size + 2 ) <= iter->max_size )
+    {
+        iter->iter[ 0 ]      = (uint8_t) ( data >> 24 );
+        iter->iter[ 1 ]      = (uint8_t) ( data >> 16 );
+        iter->iter[ 2 ]      = (uint8_t) ( data >>  8 );
+        iter->iter[ 3 ]      = (uint8_t) ( data & 0xFF);
+        iter->current_size   = (uint16_t) ( iter->current_size + 4 );
+        iter->iter           += 4;
+        return WICED_SUCCESS;
+    }
+    else
+    {
+        return WICED_PACKET_BUFFER_OVERFLOW;
+    }
 }
 
-void dns_write_bytes(dns_message_iterator_t* iter, const uint8_t* data, uint16_t length)
+wiced_result_t dns_write_bytes ( dns_message_iterator_t* iter, const uint8_t* data, uint16_t length )
 {
     int a;
-    for (a = 0; a < length; ++a)
+    if ( ( iter->current_size + length ) <= iter->max_size )
     {
-        iter->iter[a] = data[a];
+        for (a = 0; a < length; ++a)
+        {
+            iter->iter[a] = data[a];
+        }
+        iter->iter         += length;
+        iter->current_size = (uint16_t) (iter->current_size + length);
+        return WICED_SUCCESS;
     }
-    iter->iter += length;
+    else
+    {
+        return WICED_PACKET_BUFFER_OVERFLOW;
+    }
 }
 
 /*
@@ -412,6 +453,11 @@ void dns_get_next_record(dns_message_iterator_t* iter, dns_record_t* r, dns_name
 
     /* Skip the rdata */
     iter->iter += r->rd_length;
+}
+
+void dns_reset_iterator( dns_message_iterator_t* iter )
+{
+    iter->iter = (uint8_t*) ( iter->header ) + sizeof(dns_message_header_t);
 }
 
 #if 0 /* unreferenced */
@@ -584,56 +630,83 @@ void dns_write_header(dns_message_iterator_t* iter, uint16_t id, uint16_t flags,
     iter->header->authoritative_answer_count = htons(authoritative_count);
     iter->header->answer_count               = htons(answer_count);
     iter->header->additional_record_count    = htons(additional_count);
+    iter->current_size                       = sizeof(dns_message_header_t);
 }
 
-void dns_write_record(dns_message_iterator_t* iter, const char* name, uint16_t class, uint16_t type, uint32_t TTL, const void* rdata)
+wiced_result_t dns_write_record ( dns_message_iterator_t* iter, const char* name, uint16_t class, uint16_t type, uint32_t TTL, const void* rdata )
 {
-    uint8_t* rd_length;
-    uint8_t* tempPtr;
+    uint8_t*       rd_length;
+    uint8_t*       tempPtr;
+    wiced_result_t result = WICED_SUCCESS;
 
     /* Write the name, type, class, TTL */
-    iter->iter = dns_write_name(iter->iter, name);
-    dns_write_uint16(iter, type);
-    dns_write_uint16(iter, class);
-    dns_write_uint32(iter, TTL);
+    result = dns_write_name( iter, name );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    result = dns_write_uint16( iter, type );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    result = dns_write_uint16( iter, class );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+    result = dns_write_uint32( iter, TTL );
+    wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
 
     /* Keep track of where we store the rdata length */
-    rd_length   = iter->iter;
-    iter->iter += 2;
-    tempPtr    = iter->iter;
+    wiced_action_jump_when_not_true( ( ( iter->current_size + 2 ) <= iter->max_size ), error_exit, result = WICED_PACKET_BUFFER_OVERFLOW );
+    rd_length          = iter->iter;
+    iter->iter         += 2;
+    tempPtr            = iter->iter;
+    iter->current_size = (uint16_t) (iter->current_size + 2);
 
+    /* Append RDATA */
     switch (type)
     {
         case RR_TYPE_A:
-            dns_write_bytes(iter, rdata, 4);
+                result = dns_write_bytes( iter, rdata, A_RECORD_RDATA_SIZE );
+                wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+            break;
+
+        case RR_TYPE_AAAA:
+                result = dns_write_bytes( iter, rdata, AAAA_RECORD_RDATA_SIZE );
+                wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
             break;
 
         case RR_TYPE_PTR:
-            iter->iter = dns_write_name(iter->iter, (const char*) rdata);
+                result = dns_write_name(iter, (const char*) rdata);
+                wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
             break;
 
         case RR_TYPE_TXT:
-            if (rdata != NULL)
+            if ( rdata != NULL )
             {
                 //iter->iter = dns_write_string(iter->iter, rdata);
                 memcpy( iter->iter, (char*)( rdata ), strlen( ( char* )rdata )  );
-                iter->iter += strlen( ( char* )rdata );
-
+                iter->iter        += strlen( ( char* )rdata );
+                iter->current_size = (uint16_t) ( iter->current_size + strlen( ( char* )rdata ) );
             }
             else
             {
                 *iter->iter++ = 0;
+                iter->current_size = (uint16_t) (iter->current_size + 1);
             }
             break;
 
         case RR_TYPE_SRV:
         {
-            /* Copy priority, weight, and port */
-            memcpy(iter->iter, rdata, 6);
-            iter->iter += 6;
+            dns_srv_data_t* srv_rdata = (dns_srv_data_t*) rdata;
+            result = dns_write_uint16( iter, srv_rdata->priority );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+            result = dns_write_uint16( iter, srv_rdata->weight   );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+            result = dns_write_uint16( iter, srv_rdata->port     );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
 
             /* Write the hostname */
-            iter->iter = dns_write_name( iter->iter, ((dns_srv_data_t*)rdata)->target );
+            result = dns_write_name( iter, srv_rdata->target );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
             break;
         }
 
@@ -645,10 +718,13 @@ void dns_write_record(dns_message_iterator_t* iter, const char* name, uint16_t c
         case RR_TYPE_NSEC:
         {
             dns_nsec_data_t* nsec_data = (dns_nsec_data_t*)rdata;
-            iter->iter = dns_write_name(iter->iter, name);
-            dns_write_bytes(iter, &nsec_data->block_number,  (uint16_t) ( 2 + nsec_data->bitmap_size ) );
-        }
+            result = dns_write_name( iter, name );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
+
+            result = dns_write_bytes( iter, &nsec_data->block_number,  (uint16_t) ( 2 + nsec_data->bitmap_size ) );
+            wiced_jump_when_not_true( result == WICED_SUCCESS, error_exit );
             break;
+        }
 
         default:
             break;
@@ -657,16 +733,30 @@ void dns_write_record(dns_message_iterator_t* iter, const char* name, uint16_t c
     /* Write the rdata length */
     rd_length[0] = (uint8_t) ( (iter->iter - tempPtr) >> 8 );
     rd_length[1] = (uint8_t) ( (iter->iter - tempPtr) & 0xFF );
+    return WICED_SUCCESS;
+
+error_exit:
+    wiced_assert("Write record failed, potential packet buffer overflow", 0!=0);
+    return result;
 }
 
-uint8_t* dns_write_name(uint8_t* dest, const char* src)
+wiced_result_t dns_write_name ( dns_message_iterator_t* iter, const char* src )
 {
-    dest = dns_write_string(dest, src);
+    if ( ( iter->current_size + DNS_NAME_SIZE(src) ) <= iter->max_size )
+    {
+        iter->iter = dns_write_string( iter->iter, src );
 
-    /* Add the ending null */
-    *dest++ = 0;
+        /* Add the ending null */
+        *iter->iter++ = 0;
 
-    return dest;
+        /* string + 1 byte for null terminator and + 1 byte for string length */
+        iter->current_size = ( uint16_t ) ( iter->current_size + DNS_NAME_SIZE(src) );
+        return WICED_SUCCESS;
+    }
+    else
+    {
+        return WICED_PACKET_BUFFER_OVERFLOW;
+    }
 }
 
 uint8_t* dns_write_string(uint8_t* dest, const char* src)

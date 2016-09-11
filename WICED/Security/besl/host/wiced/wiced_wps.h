@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -50,6 +50,7 @@ extern besl_result_t besl_wps_deinit                      ( wps_agent_t* workspa
 extern besl_result_t besl_wps_start                       ( wps_agent_t* workspace, besl_wps_mode_t mode, const char* password, besl_wps_credential_t* credentials, uint16_t credential_length );
 extern besl_result_t besl_p2p_wps_start                   ( wps_agent_t* workspace );
 extern besl_result_t besl_wps_restart                     ( wps_agent_t* workspace );
+extern besl_result_t besl_wps_reset_registrar             ( wps_agent_t* workspace, besl_mac_t* mac );
 extern besl_result_t besl_wps_wait_till_complete          ( wps_agent_t* workspace );
 extern besl_result_t besl_wps_abort                       ( wps_agent_t* workspace );
 extern besl_result_t besl_wps_management_set_event_handler( wps_agent_t* workspace, wiced_bool_t enable );

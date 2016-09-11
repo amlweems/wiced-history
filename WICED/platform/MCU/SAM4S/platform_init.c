@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -57,7 +57,12 @@
 
 void platform_mcu_reset( void )
 {
-    NVIC_SystemReset();
+    NVIC_SystemReset( );
+
+    /* Loop forever */
+    while ( 1 )
+    {
+    }
 }
 
 WEAK void platform_init_system_clocks( void )

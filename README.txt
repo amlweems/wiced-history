@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.1.2 - README
+Broadcom WICED Software Development Kit 3.3.1 - README
 =====================================================================
 
 The WICED SDK provides a full compliment of application level APIs, 
@@ -13,13 +13,17 @@ Major features of the WICED SDK include ...
     - ThreadX/NetX (IPv4), ThreadX/NetX Duo (IPv6), FreeRTOS/LwIP (IPv4)
   - Support for various Broadcom Wi-Fi & combo chips
     - BCM4390 Integrated Apps + Wi-Fi SoC
+    - BCM43909 Integrated Apps + Wi-Fi SoC
     - BCM43362 Wi-Fi SoC
+    - BCM43364 Wi-Fi SoC
+    - BCM43341 Wi-Fi SoC
+    - BCM43438 Wi-Fi SoC
     - BCM43341 Wi-Fi + Bluetooth combo SoC
   - Support for various MCU host platforms
     - ST Microelectronics : STM32F2xx, STM32F4xx
     - Atmel : AT91SAM4S16B
-    - Freescale : K60
-    - NXP : LPC17xx
+    - Freescale : K61
+    - NXP : LPC17xx, LPC18xx
   - RTOS & Network abstraction layer with a simple API for UDP, TCP, HTTP, HTTPS communications
   - SSL/TLS Security Library integrated with an HTTPS library for secure web transactions
   - WICED Application Framework including Bootloader, OTA Upgrade and Factory Reset
@@ -37,7 +41,7 @@ The WICED SDK release is structured as follows:
   include       : WICED API, constants, and defaults 
   libraries     : Bluetooth, daemons, drivers, file systems, inputs, and protocols
   platforms     : Evaluation board support package, including Eval Board and Module Schematics
-  resources     : Resources used by the WICED webserver including scripts, styles, images and HTML
+  resources     : Binary and text based objects including scripts, images, and certificates
   tools         : Build tools, compilers, debugger, makefiles, programming tools etc.
   tools/drivers : Drivers for WICED evaluation boards
   WICED         : WICED core components (RTOS, Network Stack, Wi-Fi Driver, Security & Platform libraries)
@@ -55,16 +59,21 @@ use with the WICED SDK, IDE and WICED Evaluation Board.
 
 The WICED SDK includes lots of sample applications in the <WICED-SDK>/Apps directory.
 Applications included with the SDK are outlined below.
+
  apps/demo : Demonstration Applications
    - Applications demonstrating how to integrate various WICED API features 
+   
  apps/snip : Application Snippets
-   - Various applications to demonstrate usage of individual WICED APIs          
+   - Various applications to demonstrate usage of individual WICED APIs        
+
  apps/test : Test & Utility Applications
    - console      : Provides various test features including Iperf for throughput testing 
    - mfg_test     : Manufacturing Test application to enable radio performance and certification testing
+
  apps/waf  : WICED Application Framework
    - bootloader   : Bootloader application used in conjunction with the WICED Application Framework
    - sflash_write : Serial flash application used to write data into external serial flash
+   
  apps/wwd : Wiced Wi-Fi Driver Applications to demonstrate advanced usage of the low layer Wi-Fi driver
     
 To obtain a complete list of build commands and options, enter the following text in the
@@ -94,7 +103,7 @@ Wi-Fi & Bluetooth SmartBridge Features
  * Authenticate to Wi-Fi Access Points with the following security types:
    Open, WEP-40, WEP-104, WPA (AES & TKIP), WPA2 (AES, TKIP & Mixed mode)
  * AP mode with support for security types : Open, WPA, WPA2
- * Concurrent AP & STA mode (AP mode limited to 5 concurrent connected clients)
+ * Concurrent AP & STA mode (AP mode limited to 3 concurrent connected clients)
  * Wi-Fi Direct
  * WPS 1.0 & 2.0 Enrollee & Registrar (Internal Registrar only)
  * Wi-Fi APIs : Network keep alive, packet filters
@@ -103,6 +112,29 @@ Wi-Fi & Bluetooth SmartBridge Features
    following features: Whitelist, Bond Storage, Attribute Caching, 
    GATT Procedures, Configurable Maximum Concurrent Connections, Directed 
    Advertisements, Device address initialisation, Passkey entry
+ * Host <-> Wi-Fi via Memory to Memory DMA engine
+
+Bluetooth Features
+ * A2DP v1.2 (Advanced Audio Distribution Profile)
+   - A2DP Sink Functionality
+   - SBC Decoder
+ * AVRCP (Audio/Video Remote Control Profile)
+   - AVRCP Controller v1.0
+   - AVRCP Target v1.4 (Absolute Volume)
+ *  Handsfree profile (Handsfree role)
+   - HFP v1.6
+   - Accept/Reject/End incoming call
+   - Outgoing call – Last number dial
+   - Support for inband ringtone
+   - Two-way calling
+   - Caller-ID support
+ * Man-Machine-Interface via buttons
+   - AVRCP play/pause/Skip-forward/Skip-backward
+   - A2DP Volume Up/Down
+   - Connect to previously connected device
+   - HFP Accept/Reject/End incoming call and Last number dial
+ * SDAP (Service Discovery Application Profile)
+ * GAP (Generic Access Profile)
 
 RTOS & Network Stack Support
  * FreeRTOS / LwIP    (full source)
@@ -143,7 +175,6 @@ Application Features
    * OTA upgrade
    * Factory reset
    * Automated configuration via softAP & webserver
-   * Wi-Fi Easy Setup
    * Apple Wireless Accessory Configuration (WAC) protocol (available to Apple MFi licensees *ONLY*)
    * System Monitor to manage the watchdog
 
@@ -158,42 +189,30 @@ Hardware Platforms
    * BCM943362WCD8  : Broadcom WICED Module with Atmel SAM4S16B MCU mounted on BCM9WCD1EVAL1
    * BCM9WCDPLUS114 : WICED+ Eval Board (includes BCM43362+STM32F205 WICED+ Module and BCM20702 Bluetooth module)
    * BCM9WCD1AUDIO  : Broadcom WICED Audio Evaluation Board (includes BCM43362, STM32F415, WM8533 audio DAC, and BCM20702 Bluetooth module)
+ BCM943364
+   * BCM943364WCD1  : Broadcom WICED Module with STM32F215 MCU mounted on BCM9WCD1EVAL1
+   * BCM943364WCDA  : Broadcom WICED Module with Atmel SAM4S16B MCU mounted on BCM9WCD1EVAL1
  BCM943341
    * BCM943341WCD1  : Broadcom BCM43341-based WICED Module with STM32F417 MCU mounted on BCM9WCD5EVAL1
  BCM4390
    * BCM94390WCD2   : Broadcom BCM4390 SiP-based WICED Module on BCM9WCD3EVAL1
+ BCM43909
+   * BCM943909WCD1  : Broadcom BCM43909 SiP-based WICED Module on BCM943909WCDEVAL_1
 
 
 Known Limitations & Notes
 ---------------------------------------------------------------------
 
- * Features not yet supported in WICED-SDK-3.1.2
+ * Features not yet supported in WICED-SDK-3.3.1
    - IAR Embedded Workspace native support
-   - wiced_wifi_get_counters() is not functional
 
- * Platform Limitations
-   -----------------+-----------+-----------+-----------+-----+---------+---------+ 
-   Platform Feature | STM32F2xx | STM32F4xx | AT91SAM4S | K60 | LPC17xx | BCM439x |
-    Implementation  |           |           |           |     |         |         |
-   -----------------|-----------+-----------+-----------+-----+---------+---------+
-   MCU powersave    |     Y     |     N     |     Y     |  N  |    N    |    Y    |
-   Wi-Fi Powersave  |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
-   I2C API          |     Y     |     N     |     N     |  N  |    N    |    Y    |
-   ADC/PWM API      |    Y/Y    |    Y/Y    |    Y/N    |  N  |    N    |    N    |
-   OTA upgrade      |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
-   Real Time Clock  |     Y     |     N     |     N     |  N  |    N    |    N    |
-   -----------------+-----------+-----------+-----------+-----+---------+---------+  
-   
-   * WICED-SDK-3.1.2 Platform Restrictions
-       STM32F1xx is not yet supported
-       Freescale K60 is not yet supported
+   * Platform Restrictions:
        BCM943341WCD1
          - Wi-Fi Direct not support
          - SPI bus not supported
        BCM4390WCD2
          - Wi-Fi Direct not supported
          - WPS may timeout with some access points
-         - Software reset not yet supported. OTA upgrade requires manual reset 
      
    * Wi-Fi Powersave (1)
        The WLAN chip requires an external 32kHz sleep clock input during powersave.
@@ -211,7 +230,7 @@ Known Limitations & Notes
                 .cfg file that matches your hardware debugger 
                 (ie. BCM9WCD1EVAL1.cfg for WICED Evaluation Boards) 
 
- * AP mode when running with WPA/WPA2 encryption is limited to 4 STA clients
+ * AP mode when running with Wi-Fi Direct is limited to 2 STA clients
  
 Tools
 ---------------------------------------------------------------------

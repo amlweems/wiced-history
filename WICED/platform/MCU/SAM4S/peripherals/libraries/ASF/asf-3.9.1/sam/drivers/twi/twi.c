@@ -134,7 +134,7 @@ uint32_t twi_master_init(Twi *p_twi, const twi_options_t *p_opt)
 	twi_enable_master_mode(p_twi);
 
 	/* Select the speed */
-	if (twi_set_speed(p_twi, p_opt->speed, p_opt->master_clk) == FAIL) {
+	if (twi_set_speed(p_twi, p_opt->speed, p_opt->master_clk) == SAM4S_FAIL) {
 		/* The desired speed setting is rejected */
 		status = TWI_INVALID_ARGUMENT;
 	}
@@ -162,7 +162,7 @@ uint32_t twi_set_speed(Twi *p_twi, uint32_t ul_speed, uint32_t ul_mck)
 	uint32_t c_lh_div;
 
 	if (ul_speed > I2C_FAST_MODE_SPEED) {
-		return FAIL;
+		return SAM4S_FAIL;
 	}
 
 	c_lh_div = ul_mck / (ul_speed * TWI_CLK_DIVIDER) - TWI_CLK_CALC_ARGU;
@@ -180,7 +180,7 @@ uint32_t twi_set_speed(Twi *p_twi, uint32_t ul_speed, uint32_t ul_mck)
 			TWI_CWGR_CLDIV(c_lh_div) | TWI_CWGR_CHDIV(c_lh_div) |
 			TWI_CWGR_CKDIV(ckdiv);
 
-	return PASS;
+	return SAM4S_PASS;
 }
 
 /**

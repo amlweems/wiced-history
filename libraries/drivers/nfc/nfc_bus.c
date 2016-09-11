@@ -1,5 +1,5 @@
 /**
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,7 +16,7 @@
 #include "wiced.h"
 #include "wiced_rtos.h"
 #include "wiced_utilities.h"
-#include "nfc_hal_int.h"
+#include "nfc_host.h"
 #include "platform_nfc.h"
 
 /******************************************************
@@ -202,5 +202,5 @@ wiced_bool_t nfc_receive_ready(void)
 
 void nfc_rx_irq_handler( void* arg )
 {
-    GKI_send_event( NFC_HAL_TASK, NFC_HAL_TASK_EVT_RX_IRQ );
+    nfc_signal_rx_irq( );
 }

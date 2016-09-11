@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,13 +8,17 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME = BCM439x
+NAME = MCU_BCM439x
 
 # Host architecture is ARM Cortex M3
 HOST_ARCH := ARM_CM3
 
+FAMILY := BCM439x
+
 # Host MCU alias for OpenOCD
-HOST_OPENOCD := BCM439x
+HOST_OPENOCD := $(FAMILY)
+
+VALID_BUSES := SoC/4390
 
 GLOBAL_INCLUDES := . \
                    .. \
@@ -22,7 +26,6 @@ GLOBAL_INCLUDES := . \
                    ../../include \
                    ../../$(HOST_ARCH) \
                    ../../$(HOST_ARCH)/CMSIS \
-                   ../../$(TOOLCHAIN_NAME) \
                    ../../../../libraries/drivers/spi_flash \
                    peripherals \
                    WAF \
@@ -30,7 +33,7 @@ GLOBAL_INCLUDES := . \
 
 # Global defines
 GLOBAL_DEFINES += BCMDBG_DUMP
-GLOBAL_DEFINES += PLAT_NOTIFY_FREE
+GLOBAL_DEFINES += NETWORK_NOTIFY_RELEASED_PACKETS
 #GLOBAL_DEFINES += CPU_CLOCK_SPEED=48
 #GLOBAL_DEFINES += PA_CONTROL=12
 #GLOBAL_DEFINES += DMA_CHANNELS=1
@@ -45,15 +48,15 @@ GLOBAL_LDFLAGS  += $$(CPU_LDFLAGS)   $$(ENDIAN_LDFLAGS_LITTLE)
 ifeq ($(TOOLCHAIN_NAME),GCC)
 GLOBAL_LDFLAGS  += -nostartfiles
 GLOBAL_LDFLAGS  += -Wl,--defsym,__STACKSIZE__=$$($(RTOS)_START_STACK)
-GLOBAL_LDFLAGS  += -L ./WICED/platform/MCU/$(NAME)/$(TOOLCHAIN_NAME) \
-                   -L ./WICED/platform/MCU/$(NAME)/$(TOOLCHAIN_NAME)/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)
+GLOBAL_LDFLAGS  += -L ./WICED/platform/MCU/$(FAMILY)/$(TOOLCHAIN_NAME) \
+                   -L ./WICED/platform/MCU/$(FAMILY)/$(TOOLCHAIN_NAME)/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)
 endif
 
 # Components
-$(NAME)_COMPONENTS  += $(TOOLCHAIN_NAME)
-$(NAME)_COMPONENTS  += MCU/BCM439x/peripherals
-$(NAME)_COMPONENTS  += MCU/BCM439x/WWD/internal
-$(NAME)_COMPONENTS  += utilities/ring_buffer
+$(NAME)_COMPONENTS  += $(TOOLCHAIN_NAME) \
+                       MCU/BCM439x/peripherals \
+                       MCU/BCM439x/WWD/internal \
+                       utilities/ring_buffer
 
 # send spi flash requests through normal wiced driver
 #$(NAME)_COMPONENTS += drivers/spi_flash
@@ -67,12 +70,14 @@ endif
 
 $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../../$(HOST_ARCH)/hardfault_handler.c \
+                   ../../$(HOST_ARCH)/host_cm3.c \
                    ../platform_resource.c \
                    ../platform_stdio.c \
                    ../wiced_platform_common.c \
-                   ../wiced_apps_common.c	\
-                   ../wiced_waf_common.c	\
+                   ../wiced_apps_common.c \
+                   ../wiced_waf_common.c \
                    ../wiced_dct_external_common.c \
+                   ../platform_nsclock.c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
@@ -80,7 +85,11 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_mcu_powersave.c \
                    WAF/waf_platform.c \
                    WWD/wwd_bus.c \
-                   WWD/wwd_platform.c
+                   WWD/wwd_platform.c \
+                   WWD/BCM439x_packet.c
+
+$(NAME)_INCLUDES += WWD/internal/include
+$(NAME)_DEFINES += _HNDRTE_
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
@@ -104,13 +113,12 @@ DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/bootloader$(LINK_SCRIPT_SUFFIX)
 GLOBAL_DEFINES      += bootloader_ota
 
 else
-ifneq ($(filter ota_upgrade sflash_write, $(APP)),)
+ifneq ($(filter sflash_write, $(APP)),)
 ####################################################################################
-# Building sflash_write OR ota_upgrade
+# Building sflash_write
 ####################################################################################
 
 PRE_APP_BUILDS      += bootloader
-WIFI_IMAGE_DOWNLOAD := buffered
 DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_no_bootloader$(LINK_SCRIPT_SUFFIX)
 GLOBAL_INCLUDES     += WAF/  ../../../../../apps/waf/bootloader/
 GLOBAL_DEFINES      += WICED_DISABLE_BOOTLOADER
@@ -143,5 +151,5 @@ $(NAME)_SOURCES     += platform_isr.c
 $(NAME)_LINK_FILES  += platform_isr.o
 
 endif # USES_BOOTLOADER_OTA = 1
-endif # APP=ota_upgrade OR sflash_write
+endif # APP= sflash_write
 endif # APP=bootloader

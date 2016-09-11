@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -115,6 +115,18 @@ extern void platform_init_peripheral_irq_priorities( void );
  * \li Called by @ref platform_init_mcu_infrastructure()
  */
 extern void platform_init_rtos_irq_priorities( void );
+
+/**
+ * Used to run last step initialisation
+ *
+ * @param[in] : void
+ * @return    : void
+ *
+ * @usage
+ * \li Defined internally in platforms/MCU/<MCU>/platform_init.c and called by CRT0
+ * \li Weakly defined in platforms/MCU/<MCU>/platform_init.c. Users may override it as desired
+ */
+extern void platform_init_complete( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

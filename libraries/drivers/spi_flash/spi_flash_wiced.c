@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,6 +38,19 @@ extern int sflash_platform_send_recv ( const void* platform_peripheral, /*@in@*/
 
     return 0;
 }
+
+int sflash_platform_deinit( void )
+{
+    if ( WICED_SUCCESS != wiced_spi_deinit( &wiced_spi_flash ) )
+    {
+        /*@-mustdefine@*/ /* Lint: failed - do not define platform peripheral */
+        return -1;
+        /*@+mustdefine@*/
+    }
+
+    return 0;
+}
+
 #else
 int sflash_platform_init( /*@shared@*/ void* peripheral_id, /*@out@*/ void** platform_peripheral_out )
 {
@@ -51,6 +64,11 @@ extern int sflash_platform_send_recv( const void* platform_peripheral, /*@in@*//
     UNUSED_PARAMETER( platform_peripheral );
     UNUSED_PARAMETER( segments );
     UNUSED_PARAMETER( num_segments );
+    return -1;
+}
+
+int sflash_platform_deinit( void )
+{
     return -1;
 }
 #endif

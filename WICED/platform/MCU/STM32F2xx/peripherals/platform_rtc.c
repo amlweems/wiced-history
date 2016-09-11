@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,6 +61,7 @@ static void              subtract_second_from_time                  ( wiced_rtc_
  ******************************************************/
 
 /* Default RTC time. Set to 12:20:30 08/04/2013 Monday */
+#ifdef WICED_ENABLE_MCU_RTC
 static const platform_rtc_time_t default_rtc_time =
 {
    .sec     = 30,
@@ -71,6 +72,7 @@ static const platform_rtc_time_t default_rtc_time =
    .month   = 4,
    .year    = 13,
 };
+#endif /* ifdef WICED_ENABLE_MCU_RTC */
 
 static const char not_leap_days[] =
 {
@@ -308,6 +310,7 @@ static platform_result_t stm32f2_rtc_change_clock( rtc_clock_state_t* current, r
             /* Enable initialisation mode */
             status = RTC_EnterInitMode();
             wiced_assert( "Rtc can not enter intialisation mode", status==SUCCESS );
+            REFERENCE_DEBUG_ONLY_VARIABLE( status );
 
             /* Update RTC prescaler */
             RTC->PRER = (uint32_t)( sync_div );
@@ -343,6 +346,7 @@ static void reset_rtc_values( void )
     RTC_ExitInitMode();
     status = RTC_WaitForSynchro();
     wiced_assert( "Rtc can not synchronize", status==SUCCESS );
+    REFERENCE_DEBUG_ONLY_VARIABLE( status );
 
     /* Enable write protection of rtc registers */
     RTC_WriteProtectionCmd(ENABLE);
@@ -351,6 +355,7 @@ static void reset_rtc_values( void )
     RTC_WriteProtectionCmd(DISABLE);
     status = RTC_EnterInitMode();
     wiced_assert( "Rtc can not enter intialisation mode", status==SUCCESS );
+    REFERENCE_DEBUG_ONLY_VARIABLE( status );
 
     /* 2000 year 01/01 */
     RTC->DR= 0;
@@ -358,6 +363,7 @@ static void reset_rtc_values( void )
     RTC_ExitInitMode();
     status = RTC_WaitForSynchro();
     wiced_assert( "Rtc can not synchronize", status==SUCCESS );
+    REFERENCE_DEBUG_ONLY_VARIABLE( status );
 
     /* Enable write protection of rtc registers */
     RTC_WriteProtectionCmd(ENABLE);

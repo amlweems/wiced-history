@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,7 +9,9 @@
  */
 #pragma once
 
-#include "wiced.h"
+#include "wiced_result.h"
+#include "wiced_tcpip.h"
+#include "wiced_network.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +39,8 @@ typedef enum
     HTTP_GET  = 0,
     HTTP_POST = 1,
     HTTP_HEAD = 2,
-    HTTP_END  = 3,
+    HTTP_PUT  = 3,
+    HTTP_END  = 4,
 } http_request_t;
 
 typedef enum
@@ -117,7 +120,7 @@ typedef struct
  ******************************************************/
 
 /* HTTP stream management functions */
-wiced_result_t http_init_stream  ( http_stream_t* session, const char* host_name, wiced_ip_address_t* ip_address, uint16_t port );
+wiced_result_t http_init_stream  ( http_stream_t* session, wiced_interface_t interface, const char* host_name, wiced_ip_address_t* ip_address, uint16_t port );
 wiced_result_t http_deinit_stream( http_stream_t* session );
 
 /* HTTP stream header functions */
@@ -131,7 +134,8 @@ wiced_result_t http_stream_write( http_stream_t* session, uint8_t* data, uint16_
 wiced_result_t http_stream_flush( http_stream_t* session );
 
 /* HTTP stream reading and processing functions */
-wiced_result_t http_stream_receive  ( http_stream_t* session, wiced_packet_t** packet, uint32_t timeout);
+wiced_result_t http_stream_read     ( http_stream_t* session, uint8_t* data, uint16_t length, uint32_t timeout, uint32_t* read_count );
+wiced_result_t http_stream_receive  ( http_stream_t* session, wiced_packet_t** packet, uint32_t timeout );
 wiced_result_t http_extract_headers ( wiced_packet_t* packet, http_header_t* headers, uint16_t number_of_headers );
 wiced_result_t http_get_body        ( wiced_packet_t* packet, uint8_t** body, uint32_t* body_length );
 wiced_result_t http_process_response( wiced_packet_t* packet, http_status_code_t* response_code );

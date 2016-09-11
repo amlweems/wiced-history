@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,9 +14,9 @@ MEMORY
 /*
     BTLDR_OR_VECTOR_FLASH(rx) : ORIGIN = 0x0, LENGTH = 512
 */
-    DCT1_FLASH     (rx) : ORIGIN = 0x4100,      LENGTH = 16K
-    DCT2_FLASH     (rx) : ORIGIN = 0x8100,      LENGTH = 16K
-    APP_FLASH      (rx) : ORIGIN = 0xC100,      LENGTH = 474880
+    DCT1_FLASH     (rx) : ORIGIN = 0x4000,      LENGTH = 16K
+    DCT2_FLASH     (rx) : ORIGIN = 0x8000,      LENGTH = 16K
+    APP_FLASH      (rx) : ORIGIN = 0xC00,       LENGTH = 464K
     SRAM_32K_LOCAL (rwx): ORIGIN = 0x10000000,  LENGTH = 32K
     SRAM_32K_AHB   (rwx): ORIGIN = 0x2007C000,  LENGTH = 32K
 }

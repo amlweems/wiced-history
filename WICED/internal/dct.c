@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,6 +24,12 @@
 #else/* #ifdef WIFI_CONFIG_APPLICATION_DEFINED */
 #include "default_wifi_config_dct.h"
 #endif /* #ifdef WIFI_CONFIG_APPLICATION_DEFINED */
+
+#ifdef NETWORK_CONFIG_APPLICATION_DEFINED
+#include "network_config_dct.h"
+#else/* #ifdef NETWORK_CONFIG_APPLICATION_DEFINED */
+#include "default_network_config_dct.h"
+#endif /* #ifdef NETWORK_CONFIG_APPLICATION_DEFINED */
 
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
 #ifdef BT_CONFIG_APPLICATION_DEFINED
@@ -84,6 +90,10 @@ extern const void * const dct_used_size_loc; /* Defined by linker script */
 #define COOEE_KEY_STRING       "abcdabcdabcdabcd"
 #endif
 
+#ifndef WICED_NETWORK_INTERFACE
+#define WICED_NETWORK_INTERFACE   WICED_STA_INTERFACE
+#endif
+
 #define DEFAULT_AP_LIST  \
     { \
         [0] = \
@@ -130,7 +140,14 @@ static const platform_dct_data_t initial_dct =
     .dct_header.apps_locations[ DCT_FILESYSTEM_IMAGE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FILESYSTEM_IMAGE_INDEX,
     .dct_header.apps_locations[ DCT_WIFI_FIRMWARE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_WIFI_FIRMWARE_INDEX,
 
-#ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_EXTERNAL_LOCATION
+#if defined( BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM )
+    .dct_header.boot_detail.entry_point = 0,
+    .dct_header.boot_detail.load_details.valid = 1,
+    .dct_header.boot_detail.load_details.load_once = 0,
+    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FILESYSTEM_FILE,
+    .dct_header.boot_detail.load_details.source.detail.filesystem_filename = "app.elf",
+    .dct_header.boot_detail.load_details.destination.id = INTERNAL,
+#elif defined( BOOTLOADER_LOAD_MAIN_APP_FROM_EXTERNAL_LOCATION )
     .dct_header.boot_detail.entry_point = 0,
     .dct_header.boot_detail.load_details.valid = 1,
     .dct_header.boot_detail.load_details.load_once = 0,
@@ -143,7 +160,7 @@ static const platform_dct_data_t initial_dct =
     .dct_header.boot_detail.load_details.source.id = NONE,
     .dct_header.boot_detail.load_details.source.detail.external_fixed.location = 0,
     .dct_header.boot_detail.load_details.destination.id = INTERNAL,
-#endif /* ifdef USES_RESOURCE_FILESYSTEM */
+#endif /* ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM */
 
     .security_credentials.certificate = CERTIFICATE_STRING,
     .security_credentials.private_key = PRIVATE_KEY_STRING,
@@ -161,7 +178,14 @@ static const platform_dct_data_t initial_dct =
 #else
     .wifi_config.country_code        = WICED_DEFAULT_COUNTRY_CODE,
 #endif
-    .wifi_config.mac_address.octet   = DCT_GENERATED_MAC_ADDRESS,
+    .wifi_config.mac_address.octet     = DCT_GENERATED_MAC_ADDRESS,
+
+    .network_config.interface          = CONFIG_NETWORK_INTERFACE,
+    .network_config.hostname.value     = CONFIG_NETWORK_IP_HOSTNAME,
+
+#ifdef WICED_USE_ETHERNET_INTERFACE
+    .ethernet_config.mac_address.octet = DCT_GENERATED_ETHERNET_MAC_ADDRESS,
+#endif
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
      .bt_config.bluetooth_device_address            = WICED_BLUETOOTH_DEVICE_ADDRESS,
      .bt_config.bluetooth_device_name               = WICED_BLUETOOTH_DEVICE_NAME,
@@ -174,7 +198,7 @@ static const platform_dct_data_t initial_dct =
 };
 
 #if defined ( __IAR_SYSTEMS_ICC__ )
-4__root int wiced_program_start(void)
+__root int wiced_program_start(void)
 {
     /* in iar we must reference dct structure, otherwise it may not be included in */
     /* the dct image */

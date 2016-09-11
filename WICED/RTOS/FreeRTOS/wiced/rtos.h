@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -63,7 +63,10 @@ extern "C" {
 #endif
 #define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE                                    (10)
 #define HARDWARE_IO_WORKER_THREAD_PRIORITY       (WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_DEFAULT_LIBRARY_PRIORITY))
+
+#ifndef NETWORKING_WORKER_THREAD_STACK_SIZE
 #define NETWORKING_WORKER_THREAD_STACK_SIZE                               (7 * 1024)
+#endif
 #define NETWORKING_WORKER_THREAD_QUEUE_SIZE                                     (15)
 #define NETWORKING_WORKER_THREAD_PRIORITY        (WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_NETWORK_WORKER_PRIORITY))
 

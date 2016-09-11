@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -25,6 +25,9 @@ extern "C" {
 /******************************************************
  *                      Macros
  ******************************************************/
+
+#define SSID_NAME_SIZE        (32)
+#define HOSTNAME_SIZE         (32)
 
 /******************************************************
  *                    Constants
@@ -108,8 +111,8 @@ typedef struct
  */
 typedef struct
 {
-    uint8_t length;     /**< SSID length */
-    uint8_t value[32]; /**< SSID name (AP name)  */
+    uint8_t length;                  /**< SSID length */
+    uint8_t value[ SSID_NAME_SIZE ]; /**< SSID name (AP name)  */
 } wiced_ssid_t;
 
 /**
@@ -120,7 +123,13 @@ typedef struct
     uint8_t octet[6]; /**< Unique 6-byte MAC address */
 } wiced_mac_t;
 
-
+/**
+ * Structure for storing a null terminated network hostname
+ */
+typedef struct
+{
+    char value[ HOSTNAME_SIZE + 1 ];
+} wiced_hostname_t;
 
 /**
  * Structure for storing extended scan parameters
@@ -133,6 +142,15 @@ typedef struct
     int32_t scan_home_channel_dwell_time_between_channels_ms; /**< Period of time to wait on the home channel when scanning. Only relevant if associated. */
 } wiced_scan_extended_params_t;
 
+/**
+ * Structure for storing radio band list information
+ */
+typedef struct
+{
+    int32_t number_of_bands; /**< Number of bands supported, currently 1 or 2      */
+    int32_t current_band;    /**< Current band type : WLC_BAND_2G or WLC_BAND_5G   */
+    int32_t other_band;      /**< If number of bands is 2 then the other band type */
+} wiced_band_list_t;
 
 /**
  * Structure for storing AP information

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,7 +12,8 @@
 #include "platform_constants.h"
 #include "wwd_constants.h"
 #include "ring_buffer.h"
-#include "RTOS/wwd_rtos_interface.h"
+#include "wwd_rtos.h"
+//#include "RTOS/wwd_rtos_interface.h"
 
 #ifdef __cplusplus
 extern "C" {

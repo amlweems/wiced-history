@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,8 +22,22 @@ $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 $(NAME)_LINK_FILES := interrupt_handlers_IAR.o
 
 else
-$(NAME)_SOURCES  := wwd_rtos.c \
-                    low_level_init.c
+$(NAME)_SOURCES  := wwd_rtos.c
+
+ifneq ($(filter $(HOST_ARCH), ARM_CM3 ARM_CM4),)
+$(NAME)_SOURCES  += CM3_CM4/low_level_init.c
+GLOBAL_INCLUDES  += CM3_CM4
+else
+ifneq ($(filter $(HOST_ARCH), ARM_CR4),)
+$(NAME)_SOURCES    += CR4/low_level_init.S
+$(NAME)_SOURCES    += CR4/timer_isr.c
+$(NAME)_LINK_FILES += CR4/timer_isr.o
+GLOBAL_INCLUDES    += CR4
+else
+$(error No ThreadX low_level_init function for architecture $(HOST_ARCH))
+endif
+endif
+
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 

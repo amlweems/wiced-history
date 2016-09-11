@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,6 +14,7 @@
 
 
 #include "wwd_debug.h"
+#include "network/wwd_buffer_interface.h"
 #include "platform/wwd_resource_interface.h"
 #include "network/wwd_network_constants.h"
 #include "wwd_bus_protocol_interface.h"

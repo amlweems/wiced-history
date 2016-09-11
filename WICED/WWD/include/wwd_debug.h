@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -152,6 +152,24 @@ extern "C"
 #else
     #define WPS_ERROR(args) { WICED_BREAK_IF_DEBUG(); }
 #endif
+
+/* WICED printing macros for the Supplicant stack*/
+#ifdef WPRINT_ENABLE_SUPPLICANT_INFO
+        #define SUPPLICANT_INFO(args) WPRINT_MACRO(args)
+    #else
+        #define SUPPLICANT_INFO(args)
+    #endif
+    #ifdef WPRINT_ENABLE_SUPPLICANT_DEBUG
+        #define SUPPLICANT_DEBUG(args) WPRINT_MACRO(args)
+    #else
+        #define SUPPLICANT_DEBUG(args)
+    #endif
+    #ifdef WPRINT_ENABLE_SUPPLICANT_ERROR
+        #define SUPPLICANT_ERROR(args) { WPRINT_MACRO(args); WICED_BREAK_IF_DEBUG(); }
+    #else
+        #define SUPPLICANT_ERROR(args) { WICED_BREAK_IF_DEBUG(); }
+    #endif
+
 
 /* WICED printing macros for Platforms*/
 #ifdef WPRINT_ENABLE_PLATFORM_INFO

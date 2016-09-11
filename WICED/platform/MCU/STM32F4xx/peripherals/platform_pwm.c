@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -140,7 +140,12 @@ platform_result_t platform_pwm_start( const platform_pwm_t* pwm )
     platform_mcu_powersave_disable();
 
     TIM_Cmd( pwm->tim, ENABLE );
-    TIM_CtrlPWMOutputs( pwm->tim, ENABLE );
+
+    /* Advanced Timers 1 & 8 need extra enable */
+    if ( IS_TIM_LIST4_PERIPH(pwm->tim) )
+    {
+        TIM_CtrlPWMOutputs( pwm->tim, ENABLE );
+    }
 
     platform_mcu_powersave_enable();
 
@@ -153,7 +158,12 @@ platform_result_t platform_pwm_stop( const platform_pwm_t* pwm )
 
     platform_mcu_powersave_disable();
 
-    TIM_CtrlPWMOutputs( pwm->tim, DISABLE );
+    /* Advanced Timers 1 & 8 need extra disable */
+    if ( IS_TIM_LIST4_PERIPH(pwm->tim) )
+    {
+        TIM_CtrlPWMOutputs( pwm->tim, DISABLE );
+    }
+
     TIM_Cmd( pwm->tim, DISABLE );
 
     platform_mcu_powersave_enable();

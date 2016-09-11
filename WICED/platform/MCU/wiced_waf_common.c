@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -23,10 +23,11 @@
 #include "wiced_apps_common.h"
 #include "wiced_waf_common.h"
 #include "wiced_dct_common.h"
-#include "platform_cmsis.h"
 #include "waf_platform.h"
+#include "wicedfs.h"
 #include "elf.h"
 #include "platform_peripheral.h"
+#include "platform_resource.h"
 
 /******************************************************
  *                      Macros
@@ -129,6 +130,17 @@ wiced_result_t wiced_waf_app_set_size(wiced_app_t* app, uint32_t size)
     return wiced_dct_set_app_header_location( app->app_id, &app->app_header_location );
 }
 
+static wiced_bool_t wiced_waf_is_elf_segment_load( elf_program_header_t* prog_header )
+{
+    if ( ( prog_header->data_size_in_file == 0 ) || /* size is zero */
+         ( ( prog_header->type & 0x1 ) == 0 ) ) /* non- loadable segment */
+    {
+        return WICED_FALSE;
+    }
+
+    return WICED_TRUE;
+}
+
 static wiced_result_t wiced_waf_app_area_erase(const image_location_t* app_header_location)
 {
     elf_header_t header;
@@ -146,8 +158,7 @@ static wiced_result_t wiced_waf_app_area_erase(const image_location_t* app_heade
         offset = header.program_header_offset + header.program_header_entry_size * (unsigned long) i;
         wiced_apps_read( app_header_location, (uint8_t*) &prog_header, offset, sizeof( prog_header ) );
 
-        if ( ( prog_header.data_size_in_file == 0 ) || /* size is zero */
-             ( ( prog_header.type & 0x1 ) == 0 ) ) /* non- loadable segment */
+        if ( wiced_waf_is_elf_segment_load( &prog_header ) == WICED_FALSE )
         {
             continue;
         }
@@ -184,38 +195,81 @@ wiced_result_t wiced_waf_app_read_chunk( wiced_app_t* app, uint32_t offset, uint
 
 wiced_result_t wiced_waf_app_load( const image_location_t* app_header_location, uint32_t* destination )
 {
-    elf_header_t header;
-    uint32_t     i;
+    wiced_result_t       result = WICED_BADARG;
+    elf_header_t         header;
 
-    /* Erase the application area */
-    if ( wiced_waf_app_area_erase( app_header_location ) != WICED_SUCCESS )
+    UNUSED_PARAMETER(app_header_location);
+    (void)wiced_waf_app_area_erase;
+#ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM
+    if ( app_header_location->id == EXTERNAL_FILESYSTEM_FILE )
     {
-        return WICED_ERROR;
-    }
-
-    /* Read the image header */
-    wiced_apps_read( app_header_location, (uint8_t*) &header, 0, sizeof( header ) );
-
-    for ( i = 0; i < header.program_header_entry_count; i++ )
-    {
+        uint32_t i;
         elf_program_header_t prog_header;
-        unsigned long        offset;
+        WFILE f_in;
 
-        offset = header.program_header_offset + header.program_header_entry_size * (unsigned long) i;
-        wiced_apps_read( app_header_location, (uint8_t*) &prog_header, offset, sizeof( prog_header ) );
+        /* Read the image header */
+        wicedfs_fopen( &resource_fs_handle, &f_in, app_header_location->detail.filesystem_filename );
+        wicedfs_fread( &header, sizeof(header), 1, &f_in );
 
-        if ( ( prog_header.data_size_in_file == 0 ) || /* size is zero */
-             ( ( prog_header.type & 0x1 ) == 0 ) ) /* non- loadable segment */
+        for( i = 0; i < header.program_header_entry_count; i++ )
         {
-            continue;
+            wicedfs_fseek( &f_in, (wicedfs_ssize_t)( header.program_header_offset + header.program_header_entry_size * i ), SEEK_SET);
+            wicedfs_fread( &prog_header, sizeof(prog_header), 1, &f_in );
+
+            if ( wiced_waf_is_elf_segment_load( &prog_header ) == WICED_FALSE )
+            {
+                continue;
+            }
+
+            wicedfs_fseek( &f_in, (wicedfs_ssize_t)prog_header.data_offset, SEEK_SET);
+            platform_load_app_chunk_from_fs( app_header_location, &f_in, (void*) prog_header.physical_address, prog_header.data_size_in_file );
         }
-        offset = prog_header.data_offset;
-        platform_load_app_chunk( app_header_location, offset, (void*) prog_header.physical_address, prog_header.data_size_in_file );
+
+        wicedfs_fclose( &f_in );
+
+        result = WICED_SUCCESS;
     }
 
-    *(uint32_t *) destination = header.entry;
+#else
+    if ( app_header_location->id == EXTERNAL_FIXED_LOCATION )
+    {
+        uint32_t i;
+        elf_program_header_t prog_header;
 
-    return WICED_SUCCESS;
+        /* Erase the application area */
+        if ( wiced_waf_app_area_erase( app_header_location ) != WICED_SUCCESS )
+        {
+            return WICED_ERROR;
+        }
+
+        /* Read the image header */
+        wiced_apps_read( app_header_location, (uint8_t*) &header, 0, sizeof( header ) );
+
+        for ( i = 0; i < header.program_header_entry_count; i++ )
+        {
+            unsigned long offset = header.program_header_offset + header.program_header_entry_size * (unsigned long) i;
+
+            wiced_apps_read( app_header_location, (uint8_t*) &prog_header, offset, sizeof( prog_header ) );
+
+            if ( wiced_waf_is_elf_segment_load( &prog_header ) == WICED_FALSE )
+            {
+                continue;
+            }
+
+            offset = prog_header.data_offset;
+            platform_load_app_chunk( app_header_location, offset, (void*) prog_header.physical_address, prog_header.data_size_in_file );
+        }
+
+        result = WICED_SUCCESS;
+    }
+
+#endif /* BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM */
+    if ( result == WICED_SUCCESS )
+    {
+        *(uint32_t *) destination = header.entry;
+    }
+
+    return result;
 }
 
 void wiced_waf_start_app( uint32_t entry_point )

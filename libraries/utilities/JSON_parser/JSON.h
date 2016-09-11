@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,7 +9,8 @@
  */
 #pragma once
 
-#include "wiced.h"
+#include <stdint.h>
+#include "wiced_result.h"
 
 #ifdef __cplusplus
 extern "C" {

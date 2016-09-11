@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -342,7 +342,7 @@ int wicedfs_readdir( WDIR* dirp, /*@out@*/ char* name_buf, unsigned int name_buf
     }
 
     /* Read the filename from the file table entry */
-    bytes_read = dirp->fs_handle->read_func( dirp->fs_handle->user_param, name_buf, dirp->filename_size, file_header_loc + sizeof(wicedfs_file_header_t) );
+    bytes_read = dirp->fs_handle->read_func( dirp->fs_handle->user_param, name_buf, dirp->filename_size, (wicedfs_usize_t) ( file_header_loc + sizeof(wicedfs_file_header_t) ) );
 
     if ( bytes_read != dirp->filename_size )
     {
@@ -505,7 +505,7 @@ static int find_item( /*@in@*/  const wiced_filesystem_t*  fs_handle,
         else
         {
             /* No directory separator. Compare entire name */
-            cmp_bytes = strlen( filename );
+            cmp_bytes = (uint32_t) strlen( filename );
         }
 
 
@@ -517,7 +517,7 @@ static int find_item( /*@in@*/  const wiced_filesystem_t*  fs_handle,
          * For each: read the entry from hardware, then compare the entry name to the given filename
          */
         while ( ( ( bytes_read = fs_handle->read_func( fs_handle->user_param, file_hnd, (wicedfs_usize_t) sizeof(wicedfs_file_header_t), curr_file_table_addr + file_num * curr_dir->file_header_size ) ) == (wicedfs_usize_t) sizeof(wicedfs_file_header_t) ) &&
-                ( 1 == ( cmp_val = cmp_filename( fs_handle, curr_file_table_addr + file_num * curr_dir->file_header_size + sizeof(wicedfs_file_header_t), filename, cmp_bytes, curr_dir->filename_size ) ) ) )
+                ( 1 == ( cmp_val = cmp_filename( fs_handle, (wicedfs_usize_t) ( curr_file_table_addr + file_num * curr_dir->file_header_size + sizeof(wicedfs_file_header_t) ), filename, cmp_bytes, curr_dir->filename_size ) ) ) )
         {
             /* Not found yet - increment file table position */
             file_num++;

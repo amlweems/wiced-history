@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,6 +27,9 @@ extern void* app_code_start_addr_loc;
 extern void* sram_start_addr_loc;
 extern void* sram_size_loc;
 
+#ifdef WICED_DCT_INCLUDE_BT_CONFIG
+        [DCT_BT_CONFIG_SECTION] = OFFSETOF( platform_dct_data_t, bt_config ),
+#endif
 #if defined ( __ICCARM__ )
 
 static inline void __jump_to( uint32_t addr )
@@ -79,19 +82,20 @@ void platform_start_app( uint32_t entry_point )
 
 }
 
-int platform_erase_flash( uint16_t start_sector, uint16_t end_sector )
+platform_result_t platform_erase_flash( uint16_t start_sector, uint16_t end_sector )
 {
     UNUSED_PARAMETER(start_sector);
     UNUSED_PARAMETER(end_sector);
-    return 0;
+    return PLATFORM_UNSUPPORTED;
 }
 
-int platform_write_flash_chunk( uint32_t address, const void* data, uint32_t size )
+
+platform_result_t platform_write_flash_chunk( uint32_t address, const void* data, uint32_t size )
 {
     UNUSED_PARAMETER(address);
     UNUSED_PARAMETER(data);
     UNUSED_PARAMETER(size);
-    return 0;
+    return PLATFORM_UNSUPPORTED;
 }
 
 void platform_load_app_chunk( const image_location_t* app_header_location, uint32_t offset, void* physical_address, uint32_t size )
@@ -100,4 +104,10 @@ void platform_load_app_chunk( const image_location_t* app_header_location, uint3
     UNUSED_PARAMETER(offset);
     UNUSED_PARAMETER(physical_address);
     UNUSED_PARAMETER(size);
+}
+
+void platform_erase_app_area( uint32_t physical_address, uint32_t size )
+{
+    UNUSED_PARAMETER( physical_address );
+    UNUSED_PARAMETER( size );
 }

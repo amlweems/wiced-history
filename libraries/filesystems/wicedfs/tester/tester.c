@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
@@ -237,7 +238,7 @@ static int test_compare_dir( wiced_filesystem_t* fs_handle, const char* wdir_nam
         return -1;
     }
 
-    printf("opened dir %s at %I64u\n", wdir_name, (uint64_t)wdir.file_table_location );
+    printf("opened dir %s at %" PRIu64 "\n", wdir_name, (uint64_t)wdir.file_table_location );
 
     /* Open the local Host PC directory and get a sorted list of items */
     if ( 0 != get_sorted( dir_name, &sorted_ptr_list, &sorted_count ))
@@ -346,7 +347,7 @@ static int test_compare_dir( wiced_filesystem_t* fs_handle, const char* wdir_nam
                 printf( "Error opening wicedfs file %s\n", wpath );
                 free_list( &sorted_ptr_list, sorted_count );
                 wicedfs_closedir( &wdir );
-                flose(file);
+                fclose(file);
                 return -5;
             }
 
@@ -414,5 +415,5 @@ static wicedfs_usize_t hostfile_wicedfs_read( void* user_param, void* buf, wiced
     }
 
     /* Read the requested data from the image file */
-    return fread( buf, 1, (size_t)size, (FILE*)user_param );
+    return (wicedfs_usize_t) fread( buf, 1, (size_t)size, (FILE*)user_param );
 }

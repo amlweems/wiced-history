@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -586,12 +586,16 @@ int base64_test( void )
             if ( retval != strlen(correct_output_buffer) )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -1;
             }
 
             if ( strcmp( output_buffer, correct_output_buffer ) != 0 )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -2;
             }
 
@@ -610,6 +614,8 @@ int base64_test( void )
             if ( retval != plain_text_length )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -5;
             }
 
@@ -617,6 +623,8 @@ int base64_test( void )
                  ( memcmp( output_buffer, base64_test_vectors[test_num].plain_text, plain_text_length ) != 0 ) )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -6;
             }
 
@@ -628,6 +636,8 @@ int base64_test( void )
             if ( retval != plain_text_length )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -7;
             }
 
@@ -635,6 +645,8 @@ int base64_test( void )
                  ( memcmp( output_buffer, base64_test_vectors[test_num].plain_text, plain_text_length ) != 0 ) )
             {
                 wiced_assert("", 0 == 1);
+                free( output_buffer );
+                free( correct_output_buffer );
                 return -8;
             }
         }

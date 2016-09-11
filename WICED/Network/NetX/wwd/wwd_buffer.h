@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,7 +34,6 @@ typedef struct NX_PACKET_STRUCT* wiced_buffer_t;
 /******************************************************
  *             Global variables
  ******************************************************/
-
 
 #ifdef __cplusplus
 } /* extern "C" */

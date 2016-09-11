@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -106,6 +106,13 @@ extern "C"
  * @param mac : A wiced_mac_t pointer to the Wi-Fi MAC address
  */
 /*@external@*/ extern wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac );
+
+/**
+ * Returns Ethernet MAC address
+ *
+ * @param mac : A wiced_mac_t pointer to the Ethernet MAC address
+ */
+/*@external@*/ extern wwd_result_t host_platform_get_ethernet_mac_address( wiced_mac_t* mac );
 
 /**
  * Returns the current CPU cycle count.

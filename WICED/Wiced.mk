@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,9 +9,6 @@
 #
 
 NAME = WICED
-
-CERTIFICATE := $(SOURCE_ROOT)resources/certificates/brcm_demo_server_cert.cer
-PRIVATE_KEY := $(SOURCE_ROOT)resources/certificates/brcm_demo_server_cert_key.key
 
 ifndef USES_BOOTLOADER_OTA
 USES_BOOTLOADER_OTA :=1
@@ -25,8 +22,6 @@ endif
 ifeq (,$(APP_WWD_ONLY)$(NS_WWD_ONLY)$(RTOS_WWD_ONLY))
 
 $(NAME)_SOURCES += internal/wifi.c \
-                   internal/config.c \
-                   internal/config_http_content.c \
                    internal/time.c \
                    internal/wiced_lib.c \
                    internal/management.c \
@@ -35,37 +30,11 @@ $(NAME)_SOURCES += internal/wifi.c \
                    internal/wiced_easy_setup.c \
                    internal/waf.c
 
-$(NAME)_RESOURCES := images/brcmlogo.png \
-                     images/brcmlogo_line.png \
-                     images/favicon.ico \
-                     images/scan_icon.png \
-                     images/wps_icon.png \
-                     images/64_0bars.png \
-                     images/64_1bars.png \
-                     images/64_2bars.png \
-                     images/64_3bars.png \
-                     images/64_4bars.png \
-                     images/64_5bars.png \
-                     images/tick.png \
-                     images/cross.png \
-                     images/lock.png \
-                     images/progress.gif \
-                     scripts/general_ajax_script.js \
-                     scripts/wpad.dat \
-                     config/device_settings.html \
-                     config/scan_page_outer.html \
-                     config/redirect.html \
-                     styles/buttons.css \
-                     styles/border_radius.htc
-
-$(NAME)_INCLUDES := security/BESL/TLV \
-                    security/BESL/crypto \
+$(NAME)_INCLUDES := security/BESL/crypto \
                     security/BESL/include
 
 
-
-$(NAME)_CHECK_HEADERS := \
-                         internal/wiced_internal_api.h \
+$(NAME)_CHECK_HEADERS := internal/wiced_internal_api.h \
                          ../include/default_wifi_config_dct.h \
                          ../include/resource.h \
                          ../include/wiced.h \
@@ -81,27 +50,10 @@ $(NAME)_CHECK_HEADERS := \
                          ../include/wiced_utilities.h \
                          ../include/wiced_wifi.h
 
-ifeq (NetX,$(NETWORK))
-$(NAME)_COMPONENTS += WICED/security/BESL
-$(NAME)_COMPONENTS += daemons/HTTP_server
-$(NAME)_COMPONENTS += daemons/DNS_redirect
-$(NAME)_COMPONENTS += protocols/DNS
-GLOBAL_DEFINES += ADD_NETX_EAPOL_SUPPORT USE_MICRORNG
-endif
-
-ifeq (NetX_Duo,$(NETWORK))
-$(NAME)_COMPONENTS += WICED/security/BESL
-$(NAME)_COMPONENTS += daemons/HTTP_server
-$(NAME)_COMPONENTS += daemons/DNS_redirect
-$(NAME)_COMPONENTS += protocols/DNS
-GLOBAL_DEFINES += ADD_NETX_EAPOL_SUPPORT USE_MICRORNG
-endif
-
-ifeq (LwIP,$(NETWORK))
-$(NAME)_COMPONENTS += WICED/security/BESL
-$(NAME)_COMPONENTS += daemons/HTTP_server
-$(NAME)_COMPONENTS += daemons/DNS_redirect
-$(NAME)_COMPONENTS += protocols/DNS
+ifneq (NoNS,$(NETWORK))
+$(NAME)_COMPONENTS += WICED/security/BESL \
+                      protocols/DNS
+GLOBAL_DEFINES += ADD_NETX_EAPOL_SUPPORT
 endif
 
 endif

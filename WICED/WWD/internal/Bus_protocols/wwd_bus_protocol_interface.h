@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -82,6 +82,10 @@ extern wwd_result_t wwd_bus_write_wifi_firmware_image  ( void );
 extern wwd_result_t wwd_bus_write_wifi_nvram_image     ( void );
 extern void         wwd_bus_init_backplane_window      ( void );
 extern wwd_result_t wwd_bus_set_backplane_window       ( uint32_t addr );
+
+#ifdef WWD_TEST_NVRAM_OVERRIDE
+extern wwd_result_t wwd_bus_get_wifi_nvram_image       ( char** nvram, uint32_t* size);
+#endif
 
 #ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
 extern wwd_result_t external_write_wifi_firmware_and_nvram_image  ( void );

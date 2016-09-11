@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -57,6 +57,8 @@ typedef enum
     KEY_ID_1,
     KEY_ID_2,
     KEY_ID_3,
+    KEY_ID_4,
+    KEY_ID_5,
     KEY_ID_MAX,
 } key_id_t;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -48,9 +48,10 @@
  *               Function Definitions
  ******************************************************/
 
-wiced_result_t thermistor_take_sample(wiced_adc_t adc, uint16_t* sample_value)
+wiced_result_t thermistor_take_sample(wiced_adc_t adc, int16_t* celcius_degree_tenths )
 {
-    wiced_result_t result = wiced_adc_take_sample(adc, sample_value);
+    uint16_t sample_value;
+    wiced_result_t result = wiced_adc_take_sample(adc, &sample_value);
 
     /* Thermistor is Murata NCP18XH103J03RB  (Digi-key 490-2436-1-ND )
      *
@@ -74,16 +75,16 @@ wiced_result_t thermistor_take_sample(wiced_adc_t adc, uint16_t* sample_value)
      */
     if (result == WICED_SUCCESS)
     {
-        double thermistor_resistance = 43000.0 / ( ( 4096.0 / (double) *sample_value ) - 1 );
+        double thermistor_resistance = 43000.0 / ( ( 4096.0 / (double) sample_value ) - 1 );
         double logval = log( thermistor_resistance / 10000.0 );
         double temperature = 1.0 / ( logval / 3380.0 + 1.0 / 298.15 ) - 273.15;
 
-        *sample_value = (uint16_t)(temperature*10);
+        *celcius_degree_tenths = (int16_t)(temperature*10);
         return WICED_SUCCESS;
     }
     else
     {
-        *sample_value = 0;
+        *celcius_degree_tenths = 0;
         return result;
     }
 }

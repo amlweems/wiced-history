@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,6 +67,12 @@ typedef enum
     WICED_LINK_UP,   /**< Link status up   */
     WICED_LINK_DOWN  /**< Link status down */
 } wiced_link_status_t;
+
+typedef enum
+{
+    WICED_NETWORK_PACKET_TX,     /**< Network packet for data transmission */
+    WICED_NETWORK_PACKET_RX      /**< Network packet for data reception    */
+} wiced_network_packet_dir_t;
 
 /******************************************************
  *                 Type Definitions
@@ -204,7 +210,6 @@ extern wiced_result_t wiced_configure_device( const configuration_entry_t* confi
  */
 extern wiced_result_t wiced_reconfigure_device( const configuration_entry_t* config );
 
-
 /** @} */
 
 
@@ -219,6 +224,24 @@ extern wiced_result_t wiced_reconfigure_device( const configuration_entry_t* con
  */
 /*****************************************************************************/
 
+/** Set network hostname in DCT
+ *
+ *  NOTE: This function will change the DCT.
+ *
+ * @param[in] name          : a null terminated string (Note: this will be truncated to a maximum of 32 characters)
+ *
+ * @return    @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_set_hostname( const char* name );
+
+/** Get network hostname from DCT
+ *
+ * @param[in] name          : a pointer to a wiced_hostname_t object to store the hostname
+ *
+ * @return    @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_get_hostname( wiced_hostname_t* name );
+
 /** Brings up a network interface
  *
  *
@@ -231,7 +254,17 @@ extern wiced_result_t wiced_reconfigure_device( const configuration_entry_t* con
  */
 extern wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings );
 
-extern wiced_result_t wiced_network_create_packet_pool( uint8_t* memory_pointer, uint32_t memory_size, wiced_bool_t rx_or_tx );
+
+/** Creates a network packet pool from a chunk of memory
+ *
+ * @param[in] memory_pointer : pointer to a chunk of memory
+ * @param[in] memory_size    : size of the memory chunk
+ * @param[in] direction      : network packet reception or transmission
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_create_packet_pool( uint8_t* memory_pointer, uint32_t memory_size, wiced_network_packet_dir_t direction );
+
 
 /** Brings down a network interface
  *
@@ -295,6 +328,21 @@ extern wiced_bool_t wiced_network_is_up( wiced_interface_t interface );
  */
 extern wiced_bool_t wiced_network_is_ip_up( wiced_interface_t interface );
 
+
+/** Reads default network interface from DCT and brings up network
+ *
+ * Result from reading DCT is stored in interface
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_up_default( wiced_interface_t* interface, const wiced_ip_setting_t* ap_ip_settings );
+
+/** Returns the default ready interface
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_get_default_ready_interface( wiced_interface_t* interface );
+
+
 /** Register callback function/s that gets called when a change in network link status occurs
  *
  * @param link_up_callback   : the optional callback function to register for the link up event
@@ -303,7 +351,7 @@ extern wiced_bool_t wiced_network_is_ip_up( wiced_interface_t interface );
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred with any step
  */
-extern wiced_result_t wiced_network_register_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback );
+extern wiced_result_t wiced_network_register_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback, wiced_interface_t interface );
 
 /** De-register network link status callback function/s
  *
@@ -312,7 +360,7 @@ extern wiced_result_t wiced_network_register_link_callback( wiced_network_link_c
  *
  * @return @ref wiced_result_t
  */
-extern wiced_result_t wiced_network_deregister_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback );
+extern wiced_result_t wiced_network_deregister_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback, wiced_interface_t interface );
 
 
 /** @} */

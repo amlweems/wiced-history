@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -70,7 +70,7 @@ static const app_header_t wiced_apps_lut[ 8 ] =
     [DCT_OTA_APP_INDEX] =
         {
             .count   = OTA_APP_ENTRY_COUNT,
-            .sectors = { {DCT_IMAGE_SECTOR_START,DCT_IMAGE_SECTOR_COUNT} }
+            .sectors = { {OTA_APP_SECTOR_START,OTA_APP_SECTOR_COUNT} }
         },
     [DCT_FILESYSTEM_IMAGE_INDEX] =
         {

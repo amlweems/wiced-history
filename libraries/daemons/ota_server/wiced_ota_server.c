@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -58,7 +58,7 @@ wiced_result_t wiced_ota_server_start( wiced_interface_t interface )
     wiced_result_t result = WICED_SUCCESS;
 
     result = ota_server_start( &ota_server, OTA_SERVER_PORT, &ota_server_page_database[0], interface );
-    wiced_assert("Failed to start airplay upgrade server", result == WICED_SUCCESS);
+    wiced_assert("Failed to start ota server", result == WICED_SUCCESS);
 
     return result;
 }

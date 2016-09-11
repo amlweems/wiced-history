@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -83,10 +83,12 @@ wwd_result_t host_platform_bus_init( void )
     /* Setup SPI slave select GPIOs */
     platform_gpio_output_high( &wifi_spi_pins[WWD_PIN_SPI_CS] );
 
-#if defined ( WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP )
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     /* Set GPIO_B[1:0] to 01 to put WLAN module into gSPI mode */
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0], OUTPUT_PUSH_PULL );
     platform_gpio_output_high( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1], OUTPUT_PUSH_PULL );
     platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "wiced_platform.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,12 +19,18 @@ extern "C" {
 /******************************************************
  *                      Macros
  ******************************************************/
+
 #define CMD_TABLE_END      { NULL, NULL, 0, NULL, NULL, NULL, NULL }
 #define CMD_TABLE_DIV(str) { (char*) "",   NULL, 0, NULL, NULL, str,  NULL }
+
+#ifdef WICED_WIFI_SOFT_AP_WEP_SUPPORT_ENABLED
+    #define WEP_KEY_TYPE        WEP_KEY_ASCII_FORMAT /* WEP key type is set to ASCII format */
+#endif
 
 /******************************************************
  *                    Constants
  ******************************************************/
+
 #define DEFAULT_0_ARGUMENT_COMMAND_ENTRY(nm, func) \
         { \
           .name         = #nm,     \
@@ -49,6 +56,7 @@ extern "C" {
 /******************************************************
  *                   Enumerations
  ******************************************************/
+
 typedef enum
 {
     ERR_CMD_OK           =  0,
@@ -68,13 +76,16 @@ typedef enum
 typedef int       (*command_function_t)     ( int argc, char *argv[] );
 typedef cmd_err_t (*help_example_function_t)( char* command_name, uint32_t eg_select );
 
+/******************************************************
+ *                    Structures
+ ******************************************************/
 
 typedef struct
 {
     char* name;                             /* The command name matched at the command line. */
     command_function_t command;             /* Function that runs the command. */
     int arg_count;                          /* Minimum number of arguments. */
-    char* delimit;                          /* String of characters that may delimit the arguments. */
+    const char* delimit;                          /* Custom string of characters that may delimit the arguments for this command - NULL value will use the default for the console. */
 
     /*
      * These three elements are only used by the help, not the console dispatching code.
@@ -86,11 +97,6 @@ typedef struct
     char *brief;                            /* Brief description of the command used by the generic help generator function. */
 } command_t;
 
-
-/******************************************************
- *                    Structures
- ******************************************************/
-
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -99,12 +105,17 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-/* Default help command which can be used as a help command handler */
-int help_command_default( int argc, char* argv[] );
+wiced_result_t command_console_init  ( wiced_uart_t uart, uint32_t line_len, char* buffer, uint32_t history_len, char* history_buffer_ptr, const char* delimiter_string );
+wiced_result_t command_console_deinit( void );
+int            console_add_cmd_table ( const command_t *commands );
+int            console_del_cmd_table ( const command_t *commands );
+cmd_err_t      console_parse_cmd     ( const char* line );
+
+int hex_str_to_int( const char* hex_str );
+int str_to_int( const char* str );
 
 
-wiced_result_t command_console_init   ( wiced_uart_t uart, const command_t* command_table, uint32_t line_len, char* buffer, uint32_t history_len, char* history_buffer_ptr );
-wiced_result_t command_console_deinit ( void );
+
 
 #ifdef __cplusplus
 }

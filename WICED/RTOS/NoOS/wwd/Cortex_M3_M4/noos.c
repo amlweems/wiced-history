@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,6 +22,7 @@
  */
 
 #include "wwd_rtos.h"
+#include "wwd_rtos_isr.h"
 #include <stdint.h>
 #include "platform_config.h"
 #include "platform_cmsis.h"

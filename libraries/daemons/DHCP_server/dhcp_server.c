@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -8,9 +8,11 @@
  * written permission of Broadcom Corporation.
  */
 
+
 /** @file
- *
+ *  Implementation of a simple DHCP server
  */
+
 #include "wiced.h"
 #include "dhcp_server.h"
 #include "wwd_network_constants.h"
@@ -61,18 +63,15 @@
 #define IPPORT_DHCPS                   (67)
 #define IPPORT_DHCPC                   (68)
 
+#define WPAD_SAMPLE_URL "http://xxx.xxx.xxx.xxx/wpad.dat"
+
 static const uint8_t mtu_option_buff[]             = { 26, 2, WICED_PAYLOAD_MTU>>8, WICED_PAYLOAD_MTU&0xff };
 static const uint8_t dhcp_offer_option_buff[]      = { 53, 1, DHCPOFFER };
 static const uint8_t dhcp_ack_option_buff[]        = { 53, 1, DHCPACK };
 static const uint8_t dhcp_nak_option_buff[]        = { 53, 1, DHCPNAK };
 static const uint8_t lease_time_option_buff[]      = { 51, 4, 0x00, 0x01, 0x51, 0x80 }; /* 1 day lease */
 static const uint8_t dhcp_magic_cookie[]           = { 0x63, 0x82, 0x53, 0x63 };
-
-#define WPAD_SAMPLE_URL "http://xxx.xxx.xxx.xxx/wpad.dat"
-
-static const wiced_mac_t const empty_cache = { .octet = {0} };
-static wiced_mac_t             cached_mac_addresses[DHCP_IP_ADDRESS_CACHE_MAX];
-static wiced_ip_address_t      cached_ip_addresses [DHCP_IP_ADDRESS_CACHE_MAX];
+static const wiced_mac_t empty_cache               = { .octet = {0} };
 
 /******************************************************
  *                   Enumerations
@@ -112,7 +111,7 @@ typedef struct
  ******************************************************/
 
 static void           dhcp_thread                      ( uint32_t thread_input );
-static uint8_t*       find_option                      ( dhcp_header_t* request, uint8_t option_num );
+static const uint8_t* find_option                      ( const dhcp_header_t* request, uint8_t option_num );
 static wiced_result_t get_client_ip_address_from_cache ( const wiced_mac_t* client_mac_address, wiced_ip_address_t* client_ip_address );
 static wiced_result_t add_client_to_cache              ( const wiced_mac_t* client_mac_address, const wiced_ip_address_t* client_ip_address );
 static void           ipv4_to_string                   ( char* buffer, uint32_t ipv4_address );
@@ -120,6 +119,9 @@ static void           ipv4_to_string                   ( char* buffer, uint32_t 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
+
+static wiced_mac_t             cached_mac_addresses[DHCP_IP_ADDRESS_CACHE_MAX];
+static wiced_ip_address_t      cached_ip_addresses [DHCP_IP_ADDRESS_CACHE_MAX];
 
 /******************************************************
  *               Function Definitions
@@ -178,7 +180,7 @@ static void dhcp_thread( uint32_t thread_input )
     uint32_t             netmask_htobe;
     char*                option_ptr;
     wiced_dhcp_server_t* server                       = (wiced_dhcp_server_t*)thread_input;
-    uint8_t              subnet_option_buff[]         = { 1, 4, 0, 0, 0, 0 };
+    uint8_t              subnet_mask_option_buff[]    = { 1, 4, 0, 0, 0, 0 };
     uint8_t              server_ip_addr_option_buff[] = { 54, 4, 0, 0, 0, 0 };
     uint32_t*            server_ip_addr_ptr           = (uint32_t*)&server_ip_addr_option_buff[2];
     uint8_t              wpad_option_buff[ 2 + sizeof(WPAD_SAMPLE_URL)-1 ] = { 252, sizeof(WPAD_SAMPLE_URL)-1 };
@@ -187,19 +189,21 @@ static void dhcp_thread( uint32_t thread_input )
     wiced_ip_get_ipv4_address(server->interface, &local_ip_address);
     *server_ip_addr_ptr = htobe32( GET_IPV4_ADDRESS( local_ip_address ) );
 
+    /* Save the current netmask to be sent in DHCP packets as the 'subnet mask option' */
     wiced_ip_get_netmask(server->interface, &netmask);
-    ip_mask = ~(GET_IPV4_ADDRESS(netmask));
-
     netmask_htobe = htobe32( GET_IPV4_ADDRESS(netmask) );
-    memcpy(&subnet_option_buff[2], &netmask_htobe, 4);
+    memcpy(&subnet_mask_option_buff[2], &netmask_htobe, 4);
 
-    subnet = GET_IPV4_ADDRESS(local_ip_address) & GET_IPV4_ADDRESS(netmask);
-    next_available_ip_addr = subnet | ((GET_IPV4_ADDRESS(local_ip_address) + 1) & ip_mask);
+    /* Calculate the first available IP address which will be served - based on the netmask and the local IP */
+    ip_mask = ~( GET_IPV4_ADDRESS( netmask ) );
+    subnet = GET_IPV4_ADDRESS( local_ip_address ) & GET_IPV4_ADDRESS( netmask );
+    next_available_ip_addr = subnet | ( ( GET_IPV4_ADDRESS( local_ip_address ) + 1 ) & ip_mask );
 
-    /* Prepare wpad_option_buff */
+    /* Prepare the Web proxy auto discovery URL */
     memcpy(&wpad_option_buff[2], WPAD_SAMPLE_URL, sizeof(WPAD_SAMPLE_URL)-1);
     ipv4_to_string( (char*)&wpad_option_buff[2 + 7], *server_ip_addr_ptr);
 
+    /* Initialise the server quit flag */
     server->quit = WICED_FALSE;
 
     /* Loop endlessly */
@@ -215,6 +219,7 @@ static void dhcp_thread( uint32_t thread_input )
             continue;
         }
 
+        /* Get a pointer to the data in the packet */
         wiced_packet_get_data( received_packet, 0, (uint8_t**) &request_header, &data_length, &available_data_length );
 
         /* Check DHCP command */
@@ -228,17 +233,21 @@ static void dhcp_thread( uint32_t thread_input )
                 wiced_ip_address_t client_ip_address;
                 uint32_t           temp;
 
-                /* Create reply and free received packet */
+                /* Create reply packet */
                 if ( wiced_packet_create_udp( &server->socket, sizeof(dhcp_header_t), &transmit_packet, (uint8_t**) &reply_header, &available_space ) != WICED_SUCCESS )
                 {
+                    /* Cannot reply - release incoming packet */
                     wiced_packet_delete( received_packet );
                     break;
                 }
 
-                memcpy(reply_header, request_header, sizeof(dhcp_header_t) - sizeof(reply_header->options));
+                /* Copy in the DHCP header content from the received discover packet into the reply packet */
+                memcpy( reply_header, request_header, sizeof(dhcp_header_t) - sizeof(reply_header->options) );
+
+                /* Finished with the received discover packet - release it */
                 wiced_packet_delete( received_packet );
 
-                /* Discover command - send back OFFER response */
+                /* Now construct the OFFER response */
                 reply_header->opcode = BOOTP_OP_REPLY;
 
                 /* Clear the DHCP options list */
@@ -267,8 +276,9 @@ static void dhcp_thread( uint32_t thread_input )
                 option_ptr     = MEMCAT( option_ptr, dhcp_offer_option_buff, 3 );                                   /* DHCP message type            */
                 option_ptr     = MEMCAT( option_ptr, server_ip_addr_option_buff, 6 );                               /* Server identifier            */
                 option_ptr     = MEMCAT( option_ptr, lease_time_option_buff, 6 );                                   /* Lease Time                   */
-                option_ptr     = MEMCAT( option_ptr, subnet_option_buff, 6 );                                       /* Subnet Mask                  */
+                option_ptr     = MEMCAT( option_ptr, subnet_mask_option_buff, 6 );                                  /* Subnet Mask                  */
                 option_ptr     = (char*)MEMCAT( option_ptr, wpad_option_buff, sizeof(wpad_option_buff) );           /* Web proxy auto discovery URL */
+                /* Copy the local IP into the Router & DNS server Options */
                 memcpy( option_ptr, server_ip_addr_option_buff, 6 );                                                /* Router (gateway)             */
                 option_ptr[0]  = 3;                                                                                 /* Router id                    */
                 option_ptr    += 6;
@@ -279,7 +289,7 @@ static void dhcp_thread( uint32_t thread_input )
                 option_ptr[0]  = (char) 0xff;                                                                       /* end options                  */
                 option_ptr++;
 
-                /* Send packet */
+                /* Send OFFER reply packet */
                 wiced_packet_set_data_end( transmit_packet, (uint8_t*) option_ptr );
                 if ( wiced_udp_send( &server->socket, WICED_IP_BROADCAST, IPPORT_DHCPC, transmit_packet ) != WICED_SUCCESS )
                 {
@@ -307,14 +317,16 @@ static void dhcp_thread( uint32_t thread_input )
                     break; /* Server ID does not match local IP address */
                 }
 
-                /* Create reply and free received packet */
+                /* Create reply packet */
                 if ( wiced_packet_create_udp( &server->socket, sizeof(dhcp_header_t), &transmit_packet, (uint8_t**) &reply_header, &available_space ) != WICED_SUCCESS )
                 {
+                    /* Cannot reply - release incoming packet */
                     wiced_packet_delete( received_packet );
                     break;
                 }
 
-                memcpy(reply_header, request_header, sizeof(dhcp_header_t) - sizeof(reply_header->options));
+                /* Copy in the DHCP header content from the received request packet into the reply packet */
+                memcpy( reply_header, request_header, sizeof(dhcp_header_t) - sizeof(reply_header->options) );
 
                 /* Record client MAC address */
                 memcpy( &client_mac_address, request_header->client_hardware_addr, sizeof( client_mac_address ) );
@@ -345,9 +357,10 @@ static void dhcp_thread( uint32_t thread_input )
                     given_ip_address.ip.v4     = next_available_ip_addr;
                 }
 
+                /* Check if the requested IP address matches one we have assigned */
                 if ( memcmp( &requested_ip_address.ip.v4, &given_ip_address.ip.v4, sizeof( requested_ip_address.ip.v4 ) ) != 0 )
                 {
-                    /* Request is not for next available IP - force client to take next available IP by sending NAK */
+                    /* Request is not for the assigned IP - force client to take next available IP by sending NAK */
                     /* Add appropriate options */
                     option_ptr = (char*)MEMCAT( option_ptr, dhcp_nak_option_buff, 3 );             /* DHCP message type */
                     option_ptr = (char*)MEMCAT( option_ptr, server_ip_addr_option_buff, 6 );       /* Server identifier */
@@ -360,8 +373,9 @@ static void dhcp_thread( uint32_t thread_input )
                     option_ptr     = (char*)MEMCAT( option_ptr, dhcp_ack_option_buff, 3 );                              /* DHCP message type            */
                     option_ptr     = (char*)MEMCAT( option_ptr, server_ip_addr_option_buff, 6 );                        /* Server identifier            */
                     option_ptr     = (char*)MEMCAT( option_ptr, lease_time_option_buff, 6 );                            /* Lease Time                   */
-                    option_ptr     = (char*)MEMCAT( option_ptr, subnet_option_buff, 6 );                                /* Subnet Mask                  */
+                    option_ptr     = (char*)MEMCAT( option_ptr, subnet_mask_option_buff, 6 );                           /* Subnet Mask                  */
                     option_ptr     = (char*)MEMCAT( option_ptr, wpad_option_buff, sizeof(wpad_option_buff) );           /* Web proxy auto discovery URL */
+                    /* Copy the local IP into the Router & DNS server Options */
                     memcpy( option_ptr, server_ip_addr_option_buff, 6 );                                                /* Router (gateway)             */
                     option_ptr[0]  = 3;                                                                                 /* Router id                    */
                     option_ptr    += 6;
@@ -391,7 +405,7 @@ static void dhcp_thread( uint32_t thread_input )
                 option_ptr[0] = (char) 0xff; /* end options */
                 option_ptr++;
 
-                /* Send packet */
+                /* Send reply packet */
                 wiced_packet_set_data_end( transmit_packet, (uint8_t*) option_ptr );
                 if ( wiced_udp_send( &server->socket, WICED_IP_BROADCAST, IPPORT_DHCPC, transmit_packet ) != WICED_SUCCESS )
                 {
@@ -402,10 +416,13 @@ static void dhcp_thread( uint32_t thread_input )
                 break;
 
             default:
-                wiced_packet_delete(received_packet);
+                /* Unknown packet type - release received packet */
+                wiced_packet_delete( received_packet );
                 break;
         }
     }
+
+    /* Server loop has exited due to quit flag */
 
     /* Delete DHCP socket */
     wiced_udp_delete_socket( &server->socket );
@@ -418,21 +435,23 @@ static void dhcp_thread( uint32_t thread_input )
  *  Searches the given DHCP request and returns a pointer to the
  *  specified DHCP option data, or NULL if not found
  *
- * @param request :    The DHCP request structure
- * @param option_num : Which DHCP option number to find
+ * @param[out] request    : The DHCP request structure
+ * @param[in]  option_num : Which DHCP option number to find
  *
  * @return Pointer to the DHCP option data, or NULL if not found
  */
 
-static uint8_t* find_option( dhcp_header_t* request, uint8_t option_num )
+static const uint8_t* find_option( const dhcp_header_t* request, uint8_t option_num )
 {
-    uint8_t* option_ptr = request->options;
-    while ( ( option_ptr[0] != 0xff ) &&
-            ( option_ptr[0] != option_num ) &&
-            ( option_ptr < ( (unsigned char*) request ) + sizeof( dhcp_header_t ) ) )
+    const uint8_t* option_ptr = request->options;
+    while ( ( option_ptr[0] != 0xff ) &&                                               /* Check for end-of-options flag */
+            ( option_ptr[0] != option_num ) &&                                         /* Check for matching option number */
+            ( option_ptr < ( (const uint8_t*) request ) + sizeof( dhcp_header_t ) ) )  /* Check for buffer overrun */
     {
         option_ptr += option_ptr[1] + 2;
     }
+
+    /* Was the option found? */
     if ( option_ptr[0] == option_num )
     {
         return &option_ptr[2];
@@ -441,6 +460,14 @@ static uint8_t* find_option( dhcp_header_t* request, uint8_t option_num )
 
 }
 
+/**
+ *  Searches the cache for a given MAC address to find a matching IP address
+ *
+ * @param[in]  client_mac_address : MAC address to search for
+ * @param[out] client_ip_address  : Receives any IP address which is found
+ *
+ * @return WICED_SUCCESS if found, WICED_NOT_FOUND otherwise
+ */
 static wiced_result_t get_client_ip_address_from_cache( const wiced_mac_t* client_mac_address, wiced_ip_address_t* client_ip_address )
 {
     uint32_t a;
@@ -458,6 +485,14 @@ static wiced_result_t get_client_ip_address_from_cache( const wiced_mac_t* clien
     return WICED_NOT_FOUND;
 }
 
+/**
+ *  Adds the MAC & IP addresses of a client to the cache
+ *
+ * @param[in] client_mac_address : MAC address of the client to store
+ * @param[in] client_ip_address  : IP address of the client to store
+ *
+ * @return WICED_SUCCESS
+ */
 static wiced_result_t add_client_to_cache( const wiced_mac_t* client_mac_address, const wiced_ip_address_t* client_ip_address )
 {
     uint32_t a;
@@ -502,7 +537,16 @@ static wiced_result_t add_client_to_cache( const wiced_mac_t* client_mac_address
     return WICED_SUCCESS;
 }
 
-static void ipv4_to_string( char* buffer, uint32_t ipv4_address )
+
+/**
+ *  Convert a IPv4 address to a string
+ *
+ *  @note: String is 16 bytes including terminating null
+ *
+ * @param[out] buffer       : Buffer which will recieve the IPv4 string
+ * @param[in]  ipv4_address : IPv4 address to convert
+ */
+static void ipv4_to_string( char buffer[16], uint32_t ipv4_address )
 {
     uint8_t* ip = (uint8_t*)&ipv4_address;
     unsigned_to_decimal_string(ip[0], &buffer[0], 3, 3);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,12 +12,16 @@
  *
  */
 #include "JSON.h"
+#include <stddef.h>
+#include <string.h>
 
 /******************************************************
  *                      Macros
  ******************************************************/
-#define MAX_BACKUP_SIZE 1500
+
+#define MAX_BACKUP_SIZE 500
 #define MAX_PARENTS 4
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -40,22 +44,22 @@
 
 wiced_json_callback_t internal_json_callback;
 
-
 /******************************************************
  *               Variable Definitions
  ******************************************************/
-char* previous_token   = NULL;
+
+static char* previous_token   = NULL;
 static wiced_json_object_t json_object =
 {
-        .object_string        = NULL,
-        .object_string_length = 0,
-        .value_type           = UNKNOWN_JSON_TYPE,
-        .value                = NULL,
-        .value_length         = 0,
-        .parent_object          = NULL
+    .object_string        = NULL,
+    .object_string_length = 0,
+    .value_type           = UNKNOWN_JSON_TYPE,
+    .value                = NULL,
+    .value_length         = 0,
+    .parent_object        = NULL
 };
 
-static int32_t                 parent_counter = 0;
+static int32_t               parent_counter = 0;
 static wiced_json_object_t   parent_json_object[MAX_PARENTS];
 
 static wiced_bool_t       incomplete_response       = WICED_FALSE;
@@ -80,6 +84,7 @@ char                      packet_backup[MAX_BACKUP_SIZE];
 uint32_t                  number_of_bytes_backed_up;
 
 static wiced_bool_t       escape_token              = WICED_FALSE;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -244,7 +249,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Move value_start token until we encounter a non-digit value */
-                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) || ( *value_start == '-' ) )
                         {
                             value_start--;
                         }
@@ -432,7 +437,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Move value_start token until we encounter a non-digit value */
-                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) || ( *value_start == '-' ) )
                         {
                             value_start--;
                         }
@@ -554,7 +559,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                         value_start = value_end;
 
                         /* Increment value_start until you reach first number */
-                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) || ( *value_start == '-' ) )
                         {
                             value_start--;
                         }
@@ -653,7 +658,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
 
                         value_start = value_end;
 
-                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) )
+                        while ( ( ( *value_start >= '0' ) && (  *value_start <= '9') ) || ( *value_start == '.' ) || ( *value_start == '-' ) )
                         {
                             value_start--;
                         }

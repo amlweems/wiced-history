@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -21,14 +21,13 @@
  *             Constants
  ******************************************************/
 
-#define BACKPLANE_ADDRESS_MASK  0x7FFF
-#define AI_IOCTRL_OFFSET      0x408
-#define SICF_FGC              0x0002
-#define SICF_CLOCK_EN         0x0001
-#define AI_RESETCTRL_OFFSET   0x800
-#define AIRC_RESET            1
-
-#define WRAPPER_REGISTER_OFFSET    0x100000
+#define AI_IOCTRL_OFFSET         (0x408)
+#define SICF_CPUHALT             (0x0020)
+#define SICF_FGC                 (0x0002)
+#define SICF_CLOCK_EN            (0x0001)
+#define AI_RESETCTRL_OFFSET      (0x800)
+#define AIRC_RESET               (1)
+#define WRAPPER_REGISTER_OFFSET  (0x100000)
 
 /******************************************************
  *             Structures
@@ -40,14 +39,19 @@
 
 static const uint32_t core_base_address[] =
 {
-    (uint32_t) ( ARMCM3_BASE_ADDRESS + WRAPPER_REGISTER_OFFSET  ),
+#ifdef WLAN_ARMCM3_BASE_ADDRESS
+    (uint32_t) ( WLAN_ARMCM3_BASE_ADDRESS + WRAPPER_REGISTER_OFFSET  ),
+#endif /* ifdef WLAN_ARMCM3_BASE_ADDRESS */
+#ifdef WLAN_ARMCR4_BASE_ADDRESS
+    (uint32_t) ( WLAN_ARMCR4_BASE_ADDRESS + WRAPPER_REGISTER_OFFSET  ),
+#endif /* ifdef WLAN_ARMCR4_BASE_ADDRESS */
     (uint32_t) ( SOCSRAM_BASE_ADDRESS + WRAPPER_REGISTER_OFFSET ),
     (uint32_t) ( SDIO_BASE_ADDRESS )
 };
 
 wwd_wlan_status_t wwd_wlan_status =
 {
-    .state             = WLAN_DOWN,
+    .state             = WLAN_OFF,
     .country_code      = WICED_COUNTRY_AUSTRALIA,
     .keep_wlan_awake = 0,
 };
@@ -111,11 +115,12 @@ wwd_result_t wwd_device_core_is_up( device_core_t core_id )
 /*
  * Disables the core identified by the provided coreId
  */
-wwd_result_t wwd_disable_device_core( device_core_t core_id )
+wwd_result_t wwd_disable_device_core( device_core_t core_id, wlan_core_flag_t core_flag )
 {
     uint32_t base = wwd_get_core_address( core_id );
     wwd_result_t result;
     uint8_t junk;
+    uint8_t regdata;
 
     /* Read the reset control */
     result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
@@ -124,14 +129,20 @@ wwd_result_t wwd_disable_device_core( device_core_t core_id )
         return result;
     }
 
-    result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &junk );
+    /* Read the reset control and check if it is already in reset */
+    result = wwd_bus_read_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, &regdata );
     if ( result != WWD_SUCCESS )
     {
         return result;
     }
+    if ( ( regdata & AIRC_RESET ) != 0 )
+    {
+        /* Core already in reset */
+        return WWD_SUCCESS;
+    }
 
     /* Write 0 to the IO control and read it back */
-    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, 0 );
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, ( core_flag == WLAN_CORE_FLAG_CPU_HALT )? SICF_CPUHALT : 0 );
     if ( result != WWD_SUCCESS )
     {
         return result;
@@ -159,13 +170,19 @@ wwd_result_t wwd_disable_device_core( device_core_t core_id )
 /*
  * Resets the core identified by the provided coreId
  */
-wwd_result_t wwd_reset_device_core( device_core_t core_id )
+wwd_result_t wwd_reset_device_core( device_core_t core_id, wlan_core_flag_t core_flag )
 {
     uint32_t base = wwd_get_core_address( core_id );
     wwd_result_t result;
     uint8_t junk;
 
-    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_FGC | SICF_CLOCK_EN ) );
+    result = wwd_disable_device_core( core_id, core_flag );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_FGC | SICF_CLOCK_EN | (( core_flag == WLAN_CORE_FLAG_CPU_HALT )? SICF_CPUHALT : 0 ) ) );
     if ( result != WWD_SUCCESS )
     {
         return result;
@@ -185,7 +202,7 @@ wwd_result_t wwd_reset_device_core( device_core_t core_id )
 
     (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
 
-    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) SICF_CLOCK_EN );
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_CLOCK_EN | ( ( core_flag == WLAN_CORE_FLAG_CPU_HALT )? SICF_CPUHALT : 0 ) ) );
     if ( result != WWD_SUCCESS )
     {
         return result;
@@ -202,6 +219,57 @@ wwd_result_t wwd_reset_device_core( device_core_t core_id )
     return result;
 }
 
+/*
+ * Release ARM core to run instructions
+ */
+wwd_result_t wwd_wlan_armcore_run( device_core_t core_id, wlan_core_flag_t core_flag )
+{
+    uint32_t base = wwd_get_core_address( core_id );
+    wwd_result_t result;
+    uint8_t junk;
+
+    /* Only work for WLAN arm core! */
+    if (WLAN_ARM_CORE != core_id)
+    {
+        return WWD_UNSUPPORTED;
+    }
+
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_FGC | SICF_CLOCK_EN | (( core_flag == WLAN_CORE_FLAG_CPU_HALT )? SICF_CPUHALT : 0 ) ) );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    result = wwd_bus_write_backplane_value( base + AI_RESETCTRL_OFFSET, (uint8_t) 1, 0 );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
+
+    result = wwd_bus_write_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, (uint32_t) ( SICF_CLOCK_EN | ( ( core_flag == WLAN_CORE_FLAG_CPU_HALT )? SICF_CPUHALT : 0 ) ) );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    result = wwd_bus_read_backplane_value( base + AI_IOCTRL_OFFSET, (uint8_t) 1, &junk );
+    if ( result != WWD_SUCCESS )
+    {
+        return result;
+    }
+
+    (void) host_rtos_delay_milliseconds( (uint32_t) 1 );
+
+    return result;
+}
 
 
 

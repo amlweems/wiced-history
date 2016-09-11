@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,6 +16,9 @@
 #include "platform/wwd_resource_interface.h"
 #include "wiced_resource.h"
 #include "wwd_assert.h"
+#include "wiced_result.h"
+#include "platform_dct.h"
+#include "wiced_waf_common.h"
 
 /******************************************************
  *                      Macros
@@ -53,6 +56,8 @@
  *               Variable Definitions
  ******************************************************/
 
+extern const resource_hnd_t wifi_firmware_image;
+
 #if defined( WWD_DYNAMIC_NVRAM )
 uint32_t dynamic_nvram_size  = sizeof( wifi_nvram_image );
 void*    dynamic_nvram_image = &wifi_nvram_image;
@@ -66,12 +71,25 @@ wwd_result_t host_platform_resource_size( wwd_resource_t resource, uint32_t* siz
 {
     if ( resource == WWD_RESOURCE_WLAN_FIRMWARE )
     {
-#ifndef NO_WIFI_FIRMWARE
-        *size_out = (uint32_t) resource_get_size( &wifi_firmware_image );
-#else
+
+#ifdef NO_WIFI_FIRMWARE
         wiced_assert("Request firmware in a no wifi firmware application", 0 == 1);
         *size_out = 0;
+#else
+#ifdef WIFI_FIRMWARE_IN_MULTI_APP
+        wiced_app_t wifi_app;
+
+        *size_out = 0;
+        if ( wiced_waf_app_open( DCT_WIFI_FIRMWARE_INDEX, &wifi_app ) != WICED_SUCCESS )
+        {
+            return RESOURCE_UNSUPPORTED;
+        }
+        wiced_waf_app_get_size( &wifi_app, size_out );
+#else
+        *size_out = (uint32_t) resource_get_size( &wifi_firmware_image );
 #endif
+#endif
+
     }
     else
     {
@@ -103,7 +121,31 @@ wwd_result_t host_platform_resource_read_indirect( wwd_resource_t resource, uint
 {
     if ( resource == WWD_RESOURCE_WLAN_FIRMWARE )
     {
+
+#ifdef NO_WIFI_FIRMWARE
+        wiced_assert("Request firmware in a no wifi firmware application", 0 == 1);
+        return RESOURCE_UNSUPPORTED;
+#else
+#ifdef WIFI_FIRMWARE_IN_MULTI_APP
+        wiced_app_t wifi_app;
+        if ( wiced_waf_app_open( DCT_WIFI_FIRMWARE_INDEX, &wifi_app ) != WICED_SUCCESS )
+        {
+            return RESOURCE_UNSUPPORTED;
+        }
+        if ( wiced_waf_app_read_chunk( &wifi_app, offset, buffer, buffer_size ) == WICED_SUCCESS )
+        {
+            *size_out = buffer_size;
+        }
+        else
+        {
+            *size_out = 0;
+        }
+        return WWD_SUCCESS;
+#else
         return resource_read( &wifi_firmware_image, offset, buffer_size, size_out, buffer );
+#endif
+#endif
+
     }
     else
     {

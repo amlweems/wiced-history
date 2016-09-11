@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,17 +29,27 @@
 #include "lwip/dns.h"
 #include "wiced_p2p.h"
 
+#if LWIP_NETIF_HOSTNAME
+#include "platform_dct.h"
+
+#ifdef NETWORK_CONFIG_APPLICATION_DEFINED
+#include "network_config_dct.h"
+#else/* #ifdef NETWORK_CONFIG_APPLICATION_DEFINED */
+#include "default_network_config_dct.h"
+#endif /* #ifdef NETWORK_CONFIG_APPLICATION_DEFINED */
+
+#endif /* LWIP_NETIF_HOSTNAME */
+
 /******************************************************
  *                      Macros
  ******************************************************/
-
-#define IF_UP( interface )    ( ip_networking_up[ (interface&3) ] )
 
 /******************************************************
  *                    Constants
  ******************************************************/
 
 #define TIME_WAIT_TCP_SOCKET_DELAY (400)
+#define MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS           (2)
 
 /******************************************************
  *                   Enumerations
@@ -53,32 +63,42 @@
  *                    Structures
  ******************************************************/
 
+typedef struct
+{
+    wiced_ip_address_change_callback_t callback;
+    void*                              arg;
+} ip_address_change_callback_t;
+
 /******************************************************
  *                 Static Variables
  ******************************************************/
 
-#ifdef WICED_WIFI_USE_STA_INTERFACE
+#ifdef WICED_USE_WIFI_STA_INTERFACE
     static struct netif       sta_ip_handle;
     #define STA_IP_HANDLE    &sta_ip_handle
 #else
     #define STA_IP_HANDLE    NULL
 #endif
 
-#ifdef WICED_WIFI_USE_AP_INTERFACE
+#ifdef WICED_USE_WIFI_AP_INTERFACE
     static struct netif      ap_ip_handle;
     #define AP_IP_HANDLE    &ap_ip_handle
 #else
     #define AP_IP_HANDLE    NULL
 #endif
 
-#ifdef WICED_WIFI_USE_P2P_INTERFACE
+#ifdef WICED_USE_WIFI_P2P_INTERFACE
     static struct netif       p2p_ip_handle;
     #define P2P_IP_HANDLE    &p2p_ip_handle
 #else
     #define P2P_IP_HANDLE    NULL
 #endif
 
-NX_IP* wiced_ip_handle[ 3 ] =
+#if LWIP_NETIF_HOSTNAME
+static wiced_hostname_t    hostname;
+#endif /* LWIP_NETIF_HOSTNAME */
+
+struct netif* wiced_ip_handle[ 3 ] =
 {
     [WICED_STA_INTERFACE] = STA_IP_HANDLE,
     [WICED_AP_INTERFACE]  = AP_IP_HANDLE,
@@ -86,19 +106,16 @@ NX_IP* wiced_ip_handle[ 3 ] =
 };
 
 /* Network objects */
-struct netif        wiced_ip_handle[3];
 struct dhcp         wiced_dhcp_handle;
 static wiced_bool_t        wiced_using_dhcp;
 static wiced_dhcp_server_t internal_dhcp_server;
 
-xSemaphoreHandle send_interface_mutex;
-static xSemaphoreHandle link_subscribe_mutex;
+/* IP status callback variables */
+static ip_address_change_callback_t wiced_ip_address_change_callbacks[MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS];
 
-const wiced_ip_address_t INITIALISER_IPV4_ADDRESS( wiced_ip_broadcast, 0xFFFFFFFF );
-static wiced_network_link_callback_t link_up_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
-static wiced_network_link_callback_t link_down_callbacks[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
+const wiced_ip_address_t const INITIALISER_IPV4_ADDRESS( wiced_ip_broadcast, 0xFFFFFFFF );
 
-static wiced_bool_t ip_networking_up[3];
+wiced_mutex_t            lwip_send_interface_mutex;
 
 /* Wi-Fi power save state */
 static uint8_t wifi_powersave_mode = 0;
@@ -109,6 +126,11 @@ static uint16_t wifi_return_to_sleep_delay = 0;
  ******************************************************/
 
 static void tcpip_init_done( void* arg );
+static void ip_address_changed_handler( struct netif *netif, ip_addr_t *new_ip );
+static void invalidate_all_arp_entries( struct netif *netif );
+
+/* free_entry() is an LwIP function in etharp.c. It is used in invalidate_all_arp_entries() */
+extern void free_entry( int i );
 
 /******************************************************
  *               Function Definitions
@@ -121,9 +143,9 @@ wiced_result_t wiced_network_init( void )
     /* Initialize the LwIP system.  */
     WPRINT_NETWORK_INFO(("Initialising LwIP " LwIP_VERSION "\n"));
 
-    ip_networking_up[0] = WICED_FALSE;
-    ip_networking_up[1] = WICED_FALSE;
-    ip_networking_up[2] = WICED_FALSE;
+    ip_networking_inited[0] = WICED_FALSE;
+    ip_networking_inited[1] = WICED_FALSE;
+    ip_networking_inited[2] = WICED_FALSE;
 
     /* Create a semaphore to signal when LwIP has finished initialising */
     lwip_done_sema = xSemaphoreCreateCounting( 1, 0 );
@@ -139,15 +161,30 @@ wiced_result_t wiced_network_init( void )
     xSemaphoreTake( lwip_done_sema, portMAX_DELAY );
     vQueueDelete( lwip_done_sema );
 
-    /* Create a mutex for UDP and TCP sending with ability to swap a default interface */
-    send_interface_mutex =  xSemaphoreCreateMutex();
-    /* create a mutex for link up and down registrations */
-    link_subscribe_mutex = xSemaphoreCreateMutex();
-
     memset(&internal_dhcp_server, 0, sizeof(internal_dhcp_server));
 
-    memset(link_up_callbacks,   0, sizeof(link_up_callbacks));
-    memset(link_down_callbacks, 0, sizeof(link_down_callbacks));
+    /* create a mutex for link up and down registrations */
+    wiced_rtos_init_mutex( &link_subscribe_mutex );
+    /* Create a mutex for UDP and TCP sending with ability to swap a default interface */
+    wiced_rtos_init_mutex( &lwip_send_interface_mutex );
+
+    memset( link_up_callbacks_wireless,   0, sizeof( link_up_callbacks_wireless ) );
+    memset( link_down_callbacks_wireless, 0, sizeof( link_down_callbacks_wireless ) );
+#ifdef WICED_USE_ETHERNET_INTERFACE
+    memset( link_up_callbacks_ethernet,   0, sizeof(link_up_callbacks_ethernet ) );
+    memset( link_down_callbacks_ethernet, 0, sizeof(link_down_callbacks_ethernet ) );
+#endif
+
+#if LWIP_NETIF_HOSTNAME
+    /* Get hostname */
+    memset( hostname, 0, sizeof(hostname) );
+    result = wiced_network_get_hostname( &hostname )
+    if( result != WICED_SUCCESS )
+    {
+        return result;
+    }
+#endif /* LWIP_NETIF_HOSTNAME */
+
     wiced_using_dhcp = WICED_FALSE;
 
     return WICED_SUCCESS;
@@ -173,14 +210,9 @@ static void tcpip_init_done( void* arg )
 wiced_result_t wiced_network_deinit( void )
 {
     tcpip_deinit( );
-    vSemaphoreDelete( link_subscribe_mutex );
-    vSemaphoreDelete( send_interface_mutex );
-    return WICED_ERROR;
-}
-
-wiced_bool_t wiced_network_is_up( wiced_interface_t interface )
-{
-    return (wwd_wifi_is_ready_to_transceive( WICED_TO_WWD_INTERFACE( interface ) ) == WWD_SUCCESS) ? WICED_TRUE : WICED_FALSE;
+    wiced_rtos_deinit_mutex( &link_subscribe_mutex );
+    wiced_rtos_deinit_mutex( &lwip_send_interface_mutex );
+    return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_network_suspend(void)
@@ -204,80 +236,6 @@ wiced_result_t wiced_network_resume(void)
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings )
-{
-    wiced_result_t result = WICED_SUCCESS;
-
-    if ( wiced_network_is_up( WICED_TO_WWD_INTERFACE( interface ) ) == WICED_FALSE )
-    {
-        if ( interface == WICED_CONFIG_INTERFACE )
-        {
-            wiced_config_soft_ap_t* config_ap;
-            wiced_result_t retval = wiced_dct_read_lock( (void**) &config_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, config_ap_settings), sizeof(wiced_config_soft_ap_t) );
-            if ( retval != WICED_SUCCESS )
-            {
-                return retval;
-            }
-
-            /* Check config DCT is valid */
-            if ( config_ap->details_valid == CONFIG_VALIDITY_VALUE )
-            {
-                result = wiced_start_ap( &config_ap->SSID, config_ap->security, config_ap->security_key, config_ap->channel );
-            }
-            else
-            {
-                wiced_ssid_t ssid =
-                {
-                    .length =  sizeof("Wiced Config")-1,
-                    .value  = "Wiced Config",
-                };
-                result = wiced_start_ap( &ssid, WICED_SECURITY_OPEN, "", 1 );
-            }
-            wiced_dct_read_unlock( config_ap, WICED_FALSE );
-        }
-        else if ( interface == WICED_AP_INTERFACE )
-        {
-            wiced_config_soft_ap_t* soft_ap;
-            result = wiced_dct_read_lock( (void**) &soft_ap, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, soft_ap_settings), sizeof(wiced_config_soft_ap_t) );
-            if ( result != WICED_SUCCESS )
-            {
-                return result;
-            }
-            result = (wiced_result_t) wwd_wifi_start_ap( &soft_ap->SSID, soft_ap->security, (uint8_t*) soft_ap->security_key, soft_ap->security_key_length, soft_ap->channel );
-            wiced_dct_read_unlock( soft_ap, WICED_FALSE );
-        }
-        else
-        {
-            result = wiced_join_ap( );
-        }
-    }
-
-    if ( result != WICED_SUCCESS )
-    {
-        return result;
-    }
-
-    result = wiced_ip_up( interface, config, ip_settings );
-    if ( result != WICED_SUCCESS )
-    {
-        if ( interface == WICED_STA_INTERFACE )
-        {
-            wiced_leave_ap( interface );
-        }
-        else
-        {
-            wiced_stop_ap( );
-        }
-    }
-
-    return result;
-}
-
-wiced_bool_t wiced_network_is_ip_up( wiced_interface_t interface )
-{
-    return IF_UP(interface);
-}
-
 wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings )
 {
     struct ip_addr ipaddr;
@@ -285,7 +243,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     struct ip_addr gw;
     wiced_bool_t static_ip;
 
-    if ( IF_UP( interface ) == WICED_TRUE )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         return WICED_SUCCESS;
     }
@@ -313,6 +271,9 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         return WICED_ERROR;
     }
 
+    /* Register a handler for any address changes */
+    netif_set_ipchange_callback( &IP_HANDLE(interface), ip_address_changed_handler );
+
     if ( ( static_ip == WICED_FALSE ) && ( config == WICED_USE_EXTERNAL_DHCP_SERVER ))
     {
         wiced_ip_address_t dns_server_address;
@@ -325,6 +286,11 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
 
         WPRINT_NETWORK_INFO(("Obtaining IP address via DHCP\n"));
         dhcp_set_struct( &IP_HANDLE(interface), &wiced_dhcp_handle );
+
+#if LWIP_NETIF_HOSTNAME
+        IP_HANDLE(interface).hostname = &hostname.value;
+#endif
+
         dhcp_start( &IP_HANDLE(interface) );
         while ( wiced_dhcp_handle.state != DHCP_BOUND  && timeout_occured == WICED_FALSE )
         {
@@ -395,7 +361,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         }
     }
 
-    IF_UP(interface) = WICED_TRUE;
+    SET_IP_NETWORK_INITED( interface, WICED_TRUE );
 
     WPRINT_NETWORK_INFO( ( "Network ready IP: %u.%u.%u.%u\n", (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 24 ) & 0xff ),
         (unsigned char) ( ( htonl( IP_HANDLE(interface).ip_addr.addr ) >> 16 ) & 0xff ),
@@ -405,18 +371,9 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     return WICED_SUCCESS;
 }
 
-/* Bring down the network interface
- *
- * @param interface       : wiced_interface_t, either WICED_AP_INTERFACE or WICED_STA_INTERFACE
- *
- * @return  WICED_SUCCESS : completed successfully
- *
- *  XXX : Needs testing
- *
- */
-wiced_result_t wiced_network_down( wiced_interface_t interface )
+wiced_result_t wiced_ip_down( wiced_interface_t interface )
 {
-    if ( IF_UP(interface) == WICED_TRUE )
+    if ( IP_NETWORK_IS_INITED(interface) == WICED_TRUE )
     {
         /* Cleanup DNS client and DHCP server/client depending on interface */
         if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE )
@@ -440,49 +397,23 @@ wiced_result_t wiced_network_down( wiced_interface_t interface )
         /* Delete the network interface */
         netif_remove( &IP_HANDLE(interface) );
 
-        IF_UP(interface) = WICED_FALSE;
+        SET_IP_NETWORK_INITED( interface, WICED_FALSE );
     }
-
-    /* Stop Wi-Fi */
-    if (wiced_network_is_up(interface) == WICED_TRUE)
-    {
-        if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE ) )
-        {
-            wiced_stop_ap( );
-        }
-        else if ( interface == WICED_P2P_INTERFACE )
-        {
-            if ( wwd_wifi_p2p_go_is_up )
-            {
-                wwd_wifi_p2p_go_is_up = WICED_FALSE;
-            }
-            else
-            {
-                wiced_leave_ap( interface );
-            }
-        }
-        else
-        {
-            wiced_leave_ap( interface );
-        }
-    }
-
     return WICED_SUCCESS;
 }
-
-void wiced_network_notify_link_up( void )
+void wiced_network_notify_link_up( wiced_interface_t interface )
 {
     /* Notify LwIP that the link is up */
-    netif_set_up( &IP_HANDLE(WICED_STA_INTERFACE) );
+    netif_set_up( &IP_HANDLE(interface) );
 }
 
-void wiced_network_notify_link_down( void )
+void wiced_network_notify_link_down( wiced_interface_t interface )
 {
     /* Notify LwIP that the link is down*/
-    netif_set_down( &IP_HANDLE(WICED_STA_INTERFACE) );
+    netif_set_down( &IP_HANDLE(interface) );
 }
 
-wiced_result_t wiced_network_link_down_handler( void* arg )
+wiced_result_t wiced_wireless_link_down_handler( void* arg )
 {
     int i = 0;
     UNUSED_PARAMETER( arg );
@@ -496,14 +427,15 @@ wiced_result_t wiced_network_link_down_handler( void* arg )
     /* Wait for a while before the time wait sockets get closed */
     sys_msleep( TIME_WAIT_TCP_SOCKET_DELAY );
 
-    /* TODO: Add clearing of ARP cache */
+    /* Add clearing of ARP cache */
+    netifapi_netif_common( &IP_HANDLE(WICED_STA_INTERFACE), (netifapi_void_fn) invalidate_all_arp_entries, NULL );
 
     /* Inform all subscribers about the link down event */
     for ( i = 0; i < WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS; i++ )
     {
-        if ( link_down_callbacks[i] != NULL )
+        if ( link_down_callbacks_wireless[i] != NULL )
         {
-            link_down_callbacks[i]( );
+            link_down_callbacks_wireless[i]( );
         }
     }
 
@@ -522,7 +454,7 @@ wiced_result_t wiced_network_link_down_handler( void* arg )
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_network_link_up_handler( void* arg )
+wiced_result_t wiced_wireless_link_up_handler( void* arg )
 {
     int i = 0;
     ip_addr_t ip_addr;
@@ -571,17 +503,20 @@ wiced_result_t wiced_network_link_up_handler( void* arg )
     /* Inform all subscribers about an event */
     for ( i = 0; i < WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS; i++ )
     {
-        if ( link_up_callbacks[i] != NULL )
+        if ( link_up_callbacks_wireless[i] != NULL )
         {
-            link_up_callbacks[i]( );
+            link_up_callbacks_wireless[i]( );
         }
     }
 
     return result;
 }
 
-wiced_result_t wiced_network_link_renew_handler( void )
+wiced_result_t wiced_wireless_link_renew_handler( void )
 {
+    /* TODO : need to invalidate only particular arp instead of all arp entries*/
+    netifapi_netif_common( &IP_HANDLE(WICED_STA_INTERFACE), (netifapi_void_fn) invalidate_all_arp_entries, NULL );
+
     /* TODO: Do a DHCP renew if interface is using external DHCP server */
 
     if ( wiced_dhcp_handle.state == DHCP_BOUND )
@@ -592,80 +527,70 @@ wiced_result_t wiced_network_link_renew_handler( void )
     return WICED_SUCCESS;
 }
 
-wiced_result_t wiced_network_register_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback )
+static void ip_address_changed_handler( struct netif *netif, ip_addr_t *new_ip )
 {
-    int i = 0;
+    uint8_t i;
 
-    xSemaphoreTake( link_subscribe_mutex, portMAX_DELAY );
+    UNUSED_PARAMETER( netif );
+    UNUSED_PARAMETER( new_ip );
 
-    /* Find next empty slot among the list of currently subscribed */
-    for ( i = 0; i < WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS; ++i )
+    for ( i = 0; i < MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS; i++ )
     {
-        if ( link_up_callback != NULL && link_up_callbacks[i] == NULL )
+        if ( wiced_ip_address_change_callbacks[i].callback != NULL )
         {
-            link_up_callbacks[i] = link_up_callback;
-            link_up_callback = NULL;
+            ( *wiced_ip_address_change_callbacks[i].callback )( wiced_ip_address_change_callbacks[i].arg );
         }
-
-        if ( link_down_callback != NULL && link_down_callbacks[i] == NULL )
-        {
-            link_down_callbacks[i] = link_down_callback;
-            link_down_callback = NULL;
-        }
-    }
-
-    xSemaphoreGive( link_subscribe_mutex );
-
-    /* Check if we didn't find a place of either of the callbacks */
-    if ( (link_up_callback != NULL) || (link_down_callback != NULL) )
-    {
-        return WICED_ERROR;
-    }
-    else
-    {
-        return WICED_SUCCESS;
     }
 }
-
-wiced_result_t wiced_network_deregister_link_callback( wiced_network_link_callback_t link_up_callback, wiced_network_link_callback_t link_down_callback )
-{
-    int i=0;
-
-    xSemaphoreTake( link_subscribe_mutex, portMAX_DELAY );
-
-    /* Find matching callbacks */
-    for ( i = 0; i < WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS; ++i )
-    {
-        if ( link_up_callback != NULL && link_up_callbacks[i] == link_up_callback )
-        {
-            link_up_callbacks[i] = NULL;
-        }
-
-        if ( link_down_callback != NULL && link_down_callbacks[i] == link_down_callback )
-        {
-            link_down_callbacks[i] = NULL;
-        }
-    }
-
-    xSemaphoreGive( link_subscribe_mutex );
-
-    return WICED_SUCCESS;
-}
-
 
 wiced_result_t wiced_ip_register_address_change_callback( wiced_ip_address_change_callback_t callback, void* arg )
 {
-    /* Unimplemented */
-    UNUSED_PARAMETER( callback );
-    UNUSED_PARAMETER( arg );
+    uint8_t i;
+    for ( i = 0; i < MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS; i++ )
+    {
+        if ( wiced_ip_address_change_callbacks[i].callback == NULL )
+        {
+            wiced_ip_address_change_callbacks[i].callback = callback;
+            wiced_ip_address_change_callbacks[i].arg = arg;
+            return WICED_SUCCESS;
+        }
+    }
+
+    WPRINT_NETWORK_ERROR( ( "Out of callback storage space\n" ) );
 
     return WICED_ERROR;
 }
 
 wiced_result_t wiced_ip_deregister_address_change_callback( wiced_ip_address_change_callback_t callback )
 {
-    /* Unimplemented */
-    UNUSED_PARAMETER( callback );
+    uint8_t i;
+    for ( i = 0; i < MAXIMUM_IP_ADDRESS_CHANGE_CALLBACKS; i++ )
+    {
+        if ( wiced_ip_address_change_callbacks[i].callback == callback )
+        {
+            memset( &wiced_ip_address_change_callbacks[i], 0, sizeof( wiced_ip_address_change_callback_t ) );
+            return WICED_SUCCESS;
+        }
+    }
+
+    WPRINT_NETWORK_ERROR( ( "Unable to find callback to deregister\n" ) );
 
     return WICED_ERROR;
+}
+
+/**
+ * Remove all ARP table entries of the specified netif.
+ * @param netif points to a network interface
+ */
+static void invalidate_all_arp_entries( struct netif *netif )
+{
+    u8_t i;
+    LWIP_UNUSED_ARG(netif);
+
+    /*free all the entries in arp list */
+
+    for ( i = 0; i < ARP_TABLE_SIZE; ++i )
+    {
+        free_entry( i );
+    }
 }

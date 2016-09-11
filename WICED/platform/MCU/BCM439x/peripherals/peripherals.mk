@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,8 +10,10 @@
 
 NAME := BCM439x_Peripheral_Drivers
 
-ifneq ($(wildcard $(CURDIR)BCM439x_Peripheral_Drivers.$(HOST_ARCH).$(BUILD_TYPE).a),)
-$(NAME)_PREBUILT_LIBRARY := BCM439x_Peripheral_Drivers.$(HOST_ARCH).$(BUILD_TYPE).a
+BCM439X_PERIPHERAL_LIBRARY_NAME :=BCM439X_Peripheral.$(RTOS).$(HOST_ARCH).$(BUILD_TYPE).a
+
+ifneq ($(wildcard $(CURDIR)$(BCM439X_PERIPHERAL_LIBRARY_NAME)),)
+$(NAME)_PREBUILT_LIBRARY := $(BCM439X_PERIPHERAL_LIBRARY_NAME)
 else
 include $(CURDIR)peripherals_src.mk
 endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -114,7 +114,7 @@
 #define WM8533_REG_REVISION_ID  (0x01)
 
 #define I2C_XFER_RETRY_COUNT    3
-#define I2C_DMA_POLICY          WICED_FALSE
+#define I2C_DMA_POLICY          WICED_TRUE
 
 /******************************************************
  *                   Enumerations
@@ -190,7 +190,7 @@ static wiced_result_t wm8533_resume    ( void* driver_data );
  *               Function Definitions
  ******************************************************/
 
-static wiced_result_t i2c_reg_write(wiced_i2c_device_t *device, uint8_t reg, uint16_t value)
+static wiced_result_t wm8533_i2c_reg_write(wiced_i2c_device_t *device, uint8_t reg, uint16_t value)
 {
     wiced_result_t result;
     static wiced_i2c_message_t msg[1];
@@ -214,7 +214,8 @@ static wiced_result_t i2c_reg_write(wiced_i2c_device_t *device, uint8_t reg, uin
     return result;
 }
 
-static wiced_result_t i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint16_t *value)
+#if 0
+static wiced_result_t wm8533_i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint16_t *value)
 {
     wiced_result_t result;
     static wiced_i2c_message_t msg[1];
@@ -227,7 +228,42 @@ static wiced_result_t i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint
     }
     return result;
 }
+#else
+static wiced_result_t wm8533_i2c_reg_read(wiced_i2c_device_t *device, uint8_t reg, uint16_t *value)
+{
+    wiced_result_t result;
+    wiced_i2c_message_t msg[2];
+    uint8_t value_read[2];
 
+    result = WICED_SUCCESS;
+
+    /* Reset device's register counter by issuing a TX. */
+    if (WICED_SUCCESS == result)
+    {
+        result = wiced_i2c_init_tx_message(&msg[0], &reg, 1, I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
+    }
+
+    /* Initialize RX message. */
+    if (WICED_SUCCESS == result)
+    {
+        result = wiced_i2c_init_rx_message(&msg[1], value_read, sizeof(value_read), I2C_XFER_RETRY_COUNT, I2C_DMA_POLICY);
+    }
+
+    /* Transfer. */
+    if (WICED_SUCCESS == result)
+    {
+        result = wiced_i2c_transfer(device, msg, 2);
+    }
+
+    /* Swap bytes. */
+    if (WICED_SUCCESS == result)
+    {
+        *value = ( value_read[0] << 8 ) + value_read[1];
+    }
+
+    return result;
+}
+#endif
 
 static wiced_result_t wm8533_init ( void* driver_data )
 {
@@ -242,14 +278,14 @@ static wiced_result_t wm8533_init ( void* driver_data )
     {
         if( wm8533->cifmode != WICED_GPIO_MAX )
         {
-            result = wiced_gpio_init(wm8533->cifmode, OUTPUT_PUSH_PULL);
+//            result = wiced_gpio_init(wm8533->cifmode, OUTPUT_PUSH_PULL);
         }
     }
     if (WICED_SUCCESS == result)
     {
         if( wm8533->addr0 != WICED_GPIO_MAX )
         {
-            result = wiced_gpio_init(wm8533->addr0, OUTPUT_PUSH_PULL);
+//            result = wiced_gpio_init(wm8533->addr0, OUTPUT_PUSH_PULL);
         }
     }
 
@@ -258,7 +294,7 @@ static wiced_result_t wm8533_init ( void* driver_data )
     {
         if( wm8533->cifmode != WICED_GPIO_MAX )
         {
-            result = wiced_gpio_output_low(wm8533->cifmode);
+//            result = wiced_gpio_output_low(wm8533->cifmode);
         }
     }
 
@@ -267,7 +303,7 @@ static wiced_result_t wm8533_init ( void* driver_data )
     {
         if( wm8533->addr0 != WICED_GPIO_MAX )
         {
-            result = wiced_gpio_output_low(wm8533->addr0);
+//            result = wiced_gpio_output_low(wm8533->addr0);
         }
     }
     if (WICED_SUCCESS == result)
@@ -661,18 +697,18 @@ wiced_result_t wm8533_deinit ( void* driver_data )
 
 static wiced_result_t wm8533_reg_write( wm8533_device_data_t* wm8533, uint8_t address, uint16_t reg_data )
 {
-    return i2c_reg_write(wm8533->i2c_data, address, reg_data);
+    return wm8533_i2c_reg_write(wm8533->i2c_data, address, reg_data);
 }
 
 static wiced_result_t wm8533_reg_read(wm8533_device_data_t* wm8533, uint8_t address, uint16_t* reg_data)
 {
-    return i2c_reg_read(wm8533->i2c_data, address, reg_data);
+    return wm8533_i2c_reg_read(wm8533->i2c_data, address, reg_data);
 }
 
 #ifdef NOTYET
 static wiced_result_t wm8533_reg_read(wm8533_device_data_t* wm8533, uint8_t address, uint8_t* reg_data)
 {
-    return i2c_reg_read(wm8533->i2c_data, address, reg_data);
+    return wm8533_i2c_reg_read(wm8533->i2c_data, address, reg_data);
 }
 
 static wiced_result_t cs43l22_dac_interface_set(wm8533_device_data_t* wm8533, cs43l22_dac_interface_t type)
@@ -911,16 +947,6 @@ wiced_result_t cs43l22_read_status(cs43l22_status_t* status)
 #endif /* NOTYET */
 
 
-static wiced_result_t wm8533_audio_device_port ( void* device_data, wiced_i2s_t* port )
-{
-    wm8533_device_data_t* wm8533 = ( wm8533_device_data_t* )device_data;
-
-    *port = wm8533->data_port;
-
-    return WICED_SUCCESS;
-}
-
-
 /* Declare global audio device interface */
 
 wiced_audio_device_interface_t wm8533_interface =
@@ -928,7 +954,6 @@ wiced_audio_device_interface_t wm8533_interface =
         .audio_device_init          = wm8533_init,
         .audio_device_deinit        = wm8533_deinit,
         .audio_device_configure     = wm8533_configure,
-        .audio_device_port          = wm8533_audio_device_port,
         .audio_device_start_streaming          = wm8533_start_play,
         .audio_device_pause         = wm8533_pause,
         .audio_device_resume        = wm8533_resume,

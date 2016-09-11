@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,6 +13,9 @@
 #include <string.h> /* for NULL */
 
 /*@access sflash_handle_t@*/ /* Lint: permit access to abstract sflash handle implementation */
+
+static int generic_sflash_command      ( const sflash_handle_t* handle, sflash_command_t cmd, unsigned long num_initial_parameter_bytes, /*@null@*/ /*@observer@*/ const void* parameter_bytes, unsigned long num_data_bytes, /*@null@*/ /*@observer@*/ const void* const data_MOSI, /*@null@*/ /*@out@*/ /*@dependent@*/ void* const data_MISO );
+
 
 int sflash_read_ID( const sflash_handle_t* handle, /*@out@*/ device_id_t* data_addr )
 {
@@ -124,6 +127,10 @@ int sflash_get_size( const sflash_handle_t* const handle, /*@out@*/ unsigned lon
     {
         *size = (unsigned long) 0x200000; /* 2MByte */
     }
+    else if ( handle->device_id == SFLASH_ID_MX25L25635F )
+    {
+        *size = (unsigned long) 0x2000000; /* 32MByte */
+    }
 #endif /* ifdef SFLASH_SUPPORT_MACRONIX_PARTS */
 #ifdef SFLASH_SUPPORT_SST_PARTS
     if ( handle->device_id == SFLASH_ID_SST25VF080B )
@@ -220,9 +227,9 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
     return 0;
 }
 
-int sflash_write_status_register( const sflash_handle_t* const handle, char value )
+int sflash_write_status_register( const sflash_handle_t* const handle, unsigned char value )
 {
-    char status_register_val = value;
+    unsigned char status_register_val = value;
 #ifdef SFLASH_SUPPORT_SST_PARTS
     /* SST parts require enabling writing to the status register */
     if ( SFLASH_MANUFACTURER( handle->device_id ) == SFLASH_MANUFACTURER_SST )
@@ -238,6 +245,17 @@ int sflash_write_status_register( const sflash_handle_t* const handle, char valu
     return generic_sflash_command( handle, SFLASH_WRITE_STATUS_REGISTER, 0, NULL, (unsigned long) 1, &status_register_val, NULL );
 }
 
+int deinit_sflash( /*@out@*/ sflash_handle_t* const handle)
+{
+    int status;
+    (void) handle;
+    status = sflash_platform_deinit( );
+    if ( status != 0 )
+    {
+        return status;
+    }
+    return 0;
+}
 
 int init_sflash( /*@out@*/ sflash_handle_t* const handle, /*@shared@*/ void* peripheral_id, sflash_write_allowed_t write_allowed_in )
 {
@@ -287,7 +305,7 @@ static inline int is_write_command( sflash_command_t cmd )
              ( cmd == SFLASH_BLOCK_ERASE_LARGE ) )? 1 : 0;
 }
 
-int generic_sflash_command(                                      const sflash_handle_t* const handle,
+static int generic_sflash_command(                               const sflash_handle_t* const handle,
                                                                  sflash_command_t             cmd,
                                                                  unsigned long                num_initial_parameter_bytes,
                             /*@null@*/ /*@observer@*/            const void* const            parameter_bytes,

@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,9 @@ GLOBAL_INCLUDES := .
 
 $(NAME)_SOURCES := wiced_network.c \
                    tcpip.c \
-                   wiced_ping.c
+                   wiced_ping.c \
+                   ../../wiced_network_common.c \
+                   ../../wiced_tcpip_common.c
 
 $(NAME)_COMPONENTS := daemons/DHCP_server
 

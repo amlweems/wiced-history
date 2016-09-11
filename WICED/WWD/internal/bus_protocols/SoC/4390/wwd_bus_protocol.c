@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -86,6 +86,7 @@ wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 
 wwd_result_t wwd_bus_write_wifi_firmware_image( void )
 {
+#ifndef NO_WIFI_FIRMWARE
     uint32_t offset = 0;
     uint32_t total_size;
     uint32_t reset_inst = 0;
@@ -107,7 +108,9 @@ wwd_result_t wwd_bus_write_wifi_firmware_image( void )
      * Current Transaction's HADDR[17:0]}
      */
     wwd_bus_write_reset_instruction( reset_inst );
-
+#else
+    wiced_assert("wifi_firmware_image is not included resource build", 0 == 1);
+#endif
     return WWD_SUCCESS;
 }
 

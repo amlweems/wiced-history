@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,8 +12,8 @@ NAME := WWD_NetX_Interface
 
 GLOBAL_INCLUDES := .
 
-$(NAME)_SOURCES := wwd_network.c \
-                   wwd_buffer.c \
+$(NAME)_SOURCES := wwd_buffer.c \
+                   wwd_network.c
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 

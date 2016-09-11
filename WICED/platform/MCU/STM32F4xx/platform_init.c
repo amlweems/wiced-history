@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,7 +11,6 @@
 /** @file
  * Define default STM32F4xx initialisation functions
  */
-#include "stdio.h"
 #include "platform_init.h"
 #include "platform_isr.h"
 #include "platform_peripheral.h"
@@ -52,9 +51,15 @@
  *               Function Definitions
  ******************************************************/
 
+
 void platform_mcu_reset( void )
 {
-    NVIC_SystemReset();
+    NVIC_SystemReset( );
+
+    /* Loop forever */
+    while ( 1 )
+    {
+    }
 }
 
 /* STM32F2 common clock initialisation function
@@ -119,7 +124,7 @@ void platform_init_mcu_infrastructure( void )
     /* Initialise interrupt priorities */
     for ( i = 0; i < 81; i++ )
     {
-        NVIC_SetPriority( i, 0xf );
+        NVIC_SetPriority( (IRQn_Type) i, 0xf );
     }
     NVIC_PriorityGroupConfig( NVIC_PriorityGroup_4 );
     platform_init_rtos_irq_priorities();

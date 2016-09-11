@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -134,6 +134,27 @@ typedef struct
  * @return @ref resource_result_t
  */
 extern resource_result_t resource_read( const resource_hnd_t* resource, uint32_t offset, uint32_t maxsize, uint32_t* size, void* buffer );
+
+/** Retrieve a read only resource buffer using the handle specified
+ *
+ * @param[in]  resource : handle of the resource to read
+ * @param[in]  offset   : offset from the beginning of the resource block
+ * @param[in]  maxsize  : size of the buffer
+ * @param[out] size     : size of the data successfully read
+ * @param[out] buffer   : pointer to a buffer pointer to point to the resource data
+ *
+ * @return @ref resource_result_t
+ */
+extern resource_result_t resource_get_readonly_buffer ( const resource_hnd_t* resource, uint32_t offset, uint32_t maxsize, uint32_t* size_out, const void** buffer );
+
+/** Free a read only resource buffer using the handle specified
+ *
+ * @param[in]  resource : handle of the resource to read
+ * @param[in]  buffer   : pointer to a buffer set using resource_get_readonly_buffer
+ *
+ * @return @ref resource_result_t
+ */
+extern resource_result_t resource_free_readonly_buffer( const resource_hnd_t* handle, const void* buffer );
 
 #ifdef __cplusplus
 } /*extern "C" */

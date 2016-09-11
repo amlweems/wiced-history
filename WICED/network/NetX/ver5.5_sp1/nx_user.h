@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,7 +39,7 @@
 
 #define NX_TCP_MAX_OUT_OF_ORDER_PACKETS
 
-#define NX_MAX_LISTEN_REQUESTS 21
+#define NX_MAX_LISTEN_REQUESTS 18
 
 #define PACKET_RELEASE_NOTIFY
 extern void packet_release_notify( void* pool );
@@ -74,6 +74,8 @@ extern unsigned long host_rtos_get_tickrate( void );
 #define NX_IP_PERIODIC_RATE ( host_rtos_get_tickrate( ) )
 
 #define NX_RANDOM_INITIAL_TCP_PORT
+
+#define NX_ARP_DISABLE_AUTO_ARP_ENTRY
 
 
 /* These are all the defines that are used in NetX-Duo #if statements
@@ -636,6 +638,21 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_TRACE_INTERNAL_ARP_REQUEST_RECEIVE
 #undef NX_TRACE_OBJECT_TYPE_IP
 #undef NX_UDP_DEBUG_LOG_SIZE
+
+#ifdef PLATFORM_L1_CACHE_SHIFT
+
+#include "platform_cache_def.h"
+
+#define NX_PACKET_HEADER_SIZE     52 /* Bytes of header not counting padding. Header can be changed by stack features enabling / disabling. Static assert is added somewhere to make sure header is aligned. */
+#define NX_PACKET_HEADER_PAD_SIZE ((PLATFORM_L1_CACHE_ROUND_UP(NX_PACKET_HEADER_SIZE) - NX_PACKET_HEADER_SIZE) / 4)
+
+#if NX_PACKET_HEADER_PAD_SIZE
+#define NX_PACKET_HEADER_PAD
+#else
+#undef NX_PACKET_HEADER_PAD_SIZE
+#endif
+
+#endif /* PLATFORM_L1_CACHE_SHIFT */
 
 /* defined in port.h
 #define TX_TIMER_PROCESS_IN_ISR

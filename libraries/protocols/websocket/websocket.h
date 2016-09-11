@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -80,6 +80,7 @@ typedef enum
 /******************************************************
  *                 Type Definitions
  ******************************************************/
+typedef wiced_result_t (*wiced_websocket_callback_t)( void* websocket );
 
 /******************************************************
  *                    Structures
@@ -87,20 +88,11 @@ typedef enum
 
 typedef struct
 {
-    wiced_socket_callback_t   on_open;
-    wiced_socket_callback_t   on_error;
-    wiced_socket_callback_t   on_close;
-    wiced_socket_callback_t   on_message;
+    wiced_websocket_callback_t on_open;
+    wiced_websocket_callback_t on_error;
+    wiced_websocket_callback_t on_close;
+    wiced_websocket_callback_t on_message;
 } wiced_websocket_callbacks_t;
-
-typedef struct
-{
-    wiced_tcp_socket_t                 socket;
-    wiced_websocket_error_t            error_type;
-    wiced_websocket_state_t            state;
-    const wiced_websocket_callbacks_t* callbacks;
-    const char                         subprotocol[SUB_PROTOCOL_STRING_LENGTH];
-} wiced_websocket_t;
 
 typedef struct
 {
@@ -108,7 +100,19 @@ typedef struct
     wiced_websocket_payload_type_t  payload_type;
     uint16_t                        payload_length;
     void*                           payload;
+    uint16_t                        payload_buffer_size;
 } wiced_websocket_frame_t;
+
+typedef struct
+{
+    wiced_tcp_socket_t           socket;
+    wiced_websocket_error_t      error_type;
+    wiced_websocket_state_t      state;
+    wiced_websocket_callbacks_t  callbacks;
+    wiced_websocket_frame_t      rx_frame;
+    wiced_websocket_frame_t      tx_frame;
+    const char                   subprotocol[SUB_PROTOCOL_STRING_LENGTH];
+} wiced_websocket_t;
 
 typedef struct
 {
@@ -136,7 +140,7 @@ typedef struct
  * @note                           For additional error information, check the wiced_websocket_error_t field
  *                                 of the  wiced_websocket_t structure
  */
-wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header, const wiced_websocket_callbacks_t* callbacks );
+wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header );
 
 /* @brief                          perform opening handshake on port 443 with server and establish a connection
  *
@@ -148,25 +152,23 @@ wiced_result_t wiced_websocket_connect( wiced_websocket_t* websocket, const wice
  * @note                           For additional error information, check the wiced_websocket_error_t field
  *                                 of the  wiced_websocket_t structure
  */
-wiced_result_t wiced_websocket_secure_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header, const wiced_websocket_callbacks_t* callbacks );
+wiced_result_t wiced_websocket_secure_connect( wiced_websocket_t* websocket, const wiced_websocket_handshake_fields_t* websocket_header );
 
 /* @brief                           send data to websocket server
  *
  * @param websocket                 websocket to send on
- * @param tx_frame                  tx_frame to send
  *
  * @return                          WICED_SUCCESS if successful, or WICED_ERROR.
  */
-wiced_result_t wiced_websocket_send ( wiced_websocket_t* websocket, wiced_websocket_frame_t* tx_frame );
+wiced_result_t wiced_websocket_send ( wiced_websocket_t* websocket );
 
-/* @brief                           receive data from websocket server
+/* @brief                           receive data from websocket server. This is a blocking call.
  *
  * @param websocket                 websocket to receive on
- * @param tx_frame                  tx_frame to send
  *
  * @return                          WICED_SUCCESS if successful, or WICED_ERROR.
  */
-wiced_result_t wiced_websocket_receive ( wiced_websocket_t* websocket, wiced_websocket_frame_t* websocket_frame );
+wiced_result_t wiced_websocket_receive ( wiced_websocket_t* websocket );
 
 /* @brief                           close and delete websocket, and send close message to websocket server
  *
@@ -177,15 +179,50 @@ wiced_result_t wiced_websocket_receive ( wiced_websocket_t* websocket, wiced_web
  */
 wiced_result_t wiced_websocket_close ( wiced_websocket_t* websocket, const char* optional_close_message) ;
 
-/* @brief                           get websocket state
- * *
- * @param websocket                 request state for this websocket
+/* @brief                           Register the on_open, on_close, on_message and on_error callbacks
  *
- * @return wiced_websocket_state_t  is socket open/close/connecting.
+ * @param websocket                 websocket on which to register the callbacks
+ * @param on_open_callback          called on open websocket  connection
+ * @param on_close_callback         called on close websocket connection
+ * @param on_message_callback       called on websocket receive data
+ * @param on_error_callback         called on websocket error
  *
- * @note                            none
+ *
+ * @return                          WICED_SUCCESS if successful, or WICED_ERROR.
  */
+wiced_result_t wiced_websocket_register_callbacks ( wiced_websocket_t* websocket, wiced_websocket_callback_t on_open_callback, wiced_websocket_callback_t on_close_callback, wiced_websocket_callback_t on_message_callback, wiced_websocket_callback_t on_error ) ;
 
+/* @brief                           Un-Register the on_open, on_close, on_message and on_error callbacks for a given websocket
+ *
+ * @param websocket                 websocket on which to unregister the callbacks
+ *
+ */
+void wiced_websocket_unregister_callbacks ( wiced_websocket_t* websocket );
+
+/* @brief                           Initialise the websocket transmit frame
+ *
+ * @param websocket                 Websocket who's tx frame we are initialising
+ * @param wiced_bool_t final_frame  Indicates if this is the final frame of the message
+ * @param payload_type              Type of payload (ping frame, binary frame, text frame etc).
+ * @param payload_length            Length of payload being sent
+ * @param payload_buffer            Pointer to buffer containing the payload
+ * @param payload_buffer_size       Length of buffer containing payload
+ *
+ *
+ * @return                          WICED_SUCCESS if successful, or WICED_ERROR.
+ */
+wiced_result_t wiced_websocket_initialise_tx_frame( wiced_websocket_t* websocket, wiced_bool_t final_frame, wiced_websocket_payload_type_t payload_type, uint16_t payload_length, void* payload_buffer, uint16_t payload_buffer_size );
+
+
+/* @brief                           Initialise the websocket receive frame
+ *
+ * @param websocket                 Websocket who's rx frame we are initialising
+ * @param payload_buffer            Pointer to buffer containing the payload
+ * @param payload_buffer_size       Length of buffer containing payload
+ *
+ * @return                          WICED_SUCCESS if successful, or WICED_ERROR.
+ */
+wiced_result_t wiced_websocket_initialise_rx_frame( wiced_websocket_t* websocket, void* payload_buffer, uint16_t payload_buffer_size );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

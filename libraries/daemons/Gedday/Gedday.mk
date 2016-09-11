@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,12 +10,14 @@
 
 NAME := Lib_Gedday
 
-ifneq ($(wildcard $(CURDIR)Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a),)
-$(NAME)_PREBUILT_LIBRARY := Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
+GEDDAY_LIBRARY_NAME :=Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
+
+ifneq ($(wildcard $(CURDIR)$(GEDDAY_LIBRARY_NAME)),)
+$(NAME)_PREBUILT_LIBRARY :=$(GEDDAY_LIBRARY_NAME)
 else
-$(NAME)_SOURCES := gedday.c \
-                   text_record.c
-endif # ifneq ($(wildcard $(CURDIR)Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a),)
+# Build from source (Broadcom internal)
+include $(CURDIR)Gedday_src.mk
+endif # ifneq ($(wildcard $(CURDIR)$(GEDDAY_LIBRARY_NAME)),)
 
 GLOBAL_INCLUDES := .
 

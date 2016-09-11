@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,7 +10,7 @@
 
 NAME := NetX_Duo
 
-NETX_DUO_VERSION := 5.7_sp1
+NETX_DUO_VERSION := 5.7_sp2
 
 VALID_RTOS_LIST:= ThreadX
 
@@ -34,10 +34,10 @@ GLOBAL_INCLUDES := ver$(NETX_DUO_VERSION) \
 
 ifdef WICED_ENABLE_TRACEX
 # Precompiled library with TraceX
-NETX_DUO_LIBRARY_NAME :=NetX_Duo.TraceX.$(HOST_ARCH).$(BUILD_TYPE).a
+NETX_DUO_LIBRARY_NAME :=NetX_Duo.TraceX.$(RTOS).$(HOST_ARCH).$(BUILD_TYPE).a
 else
 # Precompiled library
-NETX_DUO_LIBRARY_NAME :=NetX_Duo.$(HOST_ARCH).$(BUILD_TYPE).a
+NETX_DUO_LIBRARY_NAME :=NetX_Duo.$(RTOS).$(HOST_ARCH).$(BUILD_TYPE).a
 endif
 
 ifneq ($(wildcard $(CURDIR)$(NETX_DUO_LIBRARY_NAME)),)
@@ -45,7 +45,7 @@ ifneq ($(wildcard $(CURDIR)$(NETX_DUO_LIBRARY_NAME)),)
 $(NAME)_PREBUILT_LIBRARY := $(NETX_DUO_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
-include $(CURDIR)NetX_Duo_src.mk
-endif #ifneq ($(wildcard $(CURDIR)NetX_Duo.$(HOST_ARCH).$(BUILD_TYPE).a),)
+-include $(CURDIR)NetX_Duo_src.mk
+endif #ifneq ($(wildcard $(CURDIR)$(NETX_DUO_LIBRARY_NAME)),)
 
 $(NAME)_SOURCES += ver$(NETX_DUO_VERSION)/nxd_external_functions.c

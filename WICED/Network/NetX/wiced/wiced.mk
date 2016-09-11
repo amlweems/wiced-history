@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,11 +13,13 @@ NAME := WICED_NetX_Interface
 GLOBAL_INCLUDES := .
 
 $(NAME)_SOURCES := wiced_network.c \
-                   tcpip.c
+                   tcpip.c \
+                   ../../wiced_network_common.c \
+                   ../../wiced_tcpip_common.c
 
-$(NAME)_COMPONENTS := daemons/DHCP_server
+$(NAME)_COMPONENTS := daemons/DHCP_server \
+                      utilities/linked_list
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
-$(NAME)_CHECK_HEADERS := \
-                         wiced_network.h
+$(NAME)_CHECK_HEADERS := wiced_network.h

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,15 +11,29 @@
 scriptname=${0##*/}
 scriptdir=${0%*$scriptname}
 
-# clear environment variables
-declare() { unset -- "${2%%=*}" 2> /dev/null || true; }
-eval "$(builtin declare -x)"
-unset declare
+# Rerun the script with environment cleared out
+if [ "$1" != "ENVCLEARED" ]; then
+    exec -c "$scriptdir$scriptname" ENVCLEARED "$PATH" "$HOME" "$@"
+    exit
+else
+    shift
+    export SAVED_PATH=$1
+    shift
+    export SAVED_HOME=$1
+    shift
+fi
+# Delete some automatic bash environment variables
+unset PATH
+unset TERM
+unset PWD
+unset OLDPWD
+unset SHLVL
 
-linux32unamestr=`${scriptdir}tools/common/Linux32/uname 2> /dev/null`
-linux64unamestr=`${scriptdir}tools/common/Linux64/uname 2> /dev/null`
-osxunamestr=`${scriptdir}tools/common/OSX/uname  2> /dev/null`
-win32unamestr=`${scriptdir}tools/common/Win32/uname.exe -o 2> /dev/null`
+
+linux32unamestr=`"${scriptdir}tools/common/Linux32/uname" 2> /dev/null`
+linux64unamestr=`"${scriptdir}tools/common/Linux64/uname" 2> /dev/null`
+osxunamestr=`"${scriptdir}tools/common/OSX/uname"  2> /dev/null`
+win32unamestr=`"${scriptdir}tools/common/Win32/uname.exe" -o 2> /dev/null`
 
 if [ "$linux32unamestr" == "Linux" ] || [ "$linux64unamestr" == "Linux" ]; then
 # Linux

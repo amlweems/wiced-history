@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -126,9 +126,9 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
     spi_number = platform_spi_get_port_number( spi->port );
 
     /* Init SPI GPIOs */
-    platform_gpio_set_alternate_function( spi->pin_clock->port, spi->pin_clock->pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, GPIO_AF_SPI1 );
-    platform_gpio_set_alternate_function( spi->pin_mosi->port,  spi->pin_mosi->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, GPIO_AF_SPI1 );
-    platform_gpio_set_alternate_function( spi->pin_miso->port,  spi->pin_miso->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, GPIO_AF_SPI1 );
+    platform_gpio_set_alternate_function( spi->pin_clock->port, spi->pin_clock->pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
+    platform_gpio_set_alternate_function( spi->pin_mosi->port,  spi->pin_mosi->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
+    platform_gpio_set_alternate_function( spi->pin_miso->port,  spi->pin_miso->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
 
     /* Init the chip select GPIO */
     platform_gpio_init( config->chip_select, OUTPUT_PUSH_PULL );
@@ -211,7 +211,7 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
 
     platform_mcu_powersave_enable();
 
-    return WICED_SUCCESS;
+    return PLATFORM_SUCCESS;
 }
 
 platform_result_t platform_spi_deinit( const platform_spi_t* spi )
@@ -282,7 +282,7 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
                 /* Check that the message length is a multiple of 2 */
                 if ( ( count % 2 ) != 0 )
                 {
-                    result = WICED_ERROR;
+                    result = PLATFORM_ERROR;
                     goto cleanup_transfer;
                 }
 
@@ -373,12 +373,12 @@ static platform_result_t spi_dma_transfer( const platform_spi_t* spi, const plat
         if ( loop_count >= (uint32_t) SPI_DMA_TIMEOUT_LOOPS )
         {
             platform_gpio_output_high( config->chip_select );
-            return WICED_TIMEOUT;
+            return PLATFORM_TIMEOUT;
         }
     }
 
     platform_gpio_output_high( config->chip_select );
-    return WICED_SUCCESS;
+    return PLATFORM_SUCCESS;
 }
 
 static void spi_dma_config( const platform_spi_t* spi, const platform_spi_message_segment_t* message )

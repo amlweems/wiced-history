@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,6 +24,7 @@
 #include "platform_cmsis.h"
 #include "platform_peripheral.h"
 #include "platform_config.h"
+#include "wwd_rtos_isr.h"
 
 /******************************************************
  *             Constants
@@ -140,10 +141,12 @@ wwd_result_t host_platform_bus_init( void )
     NVIC_EnableIRQ( SDIO_IRQ_CHANNEL );
     NVIC_EnableIRQ( DMA2_3_IRQ_CHANNEL );
 
-#if defined ( WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP )
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     /* Set GPIO_B[1:0] to 00 to put WLAN module into SDIO mode */
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0], OUTPUT_PUSH_PULL );
     platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1], OUTPUT_PUSH_PULL );
     platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
 #endif
@@ -228,8 +231,10 @@ wwd_result_t host_platform_bus_deinit( void )
         platform_gpio_deinit( &wifi_sdio_pins[ a ] );
     }
 
-#if defined ( WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP )
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     platform_gpio_deinit( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
     platform_gpio_deinit( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
 #endif
 

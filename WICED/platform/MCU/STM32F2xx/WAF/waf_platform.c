@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -235,7 +235,6 @@ static wiced_result_t platform_copy_app_to_iflash( const image_location_t* app_h
         platform_write_flash_chunk( (uint32_t) physical_address, buff, write_size );
         if (memcmp((char *)physical_address, buff, write_size))
         {
-            offset = 0;
             return WICED_ERROR;
         }
         offset += write_size;

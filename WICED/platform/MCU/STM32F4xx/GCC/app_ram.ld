@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -127,7 +127,7 @@ SECTIONS
         *(COMMON)
         link_bss_end = .;
         . = ALIGN(., 4);
-    }> CCM_SRAM AT>CCM_SRAM
+    }> SRAM AT> SRAM
 
 
     .stack : /* Contains the initial stack */
@@ -136,7 +136,7 @@ SECTIONS
         *(.stack)
         . = ALIGN(MAX(link_stack_location + __STACKSIZE__ , .), 4);
         link_stack_end = .;
-    }> CCM_SRAM AT>CCM_SRAM
+    }> SRAM AT> SRAM
 
     /DISCARD/ :
     {

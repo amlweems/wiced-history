@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,8 +29,6 @@
 #include <tx_api.h>
 #include "platform/wwd_platform_interface.h"
 #include "platform_config.h"
-
-extern unsigned long host_rtos_get_tickrate( void );
 
 #ifdef __GNUC__
 void __malloc_lock(struct _reent *ptr);
@@ -84,7 +82,7 @@ wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thr
     tx_thread_stack_error_notify( wiced_threadx_stack_error_handler );
 #endif /* ifdef DEBUG */
 
-    status = tx_thread_create( thread, (char*) name, (void(*)( ULONG )) entry_function, arg, stack, (ULONG) stack_size, (UINT) priority, 0, TX_NO_TIME_SLICE, (UINT) TX_AUTO_START );
+    status = tx_thread_create( thread, (char*) name, (void(*)( ULONG )) entry_function, arg, stack, (ULONG) stack_size, (UINT) priority, (UINT) priority, TX_NO_TIME_SLICE, (UINT) TX_AUTO_START );
     return ( status == TX_SUCCESS ) ? WWD_SUCCESS : WWD_THREAD_CREATE_FAILED;
 }
 
@@ -266,7 +264,7 @@ wwd_result_t host_rtos_delay_milliseconds( uint32_t num_ms )
     else
     {
         uint32_t time_reference = host_platform_get_cycle_count( );
-        int32_t wait_time       = (int32_t)num_ms * CPU_CLOCK_HZ / 1000;
+        int32_t wait_time       = (int32_t)num_ms * (int32_t)CPU_CLOCK_HZ / 1000;
         while ( wait_time > 0 )
         {
             uint32_t current_time = host_platform_get_cycle_count( );

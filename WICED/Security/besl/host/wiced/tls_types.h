@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -28,9 +28,10 @@ extern "C" {
 
 #define SIZEOF_SESSION_ID        32
 #define SIZEOF_SESSION_MASTER    48
+#define SIZEOF_RANDOM            64
 
-#define  TLS_WAIT_FOREVER        (0xFFFFFFFF)
-#define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS        (10000)
+#define  TLS_WAIT_FOREVER                (0xFFFFFFFF)
+#define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS (20000)
 
 
 /* Supported ciphersuites */
@@ -82,6 +83,15 @@ typedef enum
     SSL_HANDSHAKE_OVER
 } tls_states_t;
 
+/*
+ * TLS transport protocol types
+ */
+typedef enum
+{
+    TLS_TCP_TRANSPORT = 0,
+    TLS_EAP_TRANSPORT = 1,
+    TLS_UDP_TRANSPORT = 2,
+} tls_transport_protocol_t;
 
 /******************************************************
  *                 Type Definitions
@@ -249,6 +259,8 @@ struct _ssl_context
     uint16_t      current_record_bytes_processed;
     uint16_t      current_record_original_length;
 
+    tls_transport_protocol_t transport_protocol;
+
     tls_handshake_message_t* current_handshake_message;
 
     unsigned char  in_ctr[8];      /*!< 64-bit incoming message counter  */
@@ -316,6 +328,23 @@ struct _ssl_context
 };
 
 
+typedef struct
+{
+    wiced_tls_context_type_t context_type;
+    wiced_tls_context_t      context;
+    wiced_tls_session_t      session;
+} wiced_tls_simple_context_t;
+
+/* The advanced context contains a simple context but with additional certificate and key information */
+typedef struct
+{
+    wiced_tls_context_type_t context_type;
+    wiced_tls_context_t      context;
+    wiced_tls_session_t      session;
+    wiced_tls_certificate_t  certificate;
+    wiced_tls_key_t          key;
+} wiced_tls_advanced_context_t;
+
 typedef enum
 {
     TLS_RESULT_LIST     (  TLS_      )  /* 5000 - 5999 */
@@ -332,6 +361,24 @@ typedef enum
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+tls_result_t ssl_init                  ( ssl_context *ssl );
+void         ssl_set_rng               ( ssl_context *ssl, int32_t (*f_rng)( void * ), void *p_rng );
+void         ssl_set_session           ( ssl_context *ssl, int32_t resume, int32_t timeout, ssl_session *session );
+void         ssl_free                  ( ssl_context *ssl );
+void         ssl_set_endpoint          ( ssl_context *ssl, int32_t endpoint );
+void         ssl_set_ca_chain          ( ssl_context *ssl, x509_cert *ca_chain, const char *peer_cn );
+void         ssl_set_authmode          ( ssl_context *ssl, int32_t authmode );
+void         ssl_set_own_cert          ( ssl_context *ssl, x509_cert *own_cert, rsa_context *rsa_key );
+tls_result_t ssl_handshake_server_async( ssl_context *ssl );
+tls_result_t ssl_handshake_client_async( ssl_context *ssl );
+tls_result_t ssl_set_dh_param          ( ssl_context *ssl, const unsigned char *dhm_P, int P_len, const unsigned char *dhm_G, int G_len );
+tls_result_t ssl_close_notify          ( ssl_context *ssl );
+tls_result_t tls_encrypt_record        ( ssl_context *ssl, tls_record_t* record, uint32_t message_length );
+tls_result_t tls_decrypt_record        ( wiced_tls_context_t *ssl, tls_record_t* record );
+void         microrng_init             ( microrng_state *state );
+int32_t      microrng_rand             ( void *p_state );
+
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,6 +16,7 @@
 
 #include "wiced_utilities.h"
 #include "wwd_wifi.h"
+#include "wwd_debug.h"
 #include "wiced_rtos.h"
 
 #ifdef __cplusplus
@@ -33,17 +34,6 @@ extern "C" {
 /******************************************************
  *                   Enumerations
  ******************************************************/
-
-/** Enumeration of WICED interfaces. \n
- * @note The config interface is a virtual interface that shares the softAP interface
- */
-typedef enum
-{
-    WICED_STA_INTERFACE    = WWD_STA_INTERFACE,             /**< STA or Client Interface  */
-    WICED_AP_INTERFACE     = WWD_AP_INTERFACE,              /**< softAP Interface         */
-    WICED_P2P_INTERFACE    = WWD_P2P_INTERFACE,             /**< P2P Interface            */
-    WICED_CONFIG_INTERFACE = WICED_AP_INTERFACE | (1 << 7), /**< config softAP Interface  */
-} wiced_interface_t;
 
 /** WPS Connection Mode
  */
@@ -90,9 +80,20 @@ typedef enum
     WPS_CONFIG_PHYSICAL_DISPLAY_PIN  = 0x4008   /**< PHYSICAL_DISPLAY_PIN */
 } wiced_wps_configuration_method_t;
 
+/** WICED SoftAP events */
+typedef enum
+{
+    WICED_AP_UNKNOWN_EVENT,
+    WICED_AP_STA_JOINED_EVENT,
+    WICED_AP_STA_LEAVE_EVENT,
+} wiced_wifi_softap_event_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
+
+/** Soft AP event handler */
+typedef void (*wiced_wifi_softap_event_handler_t)( wiced_wifi_softap_event_t event, const wiced_mac_t* mac_address );
 
 /******************************************************
  *                    Structures
@@ -130,6 +131,7 @@ typedef struct
     const uint32_t os_version;                         /**< Operating system version       */
     const uint16_t authentication_type_flags;          /**< Supported authentication types */
     const uint16_t encryption_type_flags;              /**< Supported encryption types     */
+    const uint8_t  add_config_methods_to_probe_resp;   /**< Add configuration methods to probe response for Windows enrollees (this is non-WPS 2.0 compliant) */
 } wiced_wps_device_detail_t;
 
 /** WPS Credentials
@@ -141,6 +143,17 @@ typedef struct
     uint8_t          passphrase[64];     /**< AP passphrase        */
     uint8_t          passphrase_length;  /**< AP passphrase length */
 } wiced_wps_credential_t;
+
+/** Vendor IE details
+ */
+typedef struct
+{
+    uint8_t         oui[WIFI_IE_OUI_LENGTH];     /**< Unique identifier for the IE */
+    uint8_t         subtype;                            /**< Sub-type of the IE */
+    void*           data;                               /**< Pointer to IE data */
+    uint16_t        length;                             /**< IE data length */
+    uint16_t        which_packets;                      /**< Mask of the packet in which this IE details to be included */
+} wiced_custom_ie_info_t;
 
 /******************************************************
  *               Global Variables
@@ -206,15 +219,61 @@ extern wiced_result_t wiced_wps_registrar( wiced_wps_mode_t mode, const wiced_wp
  */
 extern wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_handler, void* user_data );
 
+/** Add Wi-Fi custom IE
+ *
+ * @param[in] interface : Interface to add custom IE
+ * @param[in] ie_info   : Pointer to the structure which contains custom IE information
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_add_custom_ie( wiced_interface_t interface, const wiced_custom_ie_info_t* ie_info );
+
+/** Remove Wi-Fi custom IE
+ *
+ * @param[in] interface : Interface to remove custom IE
+ * @param[in] ie_info   : Pointer to the structure which contains custom IE information
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_remove_custom_ie( wiced_interface_t interface, const wiced_custom_ie_info_t* ie_info );
+
+/** Brings up Wi-Fi core
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_up( void );
+
+/** Bring down Wi-Fi core preserving calibration
+ *
+ *  WARNING:
+ *     This brings down the Wi-Fi core and all existing network connections.
+ *     Bring up the Wi-Fi core using wiced_wifi_up() and bring up the required
+ *     network connections using wiced_network_up().
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_down( void );
 
 /** Set roam trigger level
  *
  * @param[in] trigger_level : Trigger level in dBm. The Wi-Fi device will search for a new AP to connect to once the \n
- *                            signal from the AP (it is currently associated with) drops below the roam trigger level
- *
+ *                            signal from the AP (it is currently associated with) drops below the roam trigger level.
+ *                            Valid value range: 2 to -100
+ *                                      0 : Default roaming trigger
+ *                                      1 : Optimize for bandwidth roaming trigger
+ *                                      2 : Optimize for distance roaming trigger
+ *                              -1 to -100: Roaming will be triggered based on the specified RSSI value
  * @return @ref wiced_result_t
  */
 static inline wiced_result_t wiced_wifi_set_roam_trigger( int32_t trigger_level );
+
+
+/** Get roam trigger level
+ *
+ * @param trigger_level  : Trigger level in dBm. Pointer to store current roam trigger level value
+ * @return  @ref wiced_result_t
+ */
+static inline wiced_result_t wiced_wifi_get_roam_trigger( int32_t* trigger_level );
 
 
 /** Get the current channel on STA interface
@@ -298,6 +357,16 @@ static inline wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t list
  * @return @ref wiced_result_t
  */
 static inline wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* li );
+
+
+/** Register soft AP event handler
+ *
+ * @param[in] softap_event_handler  : A function pointer to the event handler
+  *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_register_softap_event_handler( wiced_wifi_softap_event_handler_t softap_event_handler );
+
 
 /*****************************************************************************/
 /** @addtogroup wifipower       WLAN Power Saving functions
@@ -545,6 +614,41 @@ static inline wiced_result_t wiced_wifi_get_associated_client_list( void* client
  */
 static inline wiced_result_t wiced_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security );
 
+/** Sets the HT mode for the given interface
+ *
+ *  NOTE:
+ *     Ensure WiFi core and network is down before invoking this function.
+ *     Refer wiced_wifi_down() and wiced_network_down() functions for details.
+ *
+ * @param[in]   ht_mode     : HT mode to be set for the given interface
+ * @param[in]   interface   : Interface for which HT Mode to be set
+ *
+ * @return @ref wiced_result_t
+ */
+static inline wiced_result_t wiced_wifi_set_ht_mode( wiced_interface_t interface, wiced_ht_mode_t ht_mode );
+
+/** Gets the HT mode for the given interface
+ *
+ * @param[out]  ht_mode     : Pointer to the enum to store the currently used HT mode of the given interface.
+ * @param[in]   interface   : Interface for which HT mode to be identified.
+ *
+ * @return @ref wiced_result_t
+ */
+static inline wiced_result_t wiced_wifi_get_ht_mode( wiced_interface_t interface, wiced_ht_mode_t* ht_mode );
+
+/** Disable / enable 11n mode
+ *
+ *  NOTE:
+ *     Ensure WiFi core and network is down before invoking this function.
+ *     Refer wiced_wifi_down() API for details.
+ *
+ * @param[in]   interface : Disables 11n mode on the given interface
+ * @param[in]   disable   : Boolean to indicate if 11n mode to be disabled/enabled. If set to WICED_TRUE, 11n mode will be disabled.
+ *
+ * @return @ref wiced_result_t
+ */
+static inline wiced_result_t wiced_wifi_disable_11n_support( wiced_interface_t interface, wiced_bool_t disable );
+
 /** @} */
 
 /*****************************************************************************/
@@ -572,130 +676,167 @@ void print_scan_result( wiced_scan_result_t* record );
  *           Inline Function Implementations
  ******************************************************/
 
-static inline wiced_result_t wiced_wifi_set_roam_trigger( int32_t trigger_level )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_set_roam_trigger( int32_t trigger_level )
 {
     return (wiced_result_t) wwd_wifi_set_roam_trigger( trigger_level );
 }
 
-static inline wiced_result_t wiced_wifi_get_channel( uint32_t* channel )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_roam_trigger( int32_t* trigger_level )
+{
+    return (wiced_result_t) wwd_wifi_get_roam_trigger( trigger_level );
+}
+
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_channel( uint32_t* channel )
 {
     return (wiced_result_t) wwd_wifi_get_channel(WWD_STA_INTERFACE, channel);
 }
 
-static inline wiced_result_t wiced_wifi_get_mac_address( wiced_mac_t* mac )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_mac_address( wiced_mac_t* mac )
 {
     return (wiced_result_t) wwd_wifi_get_mac_address( mac, WWD_STA_INTERFACE );
 }
 
-static inline wiced_result_t wiced_wifi_get_counters(wwd_interface_t interface, wiced_counters_t* counters )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_counters(wwd_interface_t interface, wiced_counters_t* counters )
 {
     return (wiced_result_t) wwd_wifi_get_counters( interface, counters );
 }
 
-static inline wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_set_listen_interval( uint8_t listen_interval, wiced_listen_interval_time_unit_t time_unit )
 {
     return (wiced_result_t) wwd_wifi_set_listen_interval( listen_interval, time_unit );
 }
 
-static inline wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t listen_interval )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_set_listen_interval_assoc( uint16_t listen_interval )
 {
     return (wiced_result_t) wwd_wifi_set_listen_interval_assoc( listen_interval );
 }
 
-static inline wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* li )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interval_t* li )
 {
     return (wiced_result_t) wwd_wifi_get_listen_interval( li );
 }
 
-static inline wiced_result_t wiced_wifi_enable_powersave( void )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_enable_powersave( void )
 {
     return (wiced_result_t) wwd_wifi_enable_powersave( );
 }
 
-static inline wiced_result_t wiced_wifi_enable_powersave_with_throughput( uint16_t return_to_sleep_delay_ms )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_enable_powersave_with_throughput( uint16_t return_to_sleep_delay_ms )
 {
     return (wiced_result_t) wwd_wifi_enable_powersave_with_throughput( return_to_sleep_delay_ms );
 }
 
-static inline wiced_result_t wiced_wifi_disable_powersave( void )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_disable_powersave( void )
 {
     return (wiced_result_t) wwd_wifi_disable_powersave( );
 }
 
-static inline wiced_result_t wiced_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode )
 {
     return (wiced_result_t) wwd_wifi_set_packet_filter_mode( mode );
 }
 
-static inline wiced_result_t wiced_wifi_add_packet_filter( const wiced_packet_filter_t* settings )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_add_packet_filter( const wiced_packet_filter_t* settings )
 {
     return (wiced_result_t) wwd_wifi_add_packet_filter( settings );
 }
 
-static inline wiced_result_t wiced_wifi_remove_packet_filter( uint8_t filter_id )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_remove_packet_filter( uint8_t filter_id )
 {
     return (wiced_result_t) wwd_wifi_remove_packet_filter( filter_id );
 }
 
-static inline wiced_result_t wiced_wifi_enable_packet_filter( uint8_t filter_id )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_enable_packet_filter( uint8_t filter_id )
 {
     return (wiced_result_t) wwd_wifi_enable_packet_filter( filter_id );
 }
 
-static inline wiced_result_t wiced_wifi_disable_packet_filter( uint8_t filter_id )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_disable_packet_filter( uint8_t filter_id )
 {
     return (wiced_result_t) wwd_wifi_disable_packet_filter( filter_id );
 }
 
-static inline wiced_result_t wiced_wifi_get_packet_filter_stats( uint8_t filter_id, wiced_packet_filter_stats_t* stats )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_packet_filter_stats( uint8_t filter_id, wiced_packet_filter_stats_t* stats )
 {
     return (wiced_result_t) wwd_wifi_get_packet_filter_stats( filter_id, stats );
 }
 
-static inline wiced_result_t wiced_wifi_clear_packet_filter_stats( uint32_t filter_id )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_clear_packet_filter_stats( uint32_t filter_id )
 {
     return  (wiced_result_t) wwd_wifi_clear_packet_filter_stats( filter_id );
 }
 
-static inline wiced_result_t wiced_wifi_get_packet_filters( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list,  uint32_t* count_out )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_packet_filters( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list,  uint32_t* count_out )
 {
     return (wiced_result_t) wwd_wifi_get_packet_filters( max_count, offset, list, count_out );
 }
 
-static inline wiced_result_t wiced_wifi_get_packet_filter_mask_and_pattern( uint32_t filter_id, uint32_t max_size, uint8_t* mask, uint8_t* pattern, uint32_t* size_out )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_packet_filter_mask_and_pattern( uint32_t filter_id, uint32_t max_size, uint8_t* mask, uint8_t* pattern, uint32_t* size_out )
 {
     return (wiced_result_t) wwd_wifi_get_packet_filter_mask_and_pattern( filter_id, max_size, mask, pattern, size_out );
 }
 
-static inline wiced_result_t wiced_wifi_add_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_add_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
 {
     return (wiced_result_t) wwd_wifi_add_keep_alive( keep_alive_packet_info );
 }
 
-static inline wiced_result_t wiced_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_packet_info )
 {
     return (wiced_result_t) wwd_wifi_get_keep_alive( keep_alive_packet_info );
 }
 
-static inline wiced_result_t wiced_wifi_disable_keep_alive( uint8_t id )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_disable_keep_alive( uint8_t id )
 {
     return (wiced_result_t) wwd_wifi_disable_keep_alive( id );
 }
 
-static inline wiced_result_t wiced_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length )
 {
     return (wiced_result_t) wwd_wifi_get_associated_client_list( client_list_buffer, buffer_length );
 }
 
-static inline wiced_result_t wiced_wifi_get_ap_client_rssi( int32_t* rssi, const wiced_mac_t* client_mac_addr )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_ap_client_rssi( int32_t* rssi, const wiced_mac_t* client_mac_addr )
 {
     return (wiced_result_t) wwd_wifi_get_ap_client_rssi( rssi, client_mac_addr );
 }
 
-static inline wiced_result_t wiced_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security )
+static inline ALWAYS_INLINE wiced_result_t wiced_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security )
 {
     return (wiced_result_t) wwd_wifi_get_ap_info( ap_info, security );
 }
+
+static inline wiced_result_t wiced_wifi_set_ht_mode( wiced_interface_t interface, wiced_ht_mode_t ht_mode )
+{
+    return (wiced_result_t) wwd_wifi_set_ht_mode( (wwd_interface_t)interface, ht_mode );
+}
+
+static inline wiced_result_t wiced_wifi_get_ht_mode( wiced_interface_t interface, wiced_ht_mode_t* ht_mode )
+{
+    return (wiced_result_t) wwd_wifi_get_ht_mode( (wwd_interface_t)interface, ht_mode );
+}
+
+static inline wiced_result_t wiced_wifi_disable_11n_support( wiced_interface_t interface, wiced_bool_t disable )
+{
+    return (wiced_result_t) wwd_wifi_set_11n_support( (wwd_interface_t)interface, (disable==WICED_FALSE)?WICED_11N_SUPPORT_ENABLED : WICED_11N_SUPPORT_DISABLED );
+}
+
+/**
+ * Helper function to print a given MAC address
+ *
+ * @param[in]  mac    A pointer to the @ref wiced_mac_t address
+ */
+static inline void print_mac_address( const wiced_mac_t* mac )
+{
+    UNUSED_PARAMETER(mac);
+    WPRINT_APP_INFO( ( "%02X:%02X:%02X:%02X:%02X:%02X", mac->octet[0],
+                                                        mac->octet[1],
+                                                        mac->octet[2],
+                                                        mac->octet[3],
+                                                        mac->octet[4],
+                                                        mac->octet[5] ) );
+}
+
 
 #ifdef __cplusplus
 } /*extern "C" */

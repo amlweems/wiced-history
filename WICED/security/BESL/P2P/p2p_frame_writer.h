@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -53,7 +53,7 @@ extern uint8_t*      p2p_write_presence_response( p2p_workspace_t* workspace, co
 extern uint8_t*      p2p_write_negotiation_confirmation( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, void* buffer );
 extern uint8_t*      p2p_write_device_discoverability_response( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, void* buffer );
 extern uint8_t*      p2p_write_go_discoverability_request( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, void* buffer );
-extern uint8_t*      p2p_write_provision_discovery_request( p2p_workspace_t* workspace, const const p2p_discovered_device_t* device, void* buffer );
+extern uint8_t*      p2p_write_provision_discovery_request( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, void* buffer );
 extern uint8_t*      p2p_write_negotiation_request( p2p_workspace_t* workspace, const p2p_discovered_device_t* device, void* buffer );
 extern besl_result_t p2p_write_association_request_ie( p2p_workspace_t* workspace );
 extern besl_result_t p2p_write_wps_probe_response_ie( p2p_workspace_t* workspace );

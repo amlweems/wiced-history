@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -88,6 +88,11 @@ extern "C"
 #define PM1_POWERSAVE_MODE          ( 1 )
 #define PM2_POWERSAVE_MODE          ( 2 )
 #define NO_POWERSAVE_MODE           ( 0 )
+
+/* Roaming trigger options */
+#define WICED_WIFI_DEFAULT_ROAMING TRIGGER              ( 0 )
+#define WICED_WIFI_OPTIMIZE_BANDWIDTH_ROAMING_TRIGGER   ( 1 )
+#define WICED_WIFI_OPTIMIZE_DISTANCE_ROAMING_TRIGGER    ( 2 )
 
 /******************************************************
  *                   Enumerations
@@ -221,15 +226,16 @@ extern wwd_result_t wwd_wifi_join_specific( const wiced_scan_result_t* ap, const
  */
 extern wwd_result_t wwd_wifi_leave( wwd_interface_t interface );
 
-/** Deauthenticates a STA which may or may not be associated to SoftAP.
+/** Deauthenticates a STA which may or may not be associated to SoftAP or Group Owner
  *
- * @param[in] mac    : Pointer to a variable containing the MAC address to which the deauthentication will be sent
- * @param[in] reason : Deauthentication reason code
+ * @param[in] mac       : Pointer to a variable containing the MAC address to which the deauthentication will be sent
+ * @param[in] reason    : Deauthentication reason code
+ * @param[in] interface : SoftAP interface or P2P interface
 
  * @return    WWD_SUCCESS : On successful deauthentication of the other STA
  *            WWD_ERROR   : If an error occurred
  */
-extern wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reason_code_t reason );
+extern wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reason_code_t reason, wwd_interface_t interface );
 
 /** Retrieves the current Media Access Control (MAC) address
  *  (or Ethernet hardware address) of the 802.11 device
@@ -254,6 +260,10 @@ extern wwd_result_t wwd_wifi_get_mac_address( wiced_mac_t* mac, wwd_interface_t 
  *  Further information about MAC addresses is available in the following
  *  automatically generated file AFTER building your first application
  *  <WICED-SDK>/generated_mac_address.txt
+ *
+ *  NOTE:
+ *     Ensure Wi-Fi core and network is down before invoking this function.
+ *     Refer wiced_wifi_down() API for details.
  *
  * @param[in] mac Wi-Fi MAC address
  * @return    WWD_SUCCESS or Error code
@@ -469,29 +479,91 @@ extern wwd_result_t wwd_wifi_get_ap_client_rssi( int32_t* rssi, const wiced_mac_
  */
 extern wwd_result_t wwd_wifi_select_antenna( wiced_antenna_t antenna );
 
+/** Bring down the Wi-Fi core
+ *
+ *  WARNING / NOTE:
+ *     This brings down the Wi-Fi core and existing network connections will be lost.
+ *     Re-establish the network by calling wiced_wifi_up() and wiced_network_up().
+ *     Refer those APIs for more details.
+ *
+ * @return  WWD_SUCCESS : if success
+ *          Error code  : if fails
+ */
+extern wwd_result_t wwd_wifi_set_down( void );
+
+/** Brings up the Wi-Fi core
+ *
+ * @return  WWD_SUCCESS : if success
+ *          Error code  : if fails
+ */
+extern wwd_result_t wwd_wifi_set_up( void );
+
 /** Manage the addition and removal of custom IEs
  *
+ * @param interface    : interface on which the operation to be performed
  * @param action       : the action to take (add or remove IE)
- * @param out          : the oui of the custom IE
+ * @param oui          : the oui of the custom IE
  * @param subtype      : the IE sub-type
  * @param data         : a pointer to the buffer that hold the custom IE
  * @param length       : the length of the buffer pointed to by 'data'
  * @param which_packets: a mask of which packets this IE should be included in. See wiced_ie_packet_flag_t
  *
  * @return WWD_SUCCESS : if the custom IE action was successful
- *         Error code   : if the custom IE action failed
+ *         Error code  : if the custom IE action failed
  */
 extern wwd_result_t wwd_wifi_manage_custom_ie( wwd_interface_t interface, wiced_custom_ie_action_t action, /*@unique@*/ const uint8_t* oui, uint8_t subtype, const void* data, uint16_t length, uint16_t which_packets );
 
 /** Set roam trigger level
  *
- * @param trigger_level   : Trigger level in dBm. The Wi-Fi device will search for a new AP to connect to once the
- *                          signal from the AP (it is currently associated with) drops below the roam trigger level
+ * @param trigger_level : Trigger level in dBm. The Wi-Fi device will search for a new AP to connect to once the \n
+ *                        signal from the AP (it is currently associated with) drops below the roam trigger level
  *
  * @return  WWD_SUCCESS : if the roam trigger was successfully set
- *          Error code   : if the roam trigger was not successfully set
+ *          Error code  : if the roam trigger was not successfully set
  */
 extern wwd_result_t wwd_wifi_set_roam_trigger( int32_t trigger_level );
+
+/** Get roam trigger level
+ *
+ * @param trigger_level  : Trigger level in dBm. Pointer to store current roam trigger level value
+ * @return  WWD_SUCCESS  : if the roam trigger was successfully get
+ *          Error code   : if the roam trigger was not successfully get
+ */
+extern wwd_result_t wwd_wifi_get_roam_trigger( int32_t* trigger_level );
+
+/** Set roam trigger delta value
+ *
+ * @param trigger_delta : Trigger delta is in dBm. After a roaming is triggered - The successful roam will happen \n
+ *                        when a target AP with RSSI better than the current serving AP by at least trigger_delta (in dB)
+ *
+ * @return  WWD_SUCCESS : if the roam trigger delta was successfully set
+ *          Error code  : if the roam trigger delta was not successfully set
+ */
+extern wwd_result_t wwd_wifi_set_roam_delta( int32_t trigger_delta );
+
+/** Get roam trigger delta value
+ *
+ * @param trigger_delta : Trigger delta is in dBm. Pointer to store the current roam trigger delta value
+ * @return  WWD_SUCCESS : if the roam trigger delta was successfully get
+ *          Error code  : if the roam trigger delta was not successfully get
+ */
+extern wwd_result_t wwd_wifi_get_roam_delta( int32_t* trigger_delta );
+
+/** Set roam scan period
+ *
+ * @param roam_scan_period : Roam scan period is in secs. Updates the partial scan period - for partial scan - Only for STA
+ * @return  WWD_SUCCESS    : if the roam scan period was successfully set
+ *          Error code     : if the roam scan period was not successfully set
+ */
+extern wwd_result_t wwd_wifi_set_roam_scan_period( uint32_t roam_scan_period );
+
+/** Get roam scan period
+ *
+ * @param roam_scan_period : Roam scan period is in secs. Pointer to store the current partial scan period
+ * @return  WWD_SUCCESS    : if the roam scan period was successfully get
+ *          Error code     : if the roam scan period was not successfully get
+ */
+extern wwd_result_t wwd_wifi_get_roam_scan_period( uint32_t* roam_scan_period );
 
 /** Turn off roaming
  *
@@ -628,7 +700,11 @@ extern wwd_result_t wwd_wifi_set_legacy_rate( wwd_interface_t interface, int32_t
  */
 extern wwd_result_t wwd_wifi_set_mcs_rate( wwd_interface_t interface, int32_t mcs, wiced_bool_t mcsonly);
 
-/** Turn off or on 11n mode (support only for pre-11n modes)
+/** Enable or disable 11n support (support only for pre-11n modes)
+ *
+ *  NOTE:
+ *     Ensure Wi-Fi core and network is down before invoking this function.
+ *     Refer to wiced_wifi_down() for more details.
  *
  * @param interface       : The interface for which 11n mode is being controlled. Currently only STA supported
  *        disable         : Boolean value which if TRUE will turn 11n off and if FALSE will turn 11n on
@@ -636,7 +712,7 @@ extern wwd_result_t wwd_wifi_set_mcs_rate( wwd_interface_t interface, int32_t mc
  * @return  WICED_SUCCESS : if the 11n was successfully turned off
  *          WICED_ERROR   : if the 11n was not successfully turned off
  */
-extern wwd_result_t wwd_wifi_disable_11n_support( wwd_interface_t interface, wiced_bool_t disable );
+extern wwd_result_t wwd_wifi_set_11n_support( wwd_interface_t interface, wiced_11n_support_t value );
 
 /** Set the AMPDU parameters for both Soft AP and STA
  *
@@ -669,12 +745,46 @@ extern wwd_result_t wwd_wifi_set_block_ack_window_size( wwd_interface_t interfac
  */
 extern wwd_result_t wwd_wifi_get_noise( int32_t *noise );
 
+/** Get the bands supported by the radio chip
+ *
+ * @param band_list : pointer to a structure that will hold the band list information
+ *
+ * @return  WWD_SUCCESS : if success
+ *          Error code  : if not successful
+ */
+extern wwd_result_t wwd_wifi_get_supported_band_list( wiced_band_list_t* band_list );
+
+/** Sets HT mode for the given interface
+ *
+ *  NOTE:
+ *     Ensure WiFi core and network is down before invoking this function.
+ *     Refer wiced_wifi_down() API for more details.
+ *
+ * @param interface       : the interface for which HT mode to be changed.
+ *        ht_mode         : enumeration value which indicates the HT mode
+ *
+ * @return  WICED_SUCCESS : if success
+ *          Error code    : error code to indicate the type of error, if HT mode could not be successfully set
+ */
+extern wwd_result_t wwd_wifi_set_ht_mode( wwd_interface_t interface, wiced_ht_mode_t ht_mode );
+
+/** Gets the current HT mode of the given interface
+ *
+ * @param interface       : the interface for which current HT mode to be identified
+ *        ht_mode         : pointers to store the results (i.e., currently configured HT mode)
+ *
+ * @return  WICED_SUCCESS : if success
+ *          Error code    : error code to indicate the type of error, if HT mode could not be successfully get
+ */
+extern wwd_result_t wwd_wifi_get_ht_mode( wwd_interface_t interface, wiced_ht_mode_t* ht_mode );
+
 /*@+exportlocal@*/
 /** @} */
 
 /* AP & STA info API */
 extern wwd_result_t wwd_wifi_get_associated_client_list( void* client_list_buffer, uint16_t buffer_length );
 extern wwd_result_t wwd_wifi_get_ap_info( wiced_bss_info_t* ap_info, wiced_security_t* security );
+extern wwd_result_t wwd_wifi_get_bssid( wiced_mac_t* bssid );
 
 /* Monitor Mode API */
 extern wwd_result_t wwd_wifi_enable_monitor_mode     ( void );
@@ -702,7 +812,6 @@ extern wwd_result_t wwd_wifi_clear_packet_filter_stats         ( uint32_t filter
 extern wwd_result_t wwd_wifi_get_packet_filters                ( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list,  uint32_t* count_out );
 extern wwd_result_t wwd_wifi_get_packet_filter_mask_and_pattern( uint32_t filter_id, uint32_t max_size, uint8_t* mask, uint8_t* pattern, uint32_t* size_out );
 
-
 /* These functions are not exposed to the external WICED API */
 extern wwd_result_t wwd_wifi_toggle_packet_filter( uint8_t filter_id, wiced_bool_t enable );
 
@@ -728,6 +837,16 @@ extern wwd_result_t wwd_wifi_test_credentials( wiced_scan_result_t* ap, const ui
 /* These functions are used for link down event handling while in power save mode */
 extern uint8_t  wiced_wifi_get_powersave_mode( void );
 extern uint16_t wiced_wifi_get_return_to_sleep_delay( void );
+
+extern wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size );
+
+extern wwd_result_t wwd_wifi_set_passphrase( const uint8_t* security_key, uint8_t key_length, wwd_interface_t interface );
+
+/* Set and get IOVAR parameters */
+extern wwd_result_t wwd_wifi_set_iovar_value( const char* iovar, uint32_t  value, wwd_interface_t interface );
+extern wwd_result_t wwd_wifi_get_iovar_value( const char* iovar, uint32_t* value, wwd_interface_t interface );
+extern wwd_result_t wwd_wifi_set_ioctl_value( uint32_t ioctl, uint32_t  value, wwd_interface_t interface );
+extern wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, wwd_interface_t interface );
 
 /*@+exportlocal@*/
 

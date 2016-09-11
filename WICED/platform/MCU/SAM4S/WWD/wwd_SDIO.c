@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,12 +12,12 @@
 #include "wwd_platform_common.h"
 #include "wwd_bus_protocol.h"
 #include "wwd_assert.h"
+#include "wwd_rtos_isr.h"
 #include "platform/wwd_platform_interface.h"
 #include "platform/wwd_sdio_interface.h"
 #include "platform/wwd_bus_interface.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "network/wwd_network_constants.h"
-//#include "misc.h"
 #include "hsmci.h"
 #include "sdmmc.h"
 #include "platform_cmsis.h"
@@ -97,13 +97,14 @@ wwd_result_t host_platform_bus_init( void )
 
         /* SDIO bootstrapping: GPIO0 = 0 and GPIO1 = 0 */
 
-#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
         platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0], OUTPUT_PUSH_PULL );
         platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
-
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
         platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1], OUTPUT_PUSH_PULL );
         platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
-#endif /* WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP */
+#endif
         /* Setup SDIO pins */
         for ( a = WWD_PIN_SDIO_CLK; a < WWD_PIN_SDIO_MAX; a++ )
         {
@@ -189,10 +190,12 @@ wwd_result_t host_platform_bus_deinit( void )
         MCI_Disable( HSMCI );
         NVIC_DisableIRQ( HSMCI_IRQn );
 
-#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
         platform_gpio_deinit( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
         platform_gpio_deinit( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
-#endif /* WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP */
+#endif
 
         /* Reset all SDIO pins to input pull-up to save power */
         for ( a = WWD_PIN_SDIO_CLK; a < WWD_PIN_SDIO_MAX; a++ )

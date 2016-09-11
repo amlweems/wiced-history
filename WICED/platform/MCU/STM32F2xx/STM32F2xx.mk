@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,7 +22,6 @@ GLOBAL_INCLUDES := . \
                    ../../include \
                    ../../$(HOST_ARCH) \
                    ../../$(HOST_ARCH)/CMSIS \
-                   ../../$(TOOLCHAIN_NAME) \
                    peripherals \
                    WAF
 
@@ -57,17 +56,20 @@ $(NAME)_COMPONENTS += utilities/ring_buffer
 # Source files
 $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../../$(HOST_ARCH)/hardfault_handler.c \
+                   ../../$(HOST_ARCH)/host_cm3.c \
                    ../platform_resource.c \
                    ../platform_stdio.c \
                    ../wiced_platform_common.c \
-                   ../wwd_platform_common.c \
+                   ../wwd_platform_separate_mcu.c \
                    ../wwd_resources.c \
                    ../wiced_apps_common.c	\
                    ../wiced_waf_common.c	\
                    ../wiced_dct_internal_common.c \
+                   ../platform_nsclock.c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
+                   platform_filesystem.c \
                    WWD/wwd_platform.c \
                    WWD/wwd_$(BUS).c \
                    WAF/waf_platform.c
@@ -98,14 +100,12 @@ DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/bootloader$(LINK_SCRIPT_SUFFIX)
 else
 ifneq ($(filter sflash_write, $(APP)),)
 ####################################################################################
-# Building sflash_write OR ota_upgrade
+# Building sflash_write
 ####################################################################################
 
 PRE_APP_BUILDS      += bootloader
-WIFI_IMAGE_DOWNLOAD := buffered
 DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_ram$(LINK_SCRIPT_SUFFIX)
 GLOBAL_INCLUDES     += WAF ../../../../../apps/waf/bootloader/
-GLOBAL_DEFINES      += OTA_UPGRADE
 GLOBAL_DEFINES      += __JTAG_FLASH_WRITER_DATA_BUFFER_SIZE__=16384
 ifeq ($(TOOLCHAIN_NAME),IAR)
 GLOBAL_LDFLAGS      += --config_def __JTAG_FLASH_WRITER_DATA_BUFFER_SIZE__=16384
@@ -130,6 +130,6 @@ DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_no_bootloader$(LINK_SCRIPT_SUFFIX)
 GLOBAL_DEFINES      += WICED_DISABLE_BOOTLOADER
 
 endif # USES_BOOTLOADER_OTA = 1
-endif # APP=ota_upgrade OR sflash_write
+endif # APP=sflash_write
 endif # APP=bootloader
 

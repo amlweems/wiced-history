@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,7 +20,18 @@ extern "C" {
  *                      Macros
  ******************************************************/
 
-#define WICED_TO_WWD_INTERFACE( interface )    ((interface)&3)
+#define WICED_TO_WWD_INTERFACE( interface )        ((interface)&3)
+#define IP_NETWORK_IS_INITED(interface)            (ip_networking_inited[(interface)&3] == WICED_TRUE)
+#define SET_IP_NETWORK_INITED(interface, status)   (ip_networking_inited[(interface)&3] = status)
+
+#ifdef WICED_USE_ETHERNET_INTERFACE
+#define LINK_UP_CALLBACKS_LIST( interface )    ( interface == WICED_STA_INTERFACE ? link_up_callbacks_wireless : link_up_callbacks_ethernet )
+#define LINK_DOWN_CALLBACKS_LIST( interface )  ( interface == WICED_STA_INTERFACE ? link_down_callbacks_wireless : link_down_callbacks_ethernet )
+#else
+#define LINK_UP_CALLBACKS_LIST( interface )    ( interface == WICED_STA_INTERFACE ? link_up_callbacks_wireless : link_up_callbacks_wireless )
+#define LINK_DOWN_CALLBACKS_LIST( interface )  ( interface == WICED_STA_INTERFACE ? link_down_callbacks_wireless : link_down_callbacks_wireless )
+#endif
+
 
 /******************************************************
  *                    Constants
@@ -56,6 +67,16 @@ typedef struct
  *                 Global Variables
  ******************************************************/
 
+extern wiced_bool_t                  ip_networking_inited[];
+extern wiced_mutex_t                 link_subscribe_mutex;
+
+extern wiced_network_link_callback_t link_up_callbacks_wireless[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
+extern wiced_network_link_callback_t link_down_callbacks_wireless[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
+#ifdef WICED_USE_ETHERNET_INTERFACE
+extern wiced_network_link_callback_t link_up_callbacks_ethernet[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
+extern wiced_network_link_callback_t link_down_callbacks_ethernet[WICED_MAXIMUM_LINK_CALLBACK_SUBSCRIPTIONS];
+#endif
+
 /******************************************************
  *               Function Declarations
  ******************************************************/
@@ -82,11 +103,15 @@ extern wiced_result_t wiced_ip_down       ( wiced_interface_t interface );
 /* NOTE:
  * The notify link functions below are called from within the context of the WICED thread
  * The link handler functions below are called from within the context of the Network Worker thread */
-extern void           wiced_network_notify_link_up    ( void );
-extern void           wiced_network_notify_link_down  ( void );
-extern wiced_result_t wiced_network_link_down_handler ( void* arg );
-extern wiced_result_t wiced_network_link_up_handler   ( void* arg );
-extern wiced_result_t wiced_network_link_renew_handler( void );
+extern void           wiced_network_notify_link_up    ( wiced_interface_t interface );
+extern void           wiced_network_notify_link_down  ( wiced_interface_t interface );
+extern wiced_result_t wiced_wireless_link_down_handler ( void* arg );
+extern wiced_result_t wiced_wireless_link_up_handler   ( void* arg );
+extern wiced_result_t wiced_wireless_link_renew_handler( void );
+#ifdef WICED_USE_ETHERNET_INTERFACE
+extern wiced_result_t wiced_ethernet_link_down_handler ( void );
+extern wiced_result_t wiced_ethernet_link_up_handler   ( void );
+#endif
 
 /* Wiced Cooee API*/
 extern wiced_result_t wiced_wifi_cooee( wiced_cooee_workspace_t* workspace );
@@ -94,6 +119,9 @@ extern wiced_result_t wiced_wifi_cooee( wiced_cooee_workspace_t* workspace );
 /* Entry point for user Application */
 extern void application_start          ( void );
 
+/* TLS helper function to do TCP without involving TLS context */
+wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t*  packet );
+wiced_result_t network_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
 
 #ifdef __cplusplus
 } /*extern "C" */

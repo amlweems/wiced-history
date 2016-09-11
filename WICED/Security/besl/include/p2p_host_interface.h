@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -40,9 +40,8 @@ extern "C" {
  *                 Global Variables
  ******************************************************/
 
-static const wwd_event_num_t p2p_discovery_events[]    = { WLC_E_ESCAN_RESULT, WLC_E_P2P_DISC_LISTEN_COMPLETE, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_NONE };
-static const wwd_event_num_t p2p_group_client_events[] = { WLC_E_ESCAN_RESULT, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_NONE };
-static const wwd_event_num_t p2p_group_owner_events[]  = { WLC_E_ACTION_FRAME, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_PROBREQ_MSG, WLC_E_NONE };
+extern const wwd_event_num_t p2p_discovery_events[];
+extern const wwd_event_num_t p2p_group_owner_events[];
 
 /******************************************************
  *              Function Declarations

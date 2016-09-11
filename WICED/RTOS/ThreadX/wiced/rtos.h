@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,7 +11,8 @@
 
 #include "tx_api.h"
 #include "wiced_result.h"
-#include "platform/wwd_platform_interface.h"
+#include "wiced_utilities.h"
+#include "wwd_rtos.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,10 +55,17 @@ extern "C" {
  *    - event queue size : larger than that of wiced_hardware_io_worker_thread because networking operation may block
  */
 #ifndef HARDWARE_IO_WORKER_THREAD_STACK_SIZE
+#ifdef DEBUG
+#define HARDWARE_IO_WORKER_THREAD_STACK_SIZE     (768) /* debug builds can use larger stack for example because of compiled-in asserts, switched off optimisation, etc */
+#else
 #define HARDWARE_IO_WORKER_THREAD_STACK_SIZE     (512)
 #endif
+#endif
 #define HARDWARE_IO_WORKER_THREAD_QUEUE_SIZE      (10)
+
+#ifndef NETWORKING_WORKER_THREAD_STACK_SIZE
 #define NETWORKING_WORKER_THREAD_STACK_SIZE   (6*1024)
+#endif
 #define NETWORKING_WORKER_THREAD_QUEUE_SIZE       (15)
 
 #define RTOS_NAME                     "ThreadX"

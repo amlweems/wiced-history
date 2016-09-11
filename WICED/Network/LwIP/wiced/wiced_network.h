@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,6 +29,10 @@ extern "C"
  *                      Macros
  ******************************************************/
 
+#define LWIP_TO_WICED_ERR( lwip_err )  ((lwip_err >= ERR_ISCONN)? lwip_to_wiced_result[ -lwip_err ] : WICED_UNKNOWN_NETWORK_STACK_ERROR )
+
+#define IP_HANDLE(interface)   (*wiced_ip_handle[(interface)&3])
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -39,20 +43,18 @@ extern "C"
 
 
 #define IP_STACK_SIZE               (4*1024)
-#define DHCP_STACK_SIZE             (1024)
+#define DHCP_STACK_SIZE             (1280)
 
 #define WICED_ANY_PORT              (0)
 
 #define wiced_packet_pools          (NULL)
 
-
-#define IP_HANDLE(interface)   (*wiced_ip_handle[(interface)&3])
-
 #define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (5)
-#define WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS            (5)
+#define WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS            (MEMP_NUM_NETCONN)
 
-extern wiced_result_t lwip_to_wiced_err[];
-#define LWIP_TO_WICED_ERR( lwip_err )  ((lwip_err >= ERR_ISCONN)? lwip_to_wiced_err[ -lwip_err ] : WICED_UNKNOWN_NETWORK_STACK_ERROR )
+#define WICED_LINK_CHECK( interface )      do { if ( netif_is_up( &IP_HANDLE(interface) ) != 1){ return WICED_NOTUP; }} while(0)
+#define WICED_LINK_CHECK_TCP_SOCKET( socket_in )   WICED_LINK_CHECK((socket_in)->interface)
+#define WICED_LINK_CHECK_UDP_SOCKET( socket_in )   WICED_LINK_CHECK((socket_in)->interface)
 
 /******************************************************
  *                   Enumerations
@@ -85,30 +87,11 @@ typedef enum
  *                 Type Definitions
  ******************************************************/
 
-typedef struct netbuf       wiced_packet_t;
-typedef wiced_result_t (*wiced_socket_callback_t)( void* socket );
+typedef struct netbuf wiced_packet_t;
 
 /******************************************************
  *                    Structures
  ******************************************************/
-
-typedef struct
-{
-    wiced_tls_context_type_t context_type;
-    wiced_tls_context_t      context;
-    wiced_tls_session_t      session;
-    wiced_packet_t*          temp_packet;
-} wiced_tls_simple_context_t;
-
-typedef struct
-{
-    wiced_tls_context_type_t context_type;
-    wiced_tls_context_t      context;
-    wiced_tls_session_t      session;
-    wiced_packet_t*          temp_packet;
-    wiced_tls_certificate_t  certificate;
-    wiced_tls_key_t          key;
-} wiced_tls_advanced_context_t;
 
 typedef struct
 {
@@ -121,19 +104,30 @@ typedef struct
     int                         interface;
     wiced_tls_simple_context_t* tls_context;
     wiced_bool_t                context_malloced;
-    wiced_socket_callback_t     callbacks[3];
+    uint32_t                    callbacks[3];
+    void*                       arg;
 } wiced_tcp_socket_t;
 
 typedef struct
 {
     wiced_tcp_socket_t   listen_socket;
-    wiced_tcp_socket_t   accept_socket [WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS];
+    wiced_tcp_socket_t   accept_socket       [WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS];
     wiced_socket_state_t accept_socket_state [WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS];
     int                  data_pending_on_socket;
     uint16_t             port;
 } wiced_tcp_server_t;
 
-typedef wiced_tcp_socket_t  wiced_udp_socket_t;
+typedef struct
+{
+    int             socket;
+    struct netconn* conn_handler;
+    struct netconn* accept_handler;
+    ip_addr_t       local_ip_addr;
+    wiced_bool_t    is_bound;
+    int             interface;
+    uint32_t        receive_callback;
+    void*           arg;
+} wiced_udp_socket_t;
 
 typedef struct
 {
@@ -145,6 +139,9 @@ typedef struct
     wiced_tls_key_t*         key;
 } wiced_tls_socket_t;
 
+typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
+typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -153,6 +150,9 @@ typedef struct
 extern xTaskHandle     wiced_thread_handle;
 extern struct netif*   wiced_ip_handle[3];
 extern struct dhcp     wiced_dhcp_handle;
+
+extern wiced_result_t  lwip_to_wiced_result[];
+extern wiced_mutex_t   lwip_send_interface_mutex;
 
 /******************************************************
  *               Function Declarations

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,13 +12,29 @@
  *  Provides packet size constants which are useful for implementations of the
  *  network interface and buffer interface.
  */
+#pragma once
 
 
-#ifndef INCLUDED_WWD_NETWORK_CONSTANTS_H_
-#define INCLUDED_WWD_NETWORK_CONSTANTS_H_
+#ifdef PLATFORM_L1_CACHE_SHIFT
+#include "platform_cache_def.h"
+#else
+#ifndef PLATFORM_L1_CACHE_BYTES
+#define PLATFORM_L1_CACHE_BYTES                0
+#endif
+#ifndef PLATFORM_L1_CACHE_ROUND_UP
+#define PLATFORM_L1_CACHE_ROUND_UP(a)          (a)
+#endif
+#ifndef PLATFORM_L1_CACHE_ROUND_DOWN
+#define PLATFORM_L1_CACHE_ROUND_DOWN(a)        (a)
+#endif
+#ifndef PLATFORM_L1_CACHE_PTR_ROUND_UP
+#define PLATFORM_L1_CACHE_PTR_ROUND_UP(a)      (a)
+#endif
+#endif /* PLATFORM_L1_CACHE_SHIFT */
 
-#include "wwd_buffer_interface.h"
-#include "wwd_bus_protocol.h"
+#ifndef MAX
+#define MAX(a, b)   (((a) > (b)) ? (a) : (b))
+#endif /* MAX */
 
 #ifdef __cplusplus
 extern "C"
@@ -42,11 +58,6 @@ extern "C"
  * 4 bytes  - offset for one extra BDC reserved long int.
  */
 #define MAX_SDPCM_HEADER_LENGTH (22)
-
-/**
- * The space in bytes required for headers in front of the Ethernet header.
- */
-#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME ( sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_RESERVED_LENGTH )
 
 /**
  * The maximum space in bytes required for headers in front of the Ethernet header.
@@ -85,8 +96,14 @@ extern "C"
 /**
  * The maximum size in bytes of a packet used within Wiced
  */
-#define WICED_LINK_MTU              (WICED_PAYLOAD_MTU + WICED_PHYSICAL_HEADER + WICED_PHYSICAL_TRAILER)
+#define WICED_WIFI_BUFFER_SIZE            (WICED_PAYLOAD_MTU + WICED_PHYSICAL_HEADER + WICED_PHYSICAL_TRAILER)
 
+#ifndef WICED_ETHERNET_BUFFER_SIZE
+#define WICED_ETHERNET_BUFFER_SIZE        0
+#endif
+
+#define WICED_LINK_MTU              MAX( WICED_WIFI_BUFFER_SIZE, WICED_ETHERNET_BUFFER_SIZE )
+#define WICED_LINK_MTU_ALIGNED      PLATFORM_L1_CACHE_ROUND_UP(WICED_LINK_MTU)
 
 /**
  * Ethernet Ethertypes
@@ -103,4 +120,3 @@ extern "C"
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* ifndef INCLUDED_WWD_NETWORK_CONSTANTS_H_ */

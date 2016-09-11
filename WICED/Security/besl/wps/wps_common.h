@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,7 +13,9 @@
 extern "C" {
 #endif
 
+#include "besl_constants.h"
 #include "wps_structures.h"
+#include "wps_host.h"
 
 /******************************************************
  *                      Macros
@@ -69,13 +71,13 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-extern void         wps_send_eapol_packet(wps_eapol_packet_t packet, wps_agent_t* workspace, eapol_packet_type_t type, besl_mac_t* their_mac_address, uint16_t content_size );
-extern void         wps_abort( wps_agent_t* workspace );
-extern wps_result_t wps_send_basic_packet( wps_agent_t* workspace, uint8_t type, uint16_t optional_config_error );
-extern void         wps_enrollee_init           (   wps_agent_t* workspace );
+extern void         wps_send_eapol_packet       ( besl_packet_t packet, wps_agent_t* workspace, eapol_packet_type_t type, besl_mac_t* their_mac_address, uint16_t content_size );
+extern void         wps_abort                   ( wps_agent_t* workspace );
+extern wps_result_t wps_send_basic_packet       ( wps_agent_t* workspace, uint8_t type, uint16_t optional_config_error );
+extern void         wps_enrollee_init           ( wps_agent_t* workspace );
 extern void         wps_enrollee_start          ( wps_agent_t* workspace, wwd_interface_t interface );
 extern void         wps_enrollee_reset          ( wps_agent_t* workspace, wwd_interface_t interface );
-extern void         wps_registrar_init          (  wps_agent_t* workspace );
+extern void         wps_registrar_init          ( wps_agent_t* workspace );
 extern void         wps_registrar_start         ( wps_agent_t* workspace );
 extern void         wps_registrar_reset         ( wps_agent_t* workspace );
 extern wps_result_t wps_pbc_overlap_check       ( const besl_mac_t* data );

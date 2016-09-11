@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,7 +15,7 @@
 #include "wifi_nvram_image.h"
 #include "wwd_bus_protocol.h"
 #include "wwd_assert.h"
-#include "wwd_rtos.h"
+#include "wwd_rtos_isr.h"
 #include "wwd_platform_common.h"
 #include "network/wwd_buffer_interface.h"
 #include "platform/wwd_platform_interface.h"
@@ -88,10 +88,12 @@ wwd_result_t host_platform_bus_init( void )
         platform_gpio_set_alternate_function( wifi_spi_pins[ a ].port, wifi_spi_pins[ a ].pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, GPIO_AF_SPI2 );
     }
 
-#if defined ( WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP )
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     /* Set GPIO_B[1:0] to 01 to put WLAN module into gSPI mode */
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0], OUTPUT_PUSH_PULL );
     platform_gpio_output_high( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0] );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1], OUTPUT_PUSH_PULL );
     platform_gpio_output_low( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1] );
 #endif
@@ -176,9 +178,11 @@ wwd_result_t host_platform_bus_deinit( void )
     DMA_DeInit( DMA1_Stream4 );
     DMA_DeInit( DMA1_Stream3 );
 
-#if defined ( WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP )
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     /* Clear GPIO_B[1:0] */
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_0], INPUT_HIGH_IMPEDANCE );
+#endif
+#ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_1
     platform_gpio_init( &wifi_control_pins[WWD_PIN_BOOTSTRAP_1], INPUT_HIGH_IMPEDANCE );
 #endif
 

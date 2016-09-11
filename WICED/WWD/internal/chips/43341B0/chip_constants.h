@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,7 +26,7 @@ extern "C" {
 #define CHIPCOMMON_BASE_ADDRESS  0x18000000    /* Chipcommon core register region   */
 #define DOT11MAC_BASE_ADDRESS    0x18001000    /* dot11mac core register region     */
 #define SDIO_BASE_ADDRESS        0x18002000    /* SDIOD Device core register region */
-#define ARMCM3_BASE_ADDRESS      0x18003000    /* ARMCM3 core register region       */
+#define WLAN_ARMCM3_BASE_ADDRESS 0x18003000    /* ARMCM3 core register region       */
 #define SOCSRAM_BASE_ADDRESS     0x18004000    /* SOCSRAM core register region      */
 #define BACKPLANE_ADDRESS_MASK   0x7FFF
 

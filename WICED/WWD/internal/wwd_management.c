@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -138,6 +138,9 @@ wwd_result_t wwd_management_wifi_on( void )
         return retval;
     }
 
+    /* WLAN device is now powered up. Change state from OFF to DOWN */
+    wwd_wlan_status.state = WLAN_DOWN;
+
     retval = wwd_thread_init( );
     if ( retval != WWD_SUCCESS )
     {
@@ -170,7 +173,12 @@ wwd_result_t wwd_management_wifi_on( void )
     }
     *data = 0;
     retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
-    wiced_assert("Could not turn off TX glomming\n", (retval == WWD_SUCCESS) || (retval == WWD_UNSUPPORTED) );
+    if (( retval != WWD_SUCCESS ) && (retval != WWD_UNSUPPORTED))
+    {
+        /* Note: System may time out here if bus interrupts are not working properly */
+        WPRINT_WWD_ERROR(("Could not turn off TX glomming\n"));
+        return retval;
+    }
 
     /* Turn APSTA on */
     data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_APSTA );
@@ -193,16 +201,16 @@ wwd_result_t wwd_management_wifi_on( void )
     for ( i = 0; i < 8; ++i )
     {
         struct ampdu_tid_control* ampdu_tid;
-        ampdu_tid = (struct ampdu_tid_control*) wiced_get_iovar_buffer( &buffer, (uint16_t) sizeof(struct ampdu_tid_control), IOVAR_STR_AMPDU_TID );
+        ampdu_tid = (struct ampdu_tid_control*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) sizeof(struct ampdu_tid_control), IOVAR_STR_AMPDU_TID );
         if ( ampdu_tid == NULL )
         {
             wiced_assert( "Could not get buffer for IOVAR", 0 != 0 );
-            return WICED_ERROR;
+            return WWD_BUFFER_ALLOC_FAIL;
         }
         ampdu_tid->tid    = i;
         ampdu_tid->enable = 0;
-        retval = wiced_send_iovar( SDPCM_SET, buffer, 0, SDPCM_STA_INTERFACE );
-        if ( retval != WICED_SUCCESS )
+        retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
+        if ( retval != WWD_SUCCESS )
         {
             WPRINT_WWD_ERROR( ("Could not disable ampdu for tid: %u\n", i) );
         }
@@ -273,19 +281,7 @@ wwd_result_t wwd_management_wifi_on( void )
     }
 
     /* Send UP command */
-    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, 0 );
-    if ( data == NULL )
-    {
-        wiced_assert( "Could not get buffer for IOCTL", 0 != 0 );
-        return WWD_BUFFER_ALLOC_FAIL;
-    }
-    retval = wwd_sdpcm_send_ioctl( SDPCM_SET, (uint32_t) WLC_UP, buffer, 0, WWD_STA_INTERFACE );
-    if ( retval != WWD_SUCCESS )
-    {
-        /* Note: System may time out here if bus interrupts are not working properly */
-        WPRINT_WWD_ERROR(("Error enabling 802.11\n"));
-        return retval;
-    }
+    wwd_wifi_set_up( );
 
     /* Set the GMode */
     data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
@@ -296,9 +292,12 @@ wwd_result_t wwd_management_wifi_on( void )
     }
     *data = (uint32_t) GMODE_AUTO;
     retval = wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_GMODE, buffer, 0, WWD_STA_INTERFACE );
-    wiced_assert("Failed to set GMode\n", retval == WWD_SUCCESS );
-
-    wwd_wlan_status.state = WLAN_UP;
+    if ( retval != WWD_SUCCESS )
+    {
+        /* Note: System may time out here if bus interrupts are not working properly */
+        WPRINT_WWD_ERROR(("Error setting gmode\n"));
+        return retval;
+    }
 
     return WWD_SUCCESS;
 }
@@ -309,7 +308,6 @@ wwd_result_t wwd_management_wifi_on( void )
  * - De-Initialises the required parts of the hardware platform
  *   i.e. pins for SDIO/SPI, interrupt, reset, power etc.
  *
- * - Bring the Wireless interface "Down"
  * - De-Initialises the WWD thread which arbitrates access
  *   to the SDIO/SPI bus
  *
@@ -319,13 +317,10 @@ wwd_result_t wwd_management_wifi_off( void )
 {
     wwd_result_t retval;
 
-    if ( wwd_wlan_status.state == WLAN_DOWN )
+    if ( wwd_wlan_status.state == WLAN_OFF )
     {
         return WWD_SUCCESS;
     }
-
-    /* Send DOWN command */
-    (void) wwd_wifi_set_down( WWD_STA_INTERFACE ); /* Ignore return - ensuring wifi will be brought down even if bus is completely broken */
 
     host_platform_bus_disable_interrupt( );
 
@@ -355,7 +350,7 @@ wwd_result_t wwd_management_wifi_off( void )
     /* Disable 32K WLAN sleep clock */
     host_platform_deinit_wlan_powersave_clock();
 
-    wwd_wlan_status.state = WLAN_DOWN;
+    wwd_wlan_status.state = WLAN_OFF;
     return WWD_SUCCESS;
 }
 

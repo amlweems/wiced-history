@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,7 @@
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -682,6 +682,9 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_AMPDU_BA_WINDOW_SIZE   "ampdu_ba_wsize"
 #define IOVAR_STR_AMPDU_MPDU             "ampdu_mpdu"
 #define IOVAR_STR_AMPDU_RX_FACTOR        "ampdu_rx_factor"
+#define IOVAR_STR_MIMO_BW_CAP            "mimo_bw_cap"
+#define IOVAR_STR_RMC_ACKREQ             "rmc_ackreq"
+#define IOVAR_STR_HT40_INTOLERANCE       "intol40"
 
 #define WLC_IOCTL_MAGIC                    ( 0x14e46c77 )
 #define WLC_IOCTL_VERSION                  (          1 )

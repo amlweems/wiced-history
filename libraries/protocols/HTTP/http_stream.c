@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,8 +14,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "wiced.h"
 #include "http_stream.h"
+#include "wwd_debug.h"
+#include "wwd_assert.h"
 #include "base64.h"
 
 /******************************************************
@@ -62,6 +63,7 @@ static const char* http_methods[] =
     [HTTP_GET]   = "GET ",
     [HTTP_POST]  = "POST ",
     [HTTP_HEAD]  = "HEAD ",
+    [HTTP_PUT]   = "PUT ",
 };
 
 /******************************************************
@@ -81,7 +83,7 @@ wiced_result_t http_deinit_stream( http_stream_t* session )
     return WICED_SUCCESS;
 }
 
-wiced_result_t http_init_stream( http_stream_t* session, const char* host_name, wiced_ip_address_t* ip_address, uint16_t port )
+wiced_result_t http_init_stream( http_stream_t* session, wiced_interface_t interface, const char* host_name, wiced_ip_address_t* ip_address, uint16_t port )
 {
     uint8_t        count  = 0;
     wiced_result_t result = WICED_ERROR;
@@ -119,7 +121,7 @@ wiced_result_t http_init_stream( http_stream_t* session, const char* host_name, 
     }
 
     /* Create a TCP socket */
-    if ( wiced_tcp_create_socket( &session->socket, WICED_STA_INTERFACE ) != WICED_SUCCESS )
+    if ( wiced_tcp_create_socket( &session->socket, interface ) != WICED_SUCCESS )
     {
         goto return_error;
     }
@@ -235,6 +237,15 @@ wiced_result_t http_stream_write( http_stream_t* session, uint8_t* data, uint16_
     wiced_assert("Bad args", (session != NULL) && (data != NULL));
 
     WICED_VERIFY( wiced_tcp_stream_write( &session->tcp_stream, data, length ) );
+
+    return WICED_SUCCESS;
+}
+
+wiced_result_t http_stream_read( http_stream_t* session, uint8_t* data, uint16_t length, uint32_t timeout, uint32_t* read_count )
+{
+    wiced_assert("Bad args", (session != NULL) && (data != NULL));
+
+    WICED_VERIFY( wiced_tcp_stream_read_with_count( &session->tcp_stream, data, length, timeout, read_count ) );
 
     return WICED_SUCCESS;
 }

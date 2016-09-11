@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include "wwd_structures.h"
+#include "wiced_constants.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,11 @@ extern "C" {
 #ifndef COOEE_KEY_SIZE
 #define COOEE_KEY_SIZE   (16)
 #endif
+
+#ifndef SECURITY_KEY_SIZE
+#define SECURITY_KEY_SIZE    (64)
+#endif
+
 
 #define CONFIG_VALIDITY_VALUE        0xCA1BDF58
 
@@ -96,7 +102,7 @@ typedef struct
     {
         fixed_location_t internal_fixed;
         fixed_location_t external_fixed;
-        char     filesytem_filename[32];
+        char             filesystem_filename[32];
     } detail;
 } image_location_t;
 
@@ -151,49 +157,62 @@ typedef struct
 
 typedef struct
 {
-        char manufacturer[ 32 ];
-        char product_name[ 32 ];
-        char BOM_name[ 24 ];
-        char BOM_rev[ 8 ];
-        char serial_number[ 20 ];
-        char manufacture_date_time[ 20 ];
-        char manufacture_location[ 12 ];
-        char bootloader_version[ 8 ];
+    char manufacturer[ 32 ];
+    char product_name[ 32 ];
+    char BOM_name[24];
+    char BOM_rev[8];
+    char serial_number[20];
+    char manufacture_date_time[20];
+    char manufacture_location[12];
+    char bootloader_version[8];
 } platform_dct_mfg_info_t;
 
 typedef struct
 {
-        wiced_ap_info_t details;
-        uint8_t security_key_length;
-        char security_key[ 64 ];
+    wiced_ap_info_t details;
+    uint8_t         security_key_length;
+    char            security_key[ SECURITY_KEY_SIZE ];
 } wiced_config_ap_entry_t;
 
 typedef struct
 {
-        wiced_ssid_t SSID;
-        wiced_security_t security;
-        uint8_t channel;
-        uint8_t security_key_length;
-        char security_key[ 64 ];
-        uint32_t details_valid;
+    wiced_ssid_t     SSID;
+    wiced_security_t security;
+    uint8_t          channel;
+    uint8_t          security_key_length;
+    char             security_key[ SECURITY_KEY_SIZE ];
+    uint32_t         details_valid;
 } wiced_config_soft_ap_t;
 
 typedef struct
 {
-        wiced_bool_t device_configured;
-        wiced_config_ap_entry_t stored_ap_list[ CONFIG_AP_LIST_SIZE ];
-        wiced_config_soft_ap_t soft_ap_settings;
-        wiced_config_soft_ap_t config_ap_settings;
-        wiced_country_code_t country_code;
-        wiced_mac_t mac_address;
-        uint8_t padding[ 2 ]; /* to ensure 32bit aligned size */
+    wiced_bool_t              device_configured;
+    wiced_config_ap_entry_t   stored_ap_list[CONFIG_AP_LIST_SIZE];
+    wiced_config_soft_ap_t    soft_ap_settings;
+    wiced_config_soft_ap_t    config_ap_settings;
+    wiced_country_code_t      country_code;
+    wiced_mac_t               mac_address;
+    uint8_t                   padding[2];  /* to ensure 32bit aligned size */
 } platform_dct_wifi_config_t;
 
 typedef struct
 {
-        char private_key[ PRIVATE_KEY_SIZE ];
-        char certificate[ CERTIFICATE_SIZE ];
-        uint8_t cooee_key[ COOEE_KEY_SIZE ];
+    wiced_mac_t               mac_address;
+    uint8_t                   padding[2];  /* to ensure 32bit aligned size */
+} platform_dct_ethernet_config_t;
+
+typedef struct
+{
+    wiced_interface_t         interface;
+    wiced_hostname_t          hostname;
+    uint8_t                   padding[2];  /* to ensure 32bit aligned size */
+} platform_dct_network_config_t;
+
+typedef struct
+{
+    char    private_key[ PRIVATE_KEY_SIZE ];
+    char    certificate[ CERTIFICATE_SIZE ];
+    uint8_t cooee_key  [ COOEE_KEY_SIZE ];
 } platform_dct_security_t;
 
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
@@ -208,12 +227,14 @@ typedef struct
 
 typedef struct
 {
-    platform_dct_header_t        dct_header;
-    platform_dct_mfg_info_t      mfg_info;
-    platform_dct_security_t      security_credentials;
-    platform_dct_wifi_config_t   wifi_config;
+    platform_dct_header_t          dct_header;
+    platform_dct_mfg_info_t        mfg_info;
+    platform_dct_security_t        security_credentials;
+    platform_dct_wifi_config_t     wifi_config;
+    platform_dct_ethernet_config_t ethernet_config;
+    platform_dct_network_config_t  network_config;
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
-    platform_dct_bt_config_t     bt_config;
+    platform_dct_bt_config_t       bt_config;
 #endif
 } platform_dct_data_t;
 

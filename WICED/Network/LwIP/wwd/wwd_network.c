@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,6 +12,7 @@
  Wiced Includes
  ******************************************************************************/
 
+#include <string.h>
 #include "lwip/tcpip.h"
 #include "lwip/debug.h"
 #include "lwip/netif.h"
@@ -20,15 +21,20 @@
 
 #include "wwd_network.h"
 #include "wwd_wifi.h"
+#include "wwd_eapol.h"
 #include "network/wwd_network_interface.h"
 #include "network/wwd_buffer_interface.h"
 #include "wwd_assert.h"
+#include "wiced_constants.h"
 #include <stdlib.h>
 
 #ifdef ADD_LWIP_EAPOL_SUPPORT
 #define ETHTYPE_EAPOL    0x888E
-/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wwd_interface_t interface );
 #endif
+
+#if LWIP_NETIF_HOSTNAME
+#define LWIP_DEFAULT_CLIENT_OBJECT_NAME     "lwip"
+#endif /* LWIP_NETIF_HOSTNAME */
 
 /*****************************************************************************
  * The following is based on the skeleton Ethernet driver in LwIP            *
@@ -77,9 +83,6 @@
  */
 
 #include "lwip/opt.h"
-
-
-
 #include "lwip/def.h"
 #include "lwip/mem.h"
 #include "lwip/pbuf.h"
@@ -160,7 +163,8 @@ static err_t low_level_output( struct netif *netif, /*@only@*/ struct pbuf *p )
     UNUSED_PARAMETER( netif );
     /*@+noeffect@*/
 
-    if ( wwd_wifi_is_ready_to_transceive( (wwd_interface_t) (int) netif->state ) == WWD_SUCCESS )
+    if ( ( (wiced_interface_t) (int) netif->state  == WICED_ETHERNET_INTERFACE ) ||
+         ( wwd_wifi_is_ready_to_transceive( (wwd_interface_t) (int) netif->state ) == WWD_SUCCESS ) )
     {
         /* Take a reference to this packet */
         pbuf_ref( p );
@@ -194,6 +198,7 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_i
     struct eth_hdr* ethernet_header;
     struct netif*   tmp_netif;
     u8_t            result;
+    uint16_t        ethertype;
 
     if ( buffer == NULL )
         return;
@@ -201,10 +206,28 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_i
     /* points to packet payload, which starts with an Ethernet header */
     ethernet_header = (struct eth_hdr *) buffer->payload;
 
-    switch ( htons( ethernet_header->type ) )
+    ethertype = htons( ethernet_header->type );
+
+    /* Check if this is an 802.1Q VLAN tagged packet */
+    if ( ethertype == WICED_ETHERTYPE_8021Q )
     {
-        case ETHTYPE_IP:
-        case ETHTYPE_ARP:
+        /* Need to remove the 4 octet VLAN Tag, by moving src and dest addresses 4 octets to the right,
+         * and then read the actual ethertype. The VLAN ID and priority fields are currently ignored. */
+        uint8_t temp_buffer[ 12 ];
+        memcpy( temp_buffer, buffer->payload, 12 );
+        memcpy( ( (uint8_t*) buffer->payload ) + 4, temp_buffer, 12 );
+
+        buffer->payload = ( (uint8_t*) buffer->payload ) + 4;
+        buffer->len = (u16_t) ( buffer->len - 4 );
+
+        ethernet_header = (struct eth_hdr *) buffer->payload;
+        ethertype = htons( ethernet_header->type );
+    }
+
+    switch ( ethertype )
+    {
+        case WICED_ETHERTYPE_IPv4:
+        case WICED_ETHERTYPE_ARP:
 #if PPPOE_SUPPORT
         /* PPPoE packet? */
         case ETHTYPE_PPPOEDISC:
@@ -238,8 +261,8 @@ void host_network_process_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_i
             break;
 
 #ifdef ADD_LWIP_EAPOL_SUPPORT
-        case ETHTYPE_EAPOL:
-            host_network_process_eapol_data(buffer, interface);
+        case WICED_ETHERTYPE_EAPOL:
+            wwd_eapol_receive_eapol_packet( buffer, interface );
             break;
 #endif
         default:
@@ -267,8 +290,14 @@ err_t ethernetif_init( /*@partial@*/ struct netif *netif )
     LWIP_ASSERT("netif != NULL", (netif != NULL));
 
 #if LWIP_NETIF_HOSTNAME
-    /* Initialize interface hostname */
-    netif->hostname = "lwip";
+    if ( lwip_hostname_ptr != NULL )
+    {
+        netif_set_hostname(netif, lwip_hostname_ptr);
+    }
+    else
+    {
+        netif_set_hostname(netif, (char *)LWIP_DEFAULT_CLIENT_OBJECT_NAME);
+    }
 #endif /* LWIP_NETIF_HOSTNAME */
 
     /* Verify the netif is a valid interface */

@@ -727,6 +727,7 @@ ErrorStatus RTC_SetTime(uint32_t RTC_Format, RTC_TimeTypeDef* RTC_TimeStruct)
     {
       tmpreg = RTC_Bcd2ToByte(RTC_TimeStruct->RTC_Hours);
       assert_param(IS_RTC_HOUR12(tmpreg));
+      (void) tmpreg;
       assert_param(IS_RTC_H12(RTC_TimeStruct->RTC_H12)); 
     } 
     else
@@ -874,8 +875,10 @@ ErrorStatus RTC_SetDate(uint32_t RTC_Format, RTC_DateTypeDef* RTC_DateStruct)
     assert_param(IS_RTC_YEAR(RTC_Bcd2ToByte(RTC_DateStruct->RTC_Year)));
     tmpreg = RTC_Bcd2ToByte(RTC_DateStruct->RTC_Month);
     assert_param(IS_RTC_MONTH(tmpreg));
+    (void) tmpreg;
     tmpreg = RTC_Bcd2ToByte(RTC_DateStruct->RTC_Date);
     assert_param(IS_RTC_DATE(tmpreg));
+    (void) tmpreg;
   }
   assert_param(IS_RTC_WEEKDAY(RTC_DateStruct->RTC_WeekDay));
 
@@ -1054,6 +1057,7 @@ void RTC_SetAlarm(uint32_t RTC_Format, uint32_t RTC_Alarm, RTC_AlarmTypeDef* RTC
     {
       tmpreg = RTC_Bcd2ToByte(RTC_AlarmStruct->RTC_AlarmTime.RTC_Hours);
       assert_param(IS_RTC_HOUR12(tmpreg));
+      (void) tmpreg;
       assert_param(IS_RTC_H12(RTC_AlarmStruct->RTC_AlarmTime.RTC_H12));
     } 
     else
@@ -1068,12 +1072,14 @@ void RTC_SetAlarm(uint32_t RTC_Format, uint32_t RTC_Alarm, RTC_AlarmTypeDef* RTC
     if(RTC_AlarmStruct->RTC_AlarmDateWeekDaySel == RTC_AlarmDateWeekDaySel_Date)
     {
       tmpreg = RTC_Bcd2ToByte(RTC_AlarmStruct->RTC_AlarmDateWeekDay);
-      assert_param(IS_RTC_ALARM_DATE_WEEKDAY_DATE(tmpreg));    
+      assert_param(IS_RTC_ALARM_DATE_WEEKDAY_DATE(tmpreg));
+      (void) tmpreg;
     }
     else
     {
       tmpreg = RTC_Bcd2ToByte(RTC_AlarmStruct->RTC_AlarmDateWeekDay);
-      assert_param(IS_RTC_ALARM_DATE_WEEKDAY_WEEKDAY(tmpreg));      
+      assert_param(IS_RTC_ALARM_DATE_WEEKDAY_WEEKDAY(tmpreg));
+      (void) tmpreg;
     }    
   }
 

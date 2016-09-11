@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,13 +16,6 @@ extern "C" {
 /******************************************************
  *                      Macros
  ******************************************************/
-
-#define NULL_MAC( a )  (((a[0])==0)&& \
-                        ((a[1])==0)&& \
-                        ((a[2])==0)&& \
-                        ((a[3])==0)&& \
-                        ((a[4])==0)&& \
-                        ((a[5])==0))
 
 /******************************************************
  *                    Constants

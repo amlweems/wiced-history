@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,6 +20,8 @@
 #include "network/wwd_network_constants.h"
 #include "wwd_assert.h"
 #include "wwd_crypto.h"
+#include "platform_ethernet.h"
+#include "internal/wwd_internal.h"
 
 #if ( NX_PHYSICAL_HEADER != WICED_PHYSICAL_HEADER )
 #error ERROR PHYSICAL HEADER SIZE CHANGED - PREBUILT NETX-DUO LIBRARY WILL NOT WORK
@@ -33,7 +35,7 @@
  *                      Macros
  ******************************************************/
 
-#define IF_TO_IP( inteface )   ( ip_ptr[ (interface)&3] )     /* STA = 0,  AP = 1, P2P = 2 */
+#define IF_TO_IP( interface )   ( ip_ptr[ (interface)&3 ] )     /* STA = 0,  AP = 1, P2P = 2 */
 
 /******************************************************
  *                    Constants
@@ -62,16 +64,12 @@
 static void nx_wiced_add_ethernet_header( NX_IP* ip_ptr_in, NX_PACKET* packet_ptr, ULONG destination_mac_msw, ULONG destination_mac_lsw, USHORT ethertype );
 static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface );
 
-#ifdef ADD_NETX_EAPOL_SUPPORT
-/*@external@*/ extern void host_network_process_eapol_data( wiced_buffer_t buffer, wwd_interface_t interface );
-#endif
-
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
 /* Saves pointers to the IP instances so that the receive function knows where to send data */
-static NX_IP* ip_ptr[3] = { NULL, NULL, NULL };
+static NX_IP* ip_ptr[WWD_INTERFACE_MAX];
 
 /* WICED specific NetX_Duo variable used to control the TCP RX queue depth when NetX_Duo is released as a library */
 const ULONG nx_tcp_max_out_of_order_packets = WICED_TCP_RX_DEPTH_QUEUE;
@@ -94,6 +92,7 @@ VOID wiced_p2p_netx_duo_driver_entry( NX_IP_DRIVER* driver )
 {
     wiced_netx_driver_entry( driver, WWD_P2P_INTERFACE );
 }
+
 static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t interface )
 {
     NX_PACKET*  packet_ptr;
@@ -122,7 +121,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
     switch ( driver->nx_ip_driver_command )
     {
         case NX_LINK_INITIALIZE:
-            ip->nx_ip_driver_mtu            = (ULONG) ( WICED_LINK_MTU - NX_PHYSICAL_HEADER - NX_PHYSICAL_TRAILER );
+            ip->nx_ip_driver_mtu            = (ULONG) WICED_PAYLOAD_MTU;
             ip->nx_ip_driver_mapping_needed = (UINT) NX_TRUE;
             driver->nx_ip_driver_status     = (UINT) NX_SUCCESS;
             break;
@@ -296,6 +295,128 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
     }
 }
 
+static UINT nx_send_ethernet_packet( NX_IP_DRIVER* driver, USHORT ethertype )
+{
+    NX_IP*     ip = driver->nx_ip_driver_ptr;
+    NX_PACKET* packet_ptr = driver->nx_ip_driver_packet;
+
+    if ( packet_ptr == NULL )
+    {
+        return (UINT) NX_NOT_SUCCESSFUL;
+    }
+
+    if ( ip->nx_ip_driver_link_up != NX_TRUE )
+    {
+        nx_packet_release(packet_ptr);
+        return (UINT) NX_NOT_SUCCESSFUL;
+    }
+
+    if ( platform_ethernet_is_ready_to_transceive() != WICED_TRUE )
+    {
+        nx_packet_release(packet_ptr);
+        return (UINT) NX_NOT_SUCCESSFUL;
+    }
+
+    if ( (ethertype == WICED_ETHERTYPE_IPv4) && (packet_ptr->nx_packet_ip_version == NX_IP_VERSION_V6))
+    {
+        ethertype = (USHORT) WICED_ETHERTYPE_IPv6;
+    }
+
+    nx_wiced_add_ethernet_header( ip, packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, ethertype );
+    platform_ethernet_send_data( (wiced_buffer_t)packet_ptr );
+
+    return (UINT) NX_SUCCESS;
+}
+
+VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver )
+{
+    platform_ethernet_config_t* eth_config;
+    NX_IP*      ip = driver->nx_ip_driver_ptr;
+
+    driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
+
+    switch ( driver->nx_ip_driver_command )
+    {
+        case NX_LINK_INITIALIZE:
+            if ( platform_ethernet_get_config( &eth_config ) != PLATFORM_SUCCESS )
+            {
+                driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
+                break;
+            }
+
+            IF_TO_IP(WWD_ETHERNET_INTERFACE) = ip;
+
+            ip->nx_ip_arp_physical_address_msw = (ULONG) ( ( eth_config->mac_addr.octet[0] << 8 )  + eth_config->mac_addr.octet[1] );
+            ip->nx_ip_arp_physical_address_lsw = (ULONG) ( ( eth_config->mac_addr.octet[2] << 24 ) + ( eth_config->mac_addr.octet[3] << 16 ) +
+                                                           ( eth_config->mac_addr.octet[4] << 8 )  + eth_config->mac_addr.octet[5] );
+
+            ip->nx_ip_driver_mtu            = (ULONG) WICED_PAYLOAD_MTU;
+            ip->nx_ip_driver_mapping_needed = (UINT) NX_TRUE; /* initiate ARP requests */
+            break;
+
+        case NX_LINK_UNINITIALIZE:
+            IF_TO_IP(WWD_ETHERNET_INTERFACE) = NULL;
+            break;
+
+        case NX_LINK_ENABLE:
+            /* ip->nx_ip_driver_link_up would be set when driver detects link is up */
+            if ( platform_ethernet_init() != PLATFORM_SUCCESS )
+            {
+                driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
+            }
+            break;
+
+        case NX_LINK_DISABLE:
+            platform_ethernet_deinit();
+            ip->nx_ip_driver_link_up = NX_FALSE;
+            break;
+
+        case NX_LINK_GET_STATUS:
+            /* Signal status through return pointer */
+            *(driver -> nx_ip_driver_return_ptr) = (ULONG) ip->nx_ip_driver_link_up;
+            break;
+
+        case NX_LINK_MULTICAST_JOIN:
+        case NX_LINK_MULTICAST_LEAVE:
+            /* TODO: send IGMP packet? instruct Ethernet driver? */
+            break;
+
+        case NX_LINK_PACKET_BROADCAST:
+        case NX_LINK_PACKET_SEND:
+            driver->nx_ip_driver_status = nx_send_ethernet_packet( driver, (USHORT) WICED_ETHERTYPE_IPv4 );
+            break;
+
+        case NX_LINK_ARP_RESPONSE_SEND:
+            driver->nx_ip_driver_status = nx_send_ethernet_packet( driver, (USHORT) WICED_ETHERTYPE_ARP );
+            break;
+
+        case NX_LINK_ARP_SEND:
+            driver->nx_ip_driver_status = nx_send_ethernet_packet( driver, (USHORT) WICED_ETHERTYPE_ARP );
+            if ( driver->nx_ip_driver_status != NX_SUCCESS )
+            {
+                /*
+                 * ARP packet sending usually triggered by packet sending.
+                 * Packet is waiting in ARP entry pending list till ARP request resolved.
+                 * But we have just dropped ARP packet. As result data packet will be hanging for quite long
+                 * in the list till ARP entry be found not resolved and deleted (tens of seconds).
+                 * We can delete ARP entry, which frees all pending packets. Or we can just clear whole cache.
+                 * Cache clearing is much simpler, but have other penalties.
+                 */
+                nx_arp_dynamic_entries_invalidate( ip );
+            }
+            break;
+
+        case NX_LINK_RARP_SEND:
+            driver->nx_ip_driver_status = nx_send_ethernet_packet( driver, (USHORT) WICED_ETHERTYPE_RARP );
+            break;
+
+        default:
+            /* Invalid driver request */
+            driver->nx_ip_driver_status = (UINT) NX_UNHANDLED_COMMAND;
+            break;
+    }
+}
+
 void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t interface )
 {
     USHORT         ethertype;
@@ -310,8 +431,10 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
     /* Check if interface is valid, if not, drop frame */
     if ( ( interface != WWD_STA_INTERFACE ) &&
          ( interface != WWD_AP_INTERFACE ) &&
-         ( interface != WWD_P2P_INTERFACE ) )
+         ( interface != WWD_P2P_INTERFACE ) &&
+         ( interface != WWD_ETHERNET_INTERFACE ) )
     {
+        wiced_assert( "invalid interface", 0 != 0 );
         nx_packet_release(packet_ptr);
         return;
     }
@@ -334,27 +457,11 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
         ethertype = (USHORT) ( buff[12] << 8 | buff[13] );
     }
 
-    /* Check if this is an 802.1Q VLAN tagged packet */
-    if ( ethertype == WICED_ETHERTYPE_8021Q )
-    {
-        /* Need to remove the 4 octet VLAN Tag, by moving src and dest addresses 4 octets to the right,
-         * and then read the actual ethertype. The VLAN ID and priority fields are currently ignored. */
-        uint8_t temp_buffer[12];
-        memcpy( temp_buffer, packet_ptr->nx_packet_prepend_ptr, 12 );
-        memcpy( packet_ptr->nx_packet_prepend_ptr + 4, temp_buffer, 12 );
-
-        packet_ptr->nx_packet_prepend_ptr = packet_ptr->nx_packet_prepend_ptr + 4;
-        packet_ptr->nx_packet_length      = packet_ptr->nx_packet_length - 4;
-
-        buff      = packet_ptr->nx_packet_prepend_ptr;
-        ethertype = (USHORT) ( buff[12] << 8 | buff[13] );
-    }
-
 #ifdef ADD_NETX_EAPOL_SUPPORT
     if ( ethertype == WICED_ETHERTYPE_EAPOL )
     {
-         /* pass it to the WPS interface, but do not release the packet */
-         host_network_process_eapol_data(packet_ptr, interface);
+         /* pass it to the EAP layer, but do not release the packet */
+        wwd_eapol_receive_eapol_packet( buffer, interface );
     }
     else
 #endif

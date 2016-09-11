@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,7 +9,7 @@
  */
 
 /** @file
- * Defines BCM439x filesystem
+ * Defines STM32F4xx filesystem
  */
 #include "stdint.h"
 #include "string.h"
@@ -64,26 +64,32 @@ static wicedfs_usize_t read_callback ( void* user_param, void* buf, wicedfs_usiz
 sflash_handle_t       wicedfs_sflash_handle;
 wiced_filesystem_t    resource_fs_handle;
 static wiced_app_t    fs_app;
-
+static  uint8_t       fs_init_done = 0;
 /******************************************************
  *               Function Definitions
  ******************************************************/
-
+/* To handle WWD applications that don't go through wiced_init() (yet need to use the file system):
+ * File system initialization is called twice
+ * wiced_init()->wiced_core_init()->wiced_platform_init()->platform_filesystem_init()
+ * wwd_management_init()->wwd_management_wifi_on()->host_platform_init()->platform_filesystem_init()
+ */
 platform_result_t platform_filesystem_init( void )
 {
     int              result;
     sflash_handle_t  sflash_handle;
-
-    init_sflash( &sflash_handle, 0, SFLASH_WRITE_ALLOWED );
-    if ( wiced_framework_app_open( DCT_FILESYSTEM_IMAGE_INDEX, &fs_app ) != WICED_SUCCESS )
+    if ( fs_init_done == 0)
     {
-        return PLATFORM_ERROR;
+        init_sflash( &sflash_handle, 0, SFLASH_WRITE_ALLOWED );
+        if ( wiced_framework_app_open( DCT_FILESYSTEM_IMAGE_INDEX, &fs_app ) != WICED_SUCCESS )
+        {
+            return PLATFORM_ERROR;
+        }
+        result = wicedfs_init( 0, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
+        wiced_assert( "wicedfs init fail", result == 0 );
+        fs_init_done = ( result == 0 ) ? 1 : 0;
+        return (result == 0)? PLATFORM_SUCCESS : PLATFORM_ERROR;
     }
-    result = wicedfs_init( 0, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
-    wiced_assert( "wicedfs init fail", result == 0 );
-    REFERENCE_DEBUG_ONLY_VARIABLE( result );
-
-    return (result == 0)? PLATFORM_SUCCESS : PLATFORM_ERROR;
+    return PLATFORM_SUCCESS;
 }
 
 static wicedfs_usize_t read_callback( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos )

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,7 +16,7 @@
 #include "platform_peripheral.h"
 #include "platform_isr.h"
 #include "platform_isr_interface.h"
-#include "wwd_rtos.h"
+#include "wwd_rtos_isr.h"
 #include "wwd_assert.h"
 
 /******************************************************
@@ -167,6 +167,7 @@ platform_result_t platform_i2c_init_tx_message( platform_i2c_message_t* message,
     message->tx_buffer = tx_buffer;
     message->tx_length = tx_buffer_length;
     message->retries   = retries;
+    message->rx_buffer = NULL;
 
     return PLATFORM_SUCCESS;
 }
@@ -182,6 +183,7 @@ platform_result_t platform_i2c_init_rx_message( platform_i2c_message_t* message,
     message->rx_buffer = rx_buffer;
     message->retries   = retries;
     message->rx_length = rx_buffer_length;
+    message->tx_buffer = NULL;
 
     return PLATFORM_SUCCESS;
 }
@@ -205,62 +207,72 @@ platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* me
 
 platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t* config, platform_i2c_message_t* messages, uint16_t number_of_messages )
 {
-    platform_result_t result =  PLATFORM_SUCCESS;
-    Twi*              twi    = ( Twi* )( i2c_runtime_data[i2c->i2c_block_id].peripheral->peripheral );
-    int               i;
-    int               retry_count;
+    platform_result_t       result   =  PLATFORM_SUCCESS;
+    Twi*                    twi      = ( Twi* )( i2c_runtime_data[i2c->i2c_block_id].peripheral->peripheral );
+    platform_i2c_message_t* message_pointer;
+
+    int i;
+    int retry_count;
 
     /* Check input arguments */
     wiced_assert("Bad argument", (i2c != NULL) && ( config != NULL ) &&( messages != NULL ) && ( number_of_messages != 0 ));
 
-    for ( i = 0; i < number_of_messages && result == PLATFORM_SUCCESS; i++ )
+    for ( i = 0; ( i < number_of_messages ) && ( result == PLATFORM_SUCCESS ); i++ )
     {
-        platform_i2c_message_t* message_pointer = &messages[i];
+        message_pointer = &messages[i];
         wiced_assert("Message pointer shouldn't be null", message_pointer != NULL);
+
         for ( retry_count = 0; retry_count < message_pointer->retries; retry_count++ )
         {
             i2c_runtime_data[i2c->i2c_block_id].current_message = message_pointer;
             i2c_runtime_data[i2c->i2c_block_id].data_count      = 0;
             i2c_runtime_data[i2c->i2c_block_id].transfer_status = 0;
 
+            /* Make sure all interrupts are disables at start */
+            twi->TWI_IDR = ~0UL;
+
             if ( message_pointer->rx_buffer != NULL )
             {
                 /* Initiate an RX transfer */
-
                 /* Set read mode and slave address */
                 twi->TWI_MMR = 0;
                 twi->TWI_MMR = TWI_MMR_MREAD | TWI_MMR_DADR(config->address);
-
-                /* Dumb status and rx registers reading */
-                twi->TWI_SR;
-                twi->TWI_RHR;
 
                 /* Enable NACK, RXRDY interrupts */
                 twi->TWI_IER = TWI_IER_NACK | TWI_IER_RXRDY;
 
                 if ( message_pointer->rx_length == 1 )
                 {
+                    /* There is only byte to process, go straight to transfer complete
+                     * interrupt, and process the last byte there */
+                    twi->TWI_IDR = TWI_IDR_RXRDY;
+                    twi->TWI_IER = TWI_IER_TXCOMP;
+
                     /* Extract from sam4s user manual.
                      * When a single data byte read is performed, with or without internal address (IADR),
                      * the START and STOP bits must be set at the same time */
-                    twi->TWI_CR = TWI_CR_STOP;
+                    twi->TWI_CR = TWI_CR_STOP | TWI_CR_START;
                 }
-
-                /* Generate a START Condition */
-                twi->TWI_CR = TWI_CR_START;
+                else
+                {
+                    /* Only required for receive to reset TXCOMP state */
+                    twi->TWI_CR = TWI_CR_START;
+                }
 
             }
             else if ( message_pointer->tx_buffer != NULL )
             {
                 /* Initiate a TX transfer */
-                /* Set read mode, slave address */
+                /* Set write mode, slave address */
                 twi->TWI_MMR = 0;
                 twi->TWI_MMR = TWI_MMR_DADR(config->address);
 
-                /* Dumb status register reading */
-                twi->TWI_SR;
-
-                /* Enable NACK, TXRDY interrupts */
+                if ( message_pointer->tx_length == 1 )
+                {
+                    /* Set data count to 1 and send in interrupt routine */
+                    i2c_runtime_data[i2c->i2c_block_id].data_count = 1;
+                }
+                /* Interrupts will trigger as soon as enabled (tx is ready ) */
                 twi->TWI_IER = TWI_IER_NACK | TWI_IER_TXRDY;
 
             }
@@ -270,25 +282,14 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
                 wiced_assert("Combined transactions are not supported on sam4s twi", 0!=0);
                 return WICED_ERROR;
             }
+
             /* Wait on a semaphore until a message is received or transmitted */
             result = host_rtos_get_semaphore( &i2c_runtime_data[i2c->i2c_block_id].transfer_complete, I2C_TRANSACTION_TIMEOUT, WICED_TRUE );
-            if ( result != PLATFORM_SUCCESS )
+            if ( ( result == PLATFORM_SUCCESS ) && ( i2c_runtime_data[i2c->i2c_block_id].transfer_status != -1 ) )
             {
-                return result;
-            }
-
-            /* Check for errors */
-            if ( i2c_runtime_data[i2c->i2c_block_id].transfer_status < 0 )
-            {
-                result = PLATFORM_ERROR;
-            }
-            else
-            {
-                /* Generate a stop condition at the of the transaction */
-                twi->TWI_CR = TWI_CR_STOP;
-                result = PLATFORM_SUCCESS;
                 break;
             }
+
         }
     }
 
@@ -297,20 +298,52 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
 
 void twi_irq( sam4s_i2c_runtime_data_t* runtime_data )
 {
-    Twi*     twi_regs = (Twi*)( runtime_data->peripheral->peripheral );
-    uint32_t status   = twi_regs->TWI_SR;
-    uint32_t mask     = twi_get_interrupt_mask( runtime_data->peripheral->peripheral );
+    Twi*     twi_regs          = (Twi*)( runtime_data->peripheral->peripheral );
+    uint32_t volatile status   = twi_regs->TWI_SR;
+    uint8_t* rx_buffer_pointer = ( uint8_t* )runtime_data->current_message->rx_buffer;
+    uint8_t* tx_buffer_pointer = ( uint8_t* )runtime_data->current_message->tx_buffer;
+    uint32_t mask              = twi_get_interrupt_mask( runtime_data->peripheral->peripheral );
 
     /* Check if this is a NACK interrupt */
     if ( ( status & mask & TWI_SR_NACK ) != 0 )
     {
         runtime_data->transfer_status = -1;
-        twi_regs->TWI_IDR = TWI_IDR_NACK;
+
+        /* Transfer error, disable interrupt */
+        twi_regs->TWI_IDR = ~0UL;
+
+        /* Dummy read of status register. Recomended by Atmel sample code - not in datasheet
+         * Reading this registers clears NACK, so perhaps this is what its used for */
+        twi_regs->TWI_SR;
+
+        /* Set the semaphore that transaction is complete */
+        host_rtos_set_semaphore( &runtime_data->transfer_complete, WICED_TRUE );
+
+    }
+    else if( ( status & mask & TWI_SR_TXCOMP ) != 0 )
+    {
+        if( ( ( status & TWI_SR_RXRDY ) != 0 ) )
+        {
+            /* Load the last byte */
+            rx_buffer_pointer[runtime_data->data_count] = (uint8_t)twi_regs->TWI_RHR;
+            runtime_data->data_count++;
+        }
+
+        /* Transfer is complete, disable all interrupts */
+        twi_regs->TWI_IDR = ~0UL;
+
+        /* Dummy read of status register. Recomended by Atmel sample code - not in datasheet
+         * Reading this registers clears NACK, so perhaps this is what its used for */
+        twi_regs->TWI_SR;
+
+        runtime_data->transfer_status = 0;
+
+        /* Set the semaphore that transaction is complete */
+        host_rtos_set_semaphore( &runtime_data->transfer_complete, WICED_TRUE );
+
     }
     else if ( (status & mask & TWI_SR_RXRDY) != 0)
     {
-        uint8_t* rx_buffer_pointer = ( uint8_t* )runtime_data->current_message->rx_buffer;
-
         /* Read data increment the number of received bytes */
         /* Get data from Receive Holding Register */
         rx_buffer_pointer[runtime_data->data_count] = (uint8_t)twi_regs->TWI_RHR;
@@ -318,38 +351,36 @@ void twi_irq( sam4s_i2c_runtime_data_t* runtime_data )
         /* Increase transmitted bytes count */
         runtime_data->data_count++;
 
-        if ( runtime_data->data_count == runtime_data->current_message->rx_length )
+        if( runtime_data->data_count == ( runtime_data->current_message->rx_length -1 ) )
         {
-            /* Disable RX interrupt */
+            /* Set complete interrupt, and process last packet there */
+            twi_regs->TWI_IER = TWI_IER_TXCOMP;
             twi_regs->TWI_IDR = TWI_IDR_RXRDY;
 
-            /* Set the semaphore that transaction is complete */
-            host_rtos_set_semaphore( &runtime_data->transfer_complete, WICED_TRUE );
+            /* Indicate this is end of transfer */
+            twi_regs->TWI_CR = TWI_CR_STOP;
         }
     }
     else if ( (status & mask & TWI_SR_TXRDY) != 0 )
     {
         if ( runtime_data->data_count == runtime_data->current_message->tx_length )
         {
-            /* Finish the transmit operation */
+            /* Set complete interrupt, and process last packet there */
+            twi_regs->TWI_IER = TWI_IER_TXCOMP;
             twi_regs->TWI_IDR = TWI_IDR_TXRDY;
 
-            /* Check if this is a combined transaction */
-            if ( ( runtime_data->current_message->tx_buffer != NULL ) && ( runtime_data->current_message->rx_buffer != NULL ) )
+            /* If length is 1, stop was already issued before this interrupt occured */
+            if( runtime_data->current_message->tx_length == 1 )
             {
-                /* Generate a START Condition */
-                twi_regs->TWI_CR = TWI_CR_START;
+                twi_regs->TWI_THR = tx_buffer_pointer[0];
             }
-            else
-            {
-                /* Set the semaphore that transaction is complete */
-                host_rtos_set_semaphore( &runtime_data->transfer_complete, WICED_TRUE );
-            }
+
+            /* Indicate this is end of transfer */
+            twi_regs->TWI_CR = TWI_CR_STOP;
+
         }
         else
         {
-            uint8_t* tx_buffer_pointer = (uint8_t*) runtime_data->current_message->tx_buffer;
-
             /* Put the byte in the Transmit Holding Register */
             twi_regs->TWI_THR = tx_buffer_pointer[runtime_data->data_count];
 

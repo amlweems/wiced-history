@@ -1,5 +1,5 @@
 #
-# Copyright 2014, Broadcom Corporation
+# Copyright 2015, Broadcom Corporation
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -33,10 +33,10 @@ GLOBAL_INCLUDES := ver$(NETX_VERSION) \
 
 ifdef WICED_ENABLE_TRACEX
 # Precompiled library with TraceX
-NETX_LIBRARY_NAME :=NetX.TraceX.$(HOST_ARCH).$(BUILD_TYPE).a
+NETX_LIBRARY_NAME :=NetX.TraceX.$(RTOS).$(HOST_ARCH).$(BUILD_TYPE).a
 else
 # Precompiled library
-NETX_LIBRARY_NAME :=NetX.$(HOST_ARCH).$(BUILD_TYPE).a
+NETX_LIBRARY_NAME :=NetX.$(RTOS).$(HOST_ARCH).$(BUILD_TYPE).a
 endif
 
 ifneq ($(wildcard $(CURDIR)$(NETX_LIBRARY_NAME)),)
@@ -44,7 +44,7 @@ ifneq ($(wildcard $(CURDIR)$(NETX_LIBRARY_NAME)),)
 $(NAME)_PREBUILT_LIBRARY := $(NETX_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
-include $(CURDIR)NetX_src.mk
-endif #ifneq ($(wildcard $(CURDIR)NetX.$(HOST_ARCH).$(BUILD_TYPE).a),)
+-include $(CURDIR)NetX_src.mk
+endif #ifneq ($(wildcard $(CURDIR)$(NETX_LIBRARY_NAME)),)
 
 $(NAME)_SOURCES += ver$(NETX_VERSION)/nx_external_functions.c

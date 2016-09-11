@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -43,18 +43,17 @@ extern "C" {
  *          TLS -> Host Function Declarations
  ******************************************************/
 
-extern tls_result_t tls_host_create_buffer( wiced_tls_context_t* ssl, uint8_t** buffer, uint16_t buffer_size );
-extern tls_result_t tls_host_free_packet  ( tls_packet_t* packet );
-extern tls_result_t tls_host_send_packet  ( void* host_context, tls_packet_t* packet );
-
-extern tls_result_t tls_host_get_packet_data( tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length );
+extern tls_result_t tls_host_create_buffer   ( wiced_tls_context_t* ssl, uint8_t** buffer, uint16_t buffer_size );
+extern tls_result_t tls_host_free_packet     ( tls_packet_t* packet );
+extern tls_result_t tls_host_send_tcp_packet ( void* context, tls_packet_t* packet );
+extern tls_result_t tls_host_get_packet_data ( ssl_context* ssl, tls_packet_t* packet, uint32_t offset, uint8_t** data, uint16_t* data_length, uint16_t* available_data_length );
 extern tls_result_t tls_host_set_packet_start( tls_packet_t* packet, uint8_t* start );
 
 /*
  * This should wait for a specified amount of time to receive a packet.
  * If the SSL context already has a received packet stored, it should append it to the previous packet either contiguously or via a linked list.
  */
-extern tls_result_t tls_host_receive_packet( void* context, tls_packet_t** packet, uint32_t timeout );
+extern tls_result_t tls_host_receive_packet( ssl_context* ssl, tls_packet_t** packet, uint32_t timeout );
 
 extern uint64_t tls_host_get_time_ms( void );
 
@@ -73,6 +72,9 @@ extern tls_result_t tls_get_next_record( ssl_context* ssl, tls_record_t** record
 extern int32_t      ssl_cleanup_record(wiced_tls_context_t* ssl, tls_record_t* record);
 extern void         tls_cleanup_current_record(ssl_context* ssl);
 extern tls_result_t tls_skip_current_record( ssl_context* ssl );
+
+
+int32_t tls1_prf( unsigned char *secret, int32_t slen, char *label, unsigned char *random, int32_t rlen, unsigned char *dstbuf, int32_t dlen );
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -58,13 +58,6 @@ typedef struct
  *          WPS to Host Function Declarations
  ******************************************************/
 
-/* Packet functions */
-extern void     wps_host_create_eapol_packet  (wps_eapol_packet_t* packet, uint16_t size);
-extern uint8_t* wps_host_get_eapol_data       (wps_eapol_packet_t packet);
-extern uint16_t wps_host_get_eapol_packet_size(wps_eapol_packet_t packet);
-extern void     wps_host_free_eapol_packet    (wps_eapol_packet_t packet);
-extern void     wps_host_send_packet          (void* workspace, wps_eapol_packet_t packet, uint16_t size);
-
 /* Association functions */
 extern wps_result_t wps_host_join( void* workspace, wps_ap_t* ap, wwd_interface_t interface );
 extern wps_result_t wps_host_leave( wwd_interface_t interface );
@@ -78,10 +71,11 @@ extern void wps_host_add_vendor_ie   ( uint32_t interface, void* data, uint16_t 
 extern void wps_host_remove_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask );
 
 /* Scanning functions */
-extern void      wps_host_scan            ( wps_agent_t* workspace, wps_scan_handler_t result_handler, wwd_interface_t interface );
-extern wps_ap_t* wps_host_store_ap        ( void* workspace, wl_escan_result_t* scan_result );
-extern wps_ap_t* wps_host_retrieve_ap     ( void* workspace );
-extern uint16_t  wps_host_get_ap_list_size( void* workspace);
+extern void         wps_host_scan                 ( wps_agent_t* workspace, wps_scan_handler_t result_handler, wwd_interface_t interface );
+extern wps_ap_t*    wps_host_store_ap             ( void* workspace, wl_escan_result_t* scan_result, wps_uuid_t* uuid );
+extern wps_ap_t*    wps_host_retrieve_ap          ( void* workspace );
+extern uint16_t     wps_host_get_ap_list_size     ( void* workspace);
+extern wps_result_t wps_enrollee_pbc_overlap_check( wps_agent_t* workspace );
 
 /* Credential management functions */
 extern void wps_host_store_credential   ( void* workspace, wps_credential_t* credential );
@@ -90,13 +84,11 @@ extern void wps_host_retrieve_credential( void* workspace, wps_credential_t* cre
 /* Authorized MACs API */
 extern void wps_host_get_authorized_macs( void* workspace, besl_mac_t** mac_list, uint8_t* mac_list_length );
 
-extern void wps_host_deauthenticate_client( const besl_mac_t* mac, uint32_t reason );
-
 /******************************************************
  *          Host to WPS Function Declarations
  ******************************************************/
 
-extern wps_result_t wps_process_event( wps_agent_t* workspace, wps_event_message_t* event );
+extern wps_result_t wps_process_event( wps_agent_t* workspace, besl_event_message_t* event );
 extern void wps_init_workspace       ( wps_agent_t* workspace );
 extern void wps_deinit_workspace     ( wps_agent_t* workspace );
 extern void wps_reset_workspace      ( wps_agent_t* workspace, wwd_interface_t interface );

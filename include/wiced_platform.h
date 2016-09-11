@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,6 +38,12 @@ extern "C" {
 /******************************************************
  *                   Enumerations
  ******************************************************/
+
+typedef enum
+{
+    WICED_ACTIVE_LOW   = 0,
+    WICED_ACTIVE_HIGH  = 1,
+} wiced_active_state_t;
 
 /******************************************************
  *                 Type Definitions
@@ -309,7 +315,7 @@ wiced_result_t wiced_spi_slave_generate_interrupt( wiced_spi_t spi, uint32_t pul
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred during initialisation
  */
-wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device );
+wiced_result_t wiced_i2c_init( const wiced_i2c_device_t* device );
 
 
 /** Checks whether the device is available on a bus or not
@@ -321,7 +327,7 @@ wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device );
  * @return    WICED_TRUE : device is found.
  * @return    WICED_FALSE: device is not found
  */
-wiced_bool_t wiced_i2c_probe_device( wiced_i2c_device_t* device, int retries );
+wiced_bool_t wiced_i2c_probe_device( const wiced_i2c_device_t* device, int retries );
 
 
 /** Initialize the wiced_i2c_message_t structure for i2c tx transaction
@@ -383,7 +389,7 @@ wiced_result_t wiced_i2c_init_combined_message( wiced_i2c_message_t* message, co
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred during message transfer
  */
-wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message_t* message, uint16_t number_of_messages );
+wiced_result_t wiced_i2c_transfer(  const wiced_i2c_device_t* device, wiced_i2c_message_t* message, uint16_t number_of_messages );
 
 
 /** Deinitialises an I2C device
@@ -393,7 +399,7 @@ wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message
  * @return    WICED_SUCCESS : on success.
  * @return    WICED_ERROR   : if an error occurred during deinitialisation
  */
-wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device );
+wiced_result_t wiced_i2c_deinit( const wiced_i2c_device_t* device );
 
 /** @} */
 /*****************************************************************************/
@@ -488,6 +494,16 @@ wiced_result_t wiced_adc_deinit( wiced_adc_t adc );
  */
 wiced_result_t wiced_gpio_init( wiced_gpio_t gpio, wiced_gpio_config_t configuration );
 
+/** De-initialises a GPIO pin
+ *
+ * Clears a GPIO pin from use.
+ *
+ * @param gpio          : the gpio pin which should be de-initialised
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t wiced_gpio_deinit( wiced_gpio_t gpio );
 
 /** Sets an output GPIO pin high
  *
@@ -531,11 +547,11 @@ wiced_bool_t   wiced_gpio_input_get( wiced_gpio_t gpio );
 /** Enables an interrupt trigger for an input GPIO pin
  *
  * Enables an interrupt trigger for an input GPIO pin.
- * Using this function on a gpio pin which is set to
- * output mode is undefined.
+ * Using this function on an uninitialized gpio pin or
+ * a gpio pin which is set to output mode is undefined.
  *
  * @param gpio    : the gpio pin which will provide the interrupt trigger
- * @param trigger : the type of trigger (rising/falling edge)
+ * @param trigger : the type of trigger (rising/falling edge, high/low level)
  * @param handler : a function pointer to the interrupt handler
  * @param arg     : an argument that will be passed to the
  *                  interrupt handler
@@ -688,29 +704,37 @@ wiced_result_t wiced_platform_get_rtc_time( wiced_rtc_time_t* time );
 wiced_result_t wiced_platform_set_rtc_time( const wiced_rtc_time_t* time );
 
 
+
 /**
- * This function will return the value of time read from the nanosecond clock.
- * @return : number of nanoseconds passed since the function wiced_init_nanosecond_clock or wiced_reset_nanosecond_clock was called
+ * Enable the 802.1AS time functionality.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
  */
-uint64_t wiced_get_nanosecond_clock_value( void );
+wiced_result_t wiced_time_enable_8021as(void);
 
 
 /**
- * This function will deinitialize the nanosecond clock.
+ * Disable the 802.1AS time functionality.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
  */
-void wiced_deinit_nanosecond_clock( void );
+wiced_result_t wiced_time_disable_8021as(void);
 
 
 /**
- * This function will reset the nanosecond clock.
+ * Read the 802.1AS time.
+ *
+ * Retrieve the origin timestamp in the last sync message, correct for the
+ * intervening interval and return the corrected time in seconds + nanoseconds.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
  */
-void wiced_reset_nanosecond_clock( void );
+wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                      uint32_t *local_secs, uint32_t *local_nanosecs);
 
-
-/**
- * This function will init the nanosecond clock.
-*/
-void wiced_init_nanosecond_clock( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

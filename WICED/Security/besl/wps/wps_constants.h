@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -355,21 +355,6 @@ typedef enum
     WPS_DEVICE_TYPE_CAT_AUDIO_DEVICES = 11, /* WSC 2.0 */
 } wps_device_category_t;
 
-typedef enum
-{
-    WPS_EVENT_NO_EVENT,
-    WPS_EVENT_TIMER_TIMEOUT,
-    WPS_EVENT_ABORT_REQUESTED,
-    WPS_EVENT_EAPOL_PACKET_RECEIVED,
-    WPS_EVENT_DISCOVER_COMPLETE,
-    WPS_EVENT_ENROLLEE_ASSOCIATED,
-    WPS_EVENT_RECEIVED_IDENTITY_REQUEST,
-    WPS_EVENT_RECEIVED_IDENTITY,
-    WPS_EVENT_RECEIVED_WPS_START,
-    WPS_EVENT_RECEIVED_EAPOL_START,
-    WPS_EVENT_PBC_OVERLAP_NOTIFY_USER,
-    WPS_EVENT_WPS_COMPLETE,
-} wps_event_t;
 
 typedef enum
 {
@@ -417,15 +402,6 @@ typedef enum
     VIRTUAL_DISPLAY_PIN   = 0x2008,
     PHYSICAL_DISPLAY_PIN  = 0x4008
 } wps_configuration_method_t;
-
-typedef enum
-{
-    EAP_PACKET   = 0,
-    EAPOL_START  = 1,
-    EAPOL_LOGOFF = 2,
-    EAPOL_KEY    = 3,
-    EAPOL_ENCAPSULATED_ASF_ALERT = 4
-} eapol_packet_type_t;
 
 typedef enum
 {

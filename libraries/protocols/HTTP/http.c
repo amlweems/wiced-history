@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -111,7 +111,7 @@ wiced_result_t wiced_https_get( wiced_ip_address_t* address, const char* query, 
     wiced_tcp_create_socket( &socket, WICED_STA_INTERFACE );
     wiced_tcp_enable_tls( &socket, &context );
 
-    result = wiced_tcp_connect( &socket, address, 443, 10000 );
+    result = wiced_tcp_connect( &socket, address, 443, 20000 );
     if ( result != WICED_SUCCESS )
     {
         wiced_tcp_delete_socket( &socket );

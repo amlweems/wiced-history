@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -161,6 +161,30 @@ wiced_result_t wiced_time_set_utc_time_ms( const wiced_utc_time_ms_t* utc_time_m
 wiced_result_t wiced_time_get_iso8601_time( wiced_iso8601_time_t* iso8601_time );
 
 /** @} */
+
+/**
+ * This function will return the value of time read from the nanosecond clock.
+ * @return : number of nanoseconds passed since the function wiced_init_nanosecond_clock or wiced_reset_nanosecond_clock was called
+ */
+uint64_t wiced_get_nanosecond_clock_value( void );
+
+
+/**
+ * This function will deinitialize the nanosecond clock.
+ */
+void wiced_deinit_nanosecond_clock( void );
+
+
+/**
+ * This function will reset the nanosecond clock.
+ */
+void wiced_reset_nanosecond_clock( void );
+
+
+/**
+ * This function will initialize the nanosecond clock.
+*/
+void wiced_init_nanosecond_clock( void );
 
 #ifdef __cplusplus
 } /*extern "C" */

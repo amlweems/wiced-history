@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Broadcom Corporation
+ * Copyright 2015, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -40,6 +40,10 @@ extern "C" {
  */
 #if defined ( __GNUC__ )
 /* GCC */
+#define PLATFORM_DEFINE_NAKED_ISR( function ) \
+        void function( void ); \
+        __attribute__(( naked, interrupt, used, section( IRQ_SECTION ) )) void function( void )
+
 #define PLATFORM_DEFINE_ISR( function ) \
         void function( void ); \
         __attribute__(( interrupt, used, section( IRQ_SECTION ) )) void function( void )
