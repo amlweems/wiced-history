@@ -43,14 +43,6 @@ extern "C"
 //#define WPRINT_ENABLE_RTOS_DEBUG
 //#define WPRINT_ENABLE_RTOS_ERROR
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-//#define WPRINT_ENABLE_SECURITY_INFO    /* Security stack prints */
-//#define WPRINT_ENABLE_SECURITY_DEBUG
-//#define WPRINT_ENABLE_SECURITY_ERROR
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-#define WPRINT_ENABLE_WPS_INFO           /* WPS stack prints */
-//#define WPRINT_ENABLE_WPS_DEBUG
-//#define WPRINT_ENABLE_WPS_ERROR
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_WICED_INFO         /* Wiced internal prints */
 //#define WPRINT_ENABLE_WICED_DEBUG
 //#define WPRINT_ENABLE_WICED_ERROR

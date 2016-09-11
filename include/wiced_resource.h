@@ -92,16 +92,19 @@ typedef struct
     /*@shared@*/ const char* filename;
 } filesystem_resource_handle_t;
 
+
+typedef enum
+{
+    RESOURCE_IN_MEMORY,
+    RESOURCE_IN_FILESYSTEM,
+} resource_location_t;
+
 /**
  * Resource handle structure
  */
 typedef struct
 {
-    enum resource_location_t
-    {
-        RESOURCE_IN_MEMORY,
-        RESOURCE_IN_FILESYSTEM,
-    } location;
+    resource_location_t location;
 
     unsigned long size;
     union

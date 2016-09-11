@@ -37,11 +37,18 @@ typedef struct
 
 #define WWD_BUS_HAS_HEADER
 
-#define WWD_BUS_HEADER_SIZE                          (sizeof(wwd_bus_header_t))
+#define WWD_BUS_HEADER_SIZE               ( sizeof(wwd_bus_header_t) )
 
-#define WWD_BUS_USE_STATUS_REPORT_SCHEME             (1==1) /* read the section "Interrupt and Status logic" in TWIKI */
+#define WWD_BUS_USE_STATUS_REPORT_SCHEME  ( 1 == 1 ) /* read the section "Interrupt and Status logic" in TWIKI */
 
-#define WWD_SPDCM_HEADER_LENGTH                      (22)
+/* Reserved length for SDPCM header, generally the larger of the TX and RX headers */
+#define WWD_SDPCM_HEADER_RESERVED_LENGTH  ( 22 )
+
+/* SDPCM transmit header length */
+#define WWD_SDPCM_HEADER_TX_LENGTH        ( WWD_SDPCM_HEADER_RESERVED_LENGTH - 4 )
+
+/* SDPCM receive header length includes 4 bytes data offset prior to the start of the payload */
+#define WWD_SDPCM_HEADER_RX_LENGTH        ( WWD_SDPCM_HEADER_RESERVED_LENGTH )
 
 /******************************************************
  *             Function declarations

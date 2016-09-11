@@ -81,7 +81,7 @@ UINT        fx_file_seek(FX_FILE *file_ptr, ULONG byte_offset);
 UINT        fx_file_truncate(FX_FILE *file_ptr, ULONG size);
 UINT        fx_file_truncate_release(FX_FILE *file_ptr, ULONG size);
 UINT        fx_directory_local_path_restore(FX_MEDIA *media_ptr, FX_LOCAL_PATH *local_path_ptr);
-UINT        fx_directory_local_path_set(FX_MEDIA *media_ptr, FX_LOCAL_PATH *local_path_ptr, CHAR *new_path_name);
+UINT        fx_directory_local_path_set(FX_MEDIA *media_ptr, FX_LOCAL_PATH *local_path_ptr, const CHAR *new_path_name);
 UINT        fx_directory_local_path_get(FX_MEDIA *media_ptr, CHAR **return_path_name);
 
 #endif

@@ -555,7 +555,7 @@ UINT    _tx_trace_buffer_full_notify(VOID (*full_buffer_callback)(VOID *));
 UINT    _tx_trace_user_event_insert(ULONG event_id, ULONG info_field_1, ULONG info_field_2, ULONG info_field_3, ULONG info_field_4);
 VOID    _tx_trace_initialize(VOID);
 UINT    _tx_trace_interrupt_control(UINT new_posture);
-VOID    _tx_trace_object_register(UCHAR object_type, VOID *object_ptr, CHAR *object_name, ULONG parameter_1, ULONG parameter_2);
+VOID    _tx_trace_object_register(UCHAR object_type, VOID *object_ptr, const CHAR *object_name, ULONG parameter_1, ULONG parameter_2);
 VOID    _tx_trace_object_unregister(VOID *object_ptr);
 
 #endif

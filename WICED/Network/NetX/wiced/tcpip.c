@@ -765,6 +765,11 @@ wiced_result_t wiced_tcp_enable_keepalive( wiced_tcp_socket_t* socket, uint16_t 
     UNUSED_PARAMETER( probes );
     UNUSED_PARAMETER( time );
 
+    socket->socket.nx_tcp_socket_keepalive_enabled = WICED_TRUE;
+    socket->socket.nx_tcp_socket_keepalive_retries = probes;
+    socket->socket.nx_tcp_socket_keepalive_timeout = time;
+
+
     return WICED_TCPIP_UNSUPPORTED;
 }
 
@@ -981,6 +986,8 @@ wiced_result_t wiced_multicast_leave( wiced_interface_t interface, const wiced_i
 
 wiced_result_t wiced_hostname_lookup( const char* hostname, wiced_ip_address_t* address, uint32_t timeout_ms )
 {
+    wiced_assert("Bad args", (hostname != NULL) && (address != NULL));
+
     WICED_LINK_CHECK( &IP_HANDLE( WICED_STA_INTERFACE ) );
 
     /* Check if address is a string representation of a IPv4 address i.e. xxx.xxx.xxx.xxx */

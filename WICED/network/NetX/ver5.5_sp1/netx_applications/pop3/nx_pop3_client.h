@@ -93,33 +93,35 @@ extern   "C" {
 /* Set the event reporting/debug output level for the NetX POP3 Client */
 
 #ifndef NX_POP3_CLIENT_DEBUG
-#define NX_POP3_CLIENT_DEBUG                     MODERATE
+#define NX_POP3_CLIENT_DEBUG                     NX_POP3_DEBUG_LEVEL_NONE
 #endif
 
 
 /* Set debugging level for NetX POP3 */
-
+#if ( NX_POP3_CLIENT_DEBUG == NX_POP3_DEBUG_LEVEL_NONE )
+#define NX_POP3_CLIENT_EVENT_LOG(debug_level, msg)
+#else
 #define NX_POP3_CLIENT_EVENT_LOG(debug_level, msg)                  \
 {                                                                   \
     UINT level = (UINT)debug_level;                                 \
-    if (level <= ALL && NX_POP3_CLIENT_DEBUG == ALL)                \
+    if (level <= NX_POP3_DEBUG_LEVEL_ALL && NX_POP3_CLIENT_DEBUG == NX_POP3_DEBUG_LEVEL_ALL)                \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level <= MODERATE && NX_POP3_CLIENT_DEBUG == MODERATE) \
+    else if (level <= NX_POP3_DEBUG_LEVEL_MODERATE && NX_POP3_CLIENT_DEBUG == NX_POP3_DEBUG_LEVEL_MODERATE) \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level == SEVERE && NX_POP3_CLIENT_DEBUG == SEVERE)     \
+    else if (level == NX_POP3_DEBUG_LEVEL_SEVERE && NX_POP3_CLIENT_DEBUG == NX_POP3_DEBUG_LEVEL_SEVERE)     \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level == LOG)                                          \
+    else if (level == NX_POP3_DEBUG_LEVEL_LOG)                                          \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
 }
-
+#endif /* NX_POP3_CLIENT_DEBUG */
 
 /* Enumerated states of the protocol state machine. */
 

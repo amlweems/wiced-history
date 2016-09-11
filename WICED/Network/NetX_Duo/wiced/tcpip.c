@@ -160,13 +160,20 @@ static const wiced_result_t netx_duo_returns[] =
     [NX_PARAMETER_ERROR     ] = WICED_TCPIP_BADARG,
 };
 
+#ifndef WICED_TCP_TX_RETRIES
+#define WICED_TCP_TX_RETRIES       WICED_DEFAULT_TCP_TX_RETRIES
+#endif
+#ifndef WICED_TCP_TX_DEPTH_QUEUE
+#define WICED_TCP_TX_DEPTH_QUEUE    WICED_DEFAULT_TCP_TX_DEPTH_QUEUE
+#endif
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
 wiced_result_t wiced_tcp_server_start( wiced_tcp_server_t* tcp_server, wiced_interface_t interface, uint16_t port, wiced_socket_callback_t connect_callback, wiced_socket_callback_t receive_callback, wiced_socket_callback_t disconnect_callback)
 {
-    int            socket_index;
+    int socket_index;
     wiced_result_t status;
 
     tcp_server->interface = interface;
@@ -200,10 +207,9 @@ wiced_result_t wiced_tcp_server_disconnect_socket( wiced_tcp_server_t* tcp_serve
 {
     UINT result;
 
-    if ( socket->socket.nx_tcp_socket_state <= NX_TCP_CLOSE_WAIT )
-    {
-        nx_tcp_socket_disconnect( &socket->socket, NX_NO_WAIT );
-    }
+    UNUSED_PARAMETER( tcp_server );
+
+    nx_tcp_socket_disconnect( &socket->socket, 0);
 
     nx_tcp_server_socket_unaccept( &socket->socket );
 
@@ -787,6 +793,11 @@ wiced_result_t wiced_tcp_enable_keepalive( wiced_tcp_socket_t* socket, uint16_t 
     UNUSED_PARAMETER( probes );
     UNUSED_PARAMETER( time );
 
+    socket->socket.nx_tcp_socket_keepalive_enabled = WICED_TRUE;
+    socket->socket.nx_tcp_socket_keepalive_retries = probes;
+    socket->socket.nx_tcp_socket_keepalive_timeout = time;
+
+
     return WICED_TCPIP_UNSUPPORTED;
 }
 
@@ -953,6 +964,7 @@ wiced_result_t wiced_ip_get_ipv6_address( wiced_interface_t interface, wiced_ip_
     return WICED_TCPIP_ERROR;
 }
 
+
 wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t port, wiced_interface_t interface )
 {
     UINT result;
@@ -1078,6 +1090,8 @@ wiced_result_t wiced_multicast_leave( wiced_interface_t interface, const wiced_i
 
 wiced_result_t wiced_hostname_lookup( const char* hostname, wiced_ip_address_t* address, uint32_t timeout_ms )
 {
+    wiced_assert("Bad args", (hostname != NULL) && (address != NULL));
+
     WICED_LINK_CHECK( &IP_HANDLE( WICED_STA_INTERFACE ) );
 
     /* Check if address is a string representation of a IPv4 address i.e. xxx.xxx.xxx.xxx */

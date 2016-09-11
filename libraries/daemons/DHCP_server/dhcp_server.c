@@ -20,6 +20,20 @@
  *                      Macros
  ******************************************************/
 
+#ifdef DEBUG
+#ifdef UNIT_TESTER
+#define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )  { if (expr) { return; }}
+#define DHCP_CHECK_PARAMS( expr, retval )        { if (expr) { return retval; }}
+#else /* ifdef UNIT_TESTER */
+#define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )  { if (expr) { wiced_assert( "", 0==1 ); return; }}
+#define DHCP_CHECK_PARAMS( expr, retval )        { if (expr) { wiced_assert( "", 0==1 ); return retval; }}
+#endif /* ifdef UNIT_TESTER */
+#else /* ifdef DEBUG */
+#define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )
+#define DHCP_CHECK_PARAMS( expr, retval )
+#endif /* ifdef DEBUG */
+
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -112,6 +126,8 @@ static void           ipv4_to_string                   ( char* buffer, uint32_t 
 
 wiced_result_t wiced_start_dhcp_server(wiced_dhcp_server_t* server, wiced_interface_t interface)
 {
+    DHCP_CHECK_PARAMS( (server == NULL) || ( (interface != WICED_STA_INTERFACE) && (interface != WICED_AP_INTERFACE) && (interface != WICED_CONFIG_INTERFACE) ), WICED_BADARG );
+
     server->interface = interface;
 
     /* Clear cache */
@@ -128,6 +144,8 @@ wiced_result_t wiced_start_dhcp_server(wiced_dhcp_server_t* server, wiced_interf
 
 wiced_result_t wiced_stop_dhcp_server(wiced_dhcp_server_t* server)
 {
+    DHCP_CHECK_PARAMS( (server == NULL), WICED_BADARG );
+
     server->quit = WICED_TRUE;
     if ( wiced_rtos_is_current_thread( &server->thread ) != WICED_SUCCESS )
     {
@@ -486,11 +504,11 @@ static wiced_result_t add_client_to_cache( const wiced_mac_t* client_mac_address
 static void ipv4_to_string( char* buffer, uint32_t ipv4_address )
 {
     uint8_t* ip = (uint8_t*)&ipv4_address;
-    utoa(ip[0], &buffer[0], 3, 3);
+    unsigned_to_decimal_string(ip[0], &buffer[0], 3, 3);
     buffer[3] = '.';
-    utoa(ip[1], &buffer[4], 3, 3);
+    unsigned_to_decimal_string(ip[1], &buffer[4], 3, 3);
     buffer[7] = '.';
-    utoa(ip[2], &buffer[8], 3, 3);
+    unsigned_to_decimal_string(ip[2], &buffer[8], 3, 3);
     buffer[11] = '.';
-    utoa(ip[3], &buffer[12], 3, 3);
+    unsigned_to_decimal_string(ip[3], &buffer[12], 3, 3);
 }

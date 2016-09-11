@@ -194,7 +194,7 @@ struct _ssl_extension
 {
     uint16_t id;
     uint16_t used;
-    int sz;
+    uint16_t sz;
     uint8_t data[MAX_EXTENSION_DATA+1];
 };
 

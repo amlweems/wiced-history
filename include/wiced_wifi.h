@@ -543,6 +543,27 @@ static inline wiced_result_t wiced_wifi_get_ap_info( wiced_bss_info_t* ap_info, 
 
 /** @} */
 
+/*****************************************************************************/
+/** @addtogroup utility       Utility functions
+ *  @ingroup wifi
+ *  WICED Utility Wi-Fi functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+
+/**
+ ******************************************************************************
+ * Prints partial details of a scan result on a single line
+ *
+ * @param[in] record  A pointer to the wiced_scan_result_t record
+ *
+ */
+void print_scan_result( wiced_scan_result_t* record );
+
+/** @} */
+
 /******************************************************
  *           Inline Function Implementations
  ******************************************************/

@@ -35,6 +35,12 @@ extern "C" {
  *                   Enumerations
  ******************************************************/
 
+typedef enum
+{
+    AES_DECRYPT = 0,
+    AES_ENCRYPT = 1,
+} aes_mode_type_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -164,8 +170,12 @@ typedef struct _x509_name
 
 typedef struct _x509_time
 {
-    int32_t year, mon, day;
-    int32_t hour, min, sec;
+    uint16_t year;
+    uint8_t  mon;
+    uint8_t  day;
+    uint8_t  hour;
+    uint8_t  min;
+    uint8_t  sec;
 } x509_time;
 
 typedef struct _x509_cert

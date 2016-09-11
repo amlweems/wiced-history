@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include "platform_dct.h"
 #include "wiced_result.h"
+#include "wiced_dct_common.h"
+#include "wiced_waf_common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,17 +40,14 @@ extern "C" {
 #define DEFINE_APP_DCT( type ) const type _app_dct =
 #endif /* #if defined(__IAR_SYSTEMS_ICC__) */
 
-#define shared_waf_api ( (const shared_waf_api_t*)(&shared_api_addr_loc) )
-
-#ifndef OFFSETOF
-#define OFFSETOF( type, member )  ( (uintptr_t)&((type *)0)->member )
-#endif /* OFFSETOF */
-
 /******************************************************
  *                    Constants
  ******************************************************/
 
 #define WICED_FACTORY_RESET_MAGIC_VALUE  ( 0xA6C5A54E )
+#define WICED_FRAMEWORK_LOAD_ALWAYS      ( 0x0 )
+#define WICED_FRAMEWORK_LOAD_ONCE        ( 0x1 )
+
 
 /******************************************************
  *                   Enumerations
@@ -75,18 +74,6 @@ typedef enum boot_status_enum
     BOOTLOADER_BOOT_STATUS_DATA_CONNECTIVITY_OK    = 0x04
 } boot_status_t;
 
-/**
- * DCT section
- */
-typedef enum
-{
-    DCT_APP_SECTION,
-    DCT_SECURITY_SECTION,
-    DCT_MFG_INFO_SECTION,
-    DCT_WIFI_CONFIG_SECTION,
-    DCT_INTERNAL_SECTION, /* Do not use in apps */
-} dct_section_t;
-
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -112,30 +99,9 @@ typedef struct
     } type;
 } platform_copy_src_t;
 
-/**
- * Structure of shared APIs between bootloader and application
- */
-typedef struct
-{
-    void           (*platform_perform_factory_reset)     ( void );
-    void           (*platform_start_ota_upgrade)         ( void );
-    void           (*platform_reboot)                    ( void );
-    wiced_result_t (*platform_erase_app)                 ( void );
-    wiced_result_t (*platform_write_app_chunk)           ( uint32_t offset, const uint8_t* data, uint32_t size );
-    wiced_result_t (*platform_set_app_valid_bit)         ( app_valid_t validity );
-    wiced_result_t (*platform_read_wifi_firmware)        ( uint32_t address, void* buffer, uint32_t requested_size, uint32_t* read_size );
-    void           (*platform_start_app)                 ( uint32_t vector_table_address );
-    wiced_result_t (*platform_copy_external_to_internal) ( void* destination, platform_copy_src_t* copy_src, uint32_t size );
-    wiced_result_t (*platform_dct_write)                 ( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size );
-    wiced_result_t (*platform_dct_read_with_copy)        ( void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size );
-    void*          (*platform_get_current_dct_address)   (  dct_section_t section );
-} shared_waf_api_t;
-
 /******************************************************
  *                 Global Variables
  ******************************************************/
-
-extern const shared_waf_api_t shared_api_addr_loc; /* from link script */
 
 /******************************************************
  *               Function Declarations
@@ -225,43 +191,24 @@ static inline  wiced_result_t wiced_dct_write( const void* info_ptr, dct_section
  */
 /*****************************************************************************/
 
-/** Overwrites the application with the factory reset application
+/** Sets the next booting application after reset
  *
- * Wipes out the current application and restores the default factory application and additionally resets
- * all values stored in the DCT to factory defaults, then reboots. \p
+ * Updates the boot details to point to the specified application ID. \p
  *
- * Accidental usage of this function is protected by a magic number. If the
- * magic number argument does not match WICED_FACTORY_RESET_MAGIC_VALUE,
- * the function fails and normal program execution continues
+ * A valid application must exist in the specified application. If the applications
+ * is not valid, the behaviour is undetermined.
  *
- * @warning The current application immediately terminates when this function is called.
- *          The function does not return, and ALL state for the current application
- *          is discarded. A reboot into the factory reset application will be performed
- *          when the function has finished
+ * @warning To run the new a reboot is required.
  *
- * @param[in] magic_value : A magic value that must match WICED_FACTORY_RESET_MAGIC_VALUE for
- *                          the function to complete successfully
+ * @param[in] app_id   : Application ID.
+ * @param[in] load_once: A flag to indicate wether to  reload the application every time or just
+ *                       once. A RAM application will need to be reloaded every time while
+ *                       applications running from flash can be loaded just once.
  *
- * @return Does not return!
+ * @return Wiced reuslt code
  *
  */
-static inline void wiced_framework_perform_factory_reset( uint32_t magic_value );
-
-
-/** Starts the Over-The-Air upgrade application
- *
- * Starts the Over-The-Air (OTA) upgrade application.
- * This gives the user the opportunity to upgrade the application.
- * Once the OTA app has finished, the system reboots
- *
- * @warning The current application immediately terminates when this function is called.
- *          The function does not return, and ALL state for the current application is
- *          discarded. A reboot will be performed when the function has finished
- *
- *  @return Does not return!
- */
-static inline void wiced_framework_start_ota_upgrade( void );
-
+static inline wiced_result_t wiced_framework_set_boot( uint8_t app_id, char load_once );
 
 /** Reboots the system
  *
@@ -273,127 +220,80 @@ static inline void wiced_framework_start_ota_upgrade( void );
 static inline void wiced_framework_reboot( void );
 
 
-/** Erases the main application.
+/** Erases the application from external flash.
  *
- * Causes a soft-reset of the processor, which will restart the program
- * from the boot vector. The function does not return.
+ * Erase the full application content from external flash.
  *
- * @warning Do not call this function from the main application. That would
- *          result in the function returning to a wiped area of flash.
- *          Function must only be called from a bootloader or application
- *          running in RAM.
+ * @warning Applications must be erased before being rewritten.
  *
- *  @return Wiced reuslt code
+ * @param[in] app_id   : Application ID.
+ *
+ * @return Wiced reuslt code
  */
-static inline wiced_result_t wiced_framework_erase_app( void );
+static inline wiced_result_t wiced_framework_app_erase( uint8_t app_id );
 
-
-/** Writes a piece of a main application to flash
+/** Writes a piece of the application to external flash
  *
- * Write a piece of a main application into internal flash.
+ * Write a piece of a the application into external flash.
  *
- * @warning This function should only be called by a bootloader or an
- *          application running from RAM. If called from a main application
- *          then unpredictable execution might result due to the application
- *          containing parts of two different versions
+ * @warning Applications must be erased before being rewritten. To fully erase an
+ *          application call wiced_framework_erase_app. Applications can also be
+ *          erased on go by passing last_erased_sector pointer. However when erasing
+ *          on the go, writing to the file must be sequential with no gaps.
  *
+ * @param[in] app_id : Application ID.
  * @param[in] offset : The offset from the start of the application in bytes
- * @param[in] data : The data to be written
- * @param[in] size : The number of bytes to be written
+ * @param[in] data   : The data to be written
+ * @param[in] size   : The number of bytes to be written
+ * @param[in/out] last_erased_sector : Holds the last erased sector.
  *
- *                          the function to complete successfully
  *
  *  @return Wiced reuslt code
  */
-static inline wiced_result_t  wiced_framework_write_app_chunk( uint32_t offset, const uint8_t* data, uint32_t size );
+static inline wiced_result_t  wiced_framework_app_write_chunk( uint8_t app_id, uint32_t offset, const uint8_t* data, uint32_t size, uint32_t* last_erased_sector );
 
-
-/** Sets the bit in the DCT to indicate that the main application is valid.
+/** Reads a piece of the application from external flash
  *
- * This function is used when overwriting the main application in internal
- * flash memory. e.g. for Over-the-air upgrade. When the application has
- * been successfully completed writing, this function should be called
- * to enable the application. This guards against corrupted or incomplete
- * application writes.
+ * Reads a piece of the application from external flash.
  *
- * @note This function should normally only be called by a bootloader or an
- *       application running from RAM. If a main application sets this to
- *       zero, then it will not boot on the next system reset.
- *
- * @param[in] val : The value to be written to the "app_valid" bit.
- *                  1 = application is valid, 0 = invalid application.
+ * @param[in] app_id : Application ID.
+ * @param[in] offset : The offset from the start of the application in bytes
+ * @param[in] data   : The buffer for the data to be read
+ * @param[in] size   : The number of bytes to be read
  *
  *  @return Wiced reuslt code
  */
-static inline wiced_result_t wiced_framework_set_app_valid_bit( app_valid_t validity );
+static inline wiced_result_t  wiced_framework_app_read_chunk( uint8_t app_id, uint32_t offset, uint8_t* data, uint32_t size );
 
-
-/** Reads the Wifi Firmware from the Factory reset image
+/** Returns the current size of the application.
  *
- * This function reads a Wifi Firmware image from external flash.
- * It allows applications such as Over-the-air upgrade to boot the
- * Wifi system without being made larger by containing the image in the app.
- * The firmware image that is read should be the one contained in the
- * factory reset application.
+ * Returns the current size of the application.
  *
- * @note This function is normally only called by a bootloader or an
- *       application running from RAM.
+ * @warning The size of the application is always aligned to sector boundaries. Application
+ *          size may be different from actual size on a PC.
  *
- * @param[in] offset : The offset into the firmware image
- * @param[in] buffer : buffer to be filled
- * @param[in] requested_size : maximum number of bytes to read
- * @param[out] read_size : actual number of bytes that were read
+ * @param[in] app_id : Application ID.
+ * @param[out] size  : The size allocated to the application in bytes.
  *
  *  @return Wiced reuslt code
  */
-static inline wiced_result_t wiced_framework_read_wifi_firmware( uint32_t offset, void* buffer, uint32_t requested_size, uint32_t* read_size );
+static inline wiced_result_t  wiced_framework_app_get_size( uint8_t app_id, uint32_t* size );
 
-
-/** Starts an application
+/** Sets the current size of the application.
  *
- * This function jumps to a the start of an application.
+ * Sets the current size of the application.
  *
- * @param entry_address - the address of the first instruction
- *                        for the application
+ * @warning Before updating the application, the size must be set to match the new size of
+ *          the application. The size of the application is always aligned to sector
+ *          boundaries. Application size may be different from actual size on a PC. If the
+ *          provided size is smaller than the current size, the current size is maintained.
  *
- * @note This function is normally only called by a bootloader or an
- *       application running from RAM.
- * @warning This function does not return.
+ * @param[in] app_id : Application ID.
+ * @param[in] size   : The new size allocated to the application in bytes.
  *
- *  @return Function does not return!
+ *  @return Wiced reuslt code
  */
-static inline void wiced_framework_start_app( uint32_t entry_address );
-
-
-/** Copy data from external memory into internal memory
- *
- * This function allows the bootloader or other apps to copy
- * data from external (serial flash) memory into internal memory.
- *
- *
- * @param[in] destination : the destination internal memory address. Can be in flash or RAM.
- * @param[in] copy_src : a structure containing the source location details.
- * @param[in] size     : the number of bytes to copy.
- *
- *  @return a Wiced result code
- */
-static inline wiced_result_t wiced_framework_copy_external_to_internal( void* destination, platform_copy_src_t* copy_src, uint32_t size );
-
-
-/** Deprecated
- *
- * @deprecated Please use wiced_framework_perform_factory_reset( ) instead.
- *
- */
-static inline void DEPRECATE( wiced_restore_factory_image( uint32_t magic_value ) );
-
-
-/** Deprecated
- *
- * @deprecated Please use wiced_framework_start_ota_upgrade( ) instead.
- *
- */
-static inline void DEPRECATE( wiced_start_ota_upgrade( void ) );
+static inline wiced_result_t  wiced_framework_app_set_size( uint8_t app_id, uint32_t size );
 
 /** @} */
 
@@ -531,71 +431,47 @@ extern wiced_result_t DEPRECATE( wiced_dct_write_app_section( const void* app_dc
 
 static inline  wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
 {
-    return shared_waf_api->platform_dct_write( info_ptr, section, offset, size );
+    return wiced_dct_update( info_ptr, section, offset, size );
 }
 
-static inline void wiced_framework_perform_factory_reset( uint32_t magic_value )
+static inline wiced_result_t wiced_framework_set_boot( uint8_t app_id, char load_once)
 {
-    if ( magic_value == WICED_FACTORY_RESET_MAGIC_VALUE )
-    {
-        shared_waf_api->platform_perform_factory_reset( );
-    }
-}
-
-static inline void wiced_framework_start_ota_upgrade( void )
-{
-    shared_waf_api->platform_start_ota_upgrade( );
+    return wiced_waf_app_set_boot( app_id, load_once );
 }
 
 static inline void wiced_framework_reboot( void )
 {
-    shared_waf_api->platform_reboot( );
+    wiced_waf_reboot( );
 }
 
-static inline wiced_result_t wiced_framework_erase_app( void )
+static inline wiced_result_t wiced_framework_app_erase( uint8_t app_id )
 {
-    return shared_waf_api->platform_erase_app( );
+    return wiced_waf_app_erase( app_id );
 }
 
-static inline wiced_result_t  wiced_framework_write_app_chunk( uint32_t offset, const uint8_t* data, uint32_t size )
+static inline wiced_result_t  wiced_framework_app_write_chunk( uint8_t app_id, uint32_t offset, const uint8_t* data, uint32_t size, uint32_t * last_erased_sector )
 {
-    return shared_waf_api->platform_write_app_chunk( offset, data, size );
+    return wiced_waf_app_write_chunk( app_id, offset, data, size, last_erased_sector);
 }
 
-static inline wiced_result_t wiced_framework_set_app_valid_bit( app_valid_t validity )
+static inline wiced_result_t  wiced_framework_app_read_chunk( uint8_t app_id, uint32_t offset, uint8_t* data, uint32_t size )
 {
-    return shared_waf_api->platform_set_app_valid_bit( validity );
+    return wiced_waf_app_read_chunk( app_id, offset, data, size);
 }
 
-static inline wiced_result_t wiced_framework_read_wifi_firmware( uint32_t address, void* buffer, uint32_t requested_size, uint32_t* read_size )
+static inline wiced_result_t  wiced_framework_app_get_size( uint8_t app_id, uint32_t* size )
 {
-    return shared_waf_api->platform_read_wifi_firmware( address, buffer, requested_size, read_size );
+    return wiced_waf_app_get_size( app_id, size);
 }
 
-static inline void wiced_framework_start_app( uint32_t entry_address )
+static inline wiced_result_t  wiced_framework_app_set_size( uint8_t app_id, uint32_t size )
 {
-    shared_waf_api->platform_start_app( entry_address );
-}
-
-static inline wiced_result_t wiced_framework_copy_external_to_internal( void* destination, platform_copy_src_t* copy_src, uint32_t size )
-{
-    return shared_waf_api->platform_copy_external_to_internal( destination, copy_src, size );
+    return wiced_waf_app_set_size( app_id, size);
 }
 
 /*****************************************************************************/
 /**  Deprecated functions                                                   **/
 /*****************************************************************************/
-
-static inline void wiced_restore_factory_image( uint32_t magic_value )
-{
-    wiced_framework_perform_factory_reset( magic_value );
-}
-
-static inline void wiced_start_ota_upgrade( void )
-{
-    wiced_framework_start_ota_upgrade( );
-}
-
 #ifdef __cplusplus
 } /*extern "C" */
 #endif

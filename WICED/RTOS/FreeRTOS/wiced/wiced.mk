@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Wiced_FreeRTOS_Interface
+NAME := WICED_FreeRTOS_Interface
 
 GLOBAL_INCLUDES := .
 

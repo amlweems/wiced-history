@@ -381,8 +381,8 @@ UINT        _nxe_ftp_server_start(NX_FTP_SERVER *ftp_server_ptr);
 UINT        _nx_ftp_server_start(NX_FTP_SERVER *ftp_server_ptr);
 UINT        _nxe_ftp_server_stop(NX_FTP_SERVER *ftp_server_ptr);
 UINT        _nx_ftp_server_stop(NX_FTP_SERVER *ftp_server_ptr);
-VOID        _nx_ftp_server_response(NX_TCP_SOCKET *socket, NX_PACKET *packet_ptr, CHAR *reply_code, CHAR *message);
-VOID        _nx_ftp_server_directory_response(NX_TCP_SOCKET *socket, NX_PACKET *packet_ptr, CHAR *reply_code, CHAR *message, CHAR *directory);
+VOID        _nx_ftp_server_response(NX_TCP_SOCKET *socket, NX_PACKET *packet_ptr, const CHAR *reply_code, const CHAR *message);
+VOID        _nx_ftp_server_directory_response(NX_TCP_SOCKET *socket, NX_PACKET *packet_ptr, const CHAR *reply_code, const CHAR *message, const CHAR *directory);
 VOID        _nx_ftp_server_thread_entry(ULONG ftp_server_address);
 VOID        _nx_ftp_server_command_process(NX_FTP_SERVER *ftp_server_ptr);
 VOID        _nx_ftp_server_connect_process(NX_FTP_SERVER *ftp_server_ptr);
@@ -397,6 +397,12 @@ VOID        _nx_ftp_server_timeout(ULONG ftp_server_address);
 VOID        _nx_ftp_server_timeout_processing(NX_FTP_SERVER *ftp_server_ptr);
 VOID        _nx_ftp_server_control_disconnect(NX_TCP_SOCKET *control_socket_ptr);
 VOID        _nx_ftp_server_control_disonnect_processing(NX_FTP_SERVER *ftp_server_ptr);
+
+#ifdef  NX_FTP_ALTERNATE_SNPRINTF
+int     _nx_ftp_snprintf(char *str, size_t size, const char *format, ...);
+#else
+#define _nx_ftp_snprintf snprintf
+#endif /* ifdef  NX_FTP_ALTERNATE_SNPRINTF */
 
 #endif  /* NX_FTP_SOURCE_CODE */
 

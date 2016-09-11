@@ -129,11 +129,11 @@ VOID        _tx_queue_initialize(VOID);
 
 /* Define queue management function prototypes.  */
 
-UINT        _tx_queue_create(TX_QUEUE *queue_ptr, CHAR *name_ptr, UINT message_size, 
+UINT        _tx_queue_create(TX_QUEUE *queue_ptr, const CHAR *name_ptr, UINT message_size,
                         VOID *queue_start, ULONG queue_size);
 UINT        _tx_queue_delete(TX_QUEUE *queue_ptr);
 UINT        _tx_queue_flush(TX_QUEUE *queue_ptr);
-UINT        _tx_queue_info_get(TX_QUEUE *queue_ptr, CHAR **name, ULONG *enqueued, ULONG *available_storage,
+UINT        _tx_queue_info_get(TX_QUEUE *queue_ptr, const CHAR **name, ULONG *enqueued, ULONG *available_storage,
                     TX_THREAD **first_suspended, ULONG *suspended_count, TX_QUEUE **next_queue);
 UINT        _tx_queue_performance_info_get(TX_QUEUE *queue_ptr, ULONG *messages_sent, ULONG *messages_received,
                     ULONG *empty_suspensions, ULONG *full_suspensions, ULONG *full_errors, ULONG *timeouts);
@@ -149,11 +149,11 @@ VOID        _tx_queue_cleanup(TX_THREAD *thread_ptr);
 /* Define error checking shells for API services.  These are only referenced by the 
    application.  */
 
-UINT        _txe_queue_create(TX_QUEUE *queue_ptr, CHAR *name_ptr, UINT message_size, 
+UINT        _txe_queue_create(TX_QUEUE *queue_ptr, const CHAR *name_ptr, UINT message_size,
                         VOID *queue_start, ULONG queue_size, UINT queue_control_block_size);
 UINT        _txe_queue_delete(TX_QUEUE *queue_ptr);
 UINT        _txe_queue_flush(TX_QUEUE *queue_ptr);
-UINT        _txe_queue_info_get(TX_QUEUE *queue_ptr, CHAR **name, ULONG *enqueued, ULONG *available_storage,
+UINT        _txe_queue_info_get(TX_QUEUE *queue_ptr, const CHAR **name, ULONG *enqueued, ULONG *available_storage,
                     TX_THREAD **first_suspended, ULONG *suspended_count, TX_QUEUE **next_queue);
 UINT        _txe_queue_prioritize(TX_QUEUE *queue_ptr);
 UINT        _txe_queue_receive(TX_QUEUE *queue_ptr, VOID *destination_ptr, ULONG wait_option);

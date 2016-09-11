@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "wiced_result.h"
 #include "wiced_utilities.h"
 
 #ifdef __cplusplus

@@ -53,7 +53,7 @@ typedef enum IRQn
   DmaDoneInt_IRQn              = 16,
   Reserved033_IRQn             = 17,
   Reserved034_IRQn             = 18,
-  Reserved035_IRQn             = 19,
+  Wake_Up_IRQn                 = 19,
   GPIOA_BANK0_IRQn             = 20,
   Reserved037_IRQn             = 21,
   Reserved038_IRQn             = 22,

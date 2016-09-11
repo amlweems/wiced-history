@@ -101,13 +101,13 @@ UINT  _nx_packet_allocate(NX_PACKET_POOL *pool_ptr,  NX_PACKET **packet_ptr,
                             ULONG packet_type, ULONG wait_option);
 UINT  _nx_packet_copy(NX_PACKET *packet_ptr, NX_PACKET **new_packet_ptr, 
                             NX_PACKET_POOL *pool_ptr, ULONG wait_option);
-UINT  _nx_packet_data_append(NX_PACKET *packet_ptr, VOID *data_start, ULONG data_size,
+UINT  _nx_packet_data_append(NX_PACKET *packet_ptr, const VOID *data_start, ULONG data_size,
                             NX_PACKET_POOL *pool_ptr, ULONG wait_option);
 UINT  _nx_packet_data_extract_offset(NX_PACKET *packet_ptr, ULONG offset, VOID *buffer_start, 
                                      ULONG buffer_length, ULONG *bytes_copied);
 UINT  _nx_packet_data_retrieve(NX_PACKET *packet_ptr, VOID *buffer_start, ULONG *bytes_copied);
 UINT  _nx_packet_length_get(NX_PACKET *packet_ptr, ULONG *length);
-UINT  _nx_packet_pool_create(NX_PACKET_POOL *pool_ptr, CHAR *name, ULONG payload_size, 
+UINT  _nx_packet_pool_create(NX_PACKET_POOL *pool_ptr, const CHAR *name, ULONG payload_size,
                             VOID *memory_ptr, ULONG memory_size);
 UINT  _nx_packet_pool_delete(NX_PACKET_POOL *pool_ptr);
 UINT  _nx_packet_pool_info_get(NX_PACKET_POOL *pool_ptr, ULONG *total_packets, ULONG *free_packets, 
@@ -126,11 +126,11 @@ UINT  _nxe_packet_allocate(NX_PACKET_POOL *pool_ptr,  NX_PACKET **packet_ptr,
                             ULONG packet_type, ULONG wait_option);
 UINT  _nxe_packet_copy(NX_PACKET *packet_ptr, NX_PACKET **new_packet_ptr, 
                             NX_PACKET_POOL *pool_ptr, ULONG wait_option);
-UINT  _nxe_packet_data_append(NX_PACKET *packet_ptr, VOID *data_start, ULONG data_size,
+UINT  _nxe_packet_data_append(NX_PACKET *packet_ptr, const VOID *data_start, ULONG data_size,
                             NX_PACKET_POOL *pool_ptr, ULONG wait_option);
 UINT  _nxe_packet_data_retrieve(NX_PACKET *packet_ptr, VOID *buffer_start, ULONG *bytes_copied);
 UINT  _nxe_packet_length_get(NX_PACKET *packet_ptr, ULONG *length);
-UINT  _nxe_packet_pool_create(NX_PACKET_POOL *pool_ptr, CHAR *name, ULONG payload_size, 
+UINT  _nxe_packet_pool_create(NX_PACKET_POOL *pool_ptr, const CHAR *name, ULONG payload_size,
                             VOID *memory_ptr, ULONG memory_size, UINT pool_control_block_size);
 UINT  _nxe_packet_pool_delete(NX_PACKET_POOL *pool_ptr);
 UINT  _nxe_packet_pool_info_get(NX_PACKET_POOL *pool_ptr, ULONG *total_packets, ULONG *free_packets, 

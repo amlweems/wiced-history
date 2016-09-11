@@ -198,12 +198,12 @@ UINT  _nx_ip_address_get(NX_IP *ip_ptr, ULONG *ip_address, ULONG *network_mask);
 UINT  _nx_ip_address_set(NX_IP *ip_ptr, ULONG ip_address, ULONG network_mask);
 UINT  _nx_ip_interface_address_get(NX_IP *ip_ptr, ULONG interface_index, ULONG *ip_address, ULONG *network_mask);
 UINT  _nx_ip_interface_address_set(NX_IP *ip_ptr, ULONG interface_index, ULONG ip_address, ULONG network_mask);
-UINT  _nx_ip_interface_info_get(NX_IP *ip_ptr, UINT interface_index, CHAR **interface_name, ULONG *ip_address, 
+UINT  _nx_ip_interface_info_get(NX_IP *ip_ptr, UINT interface_index, const CHAR **interface_name, ULONG *ip_address,
                                 ULONG *network_mask, ULONG *mtu_size, ULONG *phsyical_address_msw, 
                                 ULONG *physical_address_lsw);
 UINT  _nx_ip_interface_status_check(NX_IP *ip_ptr, UINT interface_index, ULONG needed_status, ULONG *actual_status, 
                                     ULONG wait_option);
-UINT  _nx_ip_create(NX_IP *ip_ptr, CHAR *name, ULONG ip_address, ULONG network_mask,
+UINT  _nx_ip_create(NX_IP *ip_ptr, const CHAR *name, ULONG ip_address, ULONG network_mask,
                             NX_PACKET_POOL *default_pool, 
                             VOID (*ip_link_driver)(NX_IP_DRIVER *),
                             VOID *memory_ptr, ULONG memory_size, UINT priority);
@@ -224,7 +224,7 @@ UINT  _nx_ip_info_get(NX_IP *ip_ptr, ULONG *ip_total_packets_sent, ULONG *ip_tot
                             ULONG *ip_invalid_packets, ULONG *ip_receive_packets_dropped,
                             ULONG *ip_receive_checksum_errors, ULONG *ip_send_packets_dropped,
                             ULONG *ip_total_fragments_sent, ULONG *ip_total_fragments_received);
-UINT  _nx_ip_interface_attach(NX_IP *ip_ptr, CHAR *interface_name, ULONG ip_address, ULONG network_mask, VOID(*ip_link_driver)(struct NX_IP_DRIVER_STRUCT *));
+UINT  _nx_ip_interface_attach(NX_IP *ip_ptr, const CHAR *interface_name, ULONG ip_address, ULONG network_mask, VOID(*ip_link_driver)(struct NX_IP_DRIVER_STRUCT *));
 UINT  _nx_ip_raw_packet_disable(NX_IP *ip_ptr);
 UINT  _nx_ip_raw_packet_enable(NX_IP *ip_ptr);
 UINT  _nx_ip_raw_packet_receive(NX_IP *ip_ptr, NX_PACKET **packet_ptr, ULONG wait_option);
@@ -261,7 +261,7 @@ UINT  _nxe_ip_address_get(NX_IP *ip_ptr, ULONG *ip_address, ULONG *network_mask)
 UINT  _nxe_ip_address_set(NX_IP *ip_ptr, ULONG ip_address, ULONG network_mask);
 UINT  _nxe_ip_interface_address_get(NX_IP *ip_ptr, ULONG interface_index, ULONG *ip_address, ULONG *network_mask);
 UINT  _nxe_ip_interface_address_set(NX_IP *ip_ptr, ULONG interface_index, ULONG ip_address, ULONG network_mask);
-UINT  _nxe_ip_create(NX_IP *ip_ptr, CHAR *name, ULONG ip_address, ULONG network_mask,
+UINT  _nxe_ip_create(NX_IP *ip_ptr, const CHAR *name, ULONG ip_address, ULONG network_mask,
                             NX_PACKET_POOL *default_pool, 
                             VOID (*ip_link_driver)(NX_IP_DRIVER *),
                             VOID *memory_ptr, ULONG memory_size, UINT priority, UINT ip_control_block_size);

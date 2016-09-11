@@ -221,6 +221,8 @@ extern wwd_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, int
  */
 extern wwd_result_t host_buffer_check_leaked( void );
 
+wwd_result_t host_buffer_add_application_defined_pool( void* pool_in, wwd_buffer_dir_t direction );
+
 
 /** @} */
 

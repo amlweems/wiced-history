@@ -1,2 +1,2 @@
-WICED Version: 3.1.0
-8fe97231df3ae219b8feb8e85ebb89b630c81b80
+WICED Version: 3.1.1
+2f97f377ac14e4cc88aa021e58307116e7ca37f3

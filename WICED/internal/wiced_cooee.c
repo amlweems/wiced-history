@@ -163,7 +163,7 @@ wiced_result_t wiced_wifi_cooee( wiced_cooee_workspace_t* cooee_workspace )
     uint8_t             cooee_nonce[13];
     tlv8_data_t*        security_key_tlv;
     uint32_t            content_length;
-    uint32_t            aes_key_rounds[60]; /* 4 * (AES_MAXROUNDS + 1) */
+    aes_context_t       aes_ctx;
     tlv8_data_t*        tlv;
     wiced_mac_t         bogus_scan_mac = {.octet={0,0,0,0,0,0}};
     wiced_bool_t        initiator_details_printed;
@@ -239,18 +239,16 @@ try_cooee_again:
     content_length =  (uint32_t) ( ( ( cooee_header->header1 & 0x0F ) << 8 ) + cooee_header->header2 - 10 );
 
     /* Decrypt the data */
-    memset( aes_key_rounds, 0, sizeof( aes_key_rounds ) );
-
     {
         uint8_t* cooee_key;
         wiced_dct_read_lock( (void**) &cooee_key, WICED_FALSE, DCT_SECURITY_SECTION, offsetof(platform_dct_security_t, cooee_key), COOEE_KEY_SIZE );
 
-        rijndaelKeySetupEnc( aes_key_rounds, cooee_key, 128 );
+        aes_setkey_dec( &aes_ctx, cooee_key, 128 );
 
         wiced_dct_read_unlock( cooee_key, WICED_FALSE );
     }
 
-    if (aes_ccm_decrypt( aes_key_rounds, 16, cooee_nonce, 10, (uint8_t*) cooee_header, content_length, &workspace->received_cooee_data[10], &workspace->received_cooee_data[10] ) != 0)
+    if (aes_decrypt_ccm( &aes_ctx, content_length, 10, cooee_nonce, (uint8_t*) cooee_header, &workspace->received_cooee_data[10], &workspace->received_cooee_data[10] ) != 0)
     {
         WPRINT_WICED_INFO( ("Cooee payload decryption failed\n") );
         goto return_with_error;

@@ -15,6 +15,7 @@
 #include "wifi_nvram_image.h"
 #include "platform/wwd_resource_interface.h"
 #include "wiced_resource.h"
+#include "wwd_assert.h"
 
 /******************************************************
  *                      Macros
@@ -65,7 +66,12 @@ wwd_result_t host_platform_resource_size( wwd_resource_t resource, uint32_t* siz
 {
     if ( resource == WWD_RESOURCE_WLAN_FIRMWARE )
     {
+#ifndef NO_WIFI_FIRMWARE
         *size_out = (uint32_t) resource_get_size( &wifi_firmware_image );
+#else
+        wiced_assert("Request firmware in a no wifi firmware application", 0 == 1);
+        *size_out = 0;
+#endif
     }
     else
     {
@@ -79,7 +85,12 @@ wwd_result_t host_platform_resource_read_direct( wwd_resource_t resource, const 
 {
     if ( resource == WWD_RESOURCE_WLAN_FIRMWARE )
     {
+#ifndef NO_WIFI_FIRMWARE
         *ptr_out = wifi_firmware_image.val.mem.data;
+#else
+        wiced_assert("Request firmware in a no wifi firmware application", 0 == 1);
+        *ptr_out = NULL;
+#endif
     }
     else
     {

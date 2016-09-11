@@ -113,11 +113,11 @@ VOID        _tx_event_flags_initialize(VOID);
 /* Define event flags management function prototypes.  */
 
 VOID        _tx_event_flags_cleanup(TX_THREAD *thread_ptr);
-UINT        _tx_event_flags_create(TX_EVENT_FLAGS_GROUP *group_ptr, CHAR *name_ptr);
+UINT        _tx_event_flags_create(TX_EVENT_FLAGS_GROUP *group_ptr, const CHAR *name_ptr);
 UINT        _tx_event_flags_delete(TX_EVENT_FLAGS_GROUP *group_ptr);
 UINT        _tx_event_flags_get(TX_EVENT_FLAGS_GROUP *group_ptr, ULONG requested_flags,
                     UINT get_option, ULONG *actual_flags_ptr, ULONG wait_option);
-UINT        _tx_event_flags_info_get(TX_EVENT_FLAGS_GROUP *group_ptr, CHAR **name, ULONG *current_flags, 
+UINT        _tx_event_flags_info_get(TX_EVENT_FLAGS_GROUP *group_ptr, const CHAR **name, ULONG *current_flags,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_EVENT_FLAGS_GROUP **next_group);
 UINT        _tx_event_flags_performance_info_get(TX_EVENT_FLAGS_GROUP *group_ptr, ULONG *sets, ULONG *gets,
@@ -132,11 +132,11 @@ UINT        _tx_event_flags_set_notify(TX_EVENT_FLAGS_GROUP *group_ptr, VOID (*e
 /* Define error checking shells for API services.  These are only referenced by the 
    application.  */
 
-UINT        _txe_event_flags_create(TX_EVENT_FLAGS_GROUP *group_ptr, CHAR *name_ptr, UINT event_control_block_size);
+UINT        _txe_event_flags_create(TX_EVENT_FLAGS_GROUP *group_ptr, const CHAR *name_ptr, UINT event_control_block_size);
 UINT        _txe_event_flags_delete(TX_EVENT_FLAGS_GROUP *group_ptr);
 UINT        _txe_event_flags_get(TX_EVENT_FLAGS_GROUP *group_ptr, ULONG requested_flags,
                     UINT get_option, ULONG *actual_flags_ptr, ULONG wait_option);
-UINT        _txe_event_flags_info_get(TX_EVENT_FLAGS_GROUP *group_ptr, CHAR **name, ULONG *current_flags, 
+UINT        _txe_event_flags_info_get(TX_EVENT_FLAGS_GROUP *group_ptr, const CHAR **name, ULONG *current_flags,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_EVENT_FLAGS_GROUP **next_group);
 UINT        _txe_event_flags_set(TX_EVENT_FLAGS_GROUP *group_ptr, ULONG flags_to_set, 

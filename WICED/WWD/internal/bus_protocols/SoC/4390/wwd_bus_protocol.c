@@ -18,12 +18,15 @@
 
 #include <string.h> /* For memcpy */
 #include "wwd_assert.h"
+#include "network/wwd_network_constants.h"
 #include "network/wwd_buffer_interface.h"
 #include "internal/wwd_sdpcm.h"
 #include "internal/wwd_internal.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "platform/wwd_platform_interface.h"
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
+#include "wwd_bus_internal.h"
+#include "platform_mcu_peripheral.h"
 #include "chip_constants.h"
 #include "wiced_resource.h"   /* TODO: remove include dependency */
 #include "resources.h"        /* TODO: remove include dependency */
@@ -33,23 +36,12 @@
  *                      Macros
  ******************************************************/
 
-#define ROUNDUP( x, y )     ((((x) + ((y) - 1)) / (y)) * (y))
-#define VERIFY_RESULT( x )  { wwd_result_t verify_result; verify_result = (x); if ( verify_result != WWD_SUCCESS ) return verify_result; }
-#define htol32( i )         ( i )
+#define ROUNDUP( x, y ) ((((x) + ((y) - 1)) / (y)) * (y))
+#define htol32( i )     ( i )
 
 /******************************************************
  *                    Constants
  ******************************************************/
-
-#define I_PC      ( 1 << 10 )  /* descriptor error */
-#define I_PD      ( 1 << 11 )  /* data error */
-#define I_DE      ( 1 << 12 )  /* Descriptor protocol Error */
-#define I_RU      ( 1 << 13 )  /* Receive descriptor Underflow */
-#define I_RO      ( 1 << 14 )  /* Receive fifo Overflow */
-#define I_XU      ( 1 << 15 )  /* Transmit fifo Underflow */
-#define I_RI      ( 1 << 16 )  /* Receive Interrupt */
-#define I_XI      ( 1 << 24 )  /* Transmit Interrupt */
-#define I_ERRORS  ( I_PC | I_PD | I_DE | I_RU | I_RO | I_XU )  /* DMA Errors */
 
 #define WLAN_MEMORY_SIZE  ( 512 * 1024 )
 #define WLAN_ADDR         ( 0x680000 )
@@ -71,28 +63,14 @@
  *               Static Function Declarations
  ******************************************************/
 
-extern uint32_t read_intstatus          ( void );
-extern void     int_enab                ( void );
-extern void     dma_tx_data             ( void * data, uint32_t data_size );
-extern void     reset_wlan_core         ( void );
-extern void     write_reset_instruction ( uint32_t reset_inst );
-extern void*    read_dma_packet         ( uint16_t** hwtag );
-extern void     dma_tx_reclaim          ( void );
-extern void     refill_dma              ( void );
-extern int      rxactive_dma            ( void );
-extern void     init_wlan_uart          ( void );
-extern void     setup_pre_wlan_download ( void );
-extern void     setup_dma               ( void );
-extern void     deinit_sddma            ( void );
-static void     boot_wlan               ( void );
+static void boot_wlan( void );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
-static wiced_bool_t bus_is_up;
+static uint32_t     fake_backplane_window_addr = 0;
 static wiced_bool_t wwd_bus_flow_controlled;
-static uint32_t fake_backplane_window_addr = 0;
 
 /******************************************************
  *               Function Definitions
@@ -102,13 +80,11 @@ static uint32_t fake_backplane_window_addr = 0;
 wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 {
     host_buffer_add_remove_at_front(&buffer, sizeof(wwd_buffer_header_t));
-    dma_tx_data( buffer, host_buffer_get_current_piece_size( buffer ) );
+    wwd_bus_dma_transmit( buffer, host_buffer_get_current_piece_size( buffer ) );
     return WWD_SUCCESS;
 }
 
-extern resource_result_t resource_read( const resource_hnd_t* resource, uint32_t offset, uint32_t maxsize, uint32_t* size, void* buffer );
-
-wwd_result_t  wwd_bus_write_wifi_firmware_image( void )
+wwd_result_t wwd_bus_write_wifi_firmware_image( void )
 {
     uint32_t offset = 0;
     uint32_t total_size;
@@ -130,7 +106,7 @@ wwd_result_t  wwd_bus_write_wifi_firmware_image( void )
      * WLAN Address = {Programmable Register[31:18],
      * Current Transaction's HADDR[17:0]}
      */
-    write_reset_instruction( reset_inst );
+    wwd_bus_write_reset_instruction( reset_inst );
 
     return WWD_SUCCESS;
 }
@@ -165,118 +141,81 @@ wwd_result_t wwd_bus_write_wifi_nvram_image( void )
     return WWD_SUCCESS;
 }
 
-void boot_wlan( void )
-{
-#ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
-    external_write_wifi_firmware_and_nvram_image( );
-#else
-    /* Load wlan firmware from sflash */
-    wwd_bus_write_wifi_firmware_image();
-
-    /* Load nvram from sflash */
-    wwd_bus_write_wifi_nvram_image( );
-#endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
-
-    /* init wlan uart */
-    init_wlan_uart();
-
-    /* Reset ARM core */
-    reset_wlan_core( );
-
-    host_rtos_delay_milliseconds( 200 );
-}
-
 wwd_result_t wwd_bus_init( void )
 {
-
-    wwd_result_t result;
-    result = WWD_SUCCESS;
-
+    host_platform_reset_wifi( WICED_TRUE );
+    host_rtos_delay_milliseconds( 1 );
     host_platform_power_wifi( WICED_FALSE );
-    host_platform_power_wifi( WICED_TRUE );
-    setup_pre_wlan_download();
-    boot_wlan();
+    wwd_bus_prepare_firmware_download( );
+    boot_wlan( );
 
     /*
      * The enabling of SDIO internal clock is done in WLAN firmware.
      * Doing many access across AXI-bridge without proper sequencing will lead more instability
      */
-    setup_dma( );
-    return result;
+    wwd_bus_dma_init( );
+    return WWD_SUCCESS;
 }
 
 wwd_result_t wwd_bus_deinit( void )
 {
-    deinit_sddma();
+    wwd_bus_dma_deinit();
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
     return WWD_SUCCESS;
 }
 
-uint32_t wwd_bus_packet_available_to_read(void)
+uint32_t wwd_bus_packet_available_to_read( void )
 {
+    /* Tell WWD thread there's always a packet to read */
     return 1;
-
-
 }
 
-/*
- * From internal documentation: hwnbu-twiki/SdioMessageEncapsulation
- * When data is available on the device, the device will issue an interrupt:
- * - the device should signal the interrupt as a hint that one or more data frames may be available on the device for reading
- * - the host may issue reads of the 4 byte length tag at any time -- that is, whether an interupt has been issued or not
- * - if a frame is available, the tag read should return a nonzero length (>= 4) and the host can then read the remainder of the frame by issuing one or more CMD53 reads
- * - if a frame is not available, the 4byte tag read should return zero
- */
-
-/*@only@*//*@null@*/wwd_result_t wwd_bus_read_frame( wiced_buffer_t* buffer )
+wwd_result_t wwd_bus_read_frame( wiced_buffer_t* buffer )
 {
-    uint32_t intstatus;
-    void *p0 = NULL;
-    uint16_t *hwtag;
+    uint32_t  intstatus;
+    uint16_t* hwtag;
 
-    intstatus = read_intstatus();
+    intstatus = wwd_bus_get_dma_interrupt_status( );
 
     /* Handle DMA interrupts */
-    if (intstatus & I_XI) {
-        dma_tx_reclaim();
+    if ( intstatus & DMA_TRANSMIT_INTERRUPT )
+    {
+        wwd_bus_reclaim_dma_tx_packets( );
     }
 
-
-    if ( rxactive_dma( ) == 0 )
+    if ( wwd_bus_get_available_dma_rx_buffer_space( ) == 0 )
     {
-        refill_dma( );
-        if ( rxactive_dma( ) != 0 )
+        wwd_bus_refill_dma_rx_buffer( );
+        if ( wwd_bus_get_available_dma_rx_buffer_space( ) != 0 )
         {
-            int_enab();
+            wwd_bus_unmask_dma_interrupt();
         }
     }
 
 
-        /* Handle DMA errors */
-    if (intstatus & I_ERRORS) {
-        refill_dma( );
-        WPRINT_WWD_DEBUG(("RX errors: intstatus: 0x%x\n", (unsigned int)intstatus));
+    /* Handle DMA errors */
+    if ( intstatus & DMA_ERROR_MASK )
+    {
+        wwd_bus_refill_dma_rx_buffer( );
     }
     /* Handle DMA receive interrupt */
-    p0 = read_dma_packet( &hwtag );
-    if ( p0  == NULL)
+    *buffer = wwd_bus_dma_receive( &hwtag );
+    if ( *buffer == NULL )
     {
-
-        if ( rxactive_dma( ) != 0 )
+        if ( wwd_bus_get_available_dma_rx_buffer_space( ) != 0 )
         {
-            int_enab();
+            wwd_bus_unmask_dma_interrupt();
         }
 
         return WWD_NO_PACKET_TO_RECEIVE;
     }
 
-    *buffer = p0;
 
-    host_buffer_add_remove_at_front( buffer, - (int)sizeof(wwd_buffer_header_t) );
+    host_buffer_add_remove_at_front( buffer, -(int) sizeof(wwd_buffer_header_t) );
     wwd_sdpcm_update_credit((uint8_t*)hwtag);
 
-    refill_dma( );
+    wwd_bus_refill_dma_rx_buffer( );
     /* where are buffers from dma_rx and dma_getnextrxp created? */
 
     return WWD_SUCCESS;
@@ -287,17 +226,13 @@ uint32_t wwd_bus_packet_available_to_read(void)
 
 wwd_result_t wwd_bus_ensure_is_up( void )
 {
-    /* Ensure HT clock is up */
-    if (bus_is_up == WICED_TRUE)
-    {
-        return WWD_SUCCESS;
-    }
-    bus_is_up = WICED_TRUE;
+    platform_pmu_wifi_needed( );
     return WWD_SUCCESS;
 }
 
 wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
 {
+    platform_pmu_wifi_not_needed( );
     return WWD_SUCCESS;
 }
 
@@ -324,7 +259,6 @@ wwd_result_t wwd_bus_poke_wlan( void )
     return WWD_SUCCESS;
 }
 
-
 wwd_result_t wwd_bus_set_backplane_window( uint32_t addr )
 {
     /* No such thing as a backplane window on 4390 */
@@ -346,7 +280,7 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
         if ( address == 0 )
         {
             uint32_t resetinst = *((uint32_t*)data->data);
-            write_reset_instruction( resetinst );
+            wwd_bus_write_reset_instruction( resetinst );
         }
     }
     else
@@ -356,4 +290,29 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
     return WWD_SUCCESS;
 }
 
+/* This function is needed so that the MTU size does not get compiled into the 4390 prebuilt library in releases */
+uint32_t wwd_bus_get_rx_packet_size( void )
+{
+    return WICED_LINK_MTU;
+}
 
+void boot_wlan( void )
+{
+#ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
+    external_write_wifi_firmware_and_nvram_image( );
+#else
+    /* Load wlan firmware from sflash */
+    wwd_bus_write_wifi_firmware_image();
+
+    /* Load nvram from sflash */
+    wwd_bus_write_wifi_nvram_image( );
+#endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
+
+    /* init wlan uart */
+    wwd_bus_init_wlan_uart();
+
+    /* Reset ARM core */
+    wwd_bus_reset_wlan_core( );
+
+    host_rtos_delay_milliseconds( 200 );
+}

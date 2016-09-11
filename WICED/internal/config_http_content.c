@@ -49,6 +49,8 @@
 #define PASSPHRASE_FIELD_NAME      "ap0"
 #define PIN_FIELD_NAME             "pin"
 
+#define CONNECT_PROTOCOL           "http\n"
+
 #define APP_SCRIPT_PT1     "var elem_num = "
 #define APP_SCRIPT_PT2     ";\n var labelname = \""
 #define APP_SCRIPT_PT3     "\";\n var fieldname  = \"v"
@@ -91,8 +93,8 @@
 typedef struct
 {
     wiced_tcp_stream_t* stream;
-    wiced_semaphore_t semaphore;
-    int result_count;
+    wiced_semaphore_t   semaphore;
+    uint32_t            result_count;
 } process_scan_data_t;
 
 /******************************************************
@@ -161,9 +163,9 @@ extern char                         config_wps_pin[9];
 int32_t process_app_settings_page( const char* url_parameters, wiced_tcp_stream_t* stream, void* arg, wiced_http_message_body_t* http_message_body )
 {
     const configuration_entry_t* config_entry;
-    char                  temp_buf[10];
+    char                  temp_buf[11];
     const resource_hnd_t* end_str_res;
-    uint32_t              utoa_size;
+    uint8_t               string_size;
     char                  config_count[2] = {'0','0'};
 
     UNUSED_PARAMETER( url_parameters );
@@ -221,9 +223,9 @@ int32_t process_app_settings_page( const char* url_parameters, wiced_tcp_stream_
                         uint8_t * data;
                         wiced_dct_read_lock( (void**)&data, WICED_FALSE, DCT_APP_SECTION, config_entry->dct_offset, config_entry->data_size );
                         memset(temp_buf, ' ', 3);
-                        utoa_size = utoa(*data, (char*)temp_buf, 0, 3);
+                        string_size = unsigned_to_decimal_string(*data, (char*)temp_buf, 0, 3);
                         wiced_dct_read_unlock( data, WICED_FALSE );
-                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) utoa_size);
+                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) string_size);
                         end_str_res = &resources_config_DIR_device_settings_html_dev_settings_int_end;
                     }
                     break;
@@ -232,9 +234,9 @@ int32_t process_app_settings_page( const char* url_parameters, wiced_tcp_stream_
                         uint16_t * data;
                         wiced_dct_read_lock( (void**)&data, WICED_FALSE, DCT_APP_SECTION, config_entry->dct_offset, config_entry->data_size );
                         memset(temp_buf, ' ', 5);
-                        utoa_size = utoa(*data, (char*)temp_buf, 0, 5);
+                        string_size = unsigned_to_decimal_string(*data, (char*)temp_buf, 0, 5);
                         wiced_dct_read_unlock( data, WICED_FALSE );
-                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) utoa_size);
+                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) string_size);
                         end_str_res = &resources_config_DIR_device_settings_html_dev_settings_int_end;
                     }
                     break;
@@ -243,9 +245,9 @@ int32_t process_app_settings_page( const char* url_parameters, wiced_tcp_stream_
                         uint32_t * data;
                         wiced_dct_read_lock( (void**)&data, WICED_FALSE, DCT_APP_SECTION, config_entry->dct_offset, config_entry->data_size );
                         memset(temp_buf, ' ', 10);
-                        utoa_size = utoa(*data, (char*)temp_buf, 0, 10);
+                        string_size = unsigned_to_decimal_string(*data, (char*)temp_buf, 0, 10);
                         wiced_dct_read_unlock( data, WICED_FALSE );
-                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) utoa_size);
+                        wiced_tcp_stream_write(stream, temp_buf, (uint16_t) string_size);
                         end_str_res = &resources_config_DIR_device_settings_html_dev_settings_int_end;
                     }
                     break;
@@ -287,52 +289,66 @@ static wiced_result_t scan_handler( wiced_scan_handler_result_t* malloced_scan_r
     {
         char temp_buffer[70];
         char* temp_ptr;
+        const char* const_temp_ptr;
         uint16_t temp_length;
         int i;
 
         wiced_tcp_stream_t* stream = scan_data->stream;
 
         /* Result ID */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%d\n", scan_data->result_count );
+        temp_length = unsigned_to_decimal_string( scan_data->result_count, temp_buffer, 1, 10 );
+        temp_buffer[temp_length++] = '\n';
         scan_data->result_count++;
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
+        wiced_tcp_stream_write( stream, temp_buffer, temp_length );
 
         /* SSID */
         temp_ptr = temp_buffer;
         for( i = 0; i < malloced_scan_result->ap_details.SSID.length; i++)
         {
-            temp_ptr += sprintf( temp_ptr, "%02X", malloced_scan_result->ap_details.SSID.value[i] );
+            temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.SSID.value[i] );
         }
-        temp_ptr += sprintf( temp_ptr, "\n" );
+        *temp_ptr = '\n';
+        temp_ptr++;
 
         wiced_tcp_stream_write(stream, temp_buffer, (uint32_t)( temp_ptr - temp_buffer ) );
 
         /* Security */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%d\n", malloced_scan_result->ap_details.security );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
-        temp_length = (uint16_t) sprintf( temp_buffer, "%s\n", (   malloced_scan_result->ap_details.security == WICED_SECURITY_OPEN )? "OPEN" :
-                                                               ( ( malloced_scan_result->ap_details.security & WEP_ENABLED   ) != 0 )? "WEP"  :
-                                                               ( ( malloced_scan_result->ap_details.security & WPA_SECURITY  ) != 0 )? "WPA"  :
-                                                               ( ( malloced_scan_result->ap_details.security & WPA2_SECURITY ) != 0 )? "WPA2" : "UNKNOWN" );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
+        temp_length = unsigned_to_decimal_string( malloced_scan_result->ap_details.security, temp_buffer, 1, 10 );
+        temp_buffer[temp_length++] = '\n';
+        wiced_tcp_stream_write( stream, temp_buffer, temp_length );
+
+        const_temp_ptr = (   malloced_scan_result->ap_details.security == WICED_SECURITY_OPEN )? "OPEN\n" :
+                         ( ( malloced_scan_result->ap_details.security & WEP_ENABLED   ) != 0 )? "WEP\n"  :
+                         ( ( malloced_scan_result->ap_details.security & WPA_SECURITY  ) != 0 )? "WPA\n"  :
+                         ( ( malloced_scan_result->ap_details.security & WPA2_SECURITY ) != 0 )? "WPA2\n" : "UNKNOWN\n";
+        wiced_tcp_stream_write(stream, const_temp_ptr, strlen(const_temp_ptr) );
 
         /* RSSI */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%d\n", malloced_scan_result->ap_details.signal_strength );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
+        temp_length = signed_to_decimal_string( malloced_scan_result->ap_details.signal_strength, temp_buffer, 1, 11 );
+        temp_buffer[temp_length++] = '\n';
+        wiced_tcp_stream_write( stream, temp_buffer, temp_length );
 
         /* Channel */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%d\n", malloced_scan_result->ap_details.channel );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
+        temp_length = unsigned_to_decimal_string( malloced_scan_result->ap_details.channel, temp_buffer, 1, 10 );
+        temp_buffer[temp_length++] = '\n';
+        wiced_tcp_stream_write( stream, temp_buffer, temp_length );
 
         /* BSSID */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%02X%02X%02X%02X%02X%02X\n", malloced_scan_result->ap_details.BSSID.octet[0], malloced_scan_result->ap_details.BSSID.octet[1], malloced_scan_result->ap_details.BSSID.octet[2], malloced_scan_result->ap_details.BSSID.octet[3], malloced_scan_result->ap_details.BSSID.octet[4], malloced_scan_result->ap_details.BSSID.octet[5] );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
+        temp_ptr = temp_buffer;
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[0] );
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[1] );
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[2] );
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[3] );
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[4] );
+        temp_ptr = string_append_two_digit_hex_byte( temp_ptr, malloced_scan_result->ap_details.BSSID.octet[5] );
+        *temp_ptr = '\n';
+        temp_ptr++;
+        wiced_tcp_stream_write( stream, temp_buffer, (uint32_t)(temp_ptr - temp_buffer) );
 
         /* Remembered */
-        temp_length = (uint16_t) sprintf( temp_buffer, "%d\n", 0 );
-        wiced_tcp_stream_write(stream, temp_buffer, temp_length);
-
-
+        temp_length = unsigned_to_decimal_string( 0, temp_buffer, 1, 10 );  /* TODO: add support for remembered APs */
+        temp_buffer[temp_length++] = '\n';
+        wiced_tcp_stream_write( stream, temp_buffer, temp_length );
     }
     else
     {
@@ -359,7 +375,7 @@ static int32_t process_scan( const char* url_parameters, wiced_tcp_stream_t* str
     /* Initialise the semaphore that will tell us when the scan is complete */
     wiced_rtos_init_semaphore(&scan_data.semaphore);
 
-    wiced_tcp_stream_write(stream, "http\n", sizeof("http\n"));
+    wiced_tcp_stream_write(stream, CONNECT_PROTOCOL, sizeof( CONNECT_PROTOCOL )-1 );
 
     /* Start the scan */
     wiced_wifi_scan_networks( scan_handler, &scan_data );

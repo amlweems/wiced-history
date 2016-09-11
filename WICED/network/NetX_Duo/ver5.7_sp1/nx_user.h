@@ -44,6 +44,9 @@
 
 
 #define PACKET_RELEASE_NOTIFY
+
+#define NX_TCP_MAX_OUT_OF_ORDER_PACKETS
+
 extern void packet_release_notify( void* pool );
 extern UINT nx_rand16( void );
 

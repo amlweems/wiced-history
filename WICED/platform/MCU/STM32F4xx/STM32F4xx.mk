@@ -23,7 +23,8 @@ GLOBAL_INCLUDES := . \
                    ../../$(HOST_ARCH) \
                    ../../$(HOST_ARCH)/CMSIS \
                    ../../$(TOOLCHAIN_NAME) \
-                   peripherals
+                   peripherals \
+                   WAF
 
 # Global defines
 GLOBAL_DEFINES  := USE_STDPERIPH_DRIVER
@@ -61,11 +62,15 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../wiced_platform_common.c \
                    ../wwd_platform_common.c \
                    ../wwd_resources.c \
+                   ../wiced_apps_common.c	\
+                   ../wiced_waf_common.c	\
+                   ../wiced_dct_internal_common.c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
                    WWD/wwd_platform.c \
-                   WWD/wwd_$(BUS).c
+                   WWD/wwd_$(BUS).c \
+                   WAF/waf_platform.c \
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
@@ -87,11 +92,12 @@ ifeq ($(APP),bootloader)
 ####################################################################################
 
 DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/bootloader$(LINK_SCRIPT_SUFFIX)
-$(NAME)_SOURCES     += WAF/waf_platform.c
-$(NAME)_LINK_FILES  += WAF/waf_platform.o
+#$(NAME)_SOURCES     += WAF/waf_platform.c
+#$(NAME)_LINK_FILES  += WAF/waf_platform.o
 
 else
-ifneq ($(filter ota_upgrade sflash_write, $(APP)),)
+#ifneq ($(filter ota_upgrade sflash_write, $(APP)),)
+ifneq ($(filter sflash_write, $(APP)),)
 ####################################################################################
 # Building sflash_write OR ota_upgrade
 ####################################################################################

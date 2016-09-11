@@ -302,7 +302,7 @@ static void p2p_thread_main( uint32_t arg )
                 break;
 
             case P2P_EVENT_NEW_DEVICE_DISCOVERED:
-                printf( "Found P2P device: %s\r\n", workspace->discovered_devices[last_printed_discovered_device].device_name);
+                BESL_INFO( ( "Found P2P device: %s\r\n", workspace->discovered_devices[last_printed_discovered_device].device_name ) );
                 ++last_printed_discovered_device;
                 break;
 

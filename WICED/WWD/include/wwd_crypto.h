@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "wiced_utilities.h"
+#include "wwd_constants.h"
 
 #ifdef __cplusplus
 extern "C"

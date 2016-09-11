@@ -112,10 +112,10 @@ VOID        _tx_block_pool_initialize(VOID);
 /* Define block memory pool management function prototypes.  */
 
 UINT        _tx_block_allocate(TX_BLOCK_POOL *pool_ptr, VOID **block_ptr, ULONG wait_option);
-UINT        _tx_block_pool_create(TX_BLOCK_POOL *pool_ptr, CHAR *name_ptr, ULONG block_size,
+UINT        _tx_block_pool_create(TX_BLOCK_POOL *pool_ptr, const CHAR *name_ptr, ULONG block_size,
                     VOID *pool_start, ULONG pool_size);
 UINT        _tx_block_pool_delete(TX_BLOCK_POOL *pool_ptr);
-UINT        _tx_block_pool_info_get(TX_BLOCK_POOL *pool_ptr, CHAR **name, ULONG *available_blocks, 
+UINT        _tx_block_pool_info_get(TX_BLOCK_POOL *pool_ptr, const CHAR **name, ULONG *available_blocks,
                     ULONG *total_blocks, TX_THREAD **first_suspended, 
                     ULONG *suspended_count, TX_BLOCK_POOL **next_pool);
 UINT        _tx_block_pool_performance_info_get(TX_BLOCK_POOL *pool_ptr, ULONG *allocates, ULONG *releases,
@@ -131,10 +131,10 @@ VOID        _tx_block_pool_cleanup(TX_THREAD *thread_ptr);
    application.  */
 
 UINT        _txe_block_allocate(TX_BLOCK_POOL *pool_ptr, VOID **block_ptr, ULONG wait_option);
-UINT        _txe_block_pool_create(TX_BLOCK_POOL *pool_ptr, CHAR *name_ptr, ULONG block_size,
+UINT        _txe_block_pool_create(TX_BLOCK_POOL *pool_ptr, const CHAR *name_ptr, ULONG block_size,
                     VOID *pool_start, ULONG pool_size, UINT pool_control_block_size);
 UINT        _txe_block_pool_delete(TX_BLOCK_POOL *pool_ptr);
-UINT        _txe_block_pool_info_get(TX_BLOCK_POOL *pool_ptr, CHAR **name, ULONG *available_blocks, 
+UINT        _txe_block_pool_info_get(TX_BLOCK_POOL *pool_ptr, const CHAR **name, ULONG *available_blocks,
                     ULONG *total_blocks, TX_THREAD **first_suspended, 
                     ULONG *suspended_count, TX_BLOCK_POOL **next_pool);
 UINT        _txe_block_pool_prioritize(TX_BLOCK_POOL *pool_ptr);

@@ -327,7 +327,7 @@ VOID        _nxd_tftp_server_data_process(NX_TFTP_SERVER *server_ptr, NX_PACKET 
 VOID        _nxd_tftp_server_ack_process(NX_TFTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
 VOID        _nxd_tftp_server_error_process(NX_TFTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
 NX_TFTP_CLIENT_REQUEST * _nxd_tftp_server_find_client_request(NX_TFTP_SERVER *server_ptr, UINT port, NXD_ADDRESS *ip_address);
-VOID        _nxd_tftp_server_send_error(NX_TFTP_SERVER *server_ptr, NXD_ADDRESS *ip_address, UINT port, UINT error, CHAR *error_message);
+VOID        _nxd_tftp_server_send_error(NX_TFTP_SERVER *server_ptr, NXD_ADDRESS *ip_address, UINT port, UINT error, const CHAR *error_message);
 
 /* Determine if a C++ compiler is being used.  If so, complete the standard
    C conditional started above.  */

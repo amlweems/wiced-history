@@ -10,7 +10,7 @@
 #pragma once
 
 #include "platform.h"
-#include "wiced_utilities.h"
+#include "wiced_result.h"
 
 #ifdef __cplusplus
 extern "C" {

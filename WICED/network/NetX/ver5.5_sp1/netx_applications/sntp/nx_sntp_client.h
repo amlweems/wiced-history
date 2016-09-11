@@ -722,8 +722,8 @@ UINT    _nxe_sntp_client_create(NX_SNTP_CLIENT *client_ptr, NX_IP *ip_ptr, UINT 
                                 VOID (random_number_generator)(struct NX_SNTP_CLIENT_STRUCT *client_ptr, ULONG *rand));
 UINT    _nx_sntp_client_delete (NX_SNTP_CLIENT *client_ptr);
 UINT    _nxe_sntp_client_delete (NX_SNTP_CLIENT *client_ptr);
-UINT    _nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer); 
-UINT    _nxe_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer); 
+UINT    _nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer, ULONG buffer_length);
+UINT    _nxe_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer, ULONG buffer_length);
 UINT    _nx_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, ULONG multicast_server_address, ULONG broadcast_time_server);
 UINT    _nxe_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, ULONG multicast_server_address, ULONG broadcast_time_server);
 UINT    _nx_sntp_client_initialize_unicast(NX_SNTP_CLIENT *client_ptr, ULONG unicast_time_server);
@@ -773,7 +773,11 @@ UINT    _nx_sntp_client_utility_convert_time_to_UCHAR(NX_SNTP_TIME *time, NX_SNT
 UINT    _nx_sntp_client_utility_is_zero_data(UCHAR *data, UINT size);
 UINT    _nx_sntp_client_utility_usec_to_fraction(ULONG usecs, ULONG *tsf);
 
-
+#ifdef  NX_SNTP_ALTERNATE_SNPRINTF
+int     _nx_sntp_snprintf(char *str, size_t size, const char *format, ...);
+#else
+#define _nx_sntp_snprintf snprintf
+#endif /* ifdef  NX_SNTP_ALTERNATE_SNPRINTF */
 
 #endif   /*  NX_SNTP_SOURCE_CODE */
 

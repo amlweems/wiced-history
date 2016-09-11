@@ -47,7 +47,7 @@
                         ((a[4])==0)&& \
                         ((a[5])==0))
 
-#define CHECK_RETURN( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0); return check_res; } }
+#define CHECK_RETURN( expr )  { wiced_result_t check_res = (wiced_result_t)(expr); if ( check_res != WICED_SUCCESS ) { wiced_assert("Command failed\n", 0); return check_res; } }
 
 /******************************************************
  *                    Constants
@@ -121,7 +121,7 @@ wiced_result_t wiced_init( void )
 
     CHECK_RETURN( wiced_wlan_connectivity_init( ) );
 
-    return WWD_SUCCESS;
+    return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_core_init( void )
@@ -137,7 +137,7 @@ wiced_result_t wiced_core_init( void )
 
     wiced_core_initialised = WICED_TRUE;
 
-    return WWD_SUCCESS;
+    return WICED_SUCCESS;
 }
 
 
@@ -146,7 +146,6 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 {
     wiced_result_t              result;
     wiced_country_code_t        country;
-    wiced_mac_t    mac;
     platform_dct_wifi_config_t* wifi_config;
 #ifdef WPRINT_ENABLE_NETWORK_INFO
     char                        version[200];
@@ -173,7 +172,7 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 
     wiced_dct_read_unlock( wifi_config, WICED_FALSE );
 
-    result = wwd_management_init( country, wiced_packet_pools );
+    result = (wiced_result_t) wwd_management_init( country, wiced_packet_pools );
     if ( result != WICED_SUCCESS )
     {
         WPRINT_NETWORK_ERROR( ("Error %d while starting WICED!\n", result) );
@@ -189,12 +188,15 @@ wiced_result_t wiced_wlan_connectivity_init( void )
     CHECK_RETURN( wiced_rtos_init_timer( &wiced_sta_handshake_timer, HANDSHAKE_TIMEOUT_MS, handshake_timeout_handler, 0 ) );
 
 #ifdef WPRINT_ENABLE_NETWORK_INFO
-    wwd_wifi_get_mac_address( &mac, WWD_STA_INTERFACE );
-    WPRINT_NETWORK_INFO(("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac.octet[0],mac.octet[1],mac.octet[2],mac.octet[3],mac.octet[4],mac.octet[5]));
+    {
+        wiced_mac_t    mac;
+        wwd_wifi_get_mac_address( &mac, WWD_STA_INTERFACE );
+        WPRINT_NETWORK_INFO(("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n", mac.octet[0],mac.octet[1],mac.octet[2],mac.octet[3],mac.octet[4],mac.octet[5]));
 
-    memset( version, 0, sizeof( version ) );
-    wwd_wifi_get_wifi_version( version, sizeof( version ) );
-    WPRINT_NETWORK_INFO( ("WLAN Firmware    : %s\r\n", version ) );
+        memset( version, 0, sizeof( version ) );
+        wwd_wifi_get_wifi_version( version, sizeof( version ) );
+        WPRINT_NETWORK_INFO( ("WLAN Firmware    : %s\r\n", version ) );
+    }
 #endif
 
     wiced_wlan_initialised = WICED_TRUE;
@@ -249,12 +251,12 @@ wiced_result_t wiced_deinit( void )
 
 wiced_result_t wiced_start_ap( wiced_ssid_t* ssid, wiced_security_t security, const char* key, uint8_t channel )
 {
-    return wwd_wifi_start_ap(ssid, security, (uint8_t*)key, (uint8_t) strlen(key), channel);
+    return (wiced_result_t) wwd_wifi_start_ap(ssid, security, (uint8_t*)key, (uint8_t) strlen(key), channel);
 }
 
 wiced_result_t wiced_stop_ap( void )
 {
-    return wwd_wifi_stop_ap();
+    return (wiced_result_t) wwd_wifi_stop_ap();
 }
 
 wiced_result_t wiced_enable_powersave( void )
@@ -321,20 +323,20 @@ wiced_result_t wiced_join_ap( void )
                 /* Try join AP with last know specific details */
                 if ( !( NULL_MAC(ap->details.BSSID.octet) ) && ap->details.channel != 0 )
                 {
-                    join_result = wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) ap->security_key, ap->security_key_length, NULL, WWD_STA_INTERFACE );
+                    join_result = (wiced_result_t) wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) ap->security_key, ap->security_key_length, NULL, WWD_STA_INTERFACE );
                 }
 
                 if ( join_result != WICED_SUCCESS )
                 {
                     /* If join-specific failed, try scan and join AP */
-                    join_result = wwd_wifi_join( &ap->details.SSID, ap->details.security, (uint8_t*) ap->security_key, ap->security_key_length, NULL );
+                    join_result = (wiced_result_t) wwd_wifi_join( &ap->details.SSID, ap->details.security, (uint8_t*) ap->security_key, ap->security_key_length, NULL );
                 }
 
                 if ( join_result == WICED_SUCCESS )
                 {
                     WPRINT_WICED_INFO( ( "Successfully joined : %s\n", (char*)ap->details.SSID.value ) );
 
-                    link_up();
+                    wiced_sta_link_up       = WICED_TRUE;
                     wiced_sta_security_type = ap->details.security;
 
                     wwd_management_set_event_handler( link_events, wiced_link_events_handler, NULL, WWD_STA_INTERFACE );
@@ -375,7 +377,7 @@ wiced_result_t wiced_join_ap( void )
 wiced_result_t wiced_leave_ap( void )
 {
     /* Deregister the link event handler and leave the current AP */
-    wwd_management_set_event_handler(link_events, NULL, 0, WICED_STA_INTERFACE);
+    wwd_management_set_event_handler(link_events, NULL, 0, WWD_STA_INTERFACE);
     wwd_wifi_leave( WWD_STA_INTERFACE );
     wiced_sta_link_up = WICED_FALSE;
     return WICED_SUCCESS;
@@ -408,7 +410,7 @@ wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_han
     {
         free(scan_bssid_list);
     }
-    scan_bssid_list = malloc(SCAN_BSSID_LIST_LENGTH * sizeof(wiced_mac_t));
+    scan_bssid_list = (wiced_mac_t*) malloc(SCAN_BSSID_LIST_LENGTH * sizeof(wiced_mac_t));
     if (scan_bssid_list == NULL)
     {
         goto exit;
@@ -452,15 +454,15 @@ exit:
 wiced_result_t wiced_wps_enrollee(wiced_wps_mode_t mode, const wiced_wps_device_detail_t* details, const char* password, wiced_wps_credential_t* credentials, uint16_t credential_count)
 {
     wiced_result_t result    = WICED_SUCCESS;
-    wps_agent_t*   workspace = calloc_named("wps", 1, sizeof(wps_agent_t));
+    wps_agent_t*   workspace = (wps_agent_t*) calloc_named("wps", 1, sizeof(wps_agent_t));
 
     if ( workspace == NULL )
     {
         return WICED_OUT_OF_HEAP_SPACE;
     }
 
-    besl_wps_init ( workspace, (besl_wps_device_detail_t*) details, WPS_ENROLLEE_AGENT, WICED_STA_INTERFACE );
-    result = besl_wps_start( workspace, mode, password, (besl_wps_credential_t*) credentials, credential_count );
+    besl_wps_init ( workspace, (besl_wps_device_detail_t*) details, WPS_ENROLLEE_AGENT, WWD_STA_INTERFACE );
+    result = (wiced_result_t) besl_wps_start( workspace, (besl_wps_mode_t) mode, password, (besl_wps_credential_t*) credentials, credential_count );
     if ( result == WICED_SUCCESS )
     {
         besl_wps_wait_till_complete( workspace );
@@ -476,15 +478,15 @@ wiced_result_t wiced_wps_enrollee(wiced_wps_mode_t mode, const wiced_wps_device_
 wiced_result_t wiced_wps_registrar(wiced_wps_mode_t mode, const wiced_wps_device_detail_t* details, const char* password, wiced_wps_credential_t* credentials, uint16_t credential_count)
 {
     wiced_result_t result    = WICED_SUCCESS;
-    wps_agent_t*   workspace = calloc_named("wps", 1, sizeof(wps_agent_t));
+    wps_agent_t*   workspace = (wps_agent_t*) calloc_named("wps", 1, sizeof(wps_agent_t));
 
     if ( workspace == NULL )
     {
         return WICED_OUT_OF_HEAP_SPACE;
     }
 
-    besl_wps_init ( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WICED_AP_INTERFACE );
-    result = besl_wps_start( workspace, mode, password, (besl_wps_credential_t*) credentials, credential_count );
+    besl_wps_init ( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WWD_AP_INTERFACE );
+    result = (wiced_result_t) besl_wps_start( workspace, (besl_wps_mode_t) mode, password, (besl_wps_credential_t*) credentials, credential_count );
     if ( result == WICED_SUCCESS )
     {
         besl_wps_wait_till_complete( workspace );
@@ -567,13 +569,13 @@ static wiced_result_t handshake_error_callback( void* arg )
                 /* Try join AP with last know specific details */
                 if ( !( NULL_MAC(ap->details.BSSID.octet) ) && ap->details.channel != 0 )
                 {
-                    join_result = wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) ap->security_key, ap->security_key_length, NULL, WWD_STA_INTERFACE );
+                    join_result = (wiced_result_t) wwd_wifi_join_specific( &temp_scan_result, (uint8_t*) ap->security_key, ap->security_key_length, NULL, WWD_STA_INTERFACE );
                 }
 
                 if ( join_result != WICED_SUCCESS )
                 {
                     /* If join-specific failed, try scan and join AP */
-                    join_result = wwd_wifi_join( &ap->details.SSID, ap->details.security, (uint8_t*) ap->security_key, ap->security_key_length, NULL );
+                    join_result = (wiced_result_t) wwd_wifi_join( &ap->details.SSID, ap->details.security, (uint8_t*) ap->security_key, ap->security_key_length, NULL );
                 }
 
                 if ( join_result == WICED_SUCCESS )
@@ -850,7 +852,7 @@ static void scan_result_handler( wiced_scan_result_t** result_ptr, void* user_da
     wiced_scan_handler_result_t* result_iter;
     wiced_scan_handler_result_t* current_result = (wiced_scan_handler_result_t*)(*result_ptr);
     wiced_mac_t*                 mac_iter     = NULL;
-    internal_scan_handler_t*     scan_handler = user_data;
+    internal_scan_handler_t*     scan_handler = (internal_scan_handler_t*) user_data;
 
     /* Check if we don't have a scan result to send to the user */
     if ( scan_result_ptr == NULL )

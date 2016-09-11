@@ -20,12 +20,16 @@
 #include "platform_sleep.h"
 #include "platform_config.h"
 #include "platform_sflash_dct.h"
+#include "platform_dct.h"
 #include "wwd_constants.h"
 #include "wwd_rtos.h"
 #include "wwd_assert.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "spi_flash.h"
 #include "wicedfs.h"
+#include "wiced_framework.h"
+#include "wiced_dct_common.h"
+#include "wiced_apps_common.h"
 
 /******************************************************
  *                      Macros
@@ -56,7 +60,7 @@ extern uint32_t        sfi_write     ( uint32_t addr, uint32_t len, const uint8_
 extern uint32_t        sfi_size      ( void )                                                 __attribute__((long_call));
 extern void            sfi_erase     ( uint32_t addr, uint32_t len )                          __attribute__((long_call));
 static wicedfs_usize_t read_callback ( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos );
-
+extern wiced_result_t platform_read_with_copy    ( void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size );
 /******************************************************
  *               Variable Definitions
  ******************************************************/
@@ -70,19 +74,32 @@ wiced_filesystem_t    resource_fs_handle;
 /******************************************************
  *               Function Definitions
  ******************************************************/
-
-void platform_filesystem_init( void )
+void platform_sflash_init( void )
 {
-    int result;
 
     host_rtos_init_semaphore( &sflash_mutex );
-    host_rtos_set_semaphore ( &sflash_mutex, WICED_FALSE );
 
-    init_sflash( &wicedfs_sflash_handle, 0, SFLASH_WRITE_NOT_ALLOWED );
+    host_rtos_set_semaphore( &sflash_mutex, WICED_FALSE );
 
-    result = wicedfs_init( FILESYSTEM_BASE_ADDR, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
+}
+uint32_t platform_filesystem_init( void )
+{
+    int              result;
+    image_location_t filesystem_location;
+    app_header_t     app_header;
+    sflash_handle_t  sflash_handle;
+    wicedfs_usize_t  base;
+
+    /* This is current a hack, The filesystem should use the APPS read and write */
+    wiced_dct_get_app_header_location( DCT_FILESYSTEM_IMAGE_INDEX, &filesystem_location );
+    init_sflash( &sflash_handle, 0, SFLASH_WRITE_ALLOWED );
+    sflash_read( &sflash_handle, filesystem_location.detail.external_fixed.location, &app_header, sizeof(app_header_t) );
+    base = app_header.sectors[ 0 ].start * 4096UL;
+    result = wicedfs_init( base, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
     wiced_assert( "wicedfs init fail", result == 0 );
     REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
+    return base;
 }
 
 static wicedfs_usize_t read_callback( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos )

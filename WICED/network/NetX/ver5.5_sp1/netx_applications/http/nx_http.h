@@ -351,7 +351,7 @@ UINT        nx_http_client_put_start(NX_HTTP_CLIENT *client_ptr, ULONG ip_addres
 UINT        nx_http_client_put_packet(NX_HTTP_CLIENT *client_ptr, NX_PACKET *packet_ptr, ULONG wait_option);
 
 UINT        nx_http_server_callback_data_send(NX_HTTP_SERVER *server_ptr, VOID *data_ptr, ULONG data_length);
-UINT        nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, CHAR *header, CHAR *information, CHAR *additional_info);
+UINT        nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, const CHAR *header, const CHAR *information, const CHAR *additional_info);
 UINT        nx_http_server_content_get(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, ULONG byte_offset, CHAR *destination_ptr, UINT destination_size, UINT *actual_size);
 UINT        nx_http_server_content_length_get(NX_PACKET *packet_ptr);
 UINT        nx_http_server_create(NX_HTTP_SERVER *http_server_ptr, CHAR *http_server_name, NX_IP *ip_ptr, FX_MEDIA *media_ptr, VOID *stack_ptr, ULONG stack_size, NX_PACKET_POOL *pool_ptr,
@@ -381,7 +381,7 @@ UINT        _nxe_http_client_put_packet(NX_HTTP_CLIENT *client_ptr, NX_PACKET *p
 UINT        _nx_http_client_put_packet(NX_HTTP_CLIENT *client_ptr, NX_PACKET *packet_ptr, ULONG wait_option);
 
 UINT        _nx_http_server_callback_data_send(NX_HTTP_SERVER *server_ptr, VOID *data_ptr, ULONG data_length);
-UINT        _nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, CHAR *header, CHAR *information, CHAR *additional_info);
+UINT        _nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, const CHAR *header, const CHAR *information, const CHAR *additional_info);
 UINT        _nxe_http_server_content_get(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, ULONG byte_offset, CHAR *destination_ptr, UINT destination_size, UINT *actual_size);
 UINT        _nx_http_server_content_get(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, ULONG byte_offset, CHAR *destination_ptr, UINT destination_size, UINT *actual_size);
 UINT        _nxe_http_server_content_length_get(NX_PACKET *packet_ptr);
@@ -418,7 +418,7 @@ UINT        _nx_http_server_get_client_request(NX_HTTP_SERVER *server_ptr, NX_PA
 VOID        _nx_http_server_get_process(NX_HTTP_SERVER *server_ptr, UINT request_type, NX_PACKET *packet_ptr);
 VOID        _nx_http_server_put_process(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
 VOID        _nx_http_server_delete_process(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
-VOID        _nx_http_server_response_send(NX_HTTP_SERVER *server_ptr, CHAR *header, CHAR *information, CHAR *additional_info);
+VOID        _nx_http_server_response_send(NX_HTTP_SERVER *server_ptr, const CHAR *header, const CHAR *information, const CHAR *additional_info);
 UINT        _nx_http_server_basic_authenticate(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, CHAR *name_ptr, CHAR *password_ptr, CHAR *realm_ptr);
 UINT        _nx_http_server_retrieve_basic_authorization(NX_PACKET *packet_ptr, CHAR *authorization_request);
 UINT        _nx_http_server_retrieve_resource(NX_PACKET *packet_ptr, CHAR *destination, UINT max_size);

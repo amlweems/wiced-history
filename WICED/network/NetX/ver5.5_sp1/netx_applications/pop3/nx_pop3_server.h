@@ -79,7 +79,7 @@ extern   "C" {
 /* Set the event reporting/debug output for the NetX POP3 server.  */
 
 #ifndef NX_POP3_SERVER_DEBUG
-#define NX_POP3_SERVER_DEBUG                         MODERATE
+#define NX_POP3_SERVER_DEBUG                         NX_POP3_DEBUG_LEVEL_NONE
 #endif
 
 /* Scheme for filtering messages during program execution. 
@@ -88,24 +88,26 @@ extern   "C" {
    processor that is running the application and communication
    available (e.g. serial port).  */
 
-
+#if ( NX_POP3_SERVER_DEBUG == NX_POP3_DEBUG_LEVEL_NONE )
+#define NX_POP3_SERVER_EVENT_LOG(debug_level, msg)
+#else
 #define NX_POP3_SERVER_EVENT_LOG(debug_level, msg)                  \
 {                                                                   \
     UINT level = (UINT)debug_level;                                 \
-    if (level <= ALL && NX_POP3_SERVER_DEBUG == ALL)                \
+    if (level <= NX_POP3_DEBUG_LEVEL_ALL && NX_POP3_SERVER_DEBUG == NX_POP3_DEBUG_LEVEL_ALL)                \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level <= MODERATE && NX_POP3_SERVER_DEBUG == MODERATE) \
+    else if (level <= NX_POP3_DEBUG_LEVEL_MODERATE && NX_POP3_SERVER_DEBUG == NX_POP3_DEBUG_LEVEL_MODERATE) \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level == SEVERE && NX_POP3_SERVER_DEBUG == SEVERE)     \
+    else if (level == NX_POP3_DEBUG_LEVEL_SEVERE && NX_POP3_SERVER_DEBUG == NX_POP3_DEBUG_LEVEL_SEVERE)     \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
 }
-
+#endif /* NX_POP3_SERVER_DEBUG */
   
 /* Enable print server packet and memory pool reserves feature.  */
 /*

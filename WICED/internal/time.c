@@ -180,14 +180,14 @@ wiced_result_t wiced_time_get_iso8601_time(wiced_iso8601_time_t* iso8601_time)
     minute = (uint8_t) ( second / SECONDS_IN_A_MINUTE );
     second -= (uint64_t) ( minute * SECONDS_IN_A_MINUTE );
 
-    /* Write iso8601 time */
-    utoa( year,             iso8601_time->year,       4, 4 );
-    utoa( month,            iso8601_time->month,      2, 2 );
-    utoa( day,              iso8601_time->day,        2, 2 );
-    utoa( hour,             iso8601_time->hour,       2, 2 );
-    utoa( minute,           iso8601_time->minute,     2, 2 );
-    utoa( (uint8_t)second,  iso8601_time->second,     2, 2 );
-    utoa( sub_second,       iso8601_time->sub_second, 6, 6 );
+    /* Write iso8601 time (Note terminating nulls get overwritten intentionally) */
+    unsigned_to_decimal_string( year,             iso8601_time->year,       4, 4 );
+    unsigned_to_decimal_string( month,            iso8601_time->month,      2, 2 );
+    unsigned_to_decimal_string( day,              iso8601_time->day,        2, 2 );
+    unsigned_to_decimal_string( hour,             iso8601_time->hour,       2, 2 );
+    unsigned_to_decimal_string( minute,           iso8601_time->minute,     2, 2 );
+    unsigned_to_decimal_string( (uint8_t)second,  iso8601_time->second,     2, 2 );
+    unsigned_to_decimal_string( sub_second,       iso8601_time->sub_second, 6, 6 );
 
     iso8601_time->T          = 'T';
     iso8601_time->Z          = 'Z';

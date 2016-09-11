@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.1.0 BETA1 - README
+Broadcom WICED Software Development Kit 3.1.1 - README
 =====================================================================
 
 ---------------------------------------------------------------------
@@ -40,6 +40,7 @@ Major features of the WICED SDK include ...
     - Cooee(TM)
   - Simple API to provide access to MCU peripherals including UART, SPI, I2C, Timers, RTC, ADCs, DACs, etc
   - Support for multiple toolchains including GNU and IAR
+  - Support for Apple AirPlay and HomeKit
  
 The WICED SDK release is structured as follows:
   apps          : Example & Test Applications
@@ -137,6 +138,7 @@ Networking Features (IPv4 & IPv6)
 
 Application Features
  * Apple AirPlay (requires Apple authentication co-processor; available to Apple MFi licensees *ONLY*) 
+ * Apple HomeKit (available to Apple MFi licensees *ONLY*)
  * Bluetooth Audio
  * Peripheral interfaces
    * GPIO
@@ -166,9 +168,9 @@ Hardware Platforms
  BCM43362
    * BCM943362WCD4  : Broadcom WICED Module with STM32F205 MCU mounted on BCM9WCD1EVAL1
    * BCM943362WCD6  : Broadcom WICED Module with STM32F415 MCU mounted on BCM9WCD1EVAL1
+   * BCM943362WCD8  : Broadcom WICED Module with Atmel SAM4S16B MCU mounted on BCM9WCD1EVAL1
    * BCM9WCDPLUS114 : WICED+ Eval Board (includes BCM43362+STM32F205 WICED+ Module and BCM20702 Bluetooth module)
    * BCM9WCD1AUDIO  : Broadcom WICED Audio Evaluation Board (includes BCM43362, STM32F415, WM8533 audio DAC, and BCM20702 Bluetooth module)
-   * BCM943362WCD4_LPCX1769 : BCM943362WCD4 module manually wired to an NXP LPCXpresso1769 Evaluation Board 
  BCM943341
    * BCM943341WCD1  : Broadcom BCM43341-based WICED Module with STM32F417 MCU mounted on BCM9WCD5EVAL1
  BCM4390
@@ -178,9 +180,8 @@ Hardware Platforms
 Known Limitations & Notes
 ---------------------------------------------------------------------
 
- * Features not yet supported in WICED-SDK-3.1.0
+ * Features not yet supported in WICED-SDK-3.1.1
    - Wi-Fi Direct
-   - OTA upgrade functionality
    - IAR Embedded Workspace native support
    - wiced_wifi_get_counters() is not functional
 
@@ -189,30 +190,27 @@ Known Limitations & Notes
    Platform Feature | STM32F1xx | STM32F2xx | STM32F4xx | AT91SAM4S | K60 | LPC17xx | BCM439x |
     Implementation  |           |           |           |           |     |         |         |
    -----------------|-----------+-----------+-----------+-----------+-----+---------+---------+
-   MCU powersave    |     Y     |     Y     |     N     |     Y     |  N  |    N    |    N    |
-   Wi-Fi Powersave  |     N(1)  |     Y     |     Y     |     Y     |  N  |    N    |    N    |
+   MCU powersave    |     Y     |     Y     |     N     |     Y     |  N  |    N    |    Y    |
+   Wi-Fi Powersave  |     N(1)  |     Y     |     Y     |     Y     |  N  |    N    |    Y    |
    I2C API          |     Y     |     Y     |     N     |     N     |  N  |    N    |    Y    |
    ADC/PWM API      |    Y/Y    |    Y/Y    |    Y/Y    |    Y/N    |  N  |    N    |    N    |
    OTA upgrade      |     N     |     Y     |     N     |     N     |  N  |    N    |    N    |
    Real Time Clock  |     N     |     Y     |     N     |     N     |  N  |    N    |    N    |
    -----------------+-----------+-----------+-----------+-----------+-----+---------+---------+  
    
-   * WICED-SDK-3.1.0 Platform Restrictions
+   * WICED-SDK-3.1.1 Platform Restrictions
        STM32F1xx is not yet supported
        Freescale K60 is not yet supported
-       BCM94390
-         - Powersave for the applications processor is not yet supported
-         - The SPI Slave peripherals are not yet supported
        BCM943341WCD1
          - WPS is not supported (unreliable)
 
-   * BCM943362WCD2 Platform Restrictions (not applicable to WICED-SDK-3.1.0)
+   * BCM943362WCD2 Platform Restrictions (not applicable to WICED-SDK-3.1.1)
        The STM32F103 MCU on this platform only has 64kB RAM and 512kB Flash.
        Many applications that include more advanced networking features
        will NOT run on this platform! Either the application will not fit into
        Flash, or the application may run out of RAM at runtime and hang.
        Tips to use this platform:
-         - Store the Wi-Fi firmware in external serial flash (or use the Wi-Fi
+         - Store the Wi-Fi firmware in external serial flash (or use the Wi-Fi 
            firmware inside the Factory Reset image in serial flash)
          - Do not use advanced networking features like TLS & mDNS
          - Do not build applications using debug mode
@@ -234,6 +232,10 @@ Known Limitations & Notes
                 (ie. BCM9WCD1EVAL1.cfg for WICED Evaluation Boards) 
 
  * AP mode when running with WPA/WPA2 encryption is limited to 4 STA clients
+ 
+ * WICED HTTPS server connection with LwIP is unreliable. This issue will be addressed in the next release
+ 
+ * OTA upgrade is supported for STM32F2xx, STM32F4xx and BCM94390 platforms *ONLY*
 
 Tools
 ---------------------------------------------------------------------

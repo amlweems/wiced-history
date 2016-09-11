@@ -122,10 +122,10 @@ VOID        _tx_byte_pool_initialize(VOID);
 
 UINT        _tx_byte_allocate(TX_BYTE_POOL *pool_ptr, VOID **memory_ptr, ULONG memory_size,
                     ULONG wait_option);
-UINT        _tx_byte_pool_create(TX_BYTE_POOL *pool_ptr, CHAR *name_ptr, VOID *pool_start,
+UINT        _tx_byte_pool_create(TX_BYTE_POOL *pool_ptr, const CHAR *name_ptr, VOID *pool_start,
                     ULONG pool_size);
 UINT        _tx_byte_pool_delete(TX_BYTE_POOL *pool_ptr);
-UINT        _tx_byte_pool_info_get(TX_BYTE_POOL *pool_ptr, CHAR **name, ULONG *available_bytes, 
+UINT        _tx_byte_pool_info_get(TX_BYTE_POOL *pool_ptr, const CHAR **name, ULONG *available_bytes,
                     ULONG *fragments, TX_THREAD **first_suspended, 
                     ULONG *suspended_count, TX_BYTE_POOL **next_pool);
 UINT        _tx_byte_pool_performance_info_get(TX_BYTE_POOL *pool_ptr, ULONG *allocates, ULONG *releases,
@@ -143,10 +143,10 @@ VOID        _tx_byte_pool_cleanup(TX_THREAD *thread_ptr);
 
 UINT        _txe_byte_allocate(TX_BYTE_POOL *pool_ptr, VOID **memory_ptr, ULONG memory_size,
                     ULONG wait_option);
-UINT        _txe_byte_pool_create(TX_BYTE_POOL *pool_ptr, CHAR *name_ptr, VOID *pool_start,
+UINT        _txe_byte_pool_create(TX_BYTE_POOL *pool_ptr, const CHAR *name_ptr, VOID *pool_start,
                     ULONG pool_size, UINT pool_control_block_size);
 UINT        _txe_byte_pool_delete(TX_BYTE_POOL *pool_ptr);
-UINT        _txe_byte_pool_info_get(TX_BYTE_POOL *pool_ptr, CHAR **name, ULONG *available_bytes, 
+UINT        _txe_byte_pool_info_get(TX_BYTE_POOL *pool_ptr, const CHAR **name, ULONG *available_bytes,
                     ULONG *fragments, TX_THREAD **first_suspended, 
                     ULONG *suspended_count, TX_BYTE_POOL **next_pool);
 UINT        _txe_byte_pool_prioritize(TX_BYTE_POOL *pool_ptr);

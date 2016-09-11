@@ -46,7 +46,7 @@ extern "C"
 /**
  * The space in bytes required for headers in front of the Ethernet header.
  */
-#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME ( sizeof(wwd_buffer_header_t) + WWD_SPDCM_HEADER_LENGTH )
+#define WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME ( sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_RESERVED_LENGTH )
 
 /**
  * The maximum space in bytes required for headers in front of the Ethernet header.

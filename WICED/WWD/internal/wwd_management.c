@@ -160,7 +160,7 @@ wwd_result_t wwd_management_wifi_on( void )
     /* Note: This is only required for later chips.
      * The 4319 has glomming off by default however the 43362 has it on by default.
      */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_TX_GLOM );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_TX_GLOM );
     if ( data == NULL )
     {
         wiced_assert( "Could not get buffer for IOVAR", 0 != 0 );
@@ -273,7 +273,7 @@ wwd_result_t wwd_management_wifi_on( void )
     }
 
     /* Send UP command */
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, 0 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, 0 );
     if ( data == NULL )
     {
         wiced_assert( "Could not get buffer for IOCTL", 0 != 0 );
@@ -288,7 +288,7 @@ wwd_result_t wwd_management_wifi_on( void )
     }
 
     /* Set the GMode */
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     if ( data == NULL )
     {
         wiced_assert( "Could not get buffer for IOCTL", 0 != 0 );

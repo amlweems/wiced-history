@@ -17,6 +17,7 @@
 #include "platform_peripheral.h"
 #include "wiced_result.h"
 #include "wiced_platform.h"
+#include "platform_config.h"
 
 /******************************************************
  *                      Macros
@@ -42,7 +43,7 @@
  *               Static Function Declarations
  ******************************************************/
 
-extern wiced_result_t wiced_platform_init( void );
+extern wiced_result_t wiced_platform_init      ( void );
 
 /******************************************************
  *               Variable Definitions
@@ -72,7 +73,9 @@ wiced_result_t wiced_platform_init( void )
     {
         WPRINT_PLATFORM_ERROR( ("WARNING: Watchdog reset occured previously. Please see platform_watchdog.c for debugging instructions.\n") );
     }
-
+#ifdef USES_RESOURCE_FILESYSTEM
+    platform_filesystem_init();
+#endif
     memset(i2c_initialized, 0, sizeof(i2c_initialized));
 
     return WICED_SUCCESS;
@@ -80,37 +83,37 @@ wiced_result_t wiced_platform_init( void )
 
 wiced_result_t wiced_adc_init( wiced_adc_t adc, uint32_t sample_cycle )
 {
-    return platform_adc_init( &platform_adc_peripherals[adc], sample_cycle );
+    return (wiced_result_t) platform_adc_init( &platform_adc_peripherals[adc], sample_cycle );
 }
 
 wiced_result_t wiced_adc_deinit( wiced_adc_t adc )
 {
-    return platform_adc_deinit( &platform_adc_peripherals[adc] );
+    return (wiced_result_t) platform_adc_deinit( &platform_adc_peripherals[adc] );
 }
 
 wiced_result_t wiced_adc_take_sample( wiced_adc_t adc, uint16_t* output )
 {
-    return platform_adc_take_sample( &platform_adc_peripherals[adc], output );
+    return (wiced_result_t) platform_adc_take_sample( &platform_adc_peripherals[adc], output );
 }
 
 wiced_result_t wiced_adc_take_sample_stream( wiced_adc_t adc, void* buffer, uint16_t buffer_length )
 {
-    return platform_adc_take_sample_stream( &platform_adc_peripherals[adc], buffer, buffer_length );
+    return (wiced_result_t) platform_adc_take_sample_stream( &platform_adc_peripherals[adc], buffer, buffer_length );
 }
 
 wiced_result_t wiced_gpio_init( wiced_gpio_t gpio, wiced_gpio_config_t configuration )
 {
-    return platform_gpio_init( &platform_gpio_pins[gpio], configuration );
+    return (wiced_result_t) platform_gpio_init( &platform_gpio_pins[gpio], configuration );
 }
 
 wiced_result_t wiced_gpio_output_high( wiced_gpio_t gpio )
 {
-    return platform_gpio_output_high( &platform_gpio_pins[gpio] );
+    return (wiced_result_t) platform_gpio_output_high( &platform_gpio_pins[gpio] );
 }
 
 wiced_result_t wiced_gpio_output_low( wiced_gpio_t gpio )
 {
-    return platform_gpio_output_low( &platform_gpio_pins[gpio] );
+    return (wiced_result_t) platform_gpio_output_low( &platform_gpio_pins[gpio] );
 }
 
 wiced_bool_t wiced_gpio_input_get( wiced_gpio_t gpio )
@@ -120,12 +123,12 @@ wiced_bool_t wiced_gpio_input_get( wiced_gpio_t gpio )
 
 wiced_result_t wiced_gpio_input_irq_enable( wiced_gpio_t gpio, wiced_gpio_irq_trigger_t trigger, wiced_gpio_irq_handler_t handler, void* arg )
 {
-    return platform_gpio_irq_enable( &platform_gpio_pins[gpio], trigger, handler, arg );
+    return (wiced_result_t) platform_gpio_irq_enable( &platform_gpio_pins[gpio], trigger, handler, arg );
 }
 
 wiced_result_t wiced_gpio_input_irq_disable( wiced_gpio_t gpio )
 {
-    return platform_gpio_irq_disable( &platform_gpio_pins[gpio] );
+    return (wiced_result_t) platform_gpio_irq_disable( &platform_gpio_pins[gpio] );
 }
 
 wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device )
@@ -144,7 +147,7 @@ wiced_result_t wiced_i2c_init( wiced_i2c_device_t* device )
     config.flags         = device->flags;
     config.speed_mode    = device->speed_mode;
 
-    result = platform_i2c_init( &platform_i2c_peripherals[device->port], &config );
+    result = (wiced_result_t) platform_i2c_init( &platform_i2c_peripherals[device->port], &config );
     if (result == WICED_SUCCESS)
     {
         i2c_initialized[device->port] = WICED_TRUE;
@@ -163,7 +166,7 @@ wiced_result_t wiced_i2c_deinit( wiced_i2c_device_t* device )
 
     i2c_initialized[device->port] = WICED_FALSE;
 
-    return platform_i2c_deinit( &platform_i2c_peripherals[device->port], &config );
+    return (wiced_result_t) platform_i2c_deinit( &platform_i2c_peripherals[device->port], &config );
 }
 
 wiced_bool_t wiced_i2c_probe_device( wiced_i2c_device_t* device, int retries )
@@ -180,17 +183,17 @@ wiced_bool_t wiced_i2c_probe_device( wiced_i2c_device_t* device, int retries )
 
 wiced_result_t wiced_i2c_init_tx_message( wiced_i2c_message_t* message, const void* tx_buffer, uint16_t tx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
 {
-    return platform_i2c_init_tx_message( message, tx_buffer, tx_buffer_length, retries, disable_dma );
+    return (wiced_result_t) platform_i2c_init_tx_message( message, tx_buffer, tx_buffer_length, retries, disable_dma );
 }
 
 wiced_result_t wiced_i2c_init_rx_message( wiced_i2c_message_t* message, void* rx_buffer, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
 {
-    return platform_i2c_init_rx_message( message, rx_buffer, rx_buffer_length, retries, disable_dma );
+    return (wiced_result_t) platform_i2c_init_rx_message( message, rx_buffer, rx_buffer_length, retries, disable_dma );
 }
 
 wiced_result_t wiced_i2c_init_combined_message( wiced_i2c_message_t* message, const void* tx_buffer, void* rx_buffer, uint16_t tx_buffer_length, uint16_t rx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
 {
-    return platform_i2c_init_combined_message( message, tx_buffer, rx_buffer, tx_buffer_length, rx_buffer_length, retries, disable_dma );
+    return (wiced_result_t) platform_i2c_init_combined_message( message, tx_buffer, rx_buffer, tx_buffer_length, rx_buffer_length, retries, disable_dma );
 }
 
 wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message_t* messages, uint16_t number_of_messages )
@@ -202,7 +205,7 @@ wiced_result_t wiced_i2c_transfer( wiced_i2c_device_t* device, wiced_i2c_message
     config.flags         = device->flags;
     config.speed_mode    = device->speed_mode;
 
-    return platform_i2c_transfer( &platform_i2c_peripherals[device->port], &config, messages, number_of_messages );
+    return (wiced_result_t) platform_i2c_transfer( &platform_i2c_peripherals[device->port], &config, messages, number_of_messages );
 }
 
 void wiced_platform_mcu_enable_powersave( void )
@@ -221,27 +224,27 @@ void wiced_platform_mcu_disable_powersave( void )
 
 wiced_result_t wiced_pwm_init( wiced_pwm_t pwm_peripheral, uint32_t frequency, float duty_cycle )
 {
-    return platform_pwm_init( &platform_pwm_peripherals[pwm_peripheral], frequency, duty_cycle );
+    return (wiced_result_t) platform_pwm_init( &platform_pwm_peripherals[pwm_peripheral], frequency, duty_cycle );
 }
 
 wiced_result_t wiced_pwm_start( wiced_pwm_t pwm )
 {
-    return platform_pwm_start( &platform_pwm_peripherals[pwm] );
+    return (wiced_result_t) platform_pwm_start( &platform_pwm_peripherals[pwm] );
 }
 
 wiced_result_t wiced_pwm_stop( wiced_pwm_t pwm )
 {
-    return platform_pwm_stop( &platform_pwm_peripherals[pwm] );
+    return (wiced_result_t) platform_pwm_stop( &platform_pwm_peripherals[pwm] );
 }
 
 wiced_result_t wiced_platform_get_rtc_time( wiced_rtc_time_t* time )
 {
-    return platform_rtc_get_time( time );
+    return (wiced_result_t) platform_rtc_get_time( time );
 }
 
 wiced_result_t wiced_platform_set_rtc_time( const wiced_rtc_time_t* time )
 {
-    return platform_rtc_set_time( time );
+    return (wiced_result_t) platform_rtc_set_time( time );
 }
 
 wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi )
@@ -253,7 +256,7 @@ wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi )
     config.mode        = spi->mode;
     config.bits        = spi->bits;
 
-    return platform_spi_init( &platform_spi_peripherals[spi->port], &config );
+    return (wiced_result_t) platform_spi_init( &platform_spi_peripherals[spi->port], &config );
 }
 
 wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi )
@@ -265,7 +268,7 @@ wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi )
     config.mode        = spi->mode;
     config.bits        = spi->bits;
 
-    return platform_spi_init( &platform_spi_peripherals[spi->port], &config );
+    return (wiced_result_t) platform_spi_init( &platform_spi_peripherals[spi->port], &config );
 }
 
 wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments )
@@ -277,37 +280,37 @@ wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_sp
     config.mode        = spi->mode;
     config.bits        = spi->bits;
 
-    return platform_spi_transfer( &platform_spi_peripherals[spi->port], &config, segments, number_of_segments );
+    return (wiced_result_t) platform_spi_transfer( &platform_spi_peripherals[spi->port], &config, segments, number_of_segments );
 }
 
 wiced_result_t wiced_spi_slave_init( wiced_spi_t spi, const wiced_spi_slave_config_t* config )
 {
-    return platform_spi_slave_init( &platform_spi_slave_drivers[spi], &platform_spi_peripherals[spi], config );
+    return (wiced_result_t) platform_spi_slave_init( &platform_spi_slave_drivers[spi], &platform_spi_peripherals[spi], config );
 }
 
 wiced_result_t wiced_spi_slave_deinit( wiced_spi_t spi )
 {
-    return platform_spi_slave_deinit( &platform_spi_slave_drivers[spi] );
+    return (wiced_result_t) platform_spi_slave_deinit( &platform_spi_slave_drivers[spi] );
 }
 
 wiced_result_t wiced_spi_slave_send_error_status( wiced_spi_t spi, wiced_spi_slave_transfer_status_t error_status )
 {
-    return platform_spi_slave_send_error_status( &platform_spi_slave_drivers[spi], error_status );
+    return (wiced_result_t) platform_spi_slave_send_error_status( &platform_spi_slave_drivers[spi], error_status );
 }
 
 wiced_result_t wiced_spi_slave_receive_command( wiced_spi_t spi, wiced_spi_slave_command_t* command, uint32_t timeout_ms )
 {
-    return platform_spi_slave_receive_command( &platform_spi_slave_drivers[spi], command, timeout_ms );
+    return (wiced_result_t) platform_spi_slave_receive_command( &platform_spi_slave_drivers[spi], command, timeout_ms );
 }
 
 wiced_result_t wiced_spi_slave_transfer_data( wiced_spi_t spi, wiced_spi_slave_transfer_direction_t direction, wiced_spi_slave_data_buffer_t* buffer, uint32_t timeout_ms )
 {
-    return platform_spi_slave_transfer_data( &platform_spi_slave_drivers[spi], direction, buffer, timeout_ms );
+    return (wiced_result_t) platform_spi_slave_transfer_data( &platform_spi_slave_drivers[spi], direction, buffer, timeout_ms );
 }
 
 wiced_result_t wiced_spi_slave_generate_interrupt( wiced_spi_t spi, uint32_t pulse_duration_ms )
 {
-    return platform_spi_slave_generate_interrupt( &platform_spi_slave_drivers[spi], pulse_duration_ms );
+    return (wiced_result_t) platform_spi_slave_generate_interrupt( &platform_spi_slave_drivers[spi], pulse_duration_ms );
 }
 
 wiced_result_t wiced_uart_init( wiced_uart_t uart, const wiced_uart_config_t* config, wiced_ring_buffer_t* optional_rx_buffer )
@@ -320,27 +323,27 @@ wiced_result_t wiced_uart_init( wiced_uart_t uart, const wiced_uart_config_t* co
     }
 #endif
 
-    return platform_uart_init( &platform_uart_drivers[uart], &platform_uart_peripherals[uart], config, optional_rx_buffer );
+    return (wiced_result_t) platform_uart_init( &platform_uart_drivers[uart], &platform_uart_peripherals[uart], config, optional_rx_buffer );
 }
 
 wiced_result_t wiced_uart_deinit( wiced_uart_t uart )
 {
-    return platform_uart_deinit( &platform_uart_drivers[uart] );
+    return (wiced_result_t) platform_uart_deinit( &platform_uart_drivers[uart] );
 }
 
 wiced_result_t wiced_uart_transmit_bytes( wiced_uart_t uart, const void* data, uint32_t size )
 {
-    return platform_uart_transmit_bytes( &platform_uart_drivers[uart], (const uint8_t*) data, size );
+    return (wiced_result_t) platform_uart_transmit_bytes( &platform_uart_drivers[uart], (const uint8_t*) data, size );
 }
 
 wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t size, uint32_t timeout )
 {
-    return platform_uart_receive_bytes( &platform_uart_drivers[uart], (uint8_t*)data, size, timeout );
+    return (wiced_result_t) platform_uart_receive_bytes( &platform_uart_drivers[uart], (uint8_t*)data, size, timeout );
 }
 
 wiced_result_t wiced_watchdog_kick( void )
 {
-    return platform_watchdog_kick( );
+    return (wiced_result_t) platform_watchdog_kick( );
 }
 
 uint64_t wiced_get_nanosecond_clock_value( void )

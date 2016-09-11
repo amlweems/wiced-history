@@ -114,7 +114,7 @@ export SUB_BUILD
 export OPENOCD_LOG_FILE
 export EXTERNAL_WICED_GLOBAL_DEFINES
 
-.PHONY: $(BUILD_STRING) main_app bootloader download_only test testlist clean iar_project Help download no_dct download_dct download_work copy_elf_for_eclipse run debug download_bootloader sflash_image .gdbinit factory_reset_dct
+.PHONY: $(BUILD_STRING) main_app bootloader download_only test testlist clean iar_project Help download no_dct download_dct download_work copy_elf_for_eclipse run debug download_bootloader sflash_image .gdbinit factory_reset_dct sflash
 
 Help: $(TOOLCHAIN_HOOK_TARGETS)
 	$(error $(USAGE_TEXT))
@@ -197,6 +197,15 @@ sflash_image: main_app
 	$(QUIET)$(ECHO) Building Serial Flash Image
 	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/mfg_image.mk $(SFLASH) FRAPP=$(CLEANED_BUILD_STRING) SFLASH=
 endif
+
+
+sflash: main_app
+	$(QUIET)$(ECHO) Building Serial Flash Image $@
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_sflash.mk FRAPP=$(CLEANED_BUILD_STRING) $@
+
+sflash_download: main_app sflash
+	$(QUIET)$(ECHO) Downloading Serial Flash Image $@
+	$(QUIET)$(MAKE) $(SILENT) -f $(MAKEFILES_PATH)/wiced_sflash.mk FRAPP=$(CLEANED_BUILD_STRING) $@
 
 factory_reset_dct: $(SOURCE_ROOT)wiced_factory_reset.mk Makefile
 	$(QUIET)$(MAKE) $(SILENT) -f $(SOURCE_ROOT)wiced_factory_reset.mk $(FACTORY_RESET_TARGET)

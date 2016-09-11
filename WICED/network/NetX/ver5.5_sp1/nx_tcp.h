@@ -314,7 +314,7 @@ UINT  _nx_tcp_server_socket_listen(NX_IP *ip_ptr, UINT port, NX_TCP_SOCKET *sock
 UINT  _nx_tcp_server_socket_relisten(NX_IP *ip_ptr, UINT port, NX_TCP_SOCKET *socket_ptr);
 UINT  _nx_tcp_server_socket_unaccept(NX_TCP_SOCKET *socket_ptr);
 UINT  _nx_tcp_server_socket_unlisten(NX_IP *ip_ptr, UINT port);
-UINT  _nx_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, CHAR *name, 
+UINT  _nx_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG window_size,
                             VOID (*tcp_urgent_data_callback)(NX_TCP_SOCKET *socket_ptr),
                             VOID (*tcp_disconnect_callback)(NX_TCP_SOCKET *socket_ptr));
@@ -415,7 +415,7 @@ UINT  _nxe_tcp_server_socket_listen(NX_IP *ip_ptr, UINT port, NX_TCP_SOCKET *soc
 UINT  _nxe_tcp_server_socket_relisten(NX_IP *ip_ptr, UINT port, NX_TCP_SOCKET *socket_ptr);
 UINT  _nxe_tcp_server_socket_unaccept(NX_TCP_SOCKET *socket_ptr);
 UINT  _nxe_tcp_server_socket_unlisten(NX_IP *ip_ptr, UINT port);
-UINT  _nxe_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, CHAR *name, 
+UINT  _nxe_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG window_size,
                             VOID (*tcp_urgent_data_callback)(NX_TCP_SOCKET *socket_ptr),
                             VOID (*tcp_disconnect_callback)(NX_TCP_SOCKET *socket_ptr),

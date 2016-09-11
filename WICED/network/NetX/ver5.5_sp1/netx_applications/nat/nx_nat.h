@@ -109,14 +109,11 @@ extern   "C" {
     MODERATE:   Report events possibly preventing successful mail transaction
     ALL:        All events reported  */
 
-typedef enum NX_NAT_DEBUG_ENUM
-{
-    NONE,  
-    LOG,
-    SEVERE, 
-    MODERATE, 
-    ALL
-} NX_NAT_DEBUG;
+#define NX_NAT_DEBUG_NONE      (0)
+#define NX_NAT_DEBUG_LOG       (1)
+#define NX_NAT_DEBUG_SEVERE    (2)
+#define NX_NAT_DEBUG_MODERATE  (3)
+#define NX_NAT_DEBUG_ALL       (4)
 
 
 /* Internal error processing codes. */
@@ -216,7 +213,7 @@ typedef enum NX_NAT_TRANSLATION_TABLE_ENTRY_ENUM
 /* Set the event reporting/debug output for the NetX NAT */
 
 #ifndef NX_NAT_DEBUG
-#define NX_NAT_DEBUG                         MODERATE
+#define NX_NAT_DEBUG                         NX_NAT_DEBUG_NONE
 #endif
 
 /* Set debugging level for NetX NAT */
@@ -226,30 +223,35 @@ typedef enum NX_NAT_TRANSLATION_TABLE_ENTRY_ENUM
     printf() itself may need to be defined for the specific
     processor that is running the application and communication. */
 
+#if ( NX_NAT_DEBUG == NX_NAT_DEBUG_NONE )
+#define NX_NAT_EVENT_LOG(debug_level, msg)
+#else /* NX_NAT_DEBUG */
+
 #define NX_NAT_EVENT_LOG(debug_level, msg)                          \
 {                                                                   \
 TX_INTERRUPT_SAVE_AREA                                              \
 UINT level = (UINT)debug_level;                                     \
                                                                     \
 TX_DISABLE                                                          \
-    if (level <= ALL && NX_NAT_DEBUG == ALL)                        \
+    if (level <= NX_NAT_DEBUG_ALL && NX_NAT_DEBUG == NX_NAT_DEBUG_ALL)                        \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level <= MODERATE && NX_NAT_DEBUG == MODERATE)         \
+    else if (level <= NX_NAT_DEBUG_MODERATE && NX_NAT_DEBUG == NX_NAT_DEBUG_MODERATE)         \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level == SEVERE && NX_NAT_DEBUG == SEVERE)             \
+    else if (level == NX_NAT_DEBUG_SEVERE && NX_NAT_DEBUG == NX_NAT_DEBUG_SEVERE)             \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
-    else if (level == LOG)                                          \
+    else if (level == NX_NAT_DEBUG_LOG)                                          \
     {                                                               \
        printf msg ;                                                 \
     }                                                               \
 TX_RESTORE                                                          \
 }
+#endif /* NX_NAT_DEBUG */
 
 /* Configure NAT thread and stack parameters. */
 
@@ -861,6 +863,12 @@ UINT    _nx_nat_utility_convert_IP_ULONG_to_ascii(ULONG IP_address, CHAR *numstr
 UINT    _nx_nat_utility_convert_portnumber_ascii_to_ULONG(CHAR *buffer, UINT *number, UINT buffer_length);
 UINT    _nx_nat_utility_convert_portnumber_ULONG_to_ascii(CHAR *buffer, ULONG number, UINT buffer_length);
 UINT    _nx_nat_utility_convert_number_ascii(UINT number, CHAR *numstring, UINT string_length);
+
+#ifdef  NX_NAT_ALTERNATE_UCHAR_TO_ASCII
+UINT    _nx_uchar_to_ascii_convert(UCHAR number, CHAR *buffstring);
+#else
+#define _nx_uchar_to_ascii_convert(number, buffstring)  sprintf((buffstring),"%u",(unsigned int)(number))
+#endif /* ifdef  NX_NAT_ALTERNATE_UCHAR_TO_ASCII */
 
 
 /* If a C++ compiler is being used....*/

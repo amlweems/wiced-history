@@ -32,6 +32,8 @@ SECTIONS
     {
         dct_location = .;
         KEEP(*(.rodata.initial_dct))
+        KEEP(*(.rodata.wiced_apps_lut))
+        KEEP(*(.rodata.wiced_apps_lut_fill))
         KEEP(*(.rodata._app_dct))
         dct_end = .;
 

@@ -92,7 +92,7 @@ SECTIONS
         link_run_from_ram_code_ram_location = .;
         *(.fast .fast.* .text.fastcode)
         link_run_from_ram_code_ram_end = .;
-    }> SRAM AT> BTLDR_CODE
+    }> BTLDR_SRAM AT> BTLDR_CODE
 
     .data : /* Contains the non-zero initialised global variables */
     {
@@ -101,7 +101,7 @@ SECTIONS
         *(.data*)
         link_global_data_end = .;
         . = ALIGN(., 4);
-    }> SRAM AT> BTLDR_CODE
+    }> BTLDR_SRAM AT> BTLDR_CODE
 
 
     .startup_globals : /* Named global variables that may only be used in bootloader startup i.e. not in shared code */
@@ -109,7 +109,7 @@ SECTIONS
         startup_globals_location = ALIGN(., 4);
         *(.bss.noos_total_time)
         startup_globals_end = .;
-    }> SRAM AT> SRAM
+    }> BTLDR_SRAM AT> BTLDR_SRAM
 
     .stack : /* Contains the initial stack */
     {
@@ -117,7 +117,7 @@ SECTIONS
         *(.stack)
         . = ALIGN(MAX(link_stack_location + __STACKSIZE__ , .), 4);
         link_stack_end = .;
-    }> SRAM AT> SRAM
+    }> BTLDR_SRAM AT> BTLDR_SRAM
 
     /DISCARD/ :
     {

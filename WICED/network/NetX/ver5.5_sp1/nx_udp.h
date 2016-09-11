@@ -119,7 +119,7 @@ UINT  _nx_udp_info_get(NX_IP *ip_ptr, ULONG *udp_packets_sent, ULONG *udp_bytes_
 UINT  _nx_udp_socket_bind(NX_UDP_SOCKET *socket_ptr, UINT  port, ULONG wait_option);
 UINT  _nx_udp_socket_checksum_disable(NX_UDP_SOCKET *socket_ptr);
 UINT  _nx_udp_socket_checksum_enable(NX_UDP_SOCKET *socket_ptr);
-UINT  _nx_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, CHAR *name, 
+UINT  _nx_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG queue_maximum);
 UINT  _nx_udp_socket_delete(NX_UDP_SOCKET *socket_ptr);
 UINT  _nx_udp_socket_info_get(NX_UDP_SOCKET *socket_ptr, ULONG *udp_packets_sent, ULONG *udp_bytes_sent, 
@@ -158,7 +158,7 @@ UINT  _nxe_udp_info_get(NX_IP *ip_ptr, ULONG *udp_packets_sent, ULONG *udp_bytes
 UINT  _nxe_udp_socket_bind(NX_UDP_SOCKET *socket_ptr, UINT  port, ULONG wait_option);
 UINT  _nxe_udp_socket_checksum_disable(NX_UDP_SOCKET *socket_ptr);
 UINT  _nxe_udp_socket_checksum_enable(NX_UDP_SOCKET *socket_ptr);
-UINT  _nxe_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, CHAR *name, 
+UINT  _nxe_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG queue_maximum, UINT udp_socket_size);
 UINT  _nxe_udp_socket_delete(NX_UDP_SOCKET *socket_ptr);
 UINT  _nxe_udp_socket_info_get(NX_UDP_SOCKET *socket_ptr, ULONG *udp_packets_sent, ULONG *udp_bytes_sent, 

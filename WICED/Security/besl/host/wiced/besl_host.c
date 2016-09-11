@@ -11,6 +11,7 @@
 /** @file
  *
  */
+#include "wiced_result.h"
 #include "besl_host_interface.h"
 #include "wwd_structures.h"
 #include "wiced_utilities.h"

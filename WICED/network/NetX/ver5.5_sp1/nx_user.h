@@ -39,6 +39,8 @@
 
 #define NX_TCP_MAX_OUT_OF_ORDER_PACKETS
 
+#define NX_MAX_LISTEN_REQUESTS 21
+
 #define PACKET_RELEASE_NOTIFY
 extern void packet_release_notify( void* pool );
 extern UINT nx_rand16( void );
@@ -249,7 +251,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_IP_RAW
 #undef NX_IP_ROUTING_TABLE_SIZE
 #undef NX_IP_STATUS_CHECK_WAIT_TIME
-#undef NX_MAX_LISTEN_REQUESTS
+//#undef NX_MAX_LISTEN_REQUESTS
 #undef NX_MAX_MULTICAST_GROUPS
 #undef NX_MAX_PHYSICAL_INTERFACES
 #undef NX_MICROSECOND_PER_CPU_TICK

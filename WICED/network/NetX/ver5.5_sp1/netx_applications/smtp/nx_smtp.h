@@ -97,13 +97,11 @@ extern   "C" {
     MODERATE:   Report events possibly preventing successful mail transaction
     ALL:        All events reported  */
 
-typedef enum NX_SMTP_DEBUG_LEVEL_ENUM
-{
-    NONE,  
-    SEVERE, 
-    MODERATE, 
-    ALL
-} NX_SMTP_DEBUG_LEVEL;
+#define NX_SMTP_DEBUG_LEVEL_NONE     (0)
+#define NX_SMTP_DEBUG_LEVEL_SEVERE   (1)
+#define NX_SMTP_DEBUG_LEVEL_MODERATE (2)
+#define NX_SMTP_DEBUG_LEVEL_ALL      (3)
+
 
 
 /* Internal error processing codes. */

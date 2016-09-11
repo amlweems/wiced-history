@@ -20,6 +20,8 @@
 #include "wwd_constants.h"
 #include "platform_peripheral.h"
 #include "platform.h" /* This file is unique for each platform */
+#include "platform_dct.h"
+#include "waf_platform.h"
 
 #ifdef __cplusplus
 extern "C" {

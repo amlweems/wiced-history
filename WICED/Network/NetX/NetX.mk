@@ -46,3 +46,5 @@ else
 # Build from source (Broadcom internal)
 include $(CURDIR)NetX_src.mk
 endif #ifneq ($(wildcard $(CURDIR)NetX.$(HOST_ARCH).$(BUILD_TYPE).a),)
+
+$(NAME)_SOURCES += ver$(NETX_VERSION)/nx_external_functions.c

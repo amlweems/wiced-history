@@ -11,8 +11,8 @@
 MEMORY
 {
     /* OTA app resides in RAM only */
-    BTLDR_API  (rx)  : ORIGIN = 0x08000200, LENGTH = 512
+    SHARED_API (rx)  : ORIGIN = 0x08000200, LENGTH = 512
     SRAM       (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
-    CCM_SRAM   (rwx) : ORIGIN = 0x10000000, LENGTH = 64K                /* Core Coupled SRAM. */
+    CCM_SRAM   (rwx) : ORIGIN = 0x10000000, LENGTH = 64K   /* Core Coupled SRAM. */
     OTA_HDR    (rx)  : ORIGIN = 0x1FFFFE00, LENGTH = 512   /* App Header for OTA only goes in SFLASH, hence does not need a valid address */
 }

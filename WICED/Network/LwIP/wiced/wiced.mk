@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Wiced_LwIP_Interface
+NAME := WICED_LwIP_Interface
 
 GLOBAL_INCLUDES := .
 

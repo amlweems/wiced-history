@@ -51,6 +51,12 @@
  *               Function Definitions
  ******************************************************/
 
+
+void platform_mcu_reset( void )
+{
+    NVIC_SystemReset();
+}
+
 /* STM32F2 common clock initialisation function
  * This brings up enough clocks to allow the processor to run quickly while initialising memory.
  * Other platform specific clock init can be done in init_platform() or init_architecture()
@@ -113,7 +119,7 @@ void platform_init_mcu_infrastructure( void )
     /* Initialise interrupt priorities */
     for ( i = 0; i < 81; i++ )
     {
-        NVIC_SetPriority( i, 0xf );
+        NVIC_SetPriority( (IRQn_Type) i, 0xf );
     }
     NVIC_PriorityGroupConfig( NVIC_PriorityGroup_4 );
     platform_init_rtos_irq_priorities();

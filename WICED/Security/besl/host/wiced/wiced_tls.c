@@ -196,6 +196,12 @@ tls_result_t tls_host_create_buffer( ssl_context* ssl, uint8_t** buffer, uint16_
             *buffer = NULL;
             return 1;
         }
+        if ( ssl->state == SSL_HANDSHAKE_OVER )
+        {
+            /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
+            *buffer -= sizeof(tls_record_header_t);
+            wiced_packet_set_data_start((wiced_packet_t*) ssl->outgoing_packet, *buffer);
+        }
     }
     else
     {
@@ -271,6 +277,12 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
             {
                 free(buffer);
                 return 1;
+            }
+            if ( ssl->state == SSL_HANDSHAKE_OVER )
+            {
+                /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
+                packet_buffer -= sizeof(tls_record_header_t);
+                wiced_packet_set_data_start((wiced_packet_t*) temp_packet, packet_buffer);
             }
             amount_to_copy = (uint16_t) MIN(length, actual_packet_size);
             packet_buffer = MEMCAT(packet_buffer, data, amount_to_copy);
@@ -804,6 +816,12 @@ static wiced_result_t tls_packetize_buffered_data( wiced_tls_context_t* context,
     {
         *packet = NULL;
         return result;
+    }
+    if ( context->state == SSL_HANDSHAKE_OVER )
+    {
+        /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
+        data -= sizeof(tls_record_header_t);
+        wiced_packet_set_data_start((wiced_packet_t*) *packet, data);
     }
 
     amount_to_copy = (uint32_t) MIN( length, record_length - context->defragmentation_buffer_bytes_processed );

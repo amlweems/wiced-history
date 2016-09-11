@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Wiced_ThreadX_Interface
+NAME := WICED_ThreadX_Interface
 
 GLOBAL_INCLUDES := .
 

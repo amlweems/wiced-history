@@ -16,6 +16,8 @@
 #include "generated_security_dct.h"
 #include "WICED/platform/include/platform_dct.h"
 #include "wiced_defaults.h"
+#include "wiced_result.h"
+#include "wiced_apps_common.h"
 
 #ifdef WIFI_CONFIG_APPLICATION_DEFINED
 #include "wifi_config_dct.h"
@@ -103,7 +105,25 @@ static const platform_dct_data_t initial_dct =
     .dct_header.mfg_info_programmed  = 0,
     .dct_header.magic_number         = BOOTLOADER_MAGIC_NUMBER,
 
+    .dct_header.apps_locations[ DCT_FR_APP_INDEX ].id       = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_DCT_IMAGE_INDEX ].id    = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_OTA_APP_INDEX ].id      = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_FILESYSTEM_IMAGE_INDEX ].id   = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_WIFI_FIRMWARE_INDEX ].id= EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_APP0_INDEX ].id         = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_APP1_INDEX ].id         = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_APP2_INDEX ].id         = EXTERNAL_FIXED_LOCATION,
+    .dct_header.apps_locations[ DCT_FR_APP_INDEX ].detail.external_fixed.location    = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FR_APP_INDEX,
+    .dct_header.apps_locations[ DCT_DCT_IMAGE_INDEX ].detail.external_fixed.location = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_DCT_IMAGE_INDEX,
+    .dct_header.apps_locations[ DCT_OTA_APP_INDEX ].detail.external_fixed.location   = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_OTA_APP_INDEX,
+    .dct_header.apps_locations[ DCT_APP0_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_APP0_INDEX,
+    .dct_header.apps_locations[ DCT_APP1_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_APP1_INDEX,
+    .dct_header.apps_locations[ DCT_APP2_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_APP2_INDEX,
+    .dct_header.apps_locations[ DCT_FILESYSTEM_IMAGE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_FILESYSTEM_IMAGE_INDEX,
+    .dct_header.apps_locations[ DCT_WIFI_FIRMWARE_INDEX ].detail.external_fixed.location      = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_WIFI_FIRMWARE_INDEX,
+
 #ifdef BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM
+#if 0
     .dct_header.boot_detail.entry_point = 0,
     .dct_header.boot_detail.load_details.load_once = 0,
     .dct_header.boot_detail.load_details.valid = 1,
@@ -112,7 +132,19 @@ static const platform_dct_data_t initial_dct =
     .dct_header.boot_detail.load_details.destination.id = INTERNAL,
 #else
     .dct_header.boot_detail.entry_point = 0,
+    .dct_header.boot_detail.load_details.valid = 1,
+    .dct_header.boot_detail.load_details.load_once = 0,
+    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FIXED_LOCATION,
+    .dct_header.boot_detail.load_details.source.detail.external_fixed.location = SFLASH_APPS_HEADER_LOC + sizeof(app_header_t) * DCT_APP0_INDEX,
+    .dct_header.boot_detail.load_details.destination.id = INTERNAL,
+#endif
+#else
+    .dct_header.boot_detail.entry_point = 0,
     .dct_header.boot_detail.load_details.valid = 0,
+    //.dct_header.boot_detail.load_details.valid = 1,
+    .dct_header.boot_detail.load_details.source.id = EXTERNAL_FIXED_LOCATION,
+    .dct_header.boot_detail.load_details.source.detail.external_fixed.location = 0,
+    .dct_header.boot_detail.load_details.destination.id = INTERNAL,
 #endif /* ifdef USES_RESOURCE_FILESYSTEM */
 
     .security_credentials.certificate = CERTIFICATE_STRING,

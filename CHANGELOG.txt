@@ -2,6 +2,68 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.1.1 : 13 October 2014
+-----------------------------------------------------------
+* Applications
+  * Added applications available in WICED-SDK-2.4.1 including:
+    * ap_clients_rssi
+    * crypto
+    * dct_read_wriet
+    * packet_filter
+    * security_types
+    * stack_overflow
+    * tcp_client_powersave
+    * thread_monitor
+    * wps_enrollee
+    * wps_registrar
+  * Added new example applications:
+    * spi_slave
+* Libraries & Protocols
+  * Apple HomeKit
+    * Compatible with HAT version 1.0 (50)
+    * Updated HomeKit Accessory API ( currently only supporting Lightbulb accessory )
+    * Enabled support up to 16 controllers
+    * Added options for users to select Bonjour or Gedday
+    * Enabled -debug build
+    * LIMITATIONS: Apple HomeKit now supports ThreadX-NetX_Duo *ONLY*. Support for other RTOS/Network Stack
+                   combinations will be added in subsequent releases
+  * Apple AirPlay
+    * Improved streaming reliability
+    * Updated AirPlay demo application
+      * Expanded application to cover all AirPlay API
+      * Added support Over-the-Air (OTA) upgrade
+      * Audio playback progress is now updated on the terminal every second
+      * Added new console commands
+  * Broadcom Embedded Supplicant Library (BESL)
+    * BESL debug library now output additional debug prints
+  * Platforms & WICED Wi-Fi Driver (WWD)
+    * BCM4390
+      * BCM4390 now handles TCP re-transmission properly
+      * Watchdog is now supported
+      * Significantly reduced inter-beacon sleep current to 140uA (Apps + WLAN)
+      * Updated WLAN firmware to version 6.38.15.5
+        * Low power improvements
+        * Suppressed WLAN debug output on UART4
+        * Fixed channel 4 sensitivity issues
+    * BCM43362
+      * Updated NVRAM images
+      * Updated WLAN firmware version to 5.90.230.10
+        * Added support for ETSI EN 300 328 version 1.8.1
+        * Improved support for Wi-Fi Direct
+    * WICED SoftAP
+      * Set multicast transmission rate to 11 Mbps 
+      * Set block ack window size to 2
+    * Added new WWD API
+      * wwd_wifi_get_rate()
+      * wwd_wifi_set_mcs_rate() 
+      * wwd_wifi_set_legacy_rate()
+      * wwd_wifi_disable_11n_support()
+* WICED API
+  * wiced_hostname_lookup() for LwIP now checks if host name is a string representation of IPv4 address
+* WICED Application Framework (WAF)
+  * Added OTA upgrade with multi-application support (BETA). See <WICED-SDK>/apps/snip/ota_fr/ota_fr.c for details
+    * LIMITATIONS: OTA upgrade is supported for STM32F2xx, STM32F4xx and BCM94390 platforms *ONLY*
+
 Changes for WICED-SDK 3.1.0 : 03 September 2014 
 -----------------------------------------------------------
 * Added support for Apple HomeKit Beta 3 (compatible with HAT version 1.0 (42) )

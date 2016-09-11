@@ -76,7 +76,7 @@ extern "C" {
 
 #define HTTP_HEADER_200                "HTTP/1.1 200 OK"
 #define HTTP_HEADER_204                "HTTP/1.1 204 No Content"
-#define HTTP_HEADER_207                "HTTP/1.1 207 Multi Status"
+#define HTTP_HEADER_207                "HTTP/1.1 207 Multi-Status"
 #define HTTP_HEADER_301                "HTTP/1.1 301"
 #define HTTP_HEADER_400                "HTTP/1.1 400 Bad Request"
 #define HTTP_HEADER_403                "HTTP/1.1 403"
@@ -184,7 +184,7 @@ typedef struct
     } url_content;
 } wiced_http_page_t;
 
-typedef wiced_result_t (*http_server_packet_process_callback_t)( uint8_t** data, uint16_t* data_length );
+typedef wiced_result_t (*http_server_packet_process_callback_t)( wiced_tcp_socket_t* socket, uint8_t** data, uint16_t* data_length );
 
 typedef struct
 {
@@ -222,11 +222,14 @@ wiced_result_t wiced_http_write_reply_header ( wiced_tcp_stream_t* stream, http_
 wiced_result_t wiced_http_turn_on_chunking   ( wiced_tcp_stream_t* stream );
 
 wiced_result_t wiced_http_turn_off_chunking  ( wiced_tcp_stream_t* stream );
+
 wiced_result_t wiced_http_current_socket_close_request                      ( void );
 
 wiced_result_t wiced_http_server_register_packet_post_processing_function   ( http_server_packet_process_callback_t custom_receive_callback );
 
 wiced_result_t wiced_http_server_deregister_packet_post_processing_function ( void );
+
+
 
 #ifdef __cplusplus
 } /* extern "C" */

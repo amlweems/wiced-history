@@ -51,6 +51,9 @@ extern "C"
 #define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (5)
 #define WICED_MAXIMUM_NUMBER_OF_ACCEPT_SOCKETS            (5)
 
+extern wiced_result_t lwip_to_wiced_err[];
+#define LWIP_TO_WICED_ERR( lwip_err )  ((lwip_err >= ERR_ISCONN)? lwip_to_wiced_err[ -lwip_err ] : WICED_UNKNOWN_NETWORK_STACK_ERROR )
+
 /******************************************************
  *                   Enumerations
  ******************************************************/

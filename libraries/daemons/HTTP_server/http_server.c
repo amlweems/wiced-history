@@ -140,7 +140,6 @@ typedef struct
     uint16_t                   url_length;
     wiced_http_message_body_t  message_body_descriptor;
 } wiced_http_message_context_t;
-
 /******************************************************
  *               Static Function Declarations
  ******************************************************/
@@ -156,14 +155,12 @@ static wiced_packet_mime_type_t  wiced_get_mime_type                            
 static void                      http_server_thread_main                                ( uint32_t arg );
 static wiced_result_t            wiced_get_http_request_type_and_url                    ( char* request, wiced_http_request_type_t* type, char** url_start, uint16_t* url_length );
 static wiced_result_t            wiced_http_chunk_response                              ( void* stream, const void* data, uint32_t data_length );
-static wiced_result_t            wiced_http_server_get_packet_data                      ( wiced_packet_t* packet, char** data, uint16_t* request_length );
+static wiced_result_t            wiced_http_server_get_packet_data                      ( wiced_tcp_socket_t* socket, wiced_packet_t* packet, char** data, uint16_t* request_length );
 static wiced_result_t            wiced_http_server_set_http_message_body_type_for_socket( wiced_tcp_socket_t* socket, char* url, uint16_t url_length, wiced_http_message_body_t* message_body_descriptor );
 static wiced_http_packet_state_t wiced_get_http_packet_state_and_socket_context         ( wiced_tcp_socket_t* socket, wiced_http_message_context_t* socket_http_context );
 static wiced_result_t            wiced_reset_current_message_body_context_for_socket    ( wiced_tcp_socket_t* socket );
-
-static wiced_result_t            wiced_http_reset_socket_close_request                  ( void );
-static wiced_bool_t              wiced_http_get_socket_close_request                    ( void );
-
+static wiced_result_t            wiced_http_reset_external_socket_close_request                             ( void );
+static wiced_bool_t              wiced_http_get_socket_close_request                               ( void );
 /******************************************************
  *                 Static Variables
  ******************************************************/
@@ -179,6 +176,8 @@ static const char* http_mime_array[ MIME_UNSUPPORTED ] =
 };
 
 static wiced_bool_t external_close_request_received = WICED_FALSE;
+
+static wiced_tcp_socket_t* socket_in_use;
 
 /******************************************************
  *               Function Definitions
@@ -314,14 +313,16 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
             .request_type                 = REQUEST_UNDEFINED
     };
 
-    wiced_http_reset_socket_close_request();
+    wiced_http_reset_external_socket_close_request();
 
     if ( packet == NULL )
     {
         return WICED_ERROR;
     }
 
-    WICED_VERIFY( wiced_http_server_get_packet_data( packet, &request_string, &request_length ) );
+    socket_in_use = socket;
+
+    WICED_VERIFY( wiced_http_server_get_packet_data( socket, packet, &request_string, &request_length ) );
 
     /* Check socket context and check if this socket received all data in http message or was it split */
     http_packet_state = wiced_get_http_packet_state_and_socket_context( socket, socket_context );
@@ -331,6 +332,7 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
         switch( http_packet_state )
         {
             case HTTP_DATA_ONLY_FRAME_STATE:
+
                 socket_context->message_body_descriptor.data = (uint8_t*)request_string;
 
                 if( request_length <= socket_context->message_body_descriptor.total_message_data_remaining )
@@ -353,11 +355,11 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
 
                 request_length = (uint16_t)( request_length - socket_context->message_body_descriptor.message_data_length );
 
-                http_packet_state = socket_context->http_packet_state = HTTP_HEADER_AND_DATA_FRAME_STATE;
 
                 break;
 
             case HTTP_HEADER_AND_DATA_FRAME_STATE:
+
                 /* Verify we have enough data to start processing */
                 if ( request_length < MINIMUM_REQUEST_LINE_LENGTH )
                 {
@@ -426,11 +428,11 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
                     {
                         http_message_body.message_data_length = (uint16_t)( (uint8_t*)( request_string + request_length ) - http_message_body.data );
 
+
                         message_data_length_string+= ( sizeof( HTTP_HEADER_CONTENT_LENGTH ) -1 );
 
-                        http_message_body.total_message_data_remaining = (uint16_t)strtol( message_data_length_string, NULL, 10 );
 
-                        http_message_body.total_message_data_remaining = (uint16_t)( http_message_body.total_message_data_remaining - http_message_body.message_data_length );
+                        http_message_body.total_message_data_remaining = (uint16_t)( strtol( message_data_length_string, NULL, 10 ) - http_message_body.message_data_length );
 
                         if ( http_message_body.total_message_data_remaining )
                         {
@@ -455,6 +457,7 @@ static wiced_result_t http_server_parse_packet(const wiced_http_page_t* page_dat
             default:
                 return WICED_ERROR;
                 break;
+
         }
     }
 
@@ -480,7 +483,6 @@ static wiced_result_t process_url_request( wiced_tcp_socket_t* socket, const wic
         query_length--;
     }
 
-
     if ( query_length != 0 )
     {
         url_len =  url_len - query_length;
@@ -490,7 +492,7 @@ static wiced_result_t process_url_request( wiced_tcp_socket_t* socket, const wic
         url_query_parameters = url;
     }
 
-    WPRINT_WEBSERVER_DEBUG(("Processing request for: %s\n", url));
+    WPRINT_WEBSERVER_DEBUG( ("Processing request for: %s\n", url) );
 
     /* Init the tcp stream */
     wiced_tcp_stream_init( &stream, socket );
@@ -877,7 +879,7 @@ wiced_result_t wiced_http_server_deregister_packet_post_processing_function ( vo
     return WICED_SUCCESS;
 }
 
-static wiced_result_t wiced_http_server_get_packet_data( wiced_packet_t* packet, char** data, uint16_t* request_length )
+static wiced_result_t wiced_http_server_get_packet_data( wiced_tcp_socket_t* socket, wiced_packet_t* packet, char** data, uint16_t* request_length )
 {
     uint16_t       available_data_length;
     wiced_result_t result;
@@ -886,7 +888,7 @@ static wiced_result_t wiced_http_server_get_packet_data( wiced_packet_t* packet,
 
     if ( packet_process_callback != NULL )
     {
-        result = packet_process_callback( (uint8_t**)data, request_length );
+        result = packet_process_callback( socket, (uint8_t**)data, request_length );
     }
 
     return  result;
@@ -897,7 +899,7 @@ static wiced_result_t wiced_http_server_set_http_message_body_type_for_socket( w
     if ( socket_http_message_context_counter < WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS )
     {
         socket_http_message_context[socket_http_message_context_counter].socket            = socket;
-        socket_http_message_context[socket_http_message_context_counter].http_packet_state = HTTP_HEADER_AND_DATA_FRAME_STATE;
+        socket_http_message_context[socket_http_message_context_counter].http_packet_state = HTTP_DATA_ONLY_FRAME_STATE;
 
         memcpy( socket_http_message_context[socket_http_message_context_counter].url, url, url_length );
 
@@ -933,17 +935,18 @@ static wiced_http_packet_state_t wiced_get_http_packet_state_and_socket_context(
 static wiced_result_t wiced_reset_current_message_body_context_for_socket( wiced_tcp_socket_t* socket )
 {
     wiced_http_message_context_t* http_message_context = NULL;
-    wiced_result_t                result;
 
-    result = wiced_get_http_packet_state_and_socket_context( socket, http_message_context );
+    wiced_get_http_packet_state_and_socket_context( socket, http_message_context );
 
-    if ( ( socket_http_message_context_counter ) && ( result == WICED_SUCCESS ) )
+    if( socket_http_message_context_counter )
     {
+
         http_message_context->http_packet_state = HTTP_HEADER_AND_DATA_FRAME_STATE;
 
         socket_http_message_context_counter--;
 
         return WICED_SUCCESS;
+
     }
 
     return WICED_ERROR;
@@ -956,7 +959,7 @@ wiced_result_t wiced_http_current_socket_close_request( void )
     return WICED_SUCCESS;
 }
 
-static wiced_result_t wiced_http_reset_socket_close_request ( void )
+static wiced_result_t wiced_http_reset_external_socket_close_request ( void )
 {
     external_close_request_received = WICED_FALSE;
 

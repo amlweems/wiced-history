@@ -569,6 +569,47 @@ extern wwd_result_t wwd_wifi_set_channel( wwd_interface_t interface, uint32_t ch
  */
 extern wwd_result_t wwd_wifi_get_counters( wwd_interface_t interface, wiced_counters_t* counters );
 
+/** Get the current data rate for the provided interface
+ *
+ * @param interface  : The interface from which the rate is requested
+ *        rate   : A pointer to the uint32_t where the value will be returned in 500Kbits/s units, 0 for auto
+ *
+ * @return  WWD_SUCCESS : if the rate was successfully read
+ *          Error code   : if the rate was not successfully read
+ */
+extern wwd_result_t wwd_wifi_get_rate( wwd_interface_t interface, uint32_t* rate);
+
+/** Set the legacy (CCK/OFDM) transmit data rate for the provided interface
+ *
+ * @param interface  : The interface for which the rate is going to be set
+ *        rate       : uint32_t where the rate value is given in 500Kbits/s units, 0 for auto
+ *
+ * @return  WWD_SUCCESS : if the rate was successfully set
+ *          Error code   : if the rate was not successfully set
+ */
+extern wwd_result_t wwd_wifi_set_legacy_rate( wwd_interface_t interface, int32_t rate);
+
+/** Set the MCS index transmit data rate for the provided interface
+ *
+ * @param interface  : The interface for which the rate is going to be set
+ *        mcs        : int32_t where the mcs index is given, -1 for auto
+ *        mcsonly    : indicate that only the mcs index should be changed
+ *
+ * @return  WWD_SUCCESS : if the rate was successfully set
+ *          Error code   : if the rate was not successfully set
+ */
+extern wwd_result_t wwd_wifi_set_mcs_rate( wwd_interface_t interface, int32_t mcs, wiced_bool_t mcsonly);
+
+/** Turn off or on 11n mode (support only for pre-11n modes)
+ *
+ * @param interface       : The interface for which 11n mode is being controlled. Currently only STA supported
+ *        disable         : Boolean value which if TRUE will turn 11n off and if FALSE will turn 11n on
+ *
+ * @return  WICED_SUCCESS : if the 11n was successfully turned off
+ *          WICED_ERROR   : if the 11n was not successfully turned off
+ */
+extern wwd_result_t wwd_wifi_disable_11n_support( wwd_interface_t interface, wiced_bool_t disable );
+
 /** Set the AMPDU parameters for both Soft AP and STA
  *
  * Sets various AMPDU parameters for Soft AP and STA to ensure that the number of buffers dedicated to AMPDUs does

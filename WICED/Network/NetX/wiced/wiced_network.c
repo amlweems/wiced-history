@@ -93,6 +93,8 @@ static char    rx_buffer_pool_memory [APP_RX_BUFFER_POOL_SIZE];
 
 NX_IP          wiced_ip_handle   [2];
 NX_PACKET_POOL wiced_packet_pools[2]; /* 0=TX, 1=RX */
+NX_PACKET_POOL wiced_application_tx_packet_pool;
+NX_PACKET_POOL wiced_application_rx_packet_pool;
 
 static NX_DHCP             wiced_dhcp_handle;
 static wiced_dhcp_server_t internal_dhcp_server;
@@ -136,6 +138,38 @@ static wiced_bool_t   tcp_sockets_are_closed( void );
 /******************************************************
  *               Function Definitions
  ******************************************************/
+
+
+wiced_result_t wiced_network_create_packet_pool( uint8_t* memory_pointer, uint32_t memory_size, wiced_bool_t rx_or_tx )
+{
+    if( rx_or_tx == WICED_TRUE )
+    {
+        if ( nx_packet_pool_create( &wiced_application_tx_packet_pool, (char*)"application_rx", WICED_LINK_MTU, memory_pointer, memory_size ) != NX_SUCCESS )
+        {
+            host_buffer_add_application_defined_pool(&wiced_application_tx_packet_pool, WWD_NETWORK_RX);
+            WPRINT_NETWORK_ERROR(("Couldn't create TX packet pool\n"));
+            return WICED_ERROR;
+        }
+        else
+        {
+            return WICED_SUCCESS;
+        }
+    }
+    else
+    {
+        if ( nx_packet_pool_create( &wiced_application_rx_packet_pool, (char*)"application_rx", WICED_LINK_MTU, memory_pointer, memory_size ) != NX_SUCCESS )
+        {
+            host_buffer_add_application_defined_pool(&wiced_application_tx_packet_pool, WWD_NETWORK_TX);
+            WPRINT_NETWORK_ERROR(("Couldn't create RX packet pool\n"));
+            return WICED_ERROR;
+        }
+        else
+        {
+            return WICED_SUCCESS;
+        }
+    }
+
+}
 
 wiced_result_t wiced_network_init( void )
 {

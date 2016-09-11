@@ -11,7 +11,7 @@
 MEMORY
 {
     /* No Bootloader or DCT */
-    APP_FLASH (rx)  : ORIGIN = 0x004000000, LENGTH = 1024K
+    APP_FLASH (rx)  : ORIGIN = 0x00400000, LENGTH = 1024K
     SRAM      (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 

@@ -839,7 +839,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     /* Check if IOCTL is actually IOVAR */
     if ( command == WLC_SET_VAR || command == WLC_GET_VAR )
     {
-        uint8_t* data = DATA_AFTER_HEADER( send_packet );
+        uint8_t* data = (uint8_t*)DATA_AFTER_HEADER( send_packet );
         uint8_t* ptr = data;
 
         /* Calculate the offset added to compensate for IOVAR string creating unaligned data section */

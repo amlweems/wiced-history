@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "wiced_result.h"
 #include "wiced_utilities.h"
 #include "wiced_bt_constants.h"
 

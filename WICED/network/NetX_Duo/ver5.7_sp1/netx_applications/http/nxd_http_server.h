@@ -317,7 +317,7 @@ UINT        nx_http_server_content_length_get_extended(NX_PACKET *packet_ptr, UL
 /* HTTP source code is being compiled, do not perform any API mapping.  */
 
 UINT        _nx_http_server_callback_data_send(NX_HTTP_SERVER *server_ptr, VOID *data_ptr, ULONG data_length);
-UINT        _nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, CHAR *header, CHAR *information, CHAR *additional_info);
+UINT        _nx_http_server_callback_response_send(NX_HTTP_SERVER *server_ptr, const CHAR *header, const CHAR *information, const CHAR *additional_info);
 UINT        _nxe_http_server_content_get(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, ULONG byte_offset, CHAR *destination_ptr, UINT destination_size, UINT *actual_size);
 UINT        _nx_http_server_content_get(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, ULONG byte_offset, CHAR *destination_ptr, UINT destination_size, UINT *actual_size);
 UINT        _nxe_http_server_content_length_get(NX_PACKET *packet_ptr);
@@ -352,7 +352,7 @@ UINT        _nx_http_server_get_client_request(NX_HTTP_SERVER *server_ptr, NX_PA
 VOID        _nx_http_server_get_process(NX_HTTP_SERVER *server_ptr, UINT request_type, NX_PACKET *packet_ptr);
 VOID        _nx_http_server_put_process(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
 VOID        _nx_http_server_delete_process(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
-VOID        _nx_http_server_response_send(NX_HTTP_SERVER *server_ptr, CHAR *header, CHAR *information, CHAR *additional_info);
+VOID        _nx_http_server_response_send(NX_HTTP_SERVER *server_ptr, const CHAR *header, const CHAR *information, const CHAR *additional_info);
 UINT        _nx_http_server_basic_authenticate(NX_HTTP_SERVER *server_ptr, NX_PACKET *packet_ptr, CHAR *name_ptr, CHAR *password_ptr, CHAR *realm_ptr);
 UINT        _nx_http_server_retrieve_basic_authorization(NX_PACKET *packet_ptr, CHAR *authorization_request);
 UINT        _nx_http_server_retrieve_resource(NX_PACKET *packet_ptr, CHAR *destination, UINT max_size);

@@ -673,11 +673,16 @@ wps_ap_t* wps_host_store_ap( void* workspace, wl_escan_result_t* scan_result )
 wps_ap_t* wps_host_retrieve_ap( void* workspace )
 {
     wps_host_workspace_t* host = (wps_host_workspace_t*)workspace;
+    wps_ap_t* ap;
     if ( host->stuff.enrollee.ap_list_counter != 0 )
     {
         return &host->stuff.enrollee.ap_list[--host->stuff.enrollee.ap_list_counter];
     }
-
+    ap = &host->stuff.enrollee.ap_list[host->stuff.enrollee.ap_list_counter];
+    if ( 0 != ap->SSID.length )
+    {
+        return &host->stuff.enrollee.ap_list[host->stuff.enrollee.ap_list_counter];
+    }
     return NULL;
 }
 

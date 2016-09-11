@@ -80,8 +80,6 @@ extern   "C" {
 
 #endif
 
-extern UINT _nx_system_ticks_per_second;
-
 /* Define the DHCPv6 ID to mark the DHCPV6_CLIENT and DHCPV6_SERVER structures as created.  */
 
 #define NX_DHCPV6_CLIENT_ID               0x44484336UL

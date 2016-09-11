@@ -30,7 +30,7 @@ extern "C"
  *                    Constants
  ******************************************************/
 
-#define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (5)
+#define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (NX_MAX_LISTEN_REQUESTS)
 #define WICED_MAXIMUM_NUMBER_OF_SERVER_SOCKETS            (WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS)
 
 #define SIZE_OF_ARP_ENTRY           sizeof(NX_ARP)

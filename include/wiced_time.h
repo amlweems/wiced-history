@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "wiced_result.h"
 #include "wiced_utilities.h"
 #include "RTOS/wwd_rtos_interface.h"
 
@@ -56,6 +57,8 @@ typedef uint64_t  wiced_utc_time_ms_t; /**< UTC Time in milliseconds   */
 
 /** ISO8601 Time Structure
  */
+#pragma pack(1)
+
 typedef struct
 {
     char year[4];        /**< Year         */
@@ -73,6 +76,8 @@ typedef struct
     char sub_second[6];  /**< Sub-second   */
     char Z;              /**< UTC timezone */
 } wiced_iso8601_time_t;
+
+#pragma pack()
 
 /******************************************************
  *                 Global Variables

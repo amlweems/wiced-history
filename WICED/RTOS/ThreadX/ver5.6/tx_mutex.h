@@ -118,10 +118,10 @@ VOID        _tx_mutex_initialize(VOID);
 
 /* Define mutex management function prototypes.  */
 
-UINT        _tx_mutex_create(TX_MUTEX *mutex_ptr, CHAR *name_ptr, UINT inherit);
+UINT        _tx_mutex_create(TX_MUTEX *mutex_ptr, const CHAR *name_ptr, UINT inherit);
 UINT        _tx_mutex_delete(TX_MUTEX *mutex_ptr);
 UINT        _tx_mutex_get(TX_MUTEX *mutex_ptr, ULONG wait_option);
-UINT        _tx_mutex_info_get(TX_MUTEX *mutex_ptr, CHAR **name, ULONG *count, TX_THREAD **owner, 
+UINT        _tx_mutex_info_get(TX_MUTEX *mutex_ptr, const CHAR **name, ULONG *count, TX_THREAD **owner,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_MUTEX **next_mutex);
 UINT        _tx_mutex_performance_info_get(TX_MUTEX *mutex_ptr, ULONG *puts, ULONG *gets,
@@ -138,10 +138,10 @@ VOID        _tx_mutex_priority_change(TX_THREAD *thread_ptr, UINT priority);
 /* Define error checking shells for API services.  These are only referenced by the 
    application.  */
 
-UINT        _txe_mutex_create(TX_MUTEX *mutex_ptr, CHAR *name_ptr, UINT inherit, UINT mutex_control_block_size);
+UINT        _txe_mutex_create(TX_MUTEX *mutex_ptr, const CHAR *name_ptr, UINT inherit, UINT mutex_control_block_size);
 UINT        _txe_mutex_delete(TX_MUTEX *mutex_ptr);
 UINT        _txe_mutex_get(TX_MUTEX *mutex_ptr, ULONG wait_option);
-UINT        _txe_mutex_info_get(TX_MUTEX *mutex_ptr, CHAR **name, ULONG *count, TX_THREAD **owner, 
+UINT        _txe_mutex_info_get(TX_MUTEX *mutex_ptr, const CHAR **name, ULONG *count, TX_THREAD **owner,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_MUTEX **next_mutex);
 UINT        _txe_mutex_prioritize(TX_MUTEX *mutex_ptr);

@@ -123,7 +123,7 @@ uint32_t platform_power_down_hook( uint32_t delay_ms )
 static uint32_t power_down_sleep_mode_hook( uint32_t delay_ms )
 {
     wiced_bool_t pds_delay_from_startup_elapsed = ( host_rtos_get_time() > PDS_DELAY_FROM_STARTUP_MS ) ? WICED_TRUE : WICED_FALSE;
-    uint32_t     time_elapsed_ms                = 0;
+    uint32_t     time_slept_ms                  = 0;
 
     /* Criteria to enter PDS mode
      * 1. Clock needed counter is 0 and WICED system tick has progressed over 5 seconds.
@@ -143,9 +143,11 @@ static uint32_t power_down_sleep_mode_hook( uint32_t delay_ms )
         /* Atomic operation ends */
         WICED_ENABLE_INTERRUPTS();
 
-        platform_mcu_powersave_enter_pds_mode( delay_ms );
-
-        time_elapsed_ms = delay_ms;
+        if ( platform_pmu_enter_pds_mode( delay_ms, &time_slept_ms ) != PLATFORM_SUCCESS )
+        {
+            /* CPU didn't enter PDS mode */
+            time_slept_ms = 0;
+        }
     }
 
     /* Start atomic operation */
@@ -161,7 +163,7 @@ static uint32_t power_down_sleep_mode_hook( uint32_t delay_ms )
     WICED_ENABLE_INTERRUPTS();
 
     /* Return total time in milliseconds */
-    return time_elapsed_ms;
+    return time_slept_ms;
 }
 #else
 static uint32_t idle_power_down_hook( uint32_t delay_ms  )

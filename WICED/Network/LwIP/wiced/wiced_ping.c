@@ -62,31 +62,26 @@ wiced_result_t wiced_ping_send(wiced_interface_t interface, const wiced_ip_addre
     lwip_setsockopt( socket_for_ping, SOL_SOCKET, SO_RCVTIMEO, &timeout_ms, sizeof( timeout_ms ) );
 
     /* Send a ping */
-    if ( ping_send( socket_for_ping, address ) != ERR_OK )
+    result = ping_send( socket_for_ping, address );
+    if ( result != ERR_OK )
     {
         /* close a socket */
         lwip_close( socket_for_ping );
-        return WICED_ERROR;
+        return LWIP_TO_WICED_ERR( result );
     }
     /* Record time ping was sent */
     send_time = host_rtos_get_time( );
 
     /* Wait for ping reply */
     result = ping_recv( socket_for_ping );
-    if ( ERR_OK == result )
+    if ( result == ERR_OK )
     {
         /* return elapsed time since a ping request was initiated */
         *elapsed_ms = (uint32_t)( host_rtos_get_time( ) - send_time );
-        /* close a socket */
-        lwip_close( socket_for_ping );
-        return WICED_SUCCESS;
     }
-    else
-    {
-        /* close a socket */
-        lwip_close( socket_for_ping );
-        return WICED_ERROR;
-    }
+    /* close a socket */
+    lwip_close( socket_for_ping );
+    return LWIP_TO_WICED_ERR( result );
 }
 
 

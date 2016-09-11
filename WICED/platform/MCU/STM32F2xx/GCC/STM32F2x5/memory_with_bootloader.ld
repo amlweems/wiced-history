@@ -17,4 +17,5 @@ MEMORY
     DCT2_FLASH       (rx)  : ORIGIN = 0x08008000, LENGTH = 16K
     APP_CODE         (rx)  : ORIGIN = 0x0800C000, LENGTH = 0xF4000  /* 976K */
     SRAM             (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
+    BTLDR_SRAM       (rwx) : ORIGIN = 0x2001E000, LENGTH = 8k       /* Boot loader stack at the end. */
 }

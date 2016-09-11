@@ -11,6 +11,7 @@
 #include <string.h>
 #include "platform_config.h" /* Needed for EXTERNAL_DCT */
 #include "wiced_framework.h"
+#include "wiced_dct_common.h"
 #include "wiced_utilities.h"
 
 /** @file
@@ -56,7 +57,7 @@ wiced_result_t wiced_dct_read_lock( void** info_ptr, wiced_bool_t ptr_is_writabl
     UNUSED_PARAMETER( ptr_is_writable );
 
     *info_ptr = malloc_named( "DCT", size );
-    return shared_waf_api->platform_dct_read_with_copy( *info_ptr, section, offset, size);
+    return wiced_dct_read_with_copy( *info_ptr, section, offset, size);
 #else /* ifdef EXTERNAL_DCT */
     if ( ptr_is_writable == WICED_TRUE )
     {
@@ -65,11 +66,11 @@ wiced_result_t wiced_dct_read_lock( void** info_ptr, wiced_bool_t ptr_is_writabl
         {
             return WICED_ERROR;
         }
-        shared_waf_api->platform_dct_read_with_copy( *info_ptr, section, offset, size );
+        wiced_dct_read_with_copy( *info_ptr, section, offset, size );
     }
     else
     {
-        *info_ptr = (char*)shared_waf_api->platform_get_current_dct_address( section ) + offset;
+        *info_ptr = (char*)wiced_dct_get_current_address( section ) + offset;
     }
     return WICED_SUCCESS;
 #endif /* ifdef EXTERNAL_DCT */

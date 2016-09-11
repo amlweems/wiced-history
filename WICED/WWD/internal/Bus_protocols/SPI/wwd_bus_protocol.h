@@ -39,11 +39,18 @@ typedef struct
 
 #define WWD_BUS_HAS_HEADER
 
-#define WWD_BUS_HEADER_SIZE                              (sizeof(wwd_bus_header_t))
+#define WWD_BUS_HEADER_SIZE               ( sizeof(wwd_bus_header_t) )
 
-#define WWD_BUS_USE_STATUS_REPORT_SCHEME                 (1==1)
+#define WWD_BUS_USE_STATUS_REPORT_SCHEME  ( 1 == 1 )
 
-#define WWD_SPDCM_HEADER_LENGTH                          (18)
+/* Reserved length for SDPCM header, generally the larger of the TX and RX headers */
+#define WWD_SDPCM_HEADER_RESERVED_LENGTH  ( 18 )
+
+/* SDPCM transmit header length */
+#define WWD_SDPCM_HEADER_TX_LENGTH        ( WWD_SDPCM_HEADER_RESERVED_LENGTH )
+
+/* SDPCM receive header length */
+#define WWD_SDPCM_HEADER_RX_LENGTH        ( WWD_SDPCM_HEADER_RESERVED_LENGTH )
 
 /******************************************************
  *             Function declarations

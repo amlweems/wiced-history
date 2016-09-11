@@ -225,7 +225,7 @@ static wwd_result_t wwd_bus_transfer_buffer( wwd_bus_transfer_direction_t direct
             if ( loop_count >= (uint32_t) F2_READY_TIMEOUT_LOOPS )
             {
                 WPRINT_WWD_ERROR(("Timeout waiting for data FIFO to be ready\n"));
-                return WICED_TIMEOUT;
+                return WWD_TIMEOUT;
             }
         }
 
@@ -305,6 +305,9 @@ return_with_error:
     uint32_t wwd_bus_gspi_status;
     wwd_result_t result;
     uint32_t wiced_gspi_bytes_pending;
+
+    /* Ensure the wlan backplane bus is up */
+    VERIFY_RESULT( wwd_bus_ensure_is_up() );
 
     result = wwd_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status );
     if ( result != WWD_SUCCESS )
@@ -444,7 +447,7 @@ wwd_result_t wwd_bus_init( void )
     }
     if ( loop_count >= (uint32_t) ALP_AVAIL_TIMEOUT_MS )
     {
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
     if ( result != WWD_SUCCESS )
     {
@@ -479,7 +482,7 @@ wwd_result_t wwd_bus_init( void )
          * crystal frequency.
          */
         WPRINT_WWD_ERROR(("Timeout while waiting for function 2 to be ready\n"));
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
 
     bus_is_up = WICED_TRUE;
@@ -596,7 +599,7 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
         if ( loop_count >= (uint32_t) F2_READY_TIMEOUT_LOOPS )
         {
             WPRINT_WWD_DEBUG(("Timeout waiting for data FIFO to be ready\n"));
-            return WICED_TIMEOUT;
+            return WWD_TIMEOUT;
         }
 
         add_log_entry( LOG_TX, function, address, (unsigned long)size, (char*)&data->data );
@@ -621,7 +624,7 @@ wwd_result_t wwd_bus_ensure_is_up( void )
 
     if ( bus_is_up == WICED_TRUE )
     {
-        return WICED_SUCCESS;
+        return WWD_SUCCESS;
     }
 
     /* Wake up WLAN SPI interface module */
@@ -641,13 +644,11 @@ wwd_result_t wwd_bus_ensure_is_up( void )
 
     if ( attempts == 0 )
     {
-        return WICED_ERROR;
+        return WWD_TIMEOUT;
     }
-    else
-    {
-        bus_is_up = WICED_TRUE;
-        return WWD_SUCCESS;
-    }
+
+    bus_is_up = WICED_TRUE;
+    return WWD_SUCCESS;
 }
 
 wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
@@ -712,7 +713,7 @@ static wwd_result_t wwd_download_firmware( void )
     }
     if ( loop_count >= (uint32_t) HT_AVAIL_TIMEOUT_MS )
     {
-        return WICED_TIMEOUT;
+        return WWD_TIMEOUT;
     }
     if ( result != WWD_SUCCESS )
     {

@@ -12,6 +12,8 @@ NAME := WWD_NetX_Duo_Interface
 
 GLOBAL_INCLUDES := .
 
+$(NAME)_NEVER_OPTIMISE := 1
+
 $(NAME)_SOURCES := wwd_buffer.c \
                    wwd_network.c
 

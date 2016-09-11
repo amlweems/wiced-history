@@ -13,7 +13,8 @@ NAME := Lib_Gedday
 ifneq ($(wildcard $(CURDIR)Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a),)
 $(NAME)_PREBUILT_LIBRARY := Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a
 else
-$(NAME)_SOURCES := gedday.c
+$(NAME)_SOURCES := gedday.c \
+                   text_record.c
 endif # ifneq ($(wildcard $(CURDIR)Gedday.$(RTOS).$(NETWORK).$(HOST_ARCH).$(BUILD_TYPE).a),)
 
 GLOBAL_INCLUDES := .

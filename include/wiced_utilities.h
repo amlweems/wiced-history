@@ -9,10 +9,8 @@
  */
 #pragma once
 
-#include "wiced_result.h"
-#include "wwd_structures.h"
+#include <stdint.h>
 #include <stdlib.h>
-#include "ring_buffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,6 +115,7 @@ extern void  malloc_transfer_to_thread     ( void* block, malloc_thread_handle t
 /******************************************************
  *                    Structures
  ******************************************************/
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -126,12 +125,150 @@ extern void  malloc_transfer_to_thread     ( void* block, malloc_thread_handle t
  * @endcond
  ******************************************************/
 
-extern uint32_t utoa( uint32_t value, char* output, uint8_t min_length, uint8_t max_length );
-extern char     nibble_to_hexchar( uint8_t nibble );
+/**
+ * Converts a decimal/hexidecimal string to an unsigned long int
+ * Better than strtol or atol or atoi because the return value indicates if an error occurred
+ *
+ * @param string[in]     : The string buffer to be converted
+ * @param str_length[in] : The maximum number of characters to process in the string buffer
+ * @param value_out[out] : The unsigned in that will receive value of the the decimal string
+ * @param is_hex[in]     : 0 = Decimal string, 1 = Hexidecimal string
+ *
+ * @return the number of characters successfully converted.  i.e. 0 = error
+ *
+ */
+uint8_t string_to_unsigned( const char* string, uint8_t str_length, uint32_t* value_out, uint8_t is_hex );
+
+/**
+ * Converts a unsigned long int to a decimal string
+ *
+ * @param value[in]      : The unsigned long to be converted
+ * @param output[out]    : The buffer which will receive the decimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required)
+ * @param max_length[in] : the maximum number of characters to output (up to 10 )
+ *
+ * @note: No trailing null is added.
+ *
+ * @return the number of characters returned.
+ *
+ */
+uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length );
 
 
-/* Printing utilities */
-extern void print_scan_result( wiced_scan_result_t* record );
+/**
+ * Converts a decimal/hexidecimal string (with optional sign) to a signed long int
+ * Better than strtol or atol or atoi because the return value indicates if an error occurred
+ *
+ * @param string[in]     : The string buffer to be converted
+ * @param str_length[in] : The maximum number of characters to process in the string buffer
+ * @param value_out[out] : The unsigned in that will receive value of the the decimal string
+ * @param is_hex[in]     : 0 = Decimal string, 1 = Hexidecimal string
+ *
+ * @return the number of characters successfully converted (including sign).  i.e. 0 = error
+ *
+ */
+uint8_t string_to_signed( const char* string, uint8_t str_length, int32_t* value_out, uint8_t is_hex );
+
+
+/**
+ * Converts a signed long int to a decimal string
+ *
+ * @param value[in]      : The signed long to be converted
+ * @param output[out]    : The buffer which will receive the decimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required)
+ * @param max_length[in] : the maximum number of characters to output (up to 10 )
+ *
+ * @note: No trailing null is added.
+ *
+ * @return the number of characters returned.
+ *
+ */
+uint8_t signed_to_decimal_string( int32_t value, char* output, uint8_t min_length, uint8_t max_length );
+
+/**
+ * Converts a unsigned long int to a hexidecimal string
+ *
+ * @param value[in]      : The unsigned long to be converted
+ * @param output[out]    : The buffer which will receive the hexidecimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required)
+ * @param max_length[in] : the maximum number of characters to output (up to 8 )
+ *
+ * @note: No leading '0x' or trailing null is added.
+ *
+ * @return the number of characters returned.
+ *
+ */
+uint8_t unsigned_to_hex_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length );
+
+
+/**
+ ******************************************************************************
+ * Convert a nibble into a hex character
+ *
+ * @param[in] nibble  The value of the nibble in the lower 4 bits
+ *
+ * @return    The hex character corresponding to the nibble
+ */
+static inline char nibble_to_hexchar( uint8_t nibble )
+{
+    if (nibble > 9)
+    {
+        return (char)('A' + (nibble - 10));
+    }
+    else
+    {
+        return (char) ('0' + nibble);
+    }
+}
+
+
+/**
+ ******************************************************************************
+ * Convert a nibble into a hex character
+ *
+ * @param[in] nibble  The value of the nibble in the lower 4 bits
+ *
+ * @return    The hex character corresponding to the nibble
+ */
+static inline char hexchar_to_nibble( char hexchar, uint8_t* nibble )
+{
+    if ( ( hexchar >= '0' ) && ( hexchar <= '9' ) )
+    {
+        *nibble = (uint8_t)( hexchar - '0' );
+        return 0;
+    }
+    else if ( ( hexchar >= 'A' ) && ( hexchar <= 'F' ) )
+    {
+        *nibble = (uint8_t) ( hexchar - 'A' + 10 );
+        return 0;
+    }
+    else if ( ( hexchar >= 'a' ) && ( hexchar <= 'f' ) )
+    {
+        *nibble = (uint8_t) ( hexchar - 'a' + 10 );
+        return 0;
+    }
+    return -1;
+}
+
+/**
+ ******************************************************************************
+ * Append the two character hex value of a byte to a string
+ *
+ * @note: no terminating null is added
+ *
+ * @param[out] string  The buffer which will receive the two bytes
+ * @param[in]  byte    The byte which will be converted to hex
+ *
+ * @return    A pointer to the character after the two hex characters added
+ */
+static inline char* string_append_two_digit_hex_byte( char* string, uint8_t byte )
+{
+    *string = nibble_to_hexchar( ( byte & 0xf0 ) >> 4 );
+    string++;
+    *string = nibble_to_hexchar( ( byte & 0x0f ) >> 0 );
+    string++;
+    return string;
+}
 
 #ifdef __cplusplus
 } /*extern "C" */

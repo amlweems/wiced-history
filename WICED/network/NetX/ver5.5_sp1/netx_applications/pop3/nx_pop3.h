@@ -84,14 +84,11 @@ extern   "C" {
 
 #define NX_POP3_ID    0x504F5033UL
 
-typedef enum NX_POP3_DEBUG_LEVEL_ENUM
-{
-    NONE,  
-    LOG,
-    SEVERE, 
-    MODERATE, 
-    ALL
-} NX_POP3_DEBUG_LEVEL;
+#define NX_POP3_DEBUG_LEVEL_NONE     (0)
+#define NX_POP3_DEBUG_LEVEL_LOG      (1)
+#define NX_POP3_DEBUG_LEVEL_SEVERE   (2)
+#define NX_POP3_DEBUG_LEVEL_MODERATE (3)
+#define NX_POP3_DEBUG_LEVEL_ALL      (4)
 
 
 /* Conversion between seconds and timer ticks. See tx_initialize_low_level.<asm> 
@@ -195,6 +192,11 @@ typedef enum  NX_POP3_SESSION_STATE_ENUM
 #define NX_POP3_DOT                            "."
 #define NX_POP3_END_OF_MESSAGE                 "\r\n.\r\n"
 
+#ifdef  NX_POP3_ALTERNATE_SNPRINTF
+int     _nx_pop3_snprintf(char *str, size_t size, const char *format, ...);
+#else
+#define _nx_pop3_snprintf snprintf
+#endif /* ifdef  NX_POP3_ALTERNATE_SNPRINTF */
 
 /* If a C++ compiler is being used....*/
 #ifdef   __cplusplus

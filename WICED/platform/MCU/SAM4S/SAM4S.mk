@@ -16,6 +16,8 @@ HOST_ARCH := ARM_CM4
 # Host MCU alias for OpenOCD
 HOST_OPENOCD := at91sam4sXX
 
+$(NAME)_NEVER_OPTIMISE := 1
+
 GLOBAL_INCLUDES := . \
                    .. \
                    ../.. \
@@ -23,7 +25,8 @@ GLOBAL_INCLUDES := . \
                    ../../$(HOST_ARCH) \
                    ../../$(HOST_ARCH)/CMSIS \
                    ../../$(TOOLCHAIN_NAME) \
-                   peripherals
+                   peripherals \
+                   WAF
 
 # Global defines
 GLOBAL_DEFINES  := USE_STDPERIPH_DRIVER
@@ -61,13 +64,17 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../wiced_platform_common.c \
                    ../wwd_platform_common.c \
                    ../wwd_resources.c \
+                   ../wiced_apps_common.c	\
+                   ../wiced_waf_common.c	\
+                   ../wiced_dct_internal_common.c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
                    WWD/wwd_platform.c \
                    WWD/wwd_$(BUS).c \
                    WWD/hsmci_pdc.c \
-                   WWD/sdmmc.c
+                   WWD/sdmmc.c	\
+                   WAF/waf_platform.c \
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
@@ -77,7 +84,7 @@ $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
 #$(NAME)_CFLAGS = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
 # Add maximum and default watchdog timeouts to definitions. Warning: Do not change MAX_WATCHDOG_TIMEOUT_SECONDS
-MAX_WATCHDOG_TIMEOUT_SECONDS = 22
+MAX_WATCHDOG_TIMEOUT_SECONDS = 16
 GLOBAL_DEFINES += MAX_WATCHDOG_TIMEOUT_SECONDS=$(MAX_WATCHDOG_TIMEOUT_SECONDS)
 
 # DCT linker script
@@ -89,8 +96,8 @@ ifeq ($(APP),bootloader)
 ####################################################################################
 
 DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/bootloader$(LINK_SCRIPT_SUFFIX)
-$(NAME)_SOURCES     += WAF/waf_platform.c
-$(NAME)_LINK_FILES  += WAF/waf_platform.o
+#$(NAME)_SOURCES     += WAF/waf_platform.c
+#$(NAME)_LINK_FILES  += WAF/waf_platform.o
 
 else
 ifneq ($(filter ota_upgrade sflash_write, $(APP)),)

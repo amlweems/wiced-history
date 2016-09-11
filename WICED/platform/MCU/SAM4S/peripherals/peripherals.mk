@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME = STM32F2xx_Peripheral_Drivers
+NAME = SAM4S_Peripheral_Drivers
 
 GLOBAL_INCLUDES := .
 

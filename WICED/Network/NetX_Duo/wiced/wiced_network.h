@@ -14,6 +14,7 @@
 #include "netx_applications/dhcp/nxd_dhcp_client.h"
 #include "wiced_result.h"
 #include "tls_types.h"
+#include "wwd_network_constants.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -30,7 +31,7 @@ extern "C"
  *                    Constants
  ******************************************************/
 
-#define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (9)
+#define WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS    (NX_MAX_LISTEN_REQUESTS)
 #define WICED_MAXIMUM_NUMBER_OF_SERVER_SOCKETS            (WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS)
 
 #define SIZE_OF_ARP_ENTRY           sizeof(NX_ARP)
@@ -40,7 +41,7 @@ extern "C"
 #define DHCP_STACK_SIZE             (1024)
 
 #define WICED_ANY_PORT              (0)
-
+#define WICED_NETWORK_MTU_SIZE      (WICED_LINK_MTU)
 /******************************************************
  *                   Enumerations
  ******************************************************/

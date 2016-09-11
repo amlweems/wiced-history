@@ -34,6 +34,8 @@ SECTIONS
         dct_location = .;
         KEEP(*(.rodata.initial_dct))
         KEEP(*(.rodata._app_dct))
+        KEEP(*(.rodata.wiced_apps_lut))
+        KEEP(*(.rodata.wiced_apps_lut_fill))
         dct_end = .;
 
     } >DCT1_FLASH  AT> DCT1_FLASH :rodata

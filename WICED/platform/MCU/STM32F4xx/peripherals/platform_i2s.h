@@ -72,6 +72,7 @@ wiced_result_t wiced_i2s_deinit                  ( wiced_i2s_t i2s);
 wiced_result_t wiced_i2s_set_audio_buffer_details( wiced_i2s_t i2s, uint8_t* buffer_ptr, uint16_t size);
 wiced_result_t wiced_i2s_start                   ( wiced_i2s_t i2s);
 wiced_result_t wiced_i2s_stop                    ( wiced_i2s_t);
+wiced_result_t wiced_i2s_get_current_hw_pointer  ( wiced_i2s_t i2s, uint32_t* hw_pointer );
 
 
 #ifdef __cplusplus

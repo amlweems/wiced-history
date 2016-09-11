@@ -47,3 +47,5 @@ else
 # Build from source (Broadcom internal)
 include $(CURDIR)NetX_Duo_src.mk
 endif #ifneq ($(wildcard $(CURDIR)NetX_Duo.$(HOST_ARCH).$(BUILD_TYPE).a),)
+
+$(NAME)_SOURCES += ver$(NETX_DUO_VERSION)/nxd_external_functions.c

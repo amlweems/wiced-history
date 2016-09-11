@@ -109,10 +109,10 @@ VOID        _tx_semaphore_initialize(VOID);
 /* Define semaphore management function prototypes.  */
 
 UINT        _tx_semaphore_ceiling_put(TX_SEMAPHORE *semaphore_ptr, ULONG ceiling);
-UINT        _tx_semaphore_create(TX_SEMAPHORE *semaphore_ptr, CHAR *name_ptr, ULONG initial_count);
+UINT        _tx_semaphore_create(TX_SEMAPHORE *semaphore_ptr, const CHAR *name_ptr, ULONG initial_count);
 UINT        _tx_semaphore_delete(TX_SEMAPHORE *semaphore_ptr);
 UINT        _tx_semaphore_get(TX_SEMAPHORE *semaphore_ptr, ULONG wait_option);
-UINT        _tx_semaphore_info_get(TX_SEMAPHORE *semaphore_ptr, CHAR **name, ULONG *current_value, 
+UINT        _tx_semaphore_info_get(TX_SEMAPHORE *semaphore_ptr, const CHAR **name, ULONG *current_value,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_SEMAPHORE **next_semaphore);
 UINT        _tx_semaphore_performance_info_get(TX_SEMAPHORE *semaphore_ptr, ULONG *puts, ULONG *gets,
@@ -128,10 +128,10 @@ VOID        _tx_semaphore_cleanup(TX_THREAD *thread_ptr);
    application.  */
 
 UINT        _txe_semaphore_ceiling_put(TX_SEMAPHORE *semaphore_ptr, ULONG ceiling);
-UINT        _txe_semaphore_create(TX_SEMAPHORE *semaphore_ptr, CHAR *name_ptr, ULONG initial_count, UINT semaphore_control_block_size);
+UINT        _txe_semaphore_create(TX_SEMAPHORE *semaphore_ptr, const CHAR *name_ptr, ULONG initial_count, UINT semaphore_control_block_size);
 UINT        _txe_semaphore_delete(TX_SEMAPHORE *semaphore_ptr);
 UINT        _txe_semaphore_get(TX_SEMAPHORE *semaphore_ptr, ULONG wait_option);
-UINT        _txe_semaphore_info_get(TX_SEMAPHORE *semaphore_ptr, CHAR **name, ULONG *current_value, 
+UINT        _txe_semaphore_info_get(TX_SEMAPHORE *semaphore_ptr, const CHAR **name, ULONG *current_value,
                     TX_THREAD **first_suspended, ULONG *suspended_count, 
                     TX_SEMAPHORE **next_semaphore);
 UINT        _txe_semaphore_prioritize(TX_SEMAPHORE *semaphore_ptr);

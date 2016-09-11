@@ -24,7 +24,9 @@ GLOBAL_INCLUDES := . \
                    ../../$(HOST_ARCH)/CMSIS \
                    ../../$(TOOLCHAIN_NAME) \
                    ../../../../libraries/drivers/spi_flash \
-                   peripherals
+                   peripherals \
+                   WAF \
+                   WWD
 
 # Global defines
 GLOBAL_DEFINES += BCMDBG_DUMP
@@ -50,6 +52,7 @@ endif
 # Components
 $(NAME)_COMPONENTS  += $(TOOLCHAIN_NAME)
 $(NAME)_COMPONENTS  += MCU/BCM439x/peripherals
+$(NAME)_COMPONENTS  += MCU/BCM439x/WWD/internal
 $(NAME)_COMPONENTS  += utilities/ring_buffer
 
 # send spi flash requests through normal wiced driver
@@ -67,14 +70,17 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../platform_resource.c \
                    ../platform_stdio.c \
                    ../wiced_platform_common.c \
+                   ../wiced_apps_common.c	\
+                   ../wiced_waf_common.c	\
+                   ../wiced_dct_external_common.c \
                    platform_vector_table.c \
                    platform_init.c \
                    platform_unhandled_isr.c \
                    platform_filesystem.c \
                    platform_mcu_powersave.c \
                    WAF/waf_platform.c \
-                   WWD/wwd_platform.c \
-                   WWD/wwd_bus.c
+                   WWD/wwd_bus.c \
+                   WWD/wwd_platform.c
 
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \

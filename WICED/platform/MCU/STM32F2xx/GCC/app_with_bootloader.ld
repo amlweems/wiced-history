@@ -15,6 +15,12 @@ ENTRY( _start );
 /* Include memory map */
 INCLUDE memory_with_bootloader.ld
 
+PHDRS
+{
+    text PT_LOAD;
+    data PT_LOAD;
+    bss  PT_LOAD;
+}
 SECTIONS
 {
 
@@ -22,7 +28,7 @@ SECTIONS
     {
         link_interrupt_vectors_location = .;
         KEEP(*(*.interrupt_vector_table))
-    }>APP_CODE  AT> APP_CODE
+    }>APP_CODE  AT>APP_CODE :text
 
     .text :
     {
@@ -64,7 +70,7 @@ SECTIONS
 
         . = ALIGN(16);
 
-    }>APP_CODE  AT> APP_CODE
+    }>APP_CODE  AT>APP_CODE :text
 
     /*
      * The .ARM.exidx and .ARM.extab sections are used for C++ exception handling.
@@ -77,14 +83,14 @@ SECTIONS
         __exidx_start = ALIGN(4);
         *(.ARM.exidx* .gnu.linkonce.armexidx.*)
         __exidx_end = .;
-    } > APP_CODE  AT> APP_CODE
+    } > APP_CODE  AT>APP_CODE :text
 
     .ARM.extab :
     {
         __extab_start = ALIGN(4);
         *(.ARM.extab*)
         __extab_end = .;
-    } > APP_CODE  AT> APP_CODE
+    } > APP_CODE  AT>APP_CODE :text
 
     .fast : /* This section contains code that is run from RAM after being loaded from flash - functions can be put in this section with the C attribute: __attribute__ ((section (".fast"))) */
     {
@@ -92,7 +98,7 @@ SECTIONS
         link_run_from_ram_code_ram_location = .;
         *(.fast .fast.* .text.fastcode)
         link_run_from_ram_code_ram_end = .;
-    }> SRAM AT> APP_CODE
+    }> SRAM AT>APP_CODE :data
 
     .data : /* Contains the non-zero initialised global variables */
     {
@@ -101,7 +107,7 @@ SECTIONS
         *(.data*)
         link_global_data_end = .;
         . = ALIGN(., 4);
-    }> SRAM AT> APP_CODE
+    }> SRAM AT>APP_CODE :data
 
 
     .bss : /* Zero initialised memory used for zero initialised variables */
@@ -111,7 +117,7 @@ SECTIONS
         *(COMMON)
         link_bss_end = .;
         . = ALIGN(., 4);
-    }> SRAM AT>SRAM
+    }> SRAM AT>SRAM :bss
 
 
     .stack : /* Contains the initial stack */
@@ -120,7 +126,7 @@ SECTIONS
         *(.stack)
         . = ALIGN(MAX(link_stack_location + __STACKSIZE__ , .), 4);
         link_stack_end = .;
-    }> SRAM AT>SRAM
+    }> SRAM AT>SRAM :bss
 
     /DISCARD/ :
     {
@@ -156,6 +162,14 @@ PROVIDE( total_app_image_size = LOADADDR( .data ) - ORIGIN( APP_CODE ) + link_gl
 PROVIDE( wifi_firmware_image_size_from_link = wifi_firmware_image_end - wifi_firmware_image_location );
 /* PROVIDE( vectors_offset = link_interrupt_vectors_location - bootloader_app_header_location ); */
 PROVIDE( shared_api_addr_loc     = ORIGIN( SHARED_API ));
+
+PROVIDE( dct1_start_addr_loc     = ORIGIN( DCT1_FLASH ));
+PROVIDE( dct1_size_loc           = LENGTH( DCT1_FLASH ));
+PROVIDE( dct2_start_addr_loc     = ORIGIN( DCT2_FLASH ));
+PROVIDE( dct2_size_loc           = LENGTH( DCT2_FLASH ));
+PROVIDE( app_code_start_addr_loc = ORIGIN( APP_CODE ));
+PROVIDE( sram_start_addr_loc     = ORIGIN( SRAM ));
+PROVIDE( sram_size_loc           = LENGTH( SRAM ));
 
 /* ThreadX aliases */
 PROVIDE( __RAM_segment_used_end__ = link_stack_end );

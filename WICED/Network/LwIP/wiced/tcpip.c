@@ -78,6 +78,7 @@ static void                 internal_async_server_socket_callback        ( struc
 static wiced_result_t       internal_tcp_server_find_free_socket         ( wiced_tcp_server_t* tcp_server, int* index );
 static wiced_result_t       internal_wiced_tcp_server_listen             ( wiced_tcp_server_t* tcp_server);
 static int                  internal_wiced_get_socket_index_for_server   ( wiced_tcp_server_t* tcp_server, wiced_tcp_socket_t* socket);
+static uint32_t             str_to_ipv4                                  ( const char* arg );
 
 /* TLS helper function to do TCP without involving TLS context */
 wiced_result_t               network_tcp_receive                           ( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
@@ -92,7 +93,7 @@ extern xSemaphoreHandle send_interface_mutex;
 static wiced_tcp_socket_t* tcp_sockets_with_callbacks[WICED_MAXIMUM_NUMBER_OF_SOCKETS_WITH_CALLBACKS];
 static wiced_tcp_server_t* server_list[WICED_MAXIMUM_NUMBER_OF_SERVERS] = { NULL };
 
-static wiced_result_t lwip_to_wiced_err[] =
+wiced_result_t lwip_to_wiced_err[] =
 {
 [-(ERR_OK        )] = WICED_SUCCESS,
 [-(ERR_MEM       )] = WICED_OUT_OF_HEAP_SPACE,
@@ -112,8 +113,6 @@ static wiced_result_t lwip_to_wiced_err[] =
 [-(ERR_ISCONN    )] = WICED_ALREADY_CONNECTED,
 
 };
-
-#define LWIP_TO_WICED_ERR( lwip_err )  ((lwip_err >= ERR_ISCONN)? lwip_to_wiced_err[ -lwip_err ] : WICED_UNKNOWN_NETWORK_STACK_ERROR )
 
 /******************************************************
  *               Function Definitions
@@ -1054,6 +1053,15 @@ wiced_result_t wiced_hostname_lookup( const char* hostname, wiced_ip_address_t* 
 
     WICED_LINK_CHECK( WICED_STA_INTERFACE);
 
+    /* Check if address is a string representation of a IPv4 address i.e. xxx.xxx.xxx.xxx */
+    address->ip.v4 = str_to_ipv4( hostname );
+    if ( address->ip.v4 != 0 )
+    {
+        address->version = WICED_IPV4;
+        /* yes this is a string representation of a IPv4 address */
+        return WICED_TCPIP_SUCCESS;
+    }
+
     return dns_client_hostname_lookup( hostname, address, timeout_ms );
 }
 
@@ -1470,4 +1478,37 @@ static int internal_wiced_get_socket_index_for_server(wiced_tcp_server_t* tcp_se
         }
     }
     return -1;
+}
+
+
+/*
+ ******************************************************************************
+ * Convert an ipv4 string to a uint32_t.
+ *
+ * @param     arg  The string containing the value.
+ *
+ * @return    The value represented by the string.
+ */
+static uint32_t str_to_ipv4( const char* arg )
+{
+    uint32_t addr = 0;
+    uint8_t num = 0;
+
+    arg--;
+
+    do
+    {
+        addr = addr << 8;
+        addr += (uint32_t) atoi( ++arg );
+        while ( ( *arg != '\x00' ) && ( *arg != '.' ) )
+        {
+            arg++;
+        }
+        num++;
+    } while ( ( num < 4 ) && ( *arg != '\x00' ) );
+    if ( num < 4 )
+    {
+        return 0;
+    }
+    return addr;
 }

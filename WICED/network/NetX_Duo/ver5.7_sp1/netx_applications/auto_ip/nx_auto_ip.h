@@ -143,7 +143,7 @@ extern   "C" {
 typedef struct NX_AUTO_IP_STRUCT 
 {
     ULONG                   nx_auto_ip_id;
-    CHAR                    *nx_auto_ip_name;
+    const CHAR              *nx_auto_ip_name;
     NX_IP                   *nx_auto_ip_ip_ptr;
     UINT                    nx_ip_interface_index;  
     UINT                    nx_auto_ip_local_address_valid;
@@ -195,7 +195,7 @@ typedef struct NX_AUTO_IP_STRUCT
 
 /* Define the prototypes accessible to the application software.  */
 
-UINT        nx_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
+UINT        nx_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, const CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
 UINT        nx_auto_ip_get_address(NX_AUTO_IP *auto_ip_ptr, ULONG *local_ip_address);
 UINT        nx_auto_ip_set_interface(NX_AUTO_IP *auto_ip_ptr, UINT interface_index); 
 UINT        nx_auto_ip_start(NX_AUTO_IP *auto_ip_ptr, ULONG starting_local_address);
@@ -207,8 +207,8 @@ UINT        nx_auto_ip_delete(NX_AUTO_IP *auto_ip_ptr);
 
 /* AutoIP source code is being compiled, do not perform any API mapping.  */
 
-UINT        _nxe_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
-UINT        _nx_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
+UINT        _nxe_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, const CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
+UINT        _nx_auto_ip_create(NX_AUTO_IP *auto_ip_ptr, const CHAR *name, NX_IP *ip_ptr, VOID *stack_ptr, ULONG stack_size, UINT priority);
 UINT        _nxe_auto_ip_get_address(NX_AUTO_IP *auto_ip_ptr, ULONG *local_ip_address);
 UINT        _nx_auto_ip_get_address(NX_AUTO_IP *auto_ip_ptr, ULONG *local_ip_address);
 UINT        _nxe_auto_ip_set_interface(NX_AUTO_IP *auto_ip_ptr, UINT interface_index);

@@ -107,7 +107,7 @@ extern tlv8_data_t*  tlv_find_tlv8    ( const uint8_t* message, uint16_t message
 extern tlv16_data_t* tlv_find_tlv16   ( const uint8_t* message, uint16_t message_length, uint16_t type );
 extern uint8_t*      tlv_write_header ( uint8_t* buffer, uint16_t type, uint16_t length );
 extern tlv_result_t  tlv_read_value   ( uint16_t type, const uint8_t* message, uint16_t message_length, void* value, uint16_t value_size, tlv_data_type_t data_type );
-extern uint8_t*      tlv_write_value  ( uint8_t* buffer, uint16_t type, uint16_t length, const const void* data, tlv_data_type_t data_type );
+extern uint8_t*      tlv_write_value  ( uint8_t* buffer, uint16_t type, uint16_t length, const void* data, tlv_data_type_t data_type );
 
 #ifdef __cplusplus
 } /*extern "C" */

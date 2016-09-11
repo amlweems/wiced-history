@@ -18,6 +18,7 @@ boot_config_deconfigureClocks = ( DEFINED( boot_config_deconfigureClocks ) ? boo
 boot_config_init_util_clkPhaseCounting = ( DEFINED( boot_config_init_util_clkPhaseCounting ) ? boot_config_init_util_clkPhaseCounting : 0x000042cb );
 boot_init_hardware_on_por = ( DEFINED( boot_init_hardware_on_por ) ? boot_init_hardware_on_por : 0x00003f17 );
 boot_complete_FLL_programming = ( DEFINED( boot_complete_FLL_programming ) ? boot_complete_FLL_programming : 0x000041e9 );
+GPIO_ReadData = ( DEFINED( GPIO_ReadData ) ? GPIO_ReadData : 0x0004a90d );
 GPIO_WriteReg = ( DEFINED( GPIO_WriteReg ) ? GPIO_WriteReg : 0x0004a895 );
 GPIO_set = ( DEFINED( GPIO_set ) ? GPIO_set : 0x0004a8df );
 spiffy_soft_reset_check = ( DEFINED( spiffy_soft_reset_check ) ? spiffy_soft_reset_check : 0x00051a5d );

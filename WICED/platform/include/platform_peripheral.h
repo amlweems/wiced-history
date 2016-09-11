@@ -15,6 +15,7 @@
 #pragma once
 #include "stdint.h"
 #include "platform_mcu_peripheral.h" /* Include MCU-specific types */
+#include "ring_buffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -299,6 +300,13 @@ typedef struct
  ******************************************************/
 
 /**
+ * performs complete reset operation
+ */
+
+void platform_mcu_reset( void );
+
+
+/**
  * Initialise the specified GPIO pin
  *
  * @param[in] gpio   : gpio pin
@@ -417,6 +425,7 @@ wiced_bool_t platform_watchdog_check_last_reset( void );
  *
  * @return @ref platform_result_t
  */
+
 platform_result_t platform_uart_init( platform_uart_driver_t* driver, const platform_uart_t* peripheral, const platform_uart_config_t* config, wiced_ring_buffer_t* optional_ring_buffer );
 
 

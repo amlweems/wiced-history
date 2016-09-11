@@ -303,6 +303,7 @@ void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTask
 void vApplicationMallocFailedHook( void )
 {
     WPRINT_RTOS_DEBUG(("Heap is out of memory during malloc\n"));
+    wiced_assert("Malloc failed!", 0 != 0);
 }
 
 

@@ -278,7 +278,7 @@
 
 VOID        _tx_thread_context_save(VOID);
 VOID        _tx_thread_context_restore(VOID);
-UINT        _tx_thread_create(TX_THREAD *thread_ptr, CHAR *name_ptr, 
+UINT        _tx_thread_create(TX_THREAD *thread_ptr, const CHAR *name_ptr,
                 VOID (*entry_function)(ULONG), ULONG entry_input,
                 VOID *stack_start, ULONG stack_size, 
                 UINT priority, UINT preempt_threshold, 
@@ -286,7 +286,7 @@ UINT        _tx_thread_create(TX_THREAD *thread_ptr, CHAR *name_ptr,
 UINT        _tx_thread_delete(TX_THREAD *thread_ptr);
 UINT        _tx_thread_entry_exit_notify(TX_THREAD *thread_ptr, VOID (*thread_entry_exit_notify)(TX_THREAD *, UINT));
 TX_THREAD  *_tx_thread_identify(VOID);
-UINT        _tx_thread_info_get(TX_THREAD *thread_ptr, CHAR **name, UINT *state, ULONG *run_count, 
+UINT        _tx_thread_info_get(TX_THREAD *thread_ptr, const CHAR **name, UINT *state, ULONG *run_count,
                 UINT *priority, UINT *preemption_threshold, ULONG *time_slice, 
                 TX_THREAD **next_thread, TX_THREAD **next_suspended_thread);
 VOID        _tx_thread_initialize(VOID);
@@ -330,14 +330,14 @@ UINT        _tx_thread_wait_abort(TX_THREAD *thread_ptr);
 /* Define error checking shells for API services.  These are only referenced by the 
    application.  */
 
-UINT        _txe_thread_create(TX_THREAD *thread_ptr, CHAR *name_ptr, 
+UINT        _txe_thread_create(TX_THREAD *thread_ptr, const CHAR *name_ptr,
                 VOID (*entry_function)(ULONG), ULONG entry_input,
                 VOID *stack_start, ULONG stack_size, 
                 UINT priority, UINT preempt_threshold, 
                 ULONG time_slice, UINT auto_start, UINT thread_control_block_size);
 UINT        _txe_thread_delete(TX_THREAD *thread_ptr);
 UINT        _txe_thread_entry_exit_notify(TX_THREAD *thread_ptr, VOID (*thread_entry_exit_notify)(TX_THREAD *, UINT));
-UINT        _txe_thread_info_get(TX_THREAD *thread_ptr, CHAR **name, UINT *state, ULONG *run_count, 
+UINT        _txe_thread_info_get(TX_THREAD *thread_ptr, const CHAR **name, UINT *state, ULONG *run_count,
                 UINT *priority, UINT *preemption_threshold, ULONG *time_slice, 
                 TX_THREAD **next_thread, TX_THREAD **next_suspended_thread);
 UINT        _txe_thread_preemption_change(TX_THREAD *thread_ptr, UINT new_threshold,

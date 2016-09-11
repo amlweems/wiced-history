@@ -17,9 +17,12 @@
 #include "network/wwd_network_constants.h"
 #include "platform/wwd_bus_interface.h"
 #include "wwd_assert.h"
+#include "wwd_bus_protocol.h"
 
 static NX_PACKET_POOL * rx_pool = NULL;
 static NX_PACKET_POOL * tx_pool = NULL;
+static NX_PACKET_POOL * application_defined_rx_pool = NULL;
+static NX_PACKET_POOL * application_defined_tx_pool = NULL;
 
 wwd_result_t host_buffer_init( void * pools_in )
 {
@@ -27,6 +30,19 @@ wwd_result_t host_buffer_init( void * pools_in )
     tx_pool = &( (NX_PACKET_POOL*) pools_in )[0];
     rx_pool = &( (NX_PACKET_POOL*) pools_in )[1];
 
+    return WWD_SUCCESS;
+}
+
+wwd_result_t host_buffer_add_application_defined_pool( void* pool_in, wwd_buffer_dir_t direction )
+{
+    if( direction == WWD_NETWORK_TX )
+    {
+        application_defined_tx_pool = (NX_PACKET_POOL*) pool_in;
+    }
+    else
+    {
+        application_defined_rx_pool = (NX_PACKET_POOL*) pool_in;
+    }
     return WWD_SUCCESS;
 }
 
@@ -51,7 +67,43 @@ wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t directio
     }
     if ( NX_SUCCESS != ( status = nx_packet_allocate( pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
     {
-        return ( status == NX_NO_PACKET )? WWD_BUFFER_UNAVAILABLE_TEMPORARY: WWD_BUFFER_ALLOC_FAIL;
+        /* If there is no packet in the system TX pool, check whether there is any packet available in the application defined tx pool */
+        /* and try to allocate from there */
+        if( status == NX_NO_PACKET )
+        {
+            if( ( direction == WWD_NETWORK_TX ) && ( application_defined_tx_pool != NULL ) )
+            {
+                if ( NX_SUCCESS != ( status = nx_packet_allocate( application_defined_tx_pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
+                {
+                    return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
+                }
+                else
+                {
+                    ( *nx_buffer )->nx_packet_length = size;
+                    ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
+                }
+            }
+            else if( ( direction == WWD_NETWORK_RX ) && ( application_defined_rx_pool != NULL ) )
+            {
+                if ( NX_SUCCESS != ( status = nx_packet_allocate( application_defined_rx_pool, nx_buffer, 0, ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT ) ) )
+                {
+                    return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
+                }
+                else
+                {
+                    ( *nx_buffer )->nx_packet_length = size;
+                    ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
+                }
+            }
+            else
+            {
+                return WWD_BUFFER_UNAVAILABLE_TEMPORARY;
+            }
+        }
+        else
+        {
+            return WWD_BUFFER_ALLOC_FAIL;
+        }
     }
     ( *nx_buffer )->nx_packet_length = size;
     ( *nx_buffer )->nx_packet_append_ptr = ( *nx_buffer )->nx_packet_prepend_ptr + size;
@@ -72,9 +124,9 @@ void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
          * Return prepend pointer to the original location which the stack expects (the start of IP header).
          * For other packets, resetting prepend pointer isn't required.
          */
-        if ( nx_buffer->nx_packet_length > WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME + WICED_ETHERNET_SIZE )
+        if ( nx_buffer->nx_packet_length > sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_TX_LENGTH + WICED_ETHERNET_SIZE )
         {
-            if ( host_buffer_add_remove_at_front( &buffer, WICED_LINK_OVERHEAD_BELOW_ETHERNET_FRAME + WICED_ETHERNET_SIZE ) != WWD_SUCCESS )
+            if ( host_buffer_add_remove_at_front( &buffer, sizeof(wwd_buffer_header_t) + WWD_SDPCM_HEADER_TX_LENGTH + WICED_ETHERNET_SIZE ) != WWD_SUCCESS )
             {
                 WPRINT_NETWORK_DEBUG(("Could not move packet pointer\r\n"));
             }

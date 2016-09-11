@@ -78,22 +78,22 @@ extern "C" {
 /*****************************************************************************/
 
 /**
- * @brief          AES key schedule (encryption)
+ * @brief               AES key schedule (encryption)
  *
- * @param ctx      AES context to be initialized
- * @param key      encryption key
- * @param keysize  must be 128, 192 or 256
+ * @param ctx           AES context to be initialized
+ * @param key           encryption key
+ * @param keysize_bits  must be 128, 192 or 256
  */
-void aes_setkey_enc( aes_context_t *ctx, const unsigned char *key, int32_t keysize );
+void aes_setkey_enc( aes_context_t *ctx, const unsigned char *key, int32_t keysize_bits );
 
 /**
- * @brief          AES key schedule (decryption)
+ * @brief               AES key schedule (decryption)
  *
- * @param ctx      AES context to be initialized
- * @param key      decryption key
- * @param keysize  must be 128, 192 or 256
+ * @param ctx           AES context to be initialized
+ * @param key           decryption key
+ * @param keysize_bits  must be 128, 192 or 256
  */
-void aes_setkey_dec( aes_context_t *ctx, const unsigned char *key, int32_t keysize );
+void aes_setkey_dec( aes_context_t *ctx, const unsigned char *key, int32_t keysize_bits );
 
 /**
  * @brief          AES-ECB block encryption/decryption
@@ -103,7 +103,7 @@ void aes_setkey_dec( aes_context_t *ctx, const unsigned char *key, int32_t keysi
  * @param input    16-byte input block
  * @param output   16-byte output block
  */
-void aes_crypt_ecb( aes_context_t *ctx, int32_t mode, const unsigned char input[16], unsigned char output[16] );
+void aes_crypt_ecb( aes_context_t *ctx, aes_mode_type_t mode, const unsigned char input[16], unsigned char output[16] );
 
 /**
  * @brief          AES-CBC buffer encryption/decryption
@@ -113,9 +113,21 @@ void aes_crypt_ecb( aes_context_t *ctx, int32_t mode, const unsigned char input[
  * @param length   length of the input data
  * @param iv       initialization vector (updated after use)
  * @param input    buffer holding the input data
- * @param output   buffer holding the output data
+ * @param output   buffer receiving the output data
  */
-void aes_crypt_cbc( aes_context_t *ctx, int32_t mode, int32_t length, unsigned char iv[16], const unsigned char *input, unsigned char *output );
+void aes_crypt_cbc( aes_context_t *ctx, aes_mode_type_t mode, int32_t length, unsigned char iv[16], const unsigned char *input, unsigned char *output );
+
+/**
+ * @brief          AES-CBC buffer encryption/decryption with partial block padding
+ *
+ * @param ctx      AES context
+ * @param mode     AES_ENCRYPT or AES_DECRYPT
+ * @param length   length of the input data
+ * @param iv       initialization vector (updated after use)
+ * @param input    buffer holding the input data
+ * @param output   buffer receiving the output data
+ */
+int aes_cbc_crypt_pad_length_padding( aes_context_t *ctx, aes_mode_type_t mode, uint32_t length, const unsigned char iv[16], const unsigned char *input, unsigned char *output );
 
 /**
  * @brief          AES-CFB128 buffer encryption/decryption
@@ -126,38 +138,61 @@ void aes_crypt_cbc( aes_context_t *ctx, int32_t mode, int32_t length, unsigned c
  * @param iv_off   offset in IV (updated after use)
  * @param iv       initialization vector (updated after use)
  * @param input    buffer holding the input data
- * @param output   buffer holding the output data
+ * @param output   buffer receiving the output data
  */
 void aes_crypt_cfb128( aes_context_t *ctx, int32_t mode, int32_t length, int32_t *iv_off, unsigned char iv[16], const unsigned char *input, unsigned char *output );
 
 /**
- * @brief
+ * @brief          AES-CTR buffer encryption/decryption
  *
- * @param rk
- * @param key_len
- * @param nonce
- * @param aad_len
- * @param aad
- * @param data_len
- * @param ptxt
- * @param ctxt
- * @param mac
+ * @param ctx      AES context
+ * @param length   length of the input data
+ * @param iv       initialization vector (updated after use)
+ * @param input    buffer holding the input data
+ * @param output   buffer receiving the output data
  */
-int aes_ccm_encrypt( uint32_t *rk, const size_t key_len, const uint8_t *nonce, const size_t aad_len, const uint8_t *aad, const size_t data_len, const uint8_t *ptxt, uint8_t *ctxt, uint8_t *mac );
+int aes_crypt_ctr( aes_context_t *ctx, uint32_t length, const unsigned char iv[16], const unsigned char *input, unsigned char *output );
 
 /**
- * @brief
+ * @brief            AES-CCM MAC calculation
  *
- * @param rk
- * @param key_len
- * @param nonce
- * @param aad_len
- * @param aad
- * @param data_len
- * @param ctxt
- * @param ptxt
+ * @param ctx        AES context
+ * @param length     length of the input data
+ * @param aad_length length of the additional associated data
+ * @param nonce      the nonce to use
+ * @param aad_input  the buffer containing the additional associated data
+ * @param data_input buffer holding the input data
+ * @param mac_output buffer which recieves the output MAC
  */
-int aes_ccm_decrypt( uint32_t *rk, const size_t key_len, const uint8_t *nonce, const size_t aad_len, const uint8_t *aad, const size_t data_len, const uint8_t *ctxt, uint8_t *ptxt );
+int aes_ccm_mac( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *data_input, unsigned char mac_output[8] );
+
+/**
+ * @brief                   AES-CCM encryption
+ *
+ * @param ctx               AES context
+ * @param length            length of the input data
+ * @param aad_length        length of the additional associated data
+ * @param nonce             the nonce to use
+ * @param aad_input         the buffer containing the additional associated data
+ * @param plaintext_input   buffer holding the input data
+ * @param ciphertext_output buffer which receives the output ciphertext
+ * @param mac_output        buffer which recieves the output MAC
+ */
+int aes_encrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *plaintext_input, unsigned char *ciphertext_output, unsigned char mac_output[8] );
+
+/**
+ * @brief                   AES-CCM decryption
+ *
+ * @param ctx               AES context
+ * @param length            length of the input data
+ * @param aad_length        length of the additional associated data
+ * @param nonce             the nonce to use
+ * @param aad_input         the buffer containing the additional associated data
+ * @param ciphertext_input  buffer holding the input data
+ * @param plaintext_output  buffer which receives the output plaintext
+ */
+int aes_decrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *ciphertext_input, unsigned char *plaintext_output );
+
 
 /** @} */
 

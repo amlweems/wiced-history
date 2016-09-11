@@ -67,14 +67,10 @@ typedef enum
     PB12,  /* UART4_TX_RF_SW_CTRL_8 */
     PB13,  /* UART4_RX_RF_SW_CTRL_8 */
     DEBUG_EN,
-
-#ifdef EXPOSED_4390_SFLASH_PINS
-    SFLASH_SPI_CLK,
-    SFLASH_SPI_MOSI,
-    SFLASH_SPI_MISO,
-    SFLASH_SPI_CS,
-#endif /* ifdef EXPOSED_4390_SFLASH_PINS */
-
+    SFLASH_SPI_CLK,  /* Usable only if serial flash pins are exposed on the SiP */
+    SFLASH_SPI_MOSI, /* Usable only if serial flash pins are exposed on the SiP */
+    SFLASH_SPI_MISO, /* Usable only if serial flash pins are exposed on the SiP */
+    SFLASH_SPI_CS,   /* Usable only if serial flash pins are exposed on the SiP */
     PIN_MAX  /* Denotes maximum value. Not a valid pin */
 } platform_pin_t;
 
@@ -225,42 +221,56 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-platform_result_t platform_gpio_irq_manager_init       ( void );
-platform_result_t platform_pin_init                    ( platform_pin_t pin, platform_pin_gpio_config_t config );
-platform_result_t platform_pin_set_function            ( platform_pin_t pin, platform_pin_function_t function );
-platform_result_t platform_wakeup_pin_enable           ( platform_pin_t wakeup_pin, platform_wakeup_pin_polarity_t polarity );
-platform_result_t platform_wakeup_pin_disable          ( platform_pin_t wakeup_pin );
-platform_result_t platform_watchdog_init               ( void );
-void              platform_filesystem_init             ( void );
-void              platform_setup_otp                   ( void );
-void              init_4390_after_restart              ( void );
-void              init_4390_after_global_init          ( void );
-int               set_OTP_sflash_boot_439x             ( void );
-platform_result_t platform_ptu1_init                   ( void );
-platform_result_t platform_ptu2_init                   ( void );
-platform_result_t platform_ptu1_enable                 ( platform_ptu1_peripheral_t peripheral );
-platform_result_t platform_ptu1_disable                ( platform_ptu1_peripheral_t peripheral );
-platform_result_t platform_ptu1_enable_interrupt       ( platform_ptu1_peripheral_t peripheral );
-platform_result_t platform_ptu1_disable_interrupt      ( platform_ptu1_peripheral_t peripheral );
-platform_result_t platform_ptu2_enable                 ( platform_ptu2_peripheral_t peripheral );
-platform_result_t platform_ptu2_disable                ( platform_ptu2_peripheral_t peripheral );
-platform_result_t platform_ptu2_enable_interrupt       ( platform_ptu2_peripheral_t peripheral );
-platform_result_t platform_ptu2_disable_interrupt      ( platform_ptu2_peripheral_t peripheral );
-platform_result_t platform_ptu2_enable_serial_flash    ( void );
-platform_result_t platform_ptu2_disable_serial_flash   ( void );
-void              platform_gpio_irq                    ( void );
-void              platform_uart_irq                    ( platform_uart_driver_t* driver );
-void              platform_spi_slave_irq               ( platform_spi_slave_driver_t* driver );
+/* GPIO and Pin Management Function(s) */
+platform_result_t platform_gpio_irq_manager_init    ( void );
+platform_result_t platform_pin_init                 ( platform_pin_t pin, platform_pin_gpio_config_t config );
+platform_result_t platform_pin_set_function         ( platform_pin_t pin, platform_pin_function_t function );
+platform_result_t platform_wakeup_pin_enable        ( platform_pin_t wakeup_pin, platform_wakeup_pin_polarity_t polarity );
+platform_result_t platform_wakeup_pin_disable       ( platform_pin_t wakeup_pin );
+wiced_bool_t      platform_wakeup_pin_is_asserted   ( platform_pin_t wakeup_pin );
 
-/* Internal powersave functions */
-uint32_t          platform_mcu_powersave_enter_pds_mode ( uint32_t sleep_ms );
-void              platform_mcu_powersave_wakeup_irq     ( void );
-void              platform_powersave_wake_wlan          ( void );
-void              platform_powersave_allow_wlan_to_sleep( void );
-void              platform_powersave_wlan_on            ( void );
-void              platform_powersave_wlan_off           ( void );
-void              platform_powersave_wlan_sram_on       ( void );
-void              platform_powersave_wlan_sram_off      ( void );
+/* Peripheral Transport Unit (PTU) Functions */
+platform_result_t platform_ptu1_init                ( void );
+platform_result_t platform_ptu1_enable              ( platform_ptu1_peripheral_t peripheral );
+platform_result_t platform_ptu1_disable             ( platform_ptu1_peripheral_t peripheral );
+platform_result_t platform_ptu1_enable_interrupt    ( platform_ptu1_peripheral_t peripheral );
+platform_result_t platform_ptu1_disable_interrupt   ( platform_ptu1_peripheral_t peripheral );
+platform_result_t platform_ptu2_init                ( void );
+platform_result_t platform_ptu2_enable              ( platform_ptu2_peripheral_t peripheral );
+platform_result_t platform_ptu2_disable             ( platform_ptu2_peripheral_t peripheral );
+platform_result_t platform_ptu2_enable_interrupt    ( platform_ptu2_peripheral_t peripheral );
+platform_result_t platform_ptu2_disable_interrupt   ( platform_ptu2_peripheral_t peripheral );
+platform_result_t platform_ptu2_enable_serial_flash ( void );
+platform_result_t platform_ptu2_disable_serial_flash( void );
+
+/* Power Management Unit (PMU) Functions */
+platform_result_t platform_pmu_enter_pds_mode       ( uint32_t time_to_sleep_ms, uint32_t* time_slept_ms );
+wiced_bool_t      platform_pmu_wifi_is_on           ( void );
+void              platform_pmu_wifi_on              ( void );
+void              platform_pmu_wifi_off             ( void );
+void              platform_pmu_wifi_sram_init       ( void );
+void              platform_pmu_wifi_sram_on         ( void );
+void              platform_pmu_wifi_sram_off        ( void );
+void              platform_pmu_wifi_needed          ( void );
+void              platform_pmu_wifi_not_needed      ( void );
+void              platform_pmu_wifi_wake_up         ( void );
+void              platform_pmu_wifi_allowed_to_sleep( void );
+
+/* Initialisation Function(s) */
+platform_result_t platform_watchdog_init            ( void );
+
+platform_result_t platform_watchdog_force_reset     ( void );
+void              platform_apps_core_init           ( void );
+uint32_t          platform_filesystem_init          ( void );
+void              platform_sflash_init              ( void );
+platform_result_t platform_otp_setup                ( void );
+
+/* Interrupt Handler Function(s) */
+void              platform_gpio_irq                 ( void );
+void              platform_pmu_wakeup_irq           ( void );
+void              platform_uart_irq                 ( platform_uart_driver_t* driver );
+void              platform_spi_slave_irq            ( platform_spi_slave_driver_t* driver );
+
 #ifdef __cplusplus
 } /*extern "C" */
 #endif

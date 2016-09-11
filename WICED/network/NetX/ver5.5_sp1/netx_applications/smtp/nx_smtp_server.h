@@ -81,7 +81,7 @@ extern   "C" {
 /* Set the event reporting/debug output for the NetX SMTP server */
 
 #ifndef NX_SMTP_SERVER_DEBUG
-#define NX_SMTP_SERVER_DEBUG                         MODERATE
+#define NX_SMTP_SERVER_DEBUG                         NX_SMTP_DEBUG_LEVEL_NONE
 #endif
 
 
@@ -91,23 +91,26 @@ extern   "C" {
    processor that is running the application and communication
    available (e.g. serial port).  */
 
-
+#if ( NX_SMTP_SERVER_DEBUG == NX_SMTP_DEBUG_LEVEL_NONE )
+#define NX_SMTP_SERVER_EVENT_LOG(debug_level, msg)
+#else
 #define NX_SMTP_SERVER_EVENT_LOG(debug_level, msg)                      \
 {                                                                       \
     UINT level = (UINT)debug_level;                                     \
-    if ((level <= ALL) && (NX_SMTP_SERVER_DEBUG == ALL))                \
+    if ((level <= NX_SMTP_DEBUG_LEVEL_ALL) && (NX_SMTP_SERVER_DEBUG == NX_SMTP_DEBUG_LEVEL_ALL))                \
     {                                                                   \
        printf msg ;                                                     \
     }                                                                   \
-    else if ((level <= MODERATE) && (NX_SMTP_SERVER_DEBUG == MODERATE)) \
+    else if ((level <= NX_SMTP_DEBUG_LEVEL_MODERATE) && (NX_SMTP_SERVER_DEBUG == NX_SMTP_DEBUG_LEVEL_MODERATE)) \
     {                                                                   \
        printf msg ;                                                     \
     }                                                                   \
-    else if ((level == SEVERE) && (NX_SMTP_SERVER_DEBUG == SEVERE))     \
+    else if ((level == NX_SMTP_DEBUG_LEVEL_SEVERE) && (NX_SMTP_SERVER_DEBUG == NX_SMTP_DEBUG_LEVEL_SEVERE))     \
     {                                                                   \
        printf msg ;                                                     \
     }                                                                   \
 }
+#endif /* NX_SMTP_SERVER_DEBUG */
 
 /* Enable print server session mail summary feature.  */
 /* #define NX_SMTP_PRINT_SERVER_MAIL_DATA  */
@@ -877,7 +880,7 @@ UINT    _nx_smtp_server_blockpool_memory_get(VOID **memory_ptr, TX_BLOCK_POOL *b
 UINT    _nxe_smtp_server_blockpool_memory_get(VOID **memory_ptr, TX_BLOCK_POOL *blockpool_ptr, TX_MUTEX *mutex_ptr, UINT mutex_wait_option);
 UINT    _nx_smtp_server_blockpool_memory_release(VOID *memory_ptr, TX_BLOCK_POOL *blockpool_ptr, TX_MUTEX *mutex_ptr, UINT mutex_wait_option);
 UINT    _nxe_smtp_server_blockpool_memory_release(VOID *memory_ptr, TX_BLOCK_POOL *blockpool_ptr, TX_MUTEX *mutex_ptr, UINT mutex_wait_option);
-UINT    _nx_smtp_utility_send_server_response(NX_SMTP_SERVER_SESSION *session_ptr, CHAR *header, CHAR *info, CHAR *more_info, UINT more_lines_to_follow);
+UINT    _nx_smtp_utility_send_server_response(NX_SMTP_SERVER_SESSION *session_ptr, const CHAR *header, const CHAR *info, const CHAR *more_info, UINT more_lines_to_follow);
 UINT    _nxe_smtp_utility_send_server_response(NX_SMTP_SERVER_SESSION *session_ptr, CHAR *header, CHAR *info, CHAR *more_info, UINT more_lines_to_follow);
 UINT    _nx_smtp_utility_parse_client_request(CHAR *buffer_ptr, UINT *protocol_code, UINT length);
 UINT    _nxe_smtp_utility_parse_client_request(CHAR *buffer_ptr, UINT *protocol_code, UINT length);
@@ -904,8 +907,8 @@ VOID    _nx_smtp_session_disconnect_present(NX_TCP_SOCKET *socket_ptr);
 VOID    _nx_smtp_server_session_thread_entry(ULONG info);
 VOID    _nx_smtp_server_parse_response(CHAR *buffer, UINT argument_index, UINT buffer_length, CHAR *arguement, UINT arguement_length, UINT convert_to_uppercase, UINT include_crlf);
 VOID    _nx_smtp_server_find_crlf(CHAR *buffer, UINT length, CHAR **CRLF, UINT reverse);
-VOID    _nx_smtp_server_base64_encode(CHAR *name, CHAR *base64name);
-VOID    _nx_smtp_server_base64_decode(CHAR *base64name, CHAR *name);
+VOID    _nx_smtp_server_base64_encode(const CHAR *name, CHAR *base64name);
+VOID    _nx_smtp_server_base64_decode(const CHAR *base64name, CHAR *name);
 
 #endif
 

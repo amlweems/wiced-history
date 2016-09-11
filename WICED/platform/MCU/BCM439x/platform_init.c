@@ -11,6 +11,7 @@
 /** @file
  * Define default BCM439x initialisation functions
  */
+#include "wiced_defaults.h"
 #include "platform_init.h"
 #include "platform_peripheral.h"
 #include "platform_sleep.h"
@@ -48,10 +49,6 @@
  *               Static Function Declarations
  ******************************************************/
 
-extern void platform_filesystem_init( void );
-
-int platform_get_4390_rx_buffer_size( void );
-
 /******************************************************
  *               Variable Definitions
  ******************************************************/
@@ -62,49 +59,62 @@ char bcm439x_platform_inited = 0;
  *               Function Definitions
  ******************************************************/
 
+/* Reset request */
+ /*
+  * Cortex M3 provides two reset control features by setting respective bit in application interrupt and reset control register
+  * SYSRESETREQ (bit 2)--Which will reset whole system.
+  * VECTRESET (bit 0)  --Which will reset only ARM core and not the other peripherals
+  * If we are using SYSRESETREQ bit set it will signal reset signal generator which is not a
+  * part of ARM CM3 core, it specific to chip design.
+  *
+  * SYSRESETREQ signal not connected to anything on BCM4390
+  *
+  * To overcome this we are triggering watchdog to reset by making count to 0 Forcibly */
+
+void platform_mcu_reset( void )
+{
+
+    /*if BCM439x platform do Forcibly  reset the watchdog*/
+     platform_watchdog_force_reset();
+
+}
+
 /* BCM439x common clock initialisation function
  * - weak attribute is intentional in case a specific platform (board) needs to override this.
  */
 WEAK void platform_init_system_clocks( void )
 {
-    init_4390_after_restart( );
+    /* System clock initialisation is already done in ROM bootloader */
 }
 
 WEAK void platform_init_memory( void )
 {
-
+    /* Init WLAN SRAM for apps core to use */
+    platform_pmu_wifi_sram_init();
 }
 
 void platform_init_mcu_infrastructure( void )
 {
-    uint8_t i;
-
     if ( bcm439x_platform_inited == 1 )
+    {
         return;
+    }
 
-    init_4390_after_global_init();
-
+    platform_apps_core_init();
     platform_mcu_powersave_disable( );
 
+#ifndef WICED_DISABLE_WATCHDOG
     platform_watchdog_init( );
+#endif
 
-    /* Initialise the interrupt priorities to a priority lower than 0 so that the BASEPRI register can mask them */
-    for ( i = 0; i < 81; i++ )
-    {
-//        NVIC ->IP[i] = 0xff;
-    }
     platform_init_rtos_irq_priorities( );
     platform_init_peripheral_irq_priorities( );
-
-    /* Initialise peripheral transport units (PTU) before any other peripherals */
-    platform_ptu1_init( );
-    platform_ptu2_init( );
 
     /* Initialise GPIO IRQ manager */
     platform_gpio_irq_manager_init();
 
-    /* Initialise filesystem */
-    platform_filesystem_init();
+    /* Initialise external serial flash */
+    platform_sflash_init();
 
     bcm439x_platform_inited = 1;
 }
@@ -118,15 +128,4 @@ void platform_init_connectivity_module( void )
 WEAK void platform_init_external_devices( void )
 {
 
-}
-
-void platform_setup_otp( void )
-{
-    set_OTP_sflash_boot_439x( );
-}
-
-/* This function is needed so that the MTU size does not get compiled into the 4390 prebuilt library in releases */
-int platform_get_4390_rx_buffer_size( void )
-{
-    return WICED_LINK_MTU;
 }

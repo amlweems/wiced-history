@@ -108,9 +108,9 @@ typedef volatile unsigned char   host_semaphore_type_t;  /** NoOS definition of 
 typedef volatile unsigned char   host_thread_type_t;     /** NoOS definition of a thread handle - Would be declared void but that is not allowed. */
 typedef volatile unsigned char   host_queue_type_t;      /** NoOS definition of a message queue */
 
-/*@external@*/ extern void NoOS_setup_timing( void );
-/*@external@*/ extern void NoOS_stop_timing( void );
-/*@external@*/ extern void NoOS_systick_irq( void );
+/*@external@*/ void NoOS_setup_timing( void );
+/*@external@*/ void NoOS_stop_timing( void );
+/*@external@*/ void NoOS_systick_irq( void );
 
 #ifdef __cplusplus
 } /* extern "C" */

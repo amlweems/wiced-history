@@ -339,6 +339,12 @@ void        _nx_dns_long_to_network_convert(UCHAR *ptr, ULONG value);
 USHORT      _nx_dns_network_to_short_convert(UCHAR *ptr);
 ULONG       _nx_dns_network_to_long_convert(UCHAR *ptr);
 
+#ifdef  NX_DNS_ALTERNATE_UCHAR_TO_ASCII
+UINT        _nx_uchar_to_ascii_convert(UCHAR number, CHAR *buffstring);
+#else
+#define _nx_uchar_to_ascii_convert(number, buffstring)  sprintf((buffstring),"%u",(unsigned int)(number))
+#endif /* ifdef  NX_DNS_ALTERNATE_UCHAR_TO_ASCII */
+
 #endif
 
 /* Determine if a C++ compiler is being used.  If so, complete the standard

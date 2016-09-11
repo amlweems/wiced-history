@@ -221,6 +221,7 @@ static /*@null@*/ void*           wiced_join_events_handler         ( const wwd_
 static            void*           scan_result_handler               ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
 static            wwd_result_t    wwd_wifi_prepare_join             ( wwd_interface_t interface, wiced_security_t security, /*@unique@*/ const uint8_t* security_key, uint8_t key_length, host_semaphore_type_t* semaphore );
 static            wwd_result_t    wwd_wifi_get_packet_filters_inner ( uint32_t max_count, uint32_t offset, wiced_packet_filter_t* list, wiced_bool_t enabled_list, uint32_t* count_out );
+static            wwd_result_t    wwd_wifi_set_band_specific_rate( wwd_interface_t interface, uint32_t rate );
 
 /******************************************************
  *             Function definitions
@@ -752,14 +753,14 @@ static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_secu
     CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_WSEC, buffer, 0, interface ) );
 
     /* Set supplicant variable */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) ( ( ( ( auth_type & WPA_SECURITY )  != 0 ) ||
                            ( ( auth_type & WPA2_SECURITY ) != 0 ) ) ? 1 : 0 );
     CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
 
     /* Set the EAPOL version to whatever the AP is using (-1) */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA2_EAPVER );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_SUP_WPA2_EAPVER );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)-1;
     CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, interface ) );
@@ -777,7 +778,7 @@ static wwd_result_t wwd_wifi_prepare_join( wwd_interface_t interface, wiced_secu
         case WICED_SECURITY_WPA2_TKIP_PSK:
         case WICED_SECURITY_WPA2_MIXED_PSK:
         {
-            wsec_pmk_t* psk = wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
+            wsec_pmk_t* psk = (wsec_pmk_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(wsec_pmk_t) );
             CHECK_IOCTL_BUFFER( psk );
             memset( psk, 0, sizeof(wsec_pmk_t) );
             memcpy( psk->key, security_key, key_length );
@@ -1616,12 +1617,12 @@ wwd_result_t wwd_wifi_select_antenna( wiced_antenna_t antenna )
     wiced_buffer_t buffer;
     uint32_t* data;
 
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) antenna;
     CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_TXANT, buffer, 0, WWD_STA_INTERFACE ) );
 
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) antenna;
     RETURN_WITH_ASSERT( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_ANTDIV, buffer, 0, WWD_STA_INTERFACE ) );
@@ -1631,7 +1632,7 @@ wwd_result_t wwd_wifi_select_antenna( wiced_antenna_t antenna )
 wwd_result_t wwd_wifi_set_roam_trigger( int32_t trigger_level )
 {
     wiced_buffer_t buffer;
-    uint32_t* data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)trigger_level;
 
@@ -1643,7 +1644,7 @@ wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_ROAM_OFF );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_ROAM_OFF );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)disable;
     RETURN_WITH_ASSERT(  wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
@@ -1654,7 +1655,7 @@ wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame )
 {
     wiced_buffer_t buffer;
     wiced_action_frame_t* frame;
-    uint32_t* a = (uint32_t*)wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_action_frame_t)+4, IOVAR_STR_BSSCFG_ACTION_FRAME );
+    uint32_t* a = (uint32_t*) wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_action_frame_t)+4, IOVAR_STR_BSSCFG_ACTION_FRAME );
     CHECK_IOCTL_BUFFER( a );
     *a = 1;
     frame = (wiced_action_frame_t*)(a+1);
@@ -1668,7 +1669,7 @@ wwd_result_t wwd_wifi_get_acparams_sta( edcf_acparam_t *acp )
     wiced_buffer_t buffer;
     wiced_buffer_t response;
 
-    int* data = (int*)wwd_sdpcm_get_iovar_buffer( &buffer, 64, IOVAR_STR_AC_PARAMS_STA );
+    int* data = (int*) wwd_sdpcm_get_iovar_buffer( &buffer, 64, IOVAR_STR_AC_PARAMS_STA );
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, 64 );
     CHECK_RETURN( wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE ) );
@@ -1685,14 +1686,14 @@ wwd_result_t wwd_wifi_enable_monitor_mode( void )
     uint32_t*      data;
 
     /* Enable allmulti mode */
-    data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
     CHECK_IOCTL_BUFFER( data );
     *data = 1;
 
     CHECK_RETURN( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Enable monitor mode */
-    data = wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
     CHECK_IOCTL_BUFFER( data );
     *data = 1;
 
@@ -1708,14 +1709,14 @@ wwd_result_t wwd_wifi_disable_monitor_mode( void )
     uint32_t*      data;
 
     /* Disable allmulti mode */
-    data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_ALLMULTI );
     CHECK_IOCTL_BUFFER( data );
     *data = 0;
 
     CHECK_RETURN( wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
     /* Disable monitor mode */
-    data = wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer(&buffer, 4);
     CHECK_IOCTL_BUFFER( data );
     *data = 0;
 
@@ -1923,7 +1924,7 @@ wwd_result_t wwd_wifi_set_channel( wwd_interface_t interface, uint32_t channel )
     switch ( interface )
     {
         case WWD_STA_INTERFACE:
-            data = wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
+            data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) );
             CHECK_IOCTL_BUFFER( data );
             *data = channel;
             CHECK_RETURN( wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_SET_CHANNEL, buffer, NULL, WWD_STA_INTERFACE ) );
@@ -1960,6 +1961,153 @@ wwd_result_t wwd_wifi_get_counters( wwd_interface_t interface, wiced_counters_t*
     memcpy(counters, received_counters, sizeof(wiced_counters_t));
     host_buffer_release( response, WWD_NETWORK_RX );
     return WWD_SUCCESS;
+}
+
+wwd_result_t wwd_wifi_get_rate( wwd_interface_t interface, uint32_t* rate )
+{
+    wiced_buffer_t buffer;
+    wiced_buffer_t response;
+    int32_t* wl_rate;
+
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(int32_t) ) );
+    CHECK_RETURN (wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_RATE, buffer, &response, interface ));
+    wl_rate = (int32_t*) host_buffer_get_current_piece_data_pointer( response );
+    memcpy(rate, wl_rate, sizeof(uint32_t));
+    if (*wl_rate == -1)
+        *rate = 0;
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    return WWD_SUCCESS;
+}
+
+wwd_result_t wwd_wifi_set_band_specific_rate( wwd_interface_t interface, uint32_t rate )
+{
+    wiced_buffer_t buffer;
+    wiced_buffer_t response;
+    uint32_t band;
+    uint32_t bandlist[3];
+    char aname[] = IOVAR_STR_ARATE;
+    char bgname[] = IOVAR_STR_BGRATE;
+    char *name;
+    int32_t *data;
+
+    /* Get band */
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(uint32_t) ) );
+    CHECK_RETURN (wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_BAND, buffer, &response, interface ));
+    band = *(uint32_t*) host_buffer_get_current_piece_data_pointer( response );
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    /* Get supported Band List */
+    CHECK_IOCTL_BUFFER( wwd_sdpcm_get_ioctl_buffer( &buffer, sizeof(bandlist) ) );
+    CHECK_RETURN (wwd_sdpcm_send_ioctl( SDPCM_GET, WLC_GET_BANDLIST, buffer, &response, interface ));
+    memcpy(bandlist, (uint32_t*) host_buffer_get_current_piece_data_pointer( response ), sizeof(bandlist));
+    host_buffer_release(response, WWD_NETWORK_RX);
+
+    /* only support a maximum of 2 bands */
+    if (!bandlist[0])
+        return WWD_WLAN_ERROR;
+    else if (bandlist[0] > 2)
+        bandlist[0] = 2;
+
+    switch (band) {
+    /* In case of auto band selection the current associated band will be in the entry 1 */
+    case WLC_BAND_AUTO :
+        if (bandlist[1] == WLC_BAND_5G)
+            name = (char *)aname;
+        else if (bandlist[1] == WLC_BAND_2G)
+            name = (char *)bgname;
+        else
+            return WWD_WLAN_ERROR;
+
+        break;
+
+    case WLC_BAND_5G :
+        name = (char *)aname;
+        break;
+
+    case WLC_BAND_2G :
+        name = (char *)bgname;
+        break;
+
+    default :
+        return WWD_WLAN_ERROR;
+        break;
+    }
+
+    data = (int32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(int32_t), name );
+    CHECK_IOCTL_BUFFER( data );
+    if (rate == 0)
+        *data = -1; // Auto rate
+    else
+        *data = (int32_t)rate;
+
+    RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
+}
+
+/* STF parameters are not yet supported - FIXME*/
+wwd_result_t wwd_wifi_set_mcs_rate( wwd_interface_t interface, int32_t mcs, wiced_bool_t mcsonly )
+{
+    wiced_buffer_t buffer;
+    int32_t *data;
+    uint32_t nrate = 0;
+
+    if (mcs != -1)
+    {
+        nrate |= mcs & NRATE_RATE_MASK;
+        nrate |= NRATE_MCS_INUSE;
+
+        if (mcsonly)
+        {
+            nrate |= NRATE_OVERRIDE_MCS_ONLY;
+        }
+        data = (int32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(int32_t), IOVAR_STR_NRATE );
+        CHECK_IOCTL_BUFFER( data );
+        *data = (int32_t)nrate;
+
+        RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, interface ) );
+    }
+    else
+    {
+        /* reset rates to auto */
+        RETURN_WITH_ASSERT( wwd_wifi_set_band_specific_rate( interface, 0 ));
+    }
+}
+
+wwd_result_t wwd_wifi_set_legacy_rate( wwd_interface_t interface, int32_t rate )
+{
+    wiced_buffer_t buffer;
+    int32_t *data;
+    uint32_t nrate = 0;
+
+    if (rate != 0)
+    {
+        nrate |= rate & NRATE_RATE_MASK;
+
+        data = (int32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(int32_t), IOVAR_STR_NRATE );
+        CHECK_IOCTL_BUFFER( data );
+        *data = (int32_t)nrate;
+
+        RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, interface ) );
+    }
+    else
+    {
+        /* reset rates to auto */
+        data = (int32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(int32_t), IOVAR_STR_BGRATE );
+        CHECK_IOCTL_BUFFER( data );
+        *data = -1;
+
+        RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, interface ) );
+    }
+}
+
+wwd_result_t wwd_wifi_disable_11n_support( wwd_interface_t interface, wiced_bool_t disable )
+{
+    wiced_buffer_t buffer;
+
+    uint32_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_NMODE );
+    CHECK_IOCTL_BUFFER( data );
+    *data = (disable) ? 0 : 1;
+    RETURN_WITH_ASSERT(  wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, interface ) );
 }
 
 wwd_result_t wwd_wifi_set_packet_filter_mode( wiced_packet_filter_mode_t mode )
@@ -2021,7 +2169,7 @@ wwd_result_t wwd_wifi_toggle_packet_filter( uint8_t filter_id, wiced_bool_t enab
 {
     wiced_buffer_t buffer;
 
-    wl_pkt_filter_enable_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_PKT_FILTER_ENABLE );
+    wl_pkt_filter_enable_t* data = (wl_pkt_filter_enable_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_pkt_filter_enable_t), IOVAR_STR_PKT_FILTER_ENABLE );
     CHECK_IOCTL_BUFFER( data );
     data->id     = (uint32_t)filter_id;
     data->enable = (uint32_t)enable;
@@ -2051,7 +2199,7 @@ wwd_result_t wwd_wifi_clear_packet_filter_stats( uint32_t filter_id )
 {
     wiced_buffer_t buffer;
 
-    uint32_t* data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_CLEAR_STATS );
+    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(uint32_t), IOVAR_STR_PKT_FILTER_CLEAR_STATS );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)filter_id;
     RETURN_WITH_ASSERT( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE ) );
@@ -2090,7 +2238,7 @@ static wwd_result_t wwd_wifi_get_packet_filters_inner( uint32_t max_count, uint3
     uint32_t              i;
 
     wwd_result_t retval = WWD_SUCCESS;
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, PACKET_FILTER_LIST_BUFFER_MAX_LEN, IOVAR_STR_PKT_FILTER_LIST );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, PACKET_FILTER_LIST_BUFFER_MAX_LEN, IOVAR_STR_PKT_FILTER_LIST );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t)enabled_list;
 
@@ -2216,7 +2364,7 @@ wwd_result_t wwd_wifi_get_keep_alive( wiced_keep_alive_packet_t* keep_alive_pack
 
     wiced_assert("Bad args", (keep_alive_packet_info != NULL) && (keep_alive_packet_info->packet_length > 4) && (keep_alive_packet_info->keep_alive_id <= 3));
 
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, max_info_length, IOVAR_STR_MKEEP_ALIVE );  /* get a buffer to store the keep_alive info into */
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, max_info_length, IOVAR_STR_MKEEP_ALIVE );  /* get a buffer to store the keep_alive info into */
     CHECK_IOCTL_BUFFER( data );
     memset( data, 0, max_info_length );
     data[0] = keep_alive_packet_info->keep_alive_id;

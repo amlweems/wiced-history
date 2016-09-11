@@ -684,7 +684,7 @@ extern   "C" {
                                 UINT (*kiss_of_death_handler)(NX_SNTP_CLIENT *client_ptr, UINT code),
                                 VOID (random_number_generator)(struct NX_SNTP_CLIENT_STRUCT *client_ptr, ULONG *rand));
     UINT    nx_sntp_client_delete (NX_SNTP_CLIENT *client_ptr);
-    UINT    nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer); 
+    UINT    nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer, ULONG buffer_length);
     UINT    nxd_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, NXD_ADDRESS *multicast_server_address, NXD_ADDRESS *broadcast_time_server);
     UINT    nx_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr,  ULONG multicast_server_address, ULONG broadcast_time_server);
     UINT    nxd_sntp_client_initialize_unicast(NX_SNTP_CLIENT *client_ptr, NXD_ADDRESS *unicast_time_server);
@@ -713,8 +713,8 @@ extern   "C" {
                                 VOID (random_number_generator)(struct NX_SNTP_CLIENT_STRUCT *client_ptr, ULONG *rand));
     UINT    _nx_sntp_client_delete (NX_SNTP_CLIENT *client_ptr);
     UINT    _nxe_sntp_client_delete (NX_SNTP_CLIENT *client_ptr);
-    UINT    _nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer); 
-    UINT    _nxe_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer); 
+    UINT    _nx_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer, ULONG buffer_length);
+    UINT    _nxe_sntp_client_get_local_time(NX_SNTP_CLIENT *client_ptr, ULONG *seconds, ULONG *milliseconds, CHAR *buffer, ULONG buffer_length);
     UINT    _nxde_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, NXD_ADDRESS *multicast_server_address, NXD_ADDRESS *broadcast_time_server);
     UINT    _nxd_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, NXD_ADDRESS *multicast_server_address, NXD_ADDRESS *broadcast_time_server);
     UINT    _nx_sntp_client_initialize_broadcast(NX_SNTP_CLIENT *client_ptr, ULONG multicast_server_address, ULONG broadcast_time_server);
@@ -768,7 +768,11 @@ extern   "C" {
     UINT    _nx_sntp_client_utility_is_zero_data(UCHAR *data, UINT size);
     UINT    _nx_sntp_client_utility_usec_to_fraction(ULONG usecs, ULONG *tsf);
 
-
+#ifdef  NX_SNTP_ALTERNATE_SNPRINTF
+int     _nx_sntp_snprintf(char *str, size_t size, const char *format, ...);
+#else
+#define _nx_sntp_snprintf snprintf
+#endif /* ifdef  NX_SNTP_ALTERNATE_SNPRINTF */
 
 #endif   /*  NX_SNTP_SOURCE_CODE */
 

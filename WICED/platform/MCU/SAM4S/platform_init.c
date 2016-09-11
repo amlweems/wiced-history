@@ -55,6 +55,11 @@
  *               Function Definitions
  ******************************************************/
 
+void platform_mcu_reset( void )
+{
+    NVIC_SystemReset();
+}
+
 WEAK void platform_init_system_clocks( void )
 {
     sysclk_init();

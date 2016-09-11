@@ -197,6 +197,7 @@ typedef struct wl_rateset
     uint32_t  count;          /* # rates in this set */
     uint8_t   rates[WL_MAXRATES_IN_SET];  /* rates in 500kbps units w/hi bit set if basic */
 } wl_rateset_t;
+
 typedef struct wl_uint32_list
 {
     uint32_t count;
@@ -223,8 +224,13 @@ typedef struct wl_join_scan_params {
 #define NRATE_STF_MASK            (0x0000ff00)
 #define NRATE_STF_SHIFT                     (8)
 #define NRATE_OVERRIDE            (0x80000000)
+#define NRATE_OVERRIDE_MCS_ONLY   (0x40000000)
 #define NRATE_SGI_MASK          (0x00800000)
 #define NRATE_SGI_SHIFT                 (23)
+#define NRATE_LDPC_CODING       (0x00400000)
+#define NRATE_LDPC_SHIFT                (22)
+#define NRATE_BCMC_OVERRIDE     (0x00200000)
+#define NRATE_BCMC_SHIFT                (21)
 #define NRATE_STF_SISO                     (0)
 #define NRATE_STF_CDD                     (1)
 #define NRATE_STF_STBC                     (2)
@@ -666,6 +672,10 @@ typedef struct wlc_iov_trx_s
 #define IOVAR_STR_P2P_SCAN               "p2p_scan"
 #define IOVAR_STR_P2P_STATE              "p2p_state"
 #define IOVAR_STR_P2P_SSID               "p2p_ssid"
+#define IOVAR_STR_NRATE                  "nrate"
+#define IOVAR_STR_BGRATE                 "bg_rate"
+#define IOVAR_STR_ARATE                  "a_rate"
+#define IOVAR_STR_NMODE                  "nmode"
 
 #define IOVAR_STR_2G_MULTICAST_RATE      "2g_mrate"
 #define IOVAR_STR_AMPDU_BA_WINDOW_SIZE   "ampdu_ba_wsize"

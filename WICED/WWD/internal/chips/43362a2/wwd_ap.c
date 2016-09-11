@@ -212,7 +212,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     }
 
     /* Set the GMode */
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
     *data = (uint32_t) GMODE_AUTO;
 
@@ -233,7 +233,7 @@ static wwd_result_t internal_ap_init( wiced_ssid_t* ssid, wiced_security_t auth_
     wiced_assert("start_ap: Failed to set multicast transmission rate\r\n", result == WWD_SUCCESS );
 
     /* Set DTIM period */
-    data = wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
+    data = (uint32_t*) wwd_sdpcm_get_ioctl_buffer( &buffer, (uint16_t) 4 );
     CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( data, &wwd_wifi_sleep_flag );
     *data = (uint32_t) WICED_DEFAULT_SOFT_AP_DTIM_PERIOD;
     CHECK_RETURN_WITH_SEMAPHORE( wwd_sdpcm_send_ioctl( SDPCM_SET, WLC_SET_DTIMPRD, buffer, 0, WWD_AP_INTERFACE ), &wwd_wifi_sleep_flag );
@@ -314,7 +314,7 @@ wwd_result_t wwd_wifi_stop_ap( void )
     wwd_result_t result2;
 
     /* Query bss state (does it exist? if so is it UP?) */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
     *data = (uint32_t) CHIP_AP_INTERFACE;
     result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
@@ -339,7 +339,7 @@ wwd_result_t wwd_wifi_stop_ap( void )
     host_buffer_release( response, WWD_NETWORK_RX );
 
     /* set BSS down */
-    data = wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 8, IOVAR_STR_BSS );
     CHECK_IOCTL_BUFFER( data );
     data[0] = (uint32_t) CHIP_AP_INTERFACE;
     data[1] = (uint32_t) BSS_DOWN;

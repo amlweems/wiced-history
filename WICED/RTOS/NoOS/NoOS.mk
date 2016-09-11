@@ -22,7 +22,6 @@ ifeq (,$(APP_WWD_ONLY)$(NS_WWD_ONLY)$(RTOS_WWD_ONLY))
 $(NAME)_SOURCES  := WICED/rtos.c
 endif
 
-GLOBAL_INCLUDES := . \
-                   WICED
+GLOBAL_INCLUDES := .
 
 RTOS_WWD_ONLY := TRUE

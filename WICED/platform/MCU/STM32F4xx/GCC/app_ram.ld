@@ -127,7 +127,7 @@ SECTIONS
         *(COMMON)
         link_bss_end = .;
         . = ALIGN(., 4);
-    }> SRAM AT>SRAM
+    }> CCM_SRAM AT>CCM_SRAM
 
 
     .stack : /* Contains the initial stack */
@@ -136,7 +136,7 @@ SECTIONS
         *(.stack)
         . = ALIGN(MAX(link_stack_location + __STACKSIZE__ , .), 4);
         link_stack_end = .;
-    }> SRAM AT>SRAM
+    }> CCM_SRAM AT>CCM_SRAM
 
     /DISCARD/ :
     {
@@ -178,7 +178,7 @@ PROVIDE( __tx_free_memory_start = link_stack_end );
 PROVIDE( __tx_vectors = link_interrupt_vectors_location );
 
 PROVIDE( wifi_firmware_image = 0 );
-PROVIDE( bootloader_api_addr_loc     = 0x08000200);
+PROVIDE( shared_api_addr_loc     = ORIGIN( SHARED_API ));
 
 
 

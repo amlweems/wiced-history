@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME := Wiced_NetX_Interface
+NAME := WICED_NetX_Interface
 
 GLOBAL_INCLUDES := .
 

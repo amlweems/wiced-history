@@ -477,6 +477,14 @@ static wiced_result_t i2s_peripheral_init( wiced_i2s_t i2s, const wiced_i2s_para
     return WICED_SUCCESS;
 }
 
+
+wiced_result_t  wiced_i2s_get_current_hw_pointer( wiced_i2s_t i2s, uint32_t* hw_pointer )
+{
+    *hw_pointer = ( i2s_control[i2s].period_size - i2s_interfaces[i2s].tx_dma.stream->NDTR * 2 ) / 4;
+
+    return WICED_SUCCESS;
+}
+
 static void i2s_peripheral_deinit( wiced_i2s_t i2s )
 {
     /* Disable I2S peripheral if not already done by rx/tx completion. */

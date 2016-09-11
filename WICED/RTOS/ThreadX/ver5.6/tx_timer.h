@@ -89,13 +89,13 @@
 
 UINT        _tx_timer_activate(TX_TIMER *timer_ptr);
 UINT        _tx_timer_change(TX_TIMER *timer_ptr, ULONG initial_ticks, ULONG reschedule_ticks);
-UINT        _tx_timer_create(TX_TIMER *timer_ptr, CHAR *name_ptr, 
+UINT        _tx_timer_create(TX_TIMER *timer_ptr, const CHAR *name_ptr,
                 VOID (*expiration_function)(ULONG), ULONG expiration_input,
                 ULONG initial_ticks, ULONG reschedule_ticks, UINT auto_activate);
 UINT        _tx_timer_deactivate(TX_TIMER *timer_ptr);
 UINT        _tx_timer_delete(TX_TIMER *timer_ptr);
 VOID        _tx_timer_expiration_process(VOID);
-UINT        _tx_timer_info_get(TX_TIMER *timer_ptr, CHAR **name, UINT *active, ULONG *remaining_ticks, 
+UINT        _tx_timer_info_get(TX_TIMER *timer_ptr, const CHAR **name, UINT *active, ULONG *remaining_ticks,
                 ULONG *reschedule_ticks, TX_TIMER **next_timer);
 VOID        _tx_timer_initialize(VOID);
 UINT        _tx_timer_performance_info_get(TX_TIMER *timer_ptr, ULONG *activates, ULONG *reactivates,
@@ -115,12 +115,12 @@ VOID        _tx_time_set(ULONG new_time);
 
 UINT        _txe_timer_activate(TX_TIMER *timer_ptr);
 UINT        _txe_timer_change(TX_TIMER *timer_ptr, ULONG initial_ticks, ULONG reschedule_ticks);
-UINT        _txe_timer_create(TX_TIMER *timer_ptr, CHAR *name_ptr, 
+UINT        _txe_timer_create(TX_TIMER *timer_ptr, const CHAR *name_ptr,
                 VOID (*expiration_function)(ULONG), ULONG expiration_input,
                 ULONG initial_ticks, ULONG reschedule_ticks, UINT auto_activate, UINT timer_control_block_size);
 UINT        _txe_timer_deactivate(TX_TIMER *timer_ptr);
 UINT        _txe_timer_delete(TX_TIMER *timer_ptr);
-UINT        _txe_timer_info_get(TX_TIMER *timer_ptr, CHAR **name, UINT *active, ULONG *remaining_ticks, 
+UINT        _txe_timer_info_get(TX_TIMER *timer_ptr, const CHAR **name, UINT *active, ULONG *remaining_ticks,
                 ULONG *reschedule_ticks, TX_TIMER **next_timer);
 
 

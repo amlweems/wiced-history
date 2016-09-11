@@ -615,7 +615,10 @@ void dns_write_record(dns_message_iterator_t* iter, const char* name, uint16_t c
         case RR_TYPE_TXT:
             if (rdata != NULL)
             {
-                iter->iter = dns_write_string(iter->iter, rdata);
+                //iter->iter = dns_write_string(iter->iter, rdata);
+                memcpy( iter->iter, (char*)( rdata ), strlen( ( char* )rdata )  );
+                iter->iter += strlen( ( char* )rdata );
+
             }
             else
             {

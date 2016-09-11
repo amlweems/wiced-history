@@ -16,6 +16,7 @@
 #include "platform_isr_interface.h"
 #include "platform_mcu_peripheral.h"
 #include "wwd_rtos.h"
+#include "wwd_bus_internal.h"
 
 /******************************************************
  *                      Macros
@@ -83,5 +84,13 @@ WWD_RTOS_MAP_ISR( gpioa_irq, GPIOA_BANK1_irq ) /* Map all GPIOA Bank 1 interrupt
  */
 WWD_RTOS_DEFINE_ISR( WAKEUP_irq )
 {
-    platform_mcu_powersave_wakeup_irq( );
+    platform_pmu_wakeup_irq( );
 }
+
+WWD_RTOS_DEFINE_ISR( wlan_to_apps_irq )
+{
+    wwd_bus_handle_dma_interrupt();
+}
+
+WWD_RTOS_MAP_ISR( wlan_to_apps_irq, WL2APPS_irq )
+

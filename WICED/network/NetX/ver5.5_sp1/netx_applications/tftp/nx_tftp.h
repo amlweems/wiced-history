@@ -367,7 +367,7 @@ VOID        _nx_tftp_server_ack_process(NX_TFTP_SERVER *server_ptr, NX_PACKET *p
 VOID        _nx_tftp_server_error_process(NX_TFTP_SERVER *server_ptr, NX_PACKET *packet_ptr);
 NX_TFTP_CLIENT_REQUEST 
             *_nx_tftp_server_find_client_request(NX_TFTP_SERVER *server_ptr, UINT port, ULONG ip_address);
-VOID        _nx_tftp_server_send_error(NX_TFTP_SERVER *server_ptr, ULONG ip_address, UINT port, UINT error, CHAR *error_message);
+VOID        _nx_tftp_server_send_error(NX_TFTP_SERVER *server_ptr, ULONG ip_address, UINT port, UINT error, const CHAR *error_message);
 
 #endif
 

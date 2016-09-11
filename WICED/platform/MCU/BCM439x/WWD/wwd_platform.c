@@ -15,8 +15,6 @@
 #include "wwd_constants.h"
 #include "wwd_assert.h"
 #include "platform_peripheral.h"
-#include "platform_config.h"
-#include "wiced_platform.h"
 #include "platform/wwd_platform_interface.h"
 #include "platform_cmsis.h"
 
@@ -54,12 +52,26 @@
 
 wwd_result_t host_platform_init( void )
 {
+    host_platform_power_wifi( WICED_FALSE );
+    return WWD_SUCCESS;
+}
+
+wwd_result_t host_platform_deinit( void )
+{
+    host_platform_power_wifi( WICED_FALSE );
     return WWD_SUCCESS;
 }
 
 void host_platform_reset_wifi( wiced_bool_t reset_asserted )
 {
-    UNUSED_PARAMETER( reset_asserted );
+    if ( reset_asserted == WICED_TRUE )
+    {
+        host_platform_power_wifi( WICED_FALSE );
+    }
+    else
+    {
+        host_platform_power_wifi( WICED_TRUE );
+    }
 }
 
 void host_platform_power_wifi( wiced_bool_t power_enabled )
@@ -67,10 +79,10 @@ void host_platform_power_wifi( wiced_bool_t power_enabled )
     if ( power_enabled == WICED_FALSE )
     {
         /* Enable WLAN SRAM */
-        platform_powersave_wlan_sram_on( );
+        platform_pmu_wifi_sram_on( );
 
-        platform_powersave_allow_wlan_to_sleep( );
-        platform_powersave_wlan_off( );
+        platform_pmu_wifi_allowed_to_sleep( );
+        platform_pmu_wifi_off( );
 
         /* delay 100 ms */
         host_rtos_delay_milliseconds( 100 );
@@ -78,21 +90,15 @@ void host_platform_power_wifi( wiced_bool_t power_enabled )
     else
     {
         /* Enable WLAN SRAM */
-        platform_powersave_wlan_sram_on( );
+        platform_pmu_wifi_sram_on( );
 
         /* Power and wake up WLAN core */
-        platform_powersave_wlan_on( );
-        platform_powersave_wake_wlan( );
+        platform_pmu_wifi_on( );
+        platform_pmu_wifi_wake_up( );
 
         /* Disable WLAN SRAM. This is okay because apps core holds WLAN up */
-        platform_powersave_wlan_sram_off( );
+        platform_pmu_wifi_sram_off( );
     }
-}
-
-wwd_result_t host_platform_deinit( void )
-{
-    host_platform_power_wifi( WICED_FALSE );
-    return WWD_SUCCESS;
 }
 
 uint32_t host_platform_get_cycle_count( void )
@@ -104,11 +110,13 @@ uint32_t host_platform_get_cycle_count( void )
 
 wwd_result_t host_platform_init_wlan_powersave_clock( void )
 {
+    /* Nothing to do here */
     return WWD_SUCCESS;
 }
 
 wwd_result_t host_platform_deinit_wlan_powersave_clock( void )
 {
+    /* Nothing to do here */
     return WWD_SUCCESS;
 }
 

@@ -147,7 +147,7 @@ int sflash_write( const sflash_handle_t* const handle, unsigned long device_addr
     unsigned int write_size;
     unsigned int max_write_size = (unsigned int) 1;
     int enable_before_every_write = 1;
-    unsigned char* data_addr_ptr = (unsigned char*) data_addr;
+    const unsigned char* data_addr_ptr = (const unsigned char*) data_addr;
     unsigned char curr_device_address[3];
 
     if ( handle->write_allowed != SFLASH_WRITE_ALLOWED )

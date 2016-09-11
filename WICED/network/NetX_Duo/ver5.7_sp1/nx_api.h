@@ -400,7 +400,7 @@ extern   "C" {
 
 /* Define NetX trace prototypes.  */
 
-VOID    _nx_trace_object_register(UCHAR object_type, VOID *object_ptr, CHAR *object_name, ULONG parameter_1, ULONG parameter_2);
+VOID    _nx_trace_object_register(UCHAR object_type, VOID *object_ptr, const CHAR *object_name, ULONG parameter_1, ULONG parameter_2);
 VOID    _nx_trace_object_unregister(VOID *object_ptr);
 VOID    _nx_trace_event_insert(ULONG event_id, ULONG info_field_1, ULONG info_field_2, ULONG info_field_3, ULONG info_field_4, ULONG filter, TX_TRACE_BUFFER_ENTRY **current_event, ULONG *current_timestamp);
 VOID    _nx_trace_event_update(TX_TRACE_BUFFER_ENTRY *event, ULONG timestamp, ULONG event_id, ULONG info_field_1, ULONG info_field_2, ULONG info_field_3, ULONG info_field_4);
@@ -1186,7 +1186,7 @@ typedef struct NX_PACKET_POOL_STRUCT
     ULONG       nx_packet_pool_id;
 
     /* Define the packet pool's name.  */
-    CHAR        *nx_packet_pool_name;
+    const CHAR  *nx_packet_pool_name;
 
     /* Define the number of available memory packets in the pool.  */
     ULONG       nx_packet_pool_available;
@@ -1288,7 +1288,7 @@ typedef struct NX_UDP_SOCKET_STRUCT
     ULONG       nx_udp_socket_id;
 
     /* Define the Application defined name for this UDP socket instance.  */
-    CHAR        *nx_udp_socket_name;
+    const CHAR  *nx_udp_socket_name;
 
     /* Define the UDP port that was bound to.  */
     UINT        nx_udp_socket_port;
@@ -1382,7 +1382,7 @@ typedef struct NX_TCP_SOCKET_STRUCT
     ULONG       nx_tcp_socket_id;
 
     /* Define the Application defined name for this TCP socket instance.  */
-    CHAR        *nx_tcp_socket_name;
+    const CHAR  *nx_tcp_socket_name;
 
     /* Define the socket type flag.  If true, this socket is a client socket.  */
     UINT        nx_tcp_socket_client_type;
@@ -1717,7 +1717,7 @@ typedef struct NX_INTERFACE_STRUCT
 {
 
     /* Flag indicating whether or not the interface entry is valid. */
-    CHAR       *nx_interface_name;
+    const CHAR  *nx_interface_name;
     UCHAR       nx_interface_valid;
     UCHAR       nx_interface_address_mapping_needed;
 
@@ -1832,7 +1832,7 @@ typedef struct NX_IP_STRUCT
     ULONG       nx_ip_id;
 
     /* Define the Application defined name for this IP instance.  */
-    CHAR        *nx_ip_name;
+    const CHAR  *nx_ip_name;
 
     /* Define the IP address of this IP instance.  Loopback can be done by 
        either using the same address or by using 127.*.*.*.  */
@@ -2909,7 +2909,7 @@ UINT    nx_ip_address_get(NX_IP *ip_ptr, ULONG *ip_address, ULONG *network_mask)
 UINT    nx_ip_address_set(NX_IP *ip_ptr, ULONG ip_address, ULONG network_mask);
 UINT    nx_ip_interface_address_get(NX_IP *ip_ptr, UINT interface_index, ULONG *ip_address, ULONG *network_mask);
 UINT    nx_ip_interface_address_set(NX_IP *ip_ptr, UINT interface_index, ULONG ip_address, ULONG network_mask);
-UINT    nx_ip_interface_info_get(NX_IP *ip_ptr, UINT interface_index, CHAR **interface_name, ULONG *ip_address, 
+UINT    nx_ip_interface_info_get(NX_IP *ip_ptr, UINT interface_index, const CHAR **interface_name, ULONG *ip_address,
                               ULONG *network_mask, ULONG *mtu_size, ULONG *physical_address_msw, ULONG *physical_address_lsw);
 UINT    nx_ip_interface_address_mapping_configure(NX_IP *ip_ptr, UINT interface_index, UINT mapping_needed);
 UINT    nx_ip_interface_physical_address_get(NX_IP *ip_ptr, UINT interface_index, ULONG *physical_msw, ULONG *physical_lsw);
@@ -2919,12 +2919,12 @@ UINT    nx_ip_interface_physical_address_set(NX_IP *ip_ptr, UINT interface_index
 UINT    nx_ip_interface_mtu_set(NX_IP *ip_ptr, UINT interface_index, ULONG mtu_size);
 
 #ifndef NX_DISABLE_ERROR_CHECKING
-UINT    _nxe_ip_create(NX_IP *ip_ptr, CHAR *name, ULONG ip_address, ULONG network_mask,
+UINT    _nxe_ip_create(NX_IP *ip_ptr, const CHAR *name, ULONG ip_address, ULONG network_mask,
                        NX_PACKET_POOL *default_pool, 
                        VOID (*ip_link_driver)(NX_IP_DRIVER *),
                        VOID *memory_ptr, ULONG memory_size, UINT priority, UINT ip_control_block_size);
 #else
-UINT    _nx_ip_create(NX_IP *ip_ptr, CHAR *name, ULONG ip_address, ULONG network_mask,
+UINT    _nx_ip_create(NX_IP *ip_ptr, const CHAR *name, ULONG ip_address, ULONG network_mask,
                       NX_PACKET_POOL *default_pool, 
                       VOID (*ip_link_driver)(NX_IP_DRIVER *),
                       VOID *memory_ptr, ULONG memory_size, UINT priority);
@@ -2949,7 +2949,7 @@ UINT    nx_ip_info_get(NX_IP *ip_ptr, ULONG *ip_total_packets_sent, ULONG *ip_to
                        ULONG *ip_invalid_packets, ULONG *ip_receive_packets_dropped,
                        ULONG *ip_receive_checksum_errors, ULONG *ip_send_packets_dropped,
                        ULONG *ip_total_fragments_sent, ULONG *ip_total_fragments_received);
-UINT    nx_ip_interface_attach(NX_IP *ip_ptr, CHAR* interface_name, ULONG ip_address, ULONG network_mask,
+UINT    nx_ip_interface_attach(NX_IP *ip_ptr, const CHAR* interface_name, ULONG ip_address, ULONG network_mask,
                             VOID (*ip_link_driver)(struct NX_IP_DRIVER_STRUCT *));
 UINT    nx_ip_interface_status_check(NX_IP *ip_ptr, UINT interface_index, ULONG needed_status, 
                                      ULONG *actual_status, ULONG wait_option);
@@ -3015,17 +3015,17 @@ UINT    nx_packet_allocate(NX_PACKET_POOL *pool_ptr,  NX_PACKET **packet_ptr,
                            ULONG packet_type, ULONG wait_option);
 UINT    nx_packet_copy(NX_PACKET *packet_ptr, NX_PACKET **new_packet_ptr, 
                        NX_PACKET_POOL *pool_ptr, ULONG wait_option);
-UINT    nx_packet_data_append(NX_PACKET *packet_ptr, VOID *data_start, ULONG data_size,
+UINT    nx_packet_data_append(NX_PACKET *packet_ptr, const VOID *data_start, ULONG data_size,
                               NX_PACKET_POOL *pool_ptr, ULONG wait_option);
 UINT    nx_packet_data_extract_offset(NX_PACKET *packet_ptr, ULONG offset, VOID *buffer_start, 
                                       ULONG buffer_length, ULONG *bytes_copied);
 UINT    nx_packet_data_retrieve(NX_PACKET *packet_ptr, VOID *buffer_start, ULONG *bytes_copied);
 UINT    nx_packet_length_get(NX_PACKET *packet_ptr, ULONG *length);
 #ifndef NX_DISABLE_ERROR_CHECKING
-UINT    _nxe_packet_pool_create(NX_PACKET_POOL *pool_ptr, CHAR *name, ULONG payload_size, 
+UINT    _nxe_packet_pool_create(NX_PACKET_POOL *pool_ptr, const CHAR *name, ULONG payload_size,
                                 VOID *memory_ptr, ULONG memory_size, UINT pool_control_block_size);
 #else
-UINT    _nx_packet_pool_create(NX_PACKET_POOL *pool_ptr, CHAR *name, ULONG payload_size, 
+UINT    _nx_packet_pool_create(NX_PACKET_POOL *pool_ptr, const CHAR *name, ULONG payload_size,
                                VOID *memory_ptr, ULONG memory_size);
 #endif
 UINT    nx_packet_pool_delete(NX_PACKET_POOL *pool_ptr);
@@ -3078,13 +3078,13 @@ UINT    nxd_tcp_client_socket_connect(NX_TCP_SOCKET *socket_ptr, NXD_ADDRESS *se
 
 
 #ifndef NX_DISABLE_ERROR_CHECKING
-UINT    _nxe_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, CHAR *name, 
+UINT    _nxe_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG window_size,
                             VOID (*tcp_urgent_data_callback)(NX_TCP_SOCKET *socket_ptr),
                             VOID (*tcp_disconnect_callback)(NX_TCP_SOCKET *socket_ptr),
                             UINT tcp_socket_size);
 #else
-UINT    _nx_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, CHAR *name, 
+UINT    _nx_tcp_socket_create(NX_IP *ip_ptr, NX_TCP_SOCKET *socket_ptr, const CHAR *name,
                             ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG window_size,
                             VOID (*tcp_urgent_data_callback)(NX_TCP_SOCKET *socket_ptr),
                             VOID (*tcp_disconnect_callback)(NX_TCP_SOCKET *socket_ptr));
@@ -3138,11 +3138,11 @@ UINT    nx_udp_socket_bytes_available(NX_UDP_SOCKET *socket_ptr, ULONG *bytes_av
 UINT    nx_udp_socket_checksum_disable(NX_UDP_SOCKET *socket_ptr);
 UINT    nx_udp_socket_checksum_enable(NX_UDP_SOCKET *socket_ptr);
 #ifndef NX_DISABLE_ERROR_CHECKING
-UINT    _nxe_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, CHAR *name, 
+UINT    _nxe_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, const CHAR *name,
                                ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG queue_maximum, UINT udp_socket_size);
 #else
 
-UINT    _nx_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, CHAR *name, 
+UINT    _nx_udp_socket_create(NX_IP *ip_ptr, NX_UDP_SOCKET *socket_ptr, const CHAR *name,
                               ULONG type_of_service, ULONG fragment, UINT time_to_live, ULONG queue_maximum);
 #endif
 

@@ -157,6 +157,14 @@ PROVIDE( wifi_firmware_image_size_from_link = wifi_firmware_image_end - wifi_fir
 /* PROVIDE( vectors_offset = link_interrupt_vectors_location - bootloader_app_header_location ); */
 PROVIDE( shared_api_addr_loc     = ORIGIN( SHARED_API ));
 
+PROVIDE( dct1_start_addr_loc     = ORIGIN( DCT1_FLASH ));
+PROVIDE( dct1_size_loc           = LENGTH( DCT1_FLASH ));
+PROVIDE( dct2_start_addr_loc     = ORIGIN( DCT2_FLASH ));
+PROVIDE( dct2_size_loc           = LENGTH( DCT2_FLASH ));
+PROVIDE( app_code_start_addr_loc = ORIGIN( APP_CODE ));
+PROVIDE( sram_start_addr_loc     = ORIGIN( SRAM ));
+PROVIDE( sram_size_loc           = LENGTH( SRAM ));
+
 /* ThreadX aliases */
 PROVIDE( __RAM_segment_used_end__ = link_stack_end );
 PROVIDE( __tx_free_memory_start = link_stack_end );

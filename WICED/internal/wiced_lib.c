@@ -51,10 +51,132 @@
  *               Function Definitions
  ******************************************************/
 
-uint32_t utoa( uint32_t value, char* output, uint8_t min_length, uint8_t max_length )
+static uint8_t string_to_generic( const char* string, uint8_t str_length,  uint32_t* value_out, uint8_t is_unsigned, uint8_t is_hex )
 {
+    uint8_t nibble;
+    uint8_t characters_processed = 0;
+
+    if ( string == NULL )
+    {
+        return 0;
+    }
+
+    *value_out = 0;
+
+    while ( ( characters_processed != str_length ) &&
+            ( 0 == hexchar_to_nibble( *string, &nibble ) ) &&
+            ( ( is_hex != 0 ) || ( nibble < 10 ) )
+          )
+    {
+        if ( is_hex != 0 )
+        {
+            if ( ( ( *value_out > ( 0x7fffffff >> 4 ) ) && ( is_unsigned == 0 ) ) ||
+                 ( *value_out > ( 0xffffffff >> 4 ) )
+               )
+            {
+                break;
+            }
+            *value_out = ( *value_out << 4 ) + nibble;
+        }
+        else
+        {
+            if ( ( ( *value_out > ( 0x7fffffff / 10 ) ) && ( is_unsigned == 0 ) ) ||
+                 ( *value_out > ( 0xffffffff / 10 ) )
+               )
+            {
+                break;
+            }
+            *value_out = ( *value_out * 10 ) + nibble;
+        }
+        string++;
+        characters_processed++;
+    }
+
+    return characters_processed;
+}
+
+/**
+ * Converts a decimal/hexidecimal string (with optional sign) to a signed long int
+ * Better than strtol or atol or atoi because the return value indicates if an error occurred
+ *
+ * @param string[in]     : The string buffer to be converted
+ * @param str_length[in] : The maximum number of characters to process in the string buffer
+ * @param value_out[out] : The unsigned in that will receive value of the the decimal string
+ * @param is_hex[in]     : 0 = Decimal string, 1 = Hexidecimal string
+ *
+ * @return the number of characters successfully converted (including sign).  i.e. 0 = error
+ *
+ */
+uint8_t string_to_signed( const char* string, uint8_t str_length, int32_t* value_out, uint8_t is_hex )
+{
+    uint8_t characters_processed = 0;
+    uint8_t retval;
+    char    first_char;
+
+    if ( string == NULL )
+    {
+        return 0;
+    }
+
+    first_char = *string;
+
+    if ( ( first_char == '-' ) || ( *string == '+' ) )
+    {
+        characters_processed++;
+        string++;
+        str_length--;
+    }
+
+    retval = string_to_generic( string, str_length, (uint32_t*)value_out, 0, is_hex );
+    if ( retval == 0 )
+    {
+        return 0;
+    }
+
+    if ( first_char == '-' )
+    {
+        *value_out = -(*value_out);
+    }
+    return (uint8_t) ( characters_processed + retval );
+}
+
+
+/**
+ * Converts a decimal/hexidecimal string to an unsigned long int
+ * Better than strtol or atol or atoi because the return value indicates if an error occurred
+ *
+ * @param string[in]     : The string buffer to be converted
+ * @param str_length[in] : The maximum number of characters to process in the string buffer
+ * @param value_out[out] : The unsigned in that will receive value of the the decimal string
+ * @param is_hex[in]     : 0 = Decimal string, 1 = Hexidecimal string
+ *
+ * @return the number of characters successfully converted.  i.e. 0 = error
+ *
+ */
+uint8_t string_to_unsigned( const char* string, uint8_t str_length, uint32_t* value_out, uint8_t is_hex )
+{
+    return string_to_generic( string, str_length,  value_out, 1, is_hex );
+}
+
+/**
+ * Converts a unsigned long int to a decimal string
+ *
+ * @param value[in]      : The unsigned long to be converted
+ * @param output[out]    : The buffer which will receive the decimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required).
+ * @param max_length[in] : the maximum number of characters to output (up to 10 ). There must be space for terminating NULL.
+ *
+ * @note: A terminating NULL is added. Wnsure that there is space in the buffer for this.
+ *
+ * @return the number of characters returned (excluding terminating null)
+ *
+ */
+uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length )
+{
+    uint8_t digits_left;
     char buffer[ 10 ] = "0000000000";
-    uint8_t digits_left = max_length;
+    max_length = MIN( max_length, sizeof( buffer ) );
+    digits_left = max_length;
     while ( ( value != 0 ) && ( digits_left != 0 ) )
     {
         --digits_left;
@@ -65,7 +187,78 @@ uint32_t utoa( uint32_t value, char* output, uint8_t min_length, uint8_t max_len
     digits_left = (uint8_t) MIN( ( max_length - min_length ), digits_left );
     memcpy( output, &buffer[ digits_left ], (size_t)( max_length - digits_left ) );
 
-    return (uint32_t) ( max_length - digits_left );
+    /* Add terminating null */
+    output[( max_length - digits_left )] = '\x00';
+
+    return (uint8_t) ( max_length - digits_left );
+}
+
+
+/**
+ * Converts a signed long int to a decimal string
+ *
+ * @param value[in]      : The signed long to be converted
+ * @param output[out]    : The buffer which will receive the decimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required)
+ * @param max_length[in] : the maximum number of characters to output (up to 10 ). There must be space for terminating NULL.
+ *
+ * @note: A terminating NULL is added. Wnsure that there is space in the buffer for this.
+ *
+ * @return the number of characters returned.
+ *
+ */
+uint8_t signed_to_decimal_string( int32_t value, char* output, uint8_t min_length, uint8_t max_length )
+{
+    uint8_t retval = 0;
+    if ( ( value < 0 ) && ( max_length > 0 ) )
+    {
+        *output = '-';
+        output++;
+        max_length--;
+        value = -value;
+        retval++;
+    }
+    retval = (uint8_t) ( retval + unsigned_to_decimal_string( (uint32_t)value, output, min_length, max_length ) );
+    return retval;
+}
+
+
+
+
+/**
+ * Converts a unsigned long int to a hexidecimal string
+ *
+ * @param value[in]      : The unsigned long to be converted
+ * @param output[out]    : The buffer which will receive the hexidecimal string
+ * @param min_length[in] : the minimum number of characters to output (zero padding will apply if required)
+ * @param max_length[in] : the maximum number of characters to output (up to 8 ) There must be space for terminating NULL.
+ *
+ * @note: A terminating NULL is added. Wnsure that there is space in the buffer for this.
+ * @note: No leading '0x' is added.
+ *
+ * @return the number of characters returned.
+ *
+ */
+uint8_t unsigned_to_hex_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length )
+{
+    uint8_t digits_left;
+    char buffer[ 8 ] = "00000000";
+    max_length = MIN( max_length, sizeof( buffer ) );
+    digits_left = max_length;
+    while ( ( value != 0 ) && ( digits_left != 0 ) )
+    {
+        --digits_left;
+        buffer[ digits_left ] = nibble_to_hexchar( value & 0x0000000F );
+        value = value >> 4;
+    }
+
+    digits_left = (uint8_t) MIN( ( max_length - min_length ), digits_left );
+    memcpy( output, &buffer[ digits_left ], (size_t)( max_length - digits_left ) );
+
+    /* Add terminating null */
+    output[( max_length - digits_left )] = '\x00';
+
+    return (uint8_t) ( max_length - digits_left );
 }
 
 wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, const resource_hnd_t* res_id )
@@ -91,25 +284,6 @@ wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, 
     return result;
 }
 
-/*!
- ******************************************************************************
- * Convert a nibble into a hex character
- *
- * @param[in] nibble  The value of the nibble in the lower 4 bits
- *
- * @return    The hex character corresponding to the nibble
- */
-char nibble_to_hexchar( uint8_t nibble )
-{
-    if (nibble > 9)
-    {
-        return (char)('A' + (nibble - 10));
-    }
-    else
-    {
-        return (char) ('0' + nibble);
-    }
-}
 
 /*!
  ******************************************************************************

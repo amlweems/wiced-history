@@ -12,7 +12,7 @@ NAME = STM32F2xx_Peripheral_Libraries
 
 GLOBAL_INCLUDES :=  . \
                     /inc \
-                    ../../../$(HOST_ARCH)/CMSIS
+                    ../../../../$(HOST_ARCH)/CMSIS
 
 $(NAME)_SOURCES := \
                    src/misc.c \
