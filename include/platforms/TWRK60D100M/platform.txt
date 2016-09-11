@@ -1,0 +1,27 @@
+Provider    : 
+Website     : http://www.broadcom.com/support/wiced
+Description : Freescale TWRK60D100M evaluation board deadbug connected to USI WLAN SiP for prototyping
+
+Evaluation Board 
+  Mfr     : Freescale
+  P/N     : TWRK60D100M
+  MCU     : MK60N512VDM100
+  
+WLAN Module
+  Mfr     : USI
+  P/N     : WM-N-BM-02
+  WLAN    : BCM43362
+  Antenna :
+  
+Supported Interface
+  SPI
+  
+List of missing features for Freescale K60 platform (for SDK-2.2.0)
+-------------------------------------------------------------------
+-   SDIO interface to WLAN
+-   DMA support for SPI interface to WLAN
+-   Console UART RX (interactive apps such as console, iperf aren’t working)
+-   Internal Flash driver (unable to write data to DCT. Read is okay)
+-   Platform (external peripherals) API implementation (stubs only)
+-   Platform abstraction/Pin mappings
+-   External SPI flash driver (stubs only)
