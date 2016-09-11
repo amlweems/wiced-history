@@ -78,6 +78,10 @@ interrupt_vector_t interrupt_vector_table[] =
         .isr   = Timer_ISR,
     },
     {
+        .irqn  = SDIO_REMAPPED_ExtIRQn,
+        .isr   = SDIO_HOST_ISR,
+    },
+    {
         .irqn  = USB_REMAPPED_ExtIRQn,
         .isr   = USB_HOST_ISR,
     },

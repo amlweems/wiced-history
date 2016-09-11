@@ -63,8 +63,12 @@ typedef volatile struct _i2sregs {
 	uint32	stxctrl;	/* 0x050	R/W	Default 0x0	*/
 	uint32	srxctrl;	/* 0x054	R/W	Default 0x0	*/
 	uint32	srxpcnt;	/* 0x058	R/W	Default 0x0	*/
+    uint32  stxchstatus0; /* 0x5C    R-Only Default 0x0 */
+    uint32  stxchstatus1; /* 0x60    R-Only Default 0x0 */
+    uint32  srxchstatus0; /* 0x64    R-Only Default 0x0 */
+    uint32  srxchstatus1; /* 0x68    R-Only Default 0x0 */
 	/* TDM interface registers for corerev >= 37 */
-	uint32 PAD[5];     /* 0x5C ~ 0x6C */
+	uint32 PAD[1];     /* 0x6C */
 	uint32 tdm_control; /* 0x70 */
 	uint32 tdm_ch0_ctrl; /* 0x74 */
 	uint32 tdm_ch1_ctrl; /* 0x78 */
@@ -151,6 +155,7 @@ typedef volatile struct _i2sregs {
 #define I2S_INT_XMTFIFO_UFLOW_1		(1<<21)	/* Transmit FIFO Overflow */
 
 #define I2S_INT_XMT_INT			(1<<24)	/* Transmit Interrupt */
+#define I2S_INT_RXCRC_ERR       (1<<25) /* CRC Error Detection */
 #define I2S_INT_RXSIGDET		(1<<26)	/* Receive signal toggle */
 #define I2S_INT_SPDIF_PAR_ERR		(1<<27)	/* SPDIF Rx parity error */
 #define I2S_INT_VALIDITY		(1<<28)	/* SPDIF Rx Validity bit interrupt */
@@ -207,25 +212,26 @@ struct _i2s_clkdiv_coeffs {
 	uint32	rate;		/* Hz */
 	uint16	fs;
 	uint8	srate;
+	uint8   spdif_period_cnt;
 };
 
 /* divider info for SRATE */
 static const struct _i2s_clkdiv_coeffs i2s_clkdiv_coeffs[] = {
 	/* 11.2896MHz */
-	{11289600,	22050,	512,	0x3},
-	{11289600,	44100,	256,	0x1},
-	{11289600,	88200,	128,	0x0},
+	{11289600,	22050,	512,	0x3,    48},
+	{11289600,	44100,	256,	0x1,    24},
+	{11289600,	88200,	128,	0x0,    12},
 	/* 12.288MHz */
-	{12288000,	8000,	536,	0x6},
-	{12288000,	12000,	1024,	0x5},
-	{12288000,	16000,	768,	0x4},
-	{12288000,	24000,	512,	0x3},
-	{12288000,	32000,	384,	0x2},
-	{12288000,	48000,	256,	0x1},
-	{12288000,	96000,	128,	0x0},
-	/* 24.567MHz */
-	{24567000,	96000,	256,	0x1},
-	{24567000,	192000,	128,	0x0},
+	{12288000,	8000,	1536,	0x6,    130},
+	{12288000,	12000,	1024,	0x5,    87},
+	{12288000,	16000,	768,	0x4,    65},
+	{12288000,	24000,	512,	0x3,    43},
+	{12288000,	32000,	384,	0x2,    0},
+	{12288000,	48000,	256,	0x1,    22},
+	{12288000,	96000,	128,	0x0,    11},
+	/* 24.576MHz */
+	{24576000,	96000,	256,	0x1,    11},
+	{24576000,	192000,	128,	0x0,    6},
 };
 
 /*               I2S TxPlayTH Register (Offset-0x040)               */
@@ -256,7 +262,7 @@ static const struct _i2s_clkdiv_coeffs i2s_clkdiv_coeffs[] = {
 #define I2S_STXC_CHCODE		(1<<3) /* Preamble cell-order: 0 select last cell "0"
 					*                      1 select last cell "1"
 					*/
-#define I2S_STXC_SWPRE_EN	(1<<4) /* Software preable enable */
+#define I2S_STXC_SWPRE_EN	(1<<4) /* Software preamble enable */
 #define I2S_STXC_SW_VALEN	(1<<5) /* Software validity bit enable */
 #define I2S_STXC_SW_CHSTEN	(1<<6) /* Software channel status enable */
 #define I2S_STXC_SW_SUBCDEN	(1<<7) /* Software sub code enable */
@@ -265,15 +271,16 @@ static const struct _i2s_clkdiv_coeffs i2s_clkdiv_coeffs[] = {
 
 /*               I2S SRxCtrl Register (Offset-0x054)               */
 /* SPDIF Rx Word Length:
- * 0x0 means 16-bit
- * 0x1 means 20-bit
- * 0x2 means 24-bit
+ * 0x0000 means 16-bit
+ * 0x0001 means 20-bit
+ * 0x0002 means 24-bit
+ * 0x1000 means  8-bit
  */
 #define I2S_SRXC_WL_SHIFT	(0)
-#define I2S_SRXC_WL_MASK	(0x03<<I2S_SRXC_WL_SHIFT)
-#define I2S_SRXC_RXEN		(1<<2) /* SPDIF Rx Enable */
-#define I2S_SRXC_RXSTEN		(1<<3) /* Rx Status Enable */
-
+#define I2S_SRXC_WL_MASK	(0x1003<<I2S_SRXC_WL_SHIFT)
+#define I2S_SRXC_RXEN		(1<<2)  /* SPDIF Rx Enable */
+#define I2S_SRXC_RXSTEN		(1<<3)  /* Rx Status Enable */
+#define I2S_SRXC_HW_PCNTEN  (1<<31) /* Hardware SPDIF period counter enable */
 
 /*               I2S SRXPCNT Register (Offset-0x058)               */
 /* SPDIF Period Count:

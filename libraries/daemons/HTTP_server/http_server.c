@@ -33,11 +33,11 @@
  ******************************************************/
 
 #define HTTP_SERVER_CONNECT_THREAD_STACK_SIZE  (1500)
+#define HTTPS_SERVER_CONNECT_THREAD_STACK_SIZE (4000)
 
 #define HTTP_SERVER_THREAD_PRIORITY    (WICED_DEFAULT_LIBRARY_PRIORITY)
-#define SSL_LISTEN_PORT                (443)
 #define HTTP_LISTEN_PORT               (80)
-#define HTTP_SERVER_RECEIVE_TIMEOUT    (2000)
+#define HTTP_SERVER_RECEIVE_TIMEOUT    (1000)
 
 /* HTTP Tokens */
 #define GET_TOKEN                      "GET "
@@ -159,8 +159,18 @@ wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t po
 {
     http_response_stream_node_t* stream_node;
     uint32_t a;
+    uint32_t server_connect_thread_stack_size;
 
-    memset( server, 0, sizeof( *server ) );
+    /* If this will be an HTTPS server then it requires a larger stack */
+    if ( server->tcp_server.tls_identity == NULL )
+    {
+        memset( server, 0, sizeof( *server ) );
+        server_connect_thread_stack_size = HTTP_SERVER_CONNECT_THREAD_STACK_SIZE;
+    }
+    else
+    {
+        server_connect_thread_stack_size = HTTPS_SERVER_CONNECT_THREAD_STACK_SIZE;
+    }
 
     /* Store the inputs database */
     server->page_database = page_database;
@@ -186,7 +196,7 @@ wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t po
     linked_list_init( &server->active_stream_list );
 
     /* Create worker thread to process connect events */
-    WICED_VERIFY( wiced_rtos_create_worker_thread( &server->connect_thread, WICED_APPLICATION_PRIORITY, HTTP_SERVER_CONNECT_THREAD_STACK_SIZE, EVENT_QUEUE_DEPTH ) );
+    WICED_VERIFY( wiced_rtos_create_worker_thread( &server->connect_thread, HTTP_SERVER_THREAD_PRIORITY, server_connect_thread_stack_size, EVENT_QUEUE_DEPTH ) );
 
     /* Initialize HTTP server event queue */
     WICED_VERIFY( wiced_rtos_init_queue( &server->event_queue, NULL, sizeof(server_event_message_t), EVENT_QUEUE_DEPTH ) );
@@ -227,11 +237,13 @@ wiced_result_t wiced_https_server_start( wiced_https_server_t* server, uint16_t 
 {
     memset( server, 0, sizeof( *server ) );
 
+    wiced_tcp_server_enable_tls( &server->tcp_server, identity );
+
     /* Start HTTP server */
     WICED_VERIFY( wiced_http_server_start( server, port, max_sockets, page_database, interface, url_processor_stack_size) );
 
     /* Enable TLS */
-    return wiced_tcp_server_enable_tls( &server->tcp_server, identity );
+    return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_https_server_stop( wiced_https_server_t* server )
@@ -400,7 +412,7 @@ wiced_result_t wiced_http_response_stream_disconnect( wiced_http_response_stream
     current_event.event_type = SOCKET_DISCONNECT_EVENT;
     current_event.socket     = stream->tcp_stream.socket;
 
-    server = (wiced_http_server_t*)stream->tcp_stream.socket->arg;
+    server = (wiced_http_server_t*)stream->tcp_stream.socket->callback_arg;
 
     return wiced_rtos_push_to_queue( &server->event_queue, &current_event, WICED_NO_WAIT );
 }
@@ -924,7 +936,7 @@ static void http_server_event_thread_main( uint32_t arg )
                 /* Search in active stream whether stream for this socket is available. If available, removed it */
                 if ( linked_list_find_node( &server->active_stream_list, http_server_compare_stream_socket, (void*)current_event.socket, (linked_list_node_t**)&stream ) == WICED_SUCCESS )
                 {
-                    linked_list_remove_node_from_front( &server->active_stream_list, (linked_list_node_t**)&stream );
+                    linked_list_remove_node( &server->active_stream_list, &stream->node );
                     linked_list_insert_node_at_rear( &server->inactive_stream_list, &stream->node );
                     wiced_http_response_stream_deinit( &stream->stream );
                 }
@@ -959,7 +971,7 @@ static void http_server_event_thread_main( uint32_t arg )
                 wiced_packet_t*              packet = NULL;
                 http_response_stream_node_t* stream = NULL;
 
-                wiced_tcp_receive( socket, &packet, WICED_NO_WAIT );
+                wiced_tcp_receive( socket, &packet, HTTP_SERVER_RECEIVE_TIMEOUT );
                 if ( packet != NULL )
                 {
                     /* Search if a stream has been created for this socket. If not found, create and insert one to active list */
@@ -1008,17 +1020,24 @@ static wiced_bool_t http_server_compare_stream_socket( linked_list_node_t* node_
 static wiced_result_t http_server_deferred_connect_callback( void* arg )
 {
     wiced_tcp_socket_t*  socket = (wiced_tcp_socket_t*)arg;
-    wiced_http_server_t* server = (wiced_http_server_t*)socket->arg;
+    wiced_http_server_t* server = (wiced_http_server_t*)socket->callback_arg;
+    wiced_tls_context_t* context;
 
     if ( server->tcp_server.tls_identity != NULL )
     {
-        wiced_tls_context_t* context = malloc_named("https", sizeof(wiced_tls_context_t));
-        if (context == NULL)
+        if ( socket->tls_context == NULL )
         {
-            return WICED_OUT_OF_HEAP_SPACE;
+            context = malloc_named("https", sizeof(wiced_tls_context_t));
+            if (context == NULL)
+            {
+                return WICED_OUT_OF_HEAP_SPACE;
+            }
+            socket->context_malloced = WICED_TRUE;
         }
-        socket->context_malloced = WICED_TRUE;
-
+        else
+        {
+            context = socket->tls_context;
+        }
         wiced_tls_init_context( context, server->tcp_server.tls_identity, NULL );
         wiced_tcp_enable_tls( socket, context );
     }

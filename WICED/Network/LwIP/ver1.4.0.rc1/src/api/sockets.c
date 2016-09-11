@@ -1654,6 +1654,7 @@ lwip_getsockopt_internal(void *arg)
   sock = data->sock;
 #ifdef LWIP_DEBUG
   s = data->s;
+  (void) s;  /* Reference logging-only variable */
 #endif /* LWIP_DEBUG */
   level = data->level;
   optname = data->optname;
@@ -2066,6 +2067,7 @@ lwip_setsockopt_internal(void *arg)
   sock = data->sock;
 #ifdef LWIP_DEBUG
   s = data->s;
+  (void) s;  /* Reference logging-only variable */
 #endif /* LWIP_DEBUG */
   level = data->level;
   optname = data->optname;

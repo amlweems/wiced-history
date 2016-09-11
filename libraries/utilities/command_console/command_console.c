@@ -406,6 +406,10 @@ wiced_result_t command_console_init( wiced_uart_t uart, uint32_t line_len, char*
         /* Init uart the same as stdio uart configuration */
         ring_buffer_init( (wiced_ring_buffer_t*) &cons.console_rx_ring_buffer, (uint8_t*) console_rx_ring_data, sizeof(console_rx_ring_data) );
         result = wiced_uart_init(uart, &uart_console_config, &cons.console_rx_ring_buffer);
+        if ( result != WICED_SUCCESS )
+        {
+            return result;
+        }
     }
 
     wiced_rtos_init_semaphore(&cons.console_quit_semaphore);
@@ -437,7 +441,7 @@ wiced_result_t command_console_deinit(void)
     {
         wiced_uart_deinit(cons.uart);
     }
-    return WICED_SUCCESS;
+    return result;
 }
 
 /*!
@@ -1080,13 +1084,13 @@ int loop_command( const char * line )
     strcpy( copy, line );
 
     /* Parse copy of line to extract repeat count */
-    token = strtok( copy, cons.console_delimit_string );
+    strtok( copy, cons.console_delimit_string );
     token = strtok( NULL, cons.console_delimit_string );
 
     times = generic_string_to_unsigned( token );
 
     /* Tokenize original line according to ';' to extract individual cmds to repeat */
-    token = strtok( copy, ";" );
+    strtok( copy, ";" );
 
     while ( (token = strtok( NULL, ";" )) )
     {

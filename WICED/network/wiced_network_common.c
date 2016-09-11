@@ -13,6 +13,7 @@
 #include "wiced_management.h"
 #include "wiced_framework.h"
 #include "wiced_rtos.h"
+#include "wiced_deep_sleep.h"
 #include "internal/wiced_internal_api.h"
 #include "wwd_assert.h"
 #ifdef WICED_USE_ETHERNET_INTERFACE
@@ -45,7 +46,7 @@ wiced_bool_t wiced_network_is_up( wiced_interface_t interface )
 #ifdef WICED_USE_ETHERNET_INTERFACE
     if( interface == WICED_ETHERNET_INTERFACE )
     {
-        result = platform_ethernet_is_ready_to_transceive();
+        result = platform_ethernet_is_inited();
     }
     else
 #else
@@ -201,7 +202,7 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
 #ifdef WICED_USE_ETHERNET_INTERFACE
         else if ( interface == WICED_ETHERNET_INTERFACE )
         {
-            /* Do nothing. */
+            result = platform_ethernet_init( );
         }
 #endif
         else
@@ -226,9 +227,38 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
         {
             wiced_stop_ap( );
         }
+#ifdef WICED_USE_ETHERNET_INTERFACE
+        else if ( interface == WICED_ETHERNET_INTERFACE )
+        {
+            platform_ethernet_deinit( );
+        }
+#endif
     }
 
     return result;
+}
+
+wiced_result_t wiced_network_resume_after_deep_sleep( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings )
+{
+    /*
+     * Current implementation assumes wiced_network_up() during cold boot joins AP and then bring network interface up.
+     * During resuming from deep-sleep same wiced_network_up() is called.
+     * It calls wiced_network_is_up() which returns true, and joining is skipped. State returned by wiced_network_is_up() is preserved across deep-sleep.
+     * If connection to AP lost, joining be tried.
+     */
+
+    if ( !WICED_DEEP_SLEEP_IS_ENABLED( ) )
+    {
+        wiced_assert( "Deep-sleep is not supported", 0 );
+        return WICED_UNSUPPORTED;
+    }
+
+    if ( interface != WICED_STA_INTERFACE )
+    {
+        return WICED_UNSUPPORTED;
+    }
+
+    return wiced_network_up( interface, config, ip_settings );
 }
 
 
@@ -268,7 +298,7 @@ wiced_result_t wiced_network_down( wiced_interface_t interface )
 #ifdef WICED_USE_ETHERNET_INTERFACE
         else if ( interface == WICED_ETHERNET_INTERFACE )
         {
-            /* Do nothing. */
+            platform_ethernet_deinit( );
         }
 #endif
         else

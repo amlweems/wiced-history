@@ -297,6 +297,8 @@ typedef struct
  *                 Global Variables
  ******************************************************/
 
+extern uint32_t platform_ddr_size;
+
 /******************************************************
  *               Function Declarations
  ******************************************************/
@@ -480,6 +482,14 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
  * @return @ref platform_result_t
  */
 platform_result_t platform_spi_deinit( const platform_spi_t* spi );
+
+
+/**
+ * Transfer data to the specified SPI interface
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_spi_transmit( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments );
 
 
 /**
@@ -871,6 +881,20 @@ wiced_result_t platform_time_disable_8021as(void);
 wiced_result_t platform_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
                                          uint32_t *local_secs, uint32_t *local_nanosecs);
 
+
+/**
+ * Read the 802.1AS time along with the corresponding I2S-driven audio time
+ *
+ * Retrieve the origin timestamp in the last sync message, correct for the
+ * intervening interval and return the corrected time in seconds + nanoseconds.
+ * Also retrieve the corresponding time from the audio timer.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t platform_time_read_8021as_with_audio(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                                    uint32_t *local_secs, uint32_t *local_nanosecs,
+                                                    uint32_t *audio_time_hi, uint32_t *audio_time_lo);
 
 #ifdef __cplusplus
 } /*"C" */

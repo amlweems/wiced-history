@@ -219,6 +219,20 @@ extern wiced_result_t wiced_wps_registrar( wiced_wps_mode_t mode, const wiced_wp
  */
 extern wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_handler, void* user_data );
 
+/** Finds the AP and it's information for the given SSID
+ *
+ * @param[in] ssid                     : SSID of the access point for which user wants to find information.
+ *                                       It must be a NULL terminated string 32 characters or less
+ *
+ * @param[out] ap_info                 : Pointer to the structure to store AP information.
+ *
+ * @param[in] optional_channel_list    : An optional channel list to restrict which channels are scanned. Note that the last entry must be 0
+ *                                       If NULL, the scan will be performed on all supported Wi-Fi channels.
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_find_ap( const char* ssid, wiced_scan_result_t* ap_info, const uint16_t* optional_channel_list);
+
 /** Add Wi-Fi custom IE
  *
  * @param[in] interface : Interface to add custom IE
@@ -367,6 +381,12 @@ static inline wiced_result_t wiced_wifi_get_listen_interval( wiced_listen_interv
  */
 extern wiced_result_t wiced_wifi_register_softap_event_handler( wiced_wifi_softap_event_handler_t softap_event_handler );
 
+
+/** Unregister soft AP event handler
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wifi_unregister_softap_event_handler( void );
 
 /*****************************************************************************/
 /** @addtogroup wifipower       WLAN Power Saving functions

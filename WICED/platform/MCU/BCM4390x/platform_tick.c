@@ -73,6 +73,14 @@
 #define PLATFORM_TICK_PMU_TICKLESS_THRESH       5
 #endif
 
+#ifndef PLATFORM_TICK_CPU_DEEP_SLEEP_THRESH
+#define PLATFORM_TICK_CPU_DEEP_SLEEP_THRESH     1
+#endif
+
+#ifndef PLATFORM_TICK_PMU_DEEP_SLEEP_THRESH
+#define PLATFORM_TICK_PMU_DEEP_SLEEP_THRESH     100
+#endif
+
 #define PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( cpu_freq, backplane_freq, source, source_only ) \
     { \
         config->apps_cpu_freq_reg_value = (cpu_freq);       \
@@ -111,6 +119,14 @@ typedef enum
     PLATFORM_CPU_CLOCK_SOURCE_ARM       = 0x4  /* CPU runs on own ARM clock */
 } platform_cpu_clock_source_t;
 
+typedef enum
+{
+    PLATFORM_TICK_RESTART_ACTION_BEGIN_TICKLESS_MODE,
+    PLATFORM_TICK_RESTART_ACTION_OPPORTUNISTIC_BEGIN_TICKLESS_MODE,
+    PLATFORM_TICK_RESTART_ACTION_END_TICKLESS_MODE,
+    PLATFORM_TICK_RESTART_ACTION_BEGIN_NORMAL_MODE
+} platform_tick_restart_action_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -125,15 +141,16 @@ typedef struct platform_tick_timer
     uint32_t     ( *freerunning_current_func )( struct platform_tick_timer* timer );
     void         ( *start_func               )( struct platform_tick_timer* timer, uint32_t cycles_till_fire );
     void         ( *reset_func               )( struct platform_tick_timer* timer, uint32_t cycles_till_fire ); /* expect to be called from Timer ISR only when Timer is fired and not ticking anymore */
-    void         ( *restart_func             )( struct platform_tick_timer* timer, uint32_t cycles_till_fire );
+    void         ( *restart_func             )( struct platform_tick_timer* timer, platform_tick_restart_action_t action, uint32_t cycles_till_fire );
     void         ( *stop_func                )( struct platform_tick_timer* timer );
-    wiced_bool_t ( *sleep_permission_func    )( struct platform_tick_timer* timer, uint32_t ticks, wiced_bool_t powersave_permission );
-    wiced_bool_t ( *tickless_permission_func )( struct platform_tick_timer* timer, uint32_t ticks, wiced_bool_t powersave_permission );
     void         ( *sleep_invoke_func        )( struct platform_tick_timer* timer, platform_tick_sleep_idle_func idle_func );
 
+    uint32_t     deep_sleep_threshold;
+    uint32_t     tickless_threshold;
     uint32_t     cycles_per_tick;
     uint32_t     cycles_max;
-    uint32_t     freerunning_stamp;
+    uint32_t     freerunning_start_stamp;
+    uint32_t     freerunning_stop_stamp;
     uint32_t     cycles_till_fire;
     wiced_bool_t started;
 } platform_tick_timer_t;
@@ -234,7 +251,7 @@ platform_cpu_clock_source( platform_cpu_clock_source_t clock_source )
     const uint32_t          clockstable_mask = IRQN2MASK( ClockStable_ExtIRQn );
     uint32_t                irq_mask;
     uint32_t                int_mask;
-    appscr4_core_ctrl_reg_t core_ctrl;
+    appscr4_core_ctrl_reg_t core_ctrl, core_ctrl_restore;
 
     /* Return if already use requested source */
     if ( platform_cpu_clock_get_source() == clock_source )
@@ -251,6 +268,8 @@ platform_cpu_clock_source( platform_cpu_clock_source_t clock_source )
     /* Tell hw which source want */
     core_ctrl.raw = PLATFORM_APPSCR4->core_ctrl.raw;
     core_ctrl.bits.clock_source = clock_source;
+    core_ctrl_restore.raw = core_ctrl.raw;
+    core_ctrl.bits.wfi_clk_stop = 1;
     PLATFORM_APPSCR4->core_ctrl.raw = core_ctrl.raw;
 
     /*
@@ -266,8 +285,9 @@ platform_cpu_clock_source( platform_cpu_clock_source_t clock_source )
     PLATFORM_APPSCR4->fiqirq_status = clockstable_mask;
 
     /* Restore interrupt masks */
-    PLATFORM_APPSCR4->int_mask = int_mask;
-    PLATFORM_APPSCR4->irq_mask = irq_mask;
+    PLATFORM_APPSCR4->core_ctrl.raw = core_ctrl_restore.raw;
+    PLATFORM_APPSCR4->int_mask      = int_mask;
+    PLATFORM_APPSCR4->irq_mask      = irq_mask;
 }
 
 static wiced_bool_t
@@ -291,8 +311,6 @@ platform_cpu_clock_get_freq_for_source( platform_cpu_clock_source_t source )
                     ret = PLATFORM_CLOCK_HZ_320MHZ;
                     break;
 
-                default:
-                    wiced_assert( "unknown cpu frequency", 0 );
                 case GCI_CHIPCONTROL_APPS_CPU_FREQ_160:
                     ret = PLATFORM_CLOCK_HZ_160MHZ;
                     break;
@@ -316,16 +334,16 @@ platform_cpu_clock_get_freq_for_source( platform_cpu_clock_source_t source )
                 case GCI_CHIPCONTROL_APPS_CPU_FREQ_24:
                     ret = PLATFORM_CLOCK_HZ_24MHZ;
                     break;
+
+                default:
+                    wiced_assert( "unknown cpu frequency", 0 );
+                    break;
             }
             break;
 
-        default:
-            wiced_assert( "unknown source", 0 );
         case PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE:
             switch( platform_gci_chipcontrol( GCI_CHIPCONTROL_APPS_BP_FREQ_REG, 0x0, 0x0 ) & GCI_CHIPCONTROL_APPS_BP_FREQ_MASK )
             {
-                default:
-                    wiced_assert( "unknown backplane frequency", 0 );
                 case GCI_CHIPCONTROL_APPS_BP_FREQ_160:
                     ret = PLATFORM_CLOCK_HZ_160MHZ;
                     break;
@@ -350,7 +368,15 @@ platform_cpu_clock_get_freq_for_source( platform_cpu_clock_source_t source )
                     ret = PLATFORM_CLOCK_HZ_24MHZ;
                     break;
 
+                default:
+                    wiced_assert( "unknown backplane frequency", 0 );
+                    break;
+
             }
+            break;
+
+        default: /* switch ( source ) */
+            wiced_assert( "unknown source", 0 );
             break;
     }
 
@@ -567,6 +593,19 @@ platform_reference_clock_get_freq( platform_reference_clock_t clock )
  *               PMU Timer Function Definitions
  ******************************************************/
 
+static uint32_t
+platform_tick_pmu_get_freerunning_stamp( void )
+{
+    uint32_t time = PLATFORM_PMU->pmutimer;
+
+    if ( time != PLATFORM_PMU->pmutimer )
+    {
+        time = PLATFORM_PMU->pmutimer;
+    }
+
+    return time;
+}
+
 static wiced_bool_t
 platform_tick_pmu_slow_write_pending( void )
 {
@@ -589,8 +628,6 @@ platform_tick_pmu_slow_write_barrier( wiced_bool_t never_timeout )
 
     PLATFORM_TIMEOUT_BEGIN( start_stamp );
 
-    UNUSED_PARAMETER( never_timeout );
-
     while ( platform_tick_pmu_slow_write_pending() )
     {
         if ( never_timeout == WICED_FALSE )
@@ -607,52 +644,6 @@ platform_tick_pmu_slow_write( volatile uint32_t* reg, uint32_t val )
     *reg = val;
 }
 
-static void
-platform_tick_pmu_slow_write_sync( volatile uint32_t* reg, uint32_t val )
-{
-    platform_tick_pmu_slow_write( reg, val );
-    platform_tick_pmu_slow_write_barrier( reg == &PLATFORM_PMU->pmutimer );
-}
-
-static uint32_t
-platform_tick_pmu_get_freerunning_stamp( void )
-{
-    uint32_t time = PLATFORM_PMU->pmutimer;
-
-    if ( time != PLATFORM_PMU->pmutimer )
-    {
-        time = PLATFORM_PMU->pmutimer;
-    }
-
-    return time;
-}
-
-#if PLATFORM_TICK_PMU
-
-static pmu_res_req_timer_t
-platform_tick_pmu_timer_read( void )
-{
-    pmu_res_req_timer_t ret = PLATFORM_PMU->res_req_timer1;
-
-    if ( ret.raw != PLATFORM_PMU->res_req_timer1.raw )
-    {
-        ret = PLATFORM_PMU->res_req_timer1;
-    }
-
-    return ret;
-}
-
-static pmu_intstatus_t
-platform_tick_pmu_intstatus_init( void )
-{
-    pmu_intstatus_t status;
-
-    status.raw                      = 0;
-    status.bits.rsrc_req_timer_int1 = 1;
-
-    return status;
-}
-
 static pmu_res_req_timer_t
 platform_tick_pmu_timer_init( uint32_t ticks )
 {
@@ -667,26 +658,60 @@ platform_tick_pmu_timer_init( uint32_t ticks )
     return timer;
 }
 
-static wiced_bool_t
-platform_tick_pmu_idle( void )
+static pmu_intstatus_t
+platform_tick_pmu_intstatus_init( void )
 {
-    /*
-     * Synchronous write to PMU timer is slow.
-     * This function return true if PMU timer is surely idle.
-     * It may be used to avoid unnecessary stopping.
-     */
+    pmu_intstatus_t status;
 
-    if ( platform_tick_pmu_slow_write_pending() )
+    status.raw                      = 0;
+    status.bits.rsrc_req_timer_int1 = 1;
+
+    return status;
+}
+
+static void
+platform_tick_pmu_program_timer_to_stop( platform_tick_timer_t* timer )
+{
+    platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( 0x0 ).raw );
+
+    platform_tick_pmu_slow_write_barrier( WICED_FALSE );
+
+    PLATFORM_PMU->pmuintstatus.raw = platform_tick_pmu_intstatus_init().raw;
+
+    if ( timer != NULL )
     {
-        return WICED_FALSE;
+        timer->freerunning_stop_stamp = timer->freerunning_current_func( timer );
     }
+}
 
-    if ( platform_tick_pmu_timer_read().bits.time != 0 )
+#if PLATFORM_TICK_PMU
+
+static uint32_t
+platform_tick_pmu_wait_stop_complete( platform_tick_timer_t* timer )
+{
+    uint32_t start_stamp = timer->freerunning_current_func( timer );
+    uint32_t curr_stamp  = start_stamp;
+
+    while ( 1 )
     {
-        return WICED_FALSE;
-    }
+        if ( curr_stamp - timer->freerunning_stop_stamp >= PMU_MAX_WRITE_LATENCY_ILP_TICKS )
+        {
+            return curr_stamp - start_stamp;
+        }
 
-    return WICED_TRUE;
+        curr_stamp = timer->freerunning_current_func( timer );
+    }
+}
+
+static void
+platform_tick_pmu_program_timer_to_run( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
+{
+    uint32_t wait_ticks  = platform_tick_pmu_wait_stop_complete( timer );
+    uint32_t timer_ticks = ( cycles_till_fire > wait_ticks ) ? ( cycles_till_fire - wait_ticks ) : 1;
+
+    PLATFORM_PMU->pmuintstatus.raw = platform_tick_pmu_intstatus_init().raw;
+
+    platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( timer_ticks ).raw );
 }
 
 static void
@@ -707,12 +732,9 @@ platform_tick_pmu_freerunning_current( platform_tick_timer_t* timer )
 static void
 platform_tick_pmu_start( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
 {
-    uint32_t mask = platform_tick_pmu_intstatus_init().raw;
+    platform_tick_pmu_program_timer_to_run( timer, cycles_till_fire );
 
-    PLATFORM_PMU->pmuintstatus.raw = mask;
-    platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( cycles_till_fire ).raw );
-
-    platform_common_chipcontrol( &PLATFORM_PMU->pmuintmask1.raw, 0x0, mask );
+    platform_common_chipcontrol( &PLATFORM_PMU->pmuintmask1.raw, 0x0, platform_tick_pmu_intstatus_init().raw );
 
     timer->started = WICED_TRUE;
 }
@@ -720,56 +742,55 @@ platform_tick_pmu_start( platform_tick_timer_t* timer, uint32_t cycles_till_fire
 static void
 platform_tick_pmu_reset( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
 {
-    UNUSED_PARAMETER( timer );
-
-    PLATFORM_PMU->pmuintstatus.raw = platform_tick_pmu_intstatus_init().raw;
-    platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( cycles_till_fire ).raw );
+    platform_tick_pmu_program_timer_to_run( timer, cycles_till_fire );
 }
 
 static void
-platform_tick_pmu_restart( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
+platform_tick_pmu_restart( platform_tick_timer_t* timer, platform_tick_restart_action_t action, uint32_t cycles_till_fire )
 {
-    UNUSED_PARAMETER( timer );
-
-    if ( !platform_tick_pmu_idle() )
+    switch ( action )
     {
-        platform_tick_pmu_slow_write_sync( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( 0x0 ).raw );
+        case PLATFORM_TICK_RESTART_ACTION_BEGIN_TICKLESS_MODE:
+            platform_tick_pmu_program_timer_to_stop( timer );
+            platform_tick_pmu_program_timer_to_run ( timer, cycles_till_fire );
+            break;
+
+        case PLATFORM_TICK_RESTART_ACTION_OPPORTUNISTIC_BEGIN_TICKLESS_MODE:
+            /*
+             * Command to be used to implement RTOS timer.
+             * Guaranteed timer stopping is expensive operation.
+             * Be opportunistic here and just program timer without stopping it.
+             * As programming (writing) has latency, previous programming may trigger interrupt before new settings take effect.
+             * Such spontaneous interrupt will be handled gracefully because reported to RTOS number of ticks spent in tickless mode
+             * is based on free-running timer.
+             * The price for this opportunistic programming sometimes system may leave sleep mode earlier then it could,
+             * but it will back to sleep immediately after that.
+             */
+            platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( cycles_till_fire ).raw );
+            break;
+
+        case PLATFORM_TICK_RESTART_ACTION_END_TICKLESS_MODE:
+            /* Stop timer. Stopping has latency, so later let's wait for operation completed. */
+            platform_tick_pmu_program_timer_to_stop( timer );
+            break;
+
+        default:
+            wiced_assert( "bad action", 0 );
+        case PLATFORM_TICK_RESTART_ACTION_BEGIN_NORMAL_MODE:
+            /* Before programming timer let's wait till previous stop completed. */
+            platform_tick_pmu_program_timer_to_run( timer, cycles_till_fire );
+            break;
     }
-    PLATFORM_PMU->pmuintstatus.raw = platform_tick_pmu_intstatus_init().raw;
-    platform_tick_pmu_slow_write( &PLATFORM_PMU->res_req_timer1.raw, platform_tick_pmu_timer_init( cycles_till_fire ).raw );
 }
 
 static void
 platform_tick_pmu_stop( platform_tick_timer_t* timer )
 {
-    uint32_t mask = platform_tick_pmu_intstatus_init().raw;
-
     timer->started = WICED_FALSE;
 
-    platform_common_chipcontrol( &PLATFORM_PMU->pmuintmask1.raw, mask, 0x0 );
+    platform_common_chipcontrol( &PLATFORM_PMU->pmuintmask1.raw, platform_tick_pmu_intstatus_init().raw, 0x0 );
 
-    platform_tick_pmu_slow_write_sync( &PLATFORM_PMU->res_req_timer1.raw, 0x0 );
-    PLATFORM_PMU->pmuintstatus.raw = mask;
-}
-
-static wiced_bool_t
-platform_tick_pmu_sleep_permission( platform_tick_timer_t* timer, uint32_t ticks, wiced_bool_t powersave_permission )
-{
-    /*
-     * If PLATFORM_APPS_POWERSAVE defined then in PMU tick mode we potentially can put overall system into sleep when execute WFI.
-     * For PLATFORM_APPS_POWERSAVE let's go to sleep only if tickless mode is enabled,
-     * as result powersave disabling switch off sleeping completely.
-     */
-
-    return PLATFORM_APPS_POWERSAVE ? timer->tickless_permission_func( timer, ticks, powersave_permission ) : WICED_TRUE;
-}
-
-static wiced_bool_t
-platform_tick_pmu_tickless_permission( struct platform_tick_timer* timer, uint32_t ticks, wiced_bool_t powersave_permission )
-{
-    UNUSED_PARAMETER( timer );
-
-    return powersave_permission && ( ticks >= PLATFORM_TICK_PMU_TICKLESS_THRESH );
+    platform_tick_pmu_program_timer_to_stop( timer );
 }
 
 static void
@@ -805,12 +826,13 @@ static platform_tick_timer_t platform_tick_pmu_timer =
     .reset_func               = platform_tick_pmu_reset,
     .restart_func             = platform_tick_pmu_restart,
     .stop_func                = platform_tick_pmu_stop,
-    .sleep_permission_func    = platform_tick_pmu_sleep_permission,
-    .tickless_permission_func = platform_tick_pmu_tickless_permission,
     .sleep_invoke_func        = platform_tick_pmu_sleep_invoke,
+    .deep_sleep_threshold     = PLATFORM_TICK_PMU_DEEP_SLEEP_THRESH,
+    .tickless_threshold       = PLATFORM_TICK_PMU_TICKLESS_THRESH,
     .cycles_per_tick          = CYCLES_PMU_INIT_PER_TICK,
     .cycles_max               = TICKS_MAX( TICK_PMU_MAX_COUNTER, CYCLES_PMU_INIT_PER_TICK ),
-    .freerunning_stamp        = 0,
+    .freerunning_start_stamp  = 0,
+    .freerunning_stop_stamp   = 0,
     .cycles_till_fire         = 0,
     .started                  = WICED_FALSE
 };
@@ -820,6 +842,12 @@ static platform_tick_timer_t platform_tick_pmu_timer =
 /******************************************************
  *               CPU Timer Function Definitions
  ******************************************************/
+
+static inline uint32_t
+platform_tick_cpu_get_freerunning_stamp( void )
+{
+    return PLATFORM_APPSCR4->cycle_cnt;
+}
 
 static inline void
 platform_tick_cpu_write_sync( volatile uint32_t* reg, uint32_t val )
@@ -836,7 +864,11 @@ platform_tick_cpu_start_base( uint32_t cycles_per_tick )
 
     platform_irq_enable_int( Timer_IRQn );
 
-    PLATFORM_CLOCKSTATUS_REG(PLATFORM_APPSCR4_REGBASE(0x0))->bits.force_ht_request = 1; /* keep HT running while CPU is sleeping */
+    /*
+     * To make sure cr4_get_cycle_counter() and nanosecond clock implemented on top of it is running while CPU is in WFI.
+     * This affects power consumption, but CPU timer should be used when power-saving disabled, for full power mode.
+     */
+    PLATFORM_APPSCR4->core_ctrl.bits.wfi_clk_stop = 0;
 }
 
 static inline void
@@ -849,18 +881,13 @@ platform_tick_cpu_reset_base( uint32_t cycles_till_fire )
 static inline void
 platform_tick_cpu_stop_base( void )
 {
-    PLATFORM_CLOCKSTATUS_REG(PLATFORM_APPSCR4_REGBASE(0x0))->bits.force_ht_request = 0; /* no need to keep anymore */
+    /* Restore default value. */
+    PLATFORM_APPSCR4->core_ctrl.bits.wfi_clk_stop = 1;
 
     platform_irq_disable_int( Timer_IRQn );
 
     platform_tick_cpu_write_sync( &PLATFORM_APPSCR4->int_timer, 0 );
     PLATFORM_APPSCR4->int_status = IRQN2MASK( Timer_IRQn );
-}
-
-static uint32_t
-platform_tick_cpu_get_freerunning_stamp( void )
-{
-    return PLATFORM_APPSCR4->cycle_cnt;
 }
 
 #if PLATFORM_TICK_CPU
@@ -897,13 +924,17 @@ platform_tick_cpu_reset( platform_tick_timer_t* timer, uint32_t cycles_till_fire
 }
 
 static void
-platform_tick_cpu_restart( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
+platform_tick_cpu_restart( platform_tick_timer_t* timer, platform_tick_restart_action_t action, uint32_t cycles_till_fire )
 {
     UNUSED_PARAMETER( timer );
+    UNUSED_PARAMETER( action );
 
-    platform_tick_cpu_write_sync( &PLATFORM_APPSCR4->int_timer, 0 );
-    PLATFORM_APPSCR4->int_status = IRQN2MASK( Timer_IRQn );
-    PLATFORM_APPSCR4->int_timer  = cycles_till_fire;
+    if ( cycles_till_fire )
+    {
+        platform_tick_cpu_write_sync( &PLATFORM_APPSCR4->int_timer, 0 );
+        PLATFORM_APPSCR4->int_status = IRQN2MASK( Timer_IRQn );
+        PLATFORM_APPSCR4->int_timer  = cycles_till_fire;
+    }
 }
 
 static void
@@ -912,32 +943,6 @@ platform_tick_cpu_stop( platform_tick_timer_t* timer )
     timer->started = WICED_FALSE;
 
     platform_tick_cpu_stop_base();
-}
-
-static wiced_bool_t
-platform_tick_cpu_sleep_permission( platform_tick_timer_t* timer, uint32_t ticks, wiced_bool_t powersave_permission )
-{
-    /*
-     * Even if powersaving disabled it is safe to call WFI instruction and reduce current draw when idle.
-     * In this mode we do not put overall system in sleep, just stop CPU till interrupt come.
-     *
-     * Powersave disabling just disables tick-less mode and so increase timer accuracy.
-     *
-     */
-
-    UNUSED_PARAMETER( timer );
-    UNUSED_PARAMETER( ticks );
-    UNUSED_PARAMETER( powersave_permission );
-
-    return WICED_TRUE;
-}
-
-static wiced_bool_t
-platform_tick_cpu_tickless_permission( struct platform_tick_timer* timer, uint32_t ticks, wiced_bool_t powersave_permission )
-{
-    UNUSED_PARAMETER( timer );
-
-    return powersave_permission && ( ticks >= PLATFORM_TICK_CPU_TICKLESS_THRESH );
 }
 
 static void
@@ -961,12 +966,13 @@ static platform_tick_timer_t platform_tick_cpu_timer =
     .reset_func               = platform_tick_cpu_reset,
     .restart_func             = platform_tick_cpu_restart,
     .stop_func                = platform_tick_cpu_stop,
-    .sleep_permission_func    = platform_tick_cpu_sleep_permission,
-    .tickless_permission_func = platform_tick_cpu_tickless_permission,
     .sleep_invoke_func        = platform_tick_cpu_sleep_invoke,
+    .deep_sleep_threshold     = PLATFORM_TICK_CPU_DEEP_SLEEP_THRESH,
+    .tickless_threshold       = PLATFORM_TICK_CPU_TICKLESS_THRESH,
     .cycles_per_tick          = CYCLES_CPU_INIT_PER_TICK,
     .cycles_max               = TICKS_MAX( TICK_CPU_MAX_COUNTER, CYCLES_CPU_INIT_PER_TICK ),
-    .freerunning_stamp        = 0,
+    .freerunning_start_stamp  = 0,
+    .freerunning_stop_stamp   = 0,
     .cycles_till_fire         = 0,
     .started                  = WICED_FALSE
 };
@@ -1049,12 +1055,12 @@ platform_tick_switch_timer( platform_tick_timer_t* timer )
     {
         const float    convert_coeff = (float)timer->cycles_per_tick / (float)timer_curr->cycles_per_tick;
         const uint32_t restart_curr  = timer_curr->cycles_till_fire;
-        const uint32_t passed_curr   = timer_curr->freerunning_current_func( timer_curr ) - timer_curr->freerunning_stamp;
+        const uint32_t passed_curr   = timer_curr->freerunning_current_func( timer_curr ) - timer_curr->freerunning_start_stamp;
         const uint32_t restart_new   = MIN( MAX( ( uint32_t )( ( float )restart_curr * convert_coeff + 0.5f ), 1 ), timer->cycles_per_tick );
         const uint32_t passed_new    = MIN( ( uint32_t )( ( float )passed_curr * convert_coeff + 0.5f ), restart_new - 1 );
 
-        timer->freerunning_stamp = timer->freerunning_current_func( timer ) - passed_new;
-        timer->cycles_till_fire  = restart_new;
+        timer->freerunning_start_stamp = timer->freerunning_current_func( timer ) - passed_new;
+        timer->cycles_till_fire        = restart_new;
 
         timer_curr->stop_func( timer_curr );
 
@@ -1112,12 +1118,15 @@ void platform_tick_execute_command( platform_tick_command_t command )
 #endif /* PLATFORM_TICK_CPU && PLATFORM_TICK_PMU */
 
 static void
-platform_tick_restart( platform_tick_timer_t* timer, uint32_t cycles_till_fire )
+platform_tick_restart( platform_tick_timer_t* timer, platform_tick_restart_action_t action, uint32_t cycles_till_fire )
 {
-    timer->freerunning_stamp = timer->freerunning_current_func( timer );
-    timer->cycles_till_fire  = cycles_till_fire;
+    if ( cycles_till_fire )
+    {
+        timer->freerunning_start_stamp = timer->freerunning_current_func( timer );
+        timer->cycles_till_fire        = cycles_till_fire;
+    }
 
-    timer->restart_func( timer, cycles_till_fire );
+    timer->restart_func( timer, action, cycles_till_fire );
 }
 
 void
@@ -1127,8 +1136,8 @@ platform_tick_start( void )
 
     wiced_assert( "no current timer set", timer );
 
-    timer->freerunning_stamp = timer->freerunning_current_func( timer );
-    timer->cycles_till_fire  = timer->cycles_per_tick;
+    timer->freerunning_start_stamp = timer->freerunning_current_func( timer );
+    timer->cycles_till_fire        = timer->cycles_per_tick;
 
     timer->start_func( timer, timer->cycles_per_tick );
 }
@@ -1147,12 +1156,12 @@ static void
 platform_tick_reset( platform_tick_timer_t* timer )
 {
     const uint32_t         current          = timer->freerunning_current_func( timer );
-    const uint32_t         passed           = current - timer->freerunning_stamp;
+    const uint32_t         passed           = current - timer->freerunning_start_stamp;
     const uint32_t         next_sched       = timer->cycles_till_fire + timer->cycles_per_tick;
     const uint32_t         cycles_till_fire = ( passed < next_sched ) ? ( next_sched - passed ) : 1;
 
-    timer->freerunning_stamp = current;
-    timer->cycles_till_fire  = cycles_till_fire;
+    timer->freerunning_start_stamp = current;
+    timer->cycles_till_fire        = cycles_till_fire;
 
     timer->reset_func( timer, cycles_till_fire );
 }
@@ -1190,29 +1199,20 @@ platform_tick_irq_handler( void )
     return res;
 }
 
-uint32_t
-platform_tick_sleep( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission )
+static uint32_t
+platform_tick_sleep_common( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t opportunistic )
 {
-    /* Function expect to be called with interrupts disabled. */
-
     platform_tick_timer_t* timer           = platform_tick_current_timer;
-    const wiced_bool_t     sleep           = timer->sleep_permission_func( timer, ticks, powersave_permission );
-    const wiced_bool_t     tickless        = sleep && timer->tickless_permission_func( timer, ticks, powersave_permission );
     const uint32_t         cycles_per_tick = timer->cycles_per_tick;
+    const wiced_bool_t     tickless        = ( ticks != 0 ) ? WICED_TRUE : WICED_FALSE;
     uint32_t               ret             = 0;
-
-    /* If any interrupts pending better to return now to have more accurate timings. */
-    if ( platform_tick_any_interrupt_pending() )
-    {
-        return 0;
-    }
 
     /* Reconfigure timer if tickless mode. */
     if ( tickless )
     {
         const uint32_t old_restart = timer->cycles_till_fire;
         const uint32_t requested   = cycles_per_tick * MIN( ticks, timer->cycles_max );
-        const uint32_t passed      = timer->freerunning_current_func( timer ) - timer->freerunning_stamp;
+        const uint32_t passed      = timer->freerunning_current_func( timer ) - timer->freerunning_start_stamp;
         uint32_t       new_restart;
 
         if ( requested + old_restart > passed )
@@ -1229,21 +1229,31 @@ platform_tick_sleep( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wi
             ret = 1 + (passed - old_restart) / cycles_per_tick;
         }
 
-        platform_tick_restart( timer, new_restart );
+        if ( opportunistic )
+        {
+            platform_tick_restart( timer, PLATFORM_TICK_RESTART_ACTION_OPPORTUNISTIC_BEGIN_TICKLESS_MODE, new_restart );
+        }
+        else
+        {
+            platform_tick_restart( timer, PLATFORM_TICK_RESTART_ACTION_BEGIN_TICKLESS_MODE, new_restart );
+        }
     }
 
     /* Here CPU is going to enter sleep mode. */
-    if ( sleep )
+    platform_pmu_last_sleep_stamp = platform_tick_pmu_get_freerunning_stamp();
+    timer->sleep_invoke_func( timer, idle_func );
+
+    /* Notify tickless mode completed */
+    if ( tickless )
     {
-        platform_pmu_last_sleep_stamp = platform_tick_pmu_get_freerunning_stamp();
-        timer->sleep_invoke_func( timer, idle_func );
+        platform_tick_restart( timer, PLATFORM_TICK_RESTART_ACTION_END_TICKLESS_MODE, 0 );
     }
 
     /* Reconfigure timer back. */
     if ( tickless )
     {
         const uint32_t old_restart = timer->cycles_till_fire;
-        const uint32_t passed      = timer->freerunning_current_func( timer ) - timer->freerunning_stamp;
+        const uint32_t passed      = timer->freerunning_current_func( timer ) - timer->freerunning_start_stamp;
         uint32_t       new_restart;
 
         ret += ( old_restart + cycles_per_tick - 1 ) / cycles_per_tick;
@@ -1262,7 +1272,100 @@ platform_tick_sleep( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wi
             new_restart                   = cycles_per_tick - wrapped_rem;
         }
 
-        platform_tick_restart( timer, new_restart ? new_restart : cycles_per_tick );
+        platform_tick_restart( timer, PLATFORM_TICK_RESTART_ACTION_BEGIN_NORMAL_MODE, new_restart ? new_restart : cycles_per_tick );
+    }
+
+    return ret;
+}
+
+uint32_t
+platform_tick_sleep_rtos( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission )
+{
+    /* Function expect to be called with interrupts disabled. */
+
+    platform_tick_timer_t* timer = platform_tick_current_timer;
+
+    UNUSED_PARAMETER( powersave_permission );
+
+    /*
+     * If any interrupt pending better not try to sleep as sleep would immediately return.
+     * Entering sleep (especially tickless) is expensive operation while check for pending interrupts is quite cheap.
+     */
+    if ( platform_tick_any_interrupt_pending() )
+    {
+        return 0;
+    }
+
+    /* Check tickless threshold */
+    if ( ticks < timer->tickless_threshold )
+    {
+        /* Disable tickless mode */
+        ticks = 0;
+    }
+
+#if PLATFORM_APPS_POWERSAVE
+    if ( !powersave_permission || ( ticks < timer->deep_sleep_threshold ) )
+    {
+        if ( ( platform_mcu_powersave_get_mode() == PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP ) )
+        {
+            /*
+             * Sleeping (executing WFI) now can put overall system into deep-sleep.
+             * Powersave is disabled or ticks to sleep are below quite large treshold, so temporarily switch to safe mode.
+             */
+            uint32_t ret = 0;
+
+            platform_mcu_powersave_set_mode( PLATFORM_MCU_POWERSAVE_MODE_SLEEP );
+
+            ret = platform_tick_sleep_common( idle_func, ticks, WICED_TRUE );
+
+            platform_mcu_powersave_set_mode( PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP );
+
+            return ret;
+        }
+    }
+#endif /* PLATFORM_APPS_POWERSAVE */
+
+    return platform_tick_sleep_common( idle_func, ticks, WICED_TRUE );
+}
+
+uint32_t
+platform_tick_sleep_force( platform_tick_sleep_idle_func idle_func, uint32_t ticks, platform_tick_sleep_force_interrupts_mode_t mode )
+{
+    /* Function expect to be called with interrupts disabled. */
+
+    wiced_bool_t    restore_masks = WICED_FALSE;
+    uint32_t        ret;
+    pmu_intstatus_t pmu_new_intmask;
+    uint32_t        pmu_intmask;
+    uint32_t        irq_mask;
+
+    if ( ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_OFF ) || ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_WLAN_ON ) )
+    {
+        /* Save masks */
+        pmu_intmask   = PLATFORM_PMU->pmuintmask1.raw;
+        irq_mask      = PLATFORM_APPSCR4->irq_mask;
+        restore_masks = WICED_TRUE;
+
+        /* Clear PMU interrupts mask except timer */
+        pmu_new_intmask.raw                      = 0x0;
+        pmu_new_intmask.bits.rsrc_req_timer_int1 = 1;
+        PLATFORM_PMU->pmuintmask1.raw            = pmu_intmask & pmu_new_intmask.raw;
+        /* Clear APPSCR4 interrupts except timer and conditionally WLAN */
+        PLATFORM_APPSCR4->irq_mask               = irq_mask & IRQN2MASK(Timer_ExtIRQn);
+        if ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_WLAN_ON )
+        {
+            PLATFORM_APPSCR4->irq_mask           |= irq_mask & ( IRQN2MASK(M2M_ExtIRQn) | IRQN2MASK(SW0_ExtIRQn) );
+        }
+    }
+
+    /* Go to sleep */
+    ret = platform_tick_sleep_common( idle_func, ticks, WICED_FALSE );
+
+    if ( restore_masks )
+    {
+        /* Restore masks */
+        PLATFORM_APPSCR4->irq_mask    = irq_mask;
+        PLATFORM_PMU->pmuintmask1.raw = pmu_intmask;
     }
 
     return ret;
@@ -1290,8 +1393,13 @@ platform_tick_irq_init( void )
 
         pmu_intstatus_t status;
 
-        platform_tick_pmu_slow_write_sync( &PLATFORM_PMU->res_req_timer1.raw, 0x0 );
         PLATFORM_PMU->pmuintmask1.raw   = 0x0;
+
+#if PLATFORM_TICK_PMU
+        platform_tick_pmu_program_timer_to_stop( &platform_tick_pmu_timer );
+#else
+        platform_tick_pmu_program_timer_to_stop( NULL );
+#endif
 
         status.raw                      = 0;
         status.bits.rsrc_event_int1     = 1;
@@ -1357,7 +1465,8 @@ uint32_t platform_tick_get_time( platform_tick_times_t which_time )
 
         case PLATFORM_TICK_GET_AND_RESET_SLOW_TIME_STAMP:
             time = platform_tick_pmu_get_freerunning_stamp();
-            platform_tick_pmu_slow_write_sync( &PLATFORM_PMU->pmutimer, 0 );
+            platform_tick_pmu_slow_write( &PLATFORM_PMU->pmutimer, 0 );
+            platform_tick_pmu_slow_write_barrier( WICED_TRUE );
             break;
 
         case PLATFORM_TICK_GET_AND_RESET_FAST_TIME_STAMP:

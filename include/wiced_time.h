@@ -160,6 +160,17 @@ wiced_result_t wiced_time_set_utc_time_ms( const wiced_utc_time_ms_t* utc_time_m
  */
 wiced_result_t wiced_time_get_iso8601_time( wiced_iso8601_time_t* iso8601_time );
 
+
+/** Convert a time from UTC milliseconds to iso 8601 format e.g. "2012-07-02T17:12:34.567890Z"
+ *
+ * @param[in] utc_time_ms   : the time value to convert
+ * @param[out] iso8601_time : A pointer to the structure variable that
+ *                            will receive the time value
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_time_convert_utc_ms_to_iso8601( wiced_utc_time_ms_t utc_time_ms, wiced_iso8601_time_t* iso8601_time );
+
 /** @} */
 
 /**

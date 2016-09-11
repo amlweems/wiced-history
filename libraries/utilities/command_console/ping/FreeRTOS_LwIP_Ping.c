@@ -189,8 +189,13 @@ int ping( int argc, char *argv[] )
         /* Send ping and wait for reply */
         send_time = host_rtos_get_time( );
 
+        /* Set default netif so that direct ping packets will be routed correctly if tethered to an AP and also running SoftAP. */
+        wiced_rtos_lock_mutex( &lwip_send_interface_mutex );
+        netif_set_default( wiced_ip_handle[0]);
+
         if ( lwip_sendto( socket_hnd, iecho, ping_size, 0, (struct sockaddr*) &host_addr, host_addr.sin_len ) > 0 )
         {
+            wiced_rtos_unlock_mutex( &lwip_send_interface_mutex );
             /* Wait for ping reply */
             err_t result = ping_recv( socket_hnd );
             reply_time = host_rtos_get_time( );
@@ -205,13 +210,15 @@ int ping( int argc, char *argv[] )
         }
         else
         {
+            wiced_rtos_unlock_mutex( &lwip_send_interface_mutex );
+            reply_time = host_rtos_get_time( );
             WPRINT_APP_INFO(("Ping error\r\n"));
         }
 
         num--;
-        if ( ( num > 0 ) || ( continuous == WICED_TRUE ) )
+        if ( ( ( num > 0 ) || ( continuous == WICED_TRUE ) ) && ( ( send_time + interval ) > reply_time ) )
         {
-            wiced_rtos_delay_milliseconds( interval ); // This is simple and should probably wait for a residual period
+            wiced_rtos_delay_milliseconds( ( send_time + interval ) - reply_time );
         }
     }
 

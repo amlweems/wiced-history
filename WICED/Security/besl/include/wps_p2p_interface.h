@@ -41,7 +41,7 @@ extern "C" {
  *               Function Declarations
  ******************************************************/
 
-extern void wiced_wps_thread_main( uint32_t arg );
+extern void wiced_wps_thread_main( wwd_thread_arg_t arg );
 extern besl_result_t wps_internal_init( wps_agent_t* workspace, uint32_t interface, besl_wps_mode_t mode, const char* password, besl_wps_credential_t* credentials, uint16_t credential_length );
 
 #ifdef __cplusplus

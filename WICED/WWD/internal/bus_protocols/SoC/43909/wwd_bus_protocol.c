@@ -27,6 +27,7 @@
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 #include "chip_constants.h"
 #include "wiced_resource.h"         /* TODO: remove include dependency */
+#include "wiced_deep_sleep.h"
 #include "resources.h"        /* TODO: remove include dependency */
 #include "platform_map.h"
 #include "platform_mcu_peripheral.h"
@@ -41,7 +42,7 @@
  *                      Macros
  ******************************************************/
 
-#define VERIFY_RESULT( x )  { wwd_result_t verify_result; verify_result = (x); if ( verify_result != WWD_SUCCESS ) return verify_result; }
+#define VERIFY_RESULT( x )   { wwd_result_t verify_result; verify_result = (x); if ( verify_result != WWD_SUCCESS ) return verify_result; }
 
 #define ROUNDUP(x, y)        ((((x) + ((y) - 1)) / (y)) * (y))
 
@@ -49,24 +50,20 @@
  *             Constants
  ******************************************************/
 
-#define    I_PC        (1 << 10)    /* descriptor error */
-#define    I_PD        (1 << 11)    /* data error */
-#define    I_DE        (1 << 12)    /* Descriptor protocol Error */
-#define    I_RU        (1 << 13)    /* Receive descriptor Underflow */
-#define    I_RI        (1 << 16)    /* Receive Interrupt */
-#define    I_XI        (1 << 24)    /* Transmit Interrupt */
-#define    I_ERRORS    (I_PC | I_PD | I_DE | I_RU )    /* DMA Errors */
+#define I_XI                                         (1 << 24) /* Transmit Interrupt */
 
-#define SICF_CPUHALT        (0x0020)
+#define WLAN_RAM_STARTING_ADDRESS                    PLATFORM_ATCM_RAM_BASE(0x0)
 
-#define WLAN_RAM_STARTING_ADDRESS     PLATFORM_ATCM_RAM_BASE(0x0)
+#define FF_ROM_SHADOW_INDEX_REGISTER                 *((volatile uint32_t*)(PLATFORM_WLANCR4_REGBASE(0x080)))
+#define FF_ROM_SHADOW_DATA_REGISTER                  *((volatile uint32_t*)(PLATFORM_WLANCR4_REGBASE(0x084)))
 
-#define FF_ROM_SHADOW_INDEX_REGISTER     *((volatile uint32_t*)(PLATFORM_WLANCR4_REGBASE(0x080)))
-#define FF_ROM_SHADOW_DATA_REGISTER      *((volatile uint32_t*)(PLATFORM_WLANCR4_REGBASE(0x084)))
+#ifndef PLATFORM_WLAN_DMA_RX_UNDERFLOW_THRESH
+#define PLATFORM_WLAN_DMA_RX_UNDERFLOW_THRESH        3
+#endif
 
-
-/*IDM wrapper register regions */
-#define ARMCR4_MWRAPPER_ADR       PLATFORM_WLANCR4_MASTER_WRAPPER_REGBASE(0)
+#ifndef PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
+#define PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS    10
+#endif
 
 /******************************************************
  *             Structures
@@ -76,9 +73,18 @@
  *             Variables
  ******************************************************/
 
+/* Variables represent state and has to be reset in wwd_bus_deinit() */
 static wiced_bool_t bus_is_up = WICED_FALSE;
-static wiced_bool_t wwd_bus_flow_controlled;
+static wiced_bool_t WICED_DEEP_SLEEP_SAVED_VAR(wwd_bus_flow_controlled) = WICED_FALSE;
 static uint32_t fake_backplane_window_addr = 0;
+static volatile wiced_bool_t refill_underflow = WICED_FALSE;
+#if PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
+static wwd_time_t delayed_bus_release_deadline = 0;
+static wiced_bool_t delayed_bus_release_scheduled = WICED_FALSE;
+#define DELAYED_BUS_RELEASE_SCHEDULE(schedule) do { delayed_bus_release_scheduled = schedule; delayed_bus_release_deadline = 0; } while(0)
+#else
+#define DELAYED_BUS_RELEASE_SCHEDULE(schedule) do {} while(0)
+#endif
 
 /******************************************************
  *             Function declarations
@@ -89,19 +95,22 @@ static wwd_result_t shutdown_wlan(void);
 static void write_reset_instruction( uint32_t reset_inst );
 
 /******************************************************
- *             Global Function definitions
+ *             Function definitions
  ******************************************************/
 
-/* Device data transfer functions */
 wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 {
-    m2m_dma_tx_data( buffer, 0 );
+    m2m_dma_tx_data( buffer );
+    DELAYED_BUS_RELEASE_SCHEDULE( WICED_TRUE );
     return WWD_SUCCESS;
 }
 
 wwd_result_t wwd_bus_init( void )
 {
+    PLATFORM_WLAN_POWERSAVE_RES_UP();
     boot_wlan();
+    PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_FALSE );
+
     platform_watchdog_kick();
 
     M2M_INIT_DMA_SYNC();
@@ -109,13 +118,41 @@ wwd_result_t wwd_bus_init( void )
     return WWD_SUCCESS;
 }
 
+wwd_result_t wwd_bus_resume_after_deep_sleep( void )
+{
+    M2M_INIT_DMA_SYNC();
+
+    return WWD_SUCCESS;
+}
+
 wwd_result_t wwd_bus_deinit( void )
 {
+    while ( wwd_allow_wlan_bus_to_sleep() == WWD_PENDING )
+    {
+        host_rtos_delay_milliseconds( 1 );
+    }
+
+    PLATFORM_WLAN_POWERSAVE_RES_UP();
+
+    /* Down M2M and WLAN */
     m2m_deinit_dma();
     shutdown_wlan();
 
-    /* Put device in reset. */
+    /* Put WLAN to reset. */
     host_platform_reset_wifi( WICED_TRUE );
+
+    PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_FALSE );
+
+    /* Force resource down even if resource up/down is unbalanced */
+    PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_TRUE );
+
+    /* Reset all state variables */
+    bus_is_up = WICED_FALSE;
+    wwd_bus_flow_controlled = WICED_FALSE;
+    fake_backplane_window_addr = 0;
+    refill_underflow = WICED_FALSE;
+    DELAYED_BUS_RELEASE_SCHEDULE( WICED_FALSE );
+
     return WWD_SUCCESS;
 }
 
@@ -124,72 +161,80 @@ uint32_t wwd_bus_packet_available_to_read(void)
     return 1;
 }
 
-/*
- * From internal documentation: hwnbu-twiki/SdioMessageEncapsulation
- * When data is available on the device, the device will issue an interrupt:
- * - the device should signal the interrupt as a hint that one or more data frames may be available on the device for reading
- * - the host may issue reads of the 4 byte length tag at any time -- that is, whether an interupt has been issued or not
- * - if a frame is available, the tag read should return a nonzero length (>= 4) and the host can then read the remainder of the frame by issuing one or more CMD53 reads
- * - if a frame is not available, the 4byte tag read should return zero
- */
-
-/*
- * The format of the rx wiced buffer :
- * |SDPCMD_RXOFFSET | wiced_buffer_t |   SDPCM HDR    | DATA|
- *       8 bytes         4 bytes          22 bytes
- */
-
-/*@only@*//*@null@*/wwd_result_t wwd_bus_read_frame( wiced_buffer_t* buffer )
+static void wwd_bus_refill_dma( void )
 {
-    uint32_t  intstatus;
-    uint16_t* hwtag;
-    void*     p0 = NULL;
+    /*
+     * Set flag and clear it later if filled above threshold.
+     * Done this way if packet is freed during m2m_refill_dma()
+     * it may be too late to set flag.
+     */
+
+    refill_underflow = WICED_TRUE;
+
+    m2m_refill_dma( );
+
+    if ( m2m_rxactive_dma() > PLATFORM_WLAN_DMA_RX_UNDERFLOW_THRESH )
+    {
+        refill_underflow = WICED_FALSE;
+    }
+}
+
+wwd_result_t wwd_bus_read_frame( wiced_buffer_t* buffer )
+{
+    wwd_result_t result = WWD_SUCCESS;
+    uint32_t     intstatus;
+    uint16_t*    hwtag;
+    void*        packet;
+    wiced_bool_t signal_txdone;
 
     M2M_INIT_DMA_ASYNC( );
 
-    intstatus = m2m_read_intstatus( );
+    wwd_bus_refill_dma( );
+
+    intstatus = m2m_read_intstatus( &signal_txdone );
+
+    /* Tell peer about txdone event */
+    if ( signal_txdone )
+    {
+        wwd_ensure_wlan_bus_is_up( );
+        m2m_signal_txdone( );
+        DELAYED_BUS_RELEASE_SCHEDULE( WICED_TRUE );
+    }
 
     /* Handle DMA interrupts */
     if ( ( intstatus & I_XI ) != 0 )
     {
-        WPRINT_WWD_INFO(("DMA:  TX reclaim\n"));
+        WPRINT_WWD_INFO(("DMA: TX reclaim\n"));
         m2m_dma_tx_reclaim( );
     }
 
-    m2m_refill_dma( );
-
-    /* Handle DMA errors */
-    if ( ( intstatus & I_ERRORS ) != 0 )
-    {
-        m2m_refill_dma( );
-        WPRINT_WWD_INFO(("RX errors: intstatus: 0x%x\n", (unsigned int)intstatus));
-    }
-
     /* Handle DMA receive interrupt */
-    p0 = m2m_read_dma_packet( &hwtag );
-    if ( p0 == NULL )
+    packet = m2m_read_dma_packet( &hwtag );
+    if ( packet == NULL )
     {
-        WPRINT_WWD_INFO(("intstatus: 0x%x, NO PACKT\n", (uint)intstatus));
-        return WWD_NO_PACKET_TO_RECEIVE;
+        WPRINT_WWD_INFO(("intstatus: 0x%x, NO PACKET\n", (uint)intstatus));
+        result = WWD_NO_PACKET_TO_RECEIVE;
+    }
+    else
+    {
+        *buffer = packet;
+        WPRINT_WWD_INFO(("read pkt , p0: 0x%x\n", (uint)packet));
+
+        /* move the data pointer 12 bytes(sizeof(wwd_buffer_header_t))
+         * back to the start of the pakcet
+         */
+        host_buffer_add_remove_at_front( buffer, -(int)sizeof(wwd_buffer_header_t) );
+        wwd_sdpcm_update_credit( (uint8_t*) hwtag );
+
+        DELAYED_BUS_RELEASE_SCHEDULE( WICED_TRUE );
     }
 
-    *buffer = p0;
-    WPRINT_WWD_INFO(("read pkt , p0: 0x%x\n", (uint)p0));
+    wwd_bus_refill_dma( );
 
-    /* move the data pointer 12 bytes(sizeof(wwd_buffer_header_t))
-     * back to the start of the pakcet
-     */
-    host_buffer_add_remove_at_front( buffer, -(int)sizeof(wwd_buffer_header_t) );
-    wwd_sdpcm_update_credit( (uint8_t*) hwtag );
-
-    m2m_refill_dma( );
-
-    /* XXX: Where are buffers from dma_rx and dma_getnextrxp created? */
-
-    return WWD_SUCCESS;
+    return result;
 }
 
-wwd_result_t wwd_bus_ensure_is_up( void )
+wwd_result_t wwd_ensure_wlan_bus_is_up( void )
 {
     if ( bus_is_up == WICED_FALSE )
     {
@@ -200,7 +245,7 @@ wwd_result_t wwd_bus_ensure_is_up( void )
     return WWD_SUCCESS;
 }
 
-wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
+wwd_result_t wwd_allow_wlan_bus_to_sleep( void )
 {
     wwd_result_t result = WWD_SUCCESS;
 
@@ -241,25 +286,75 @@ wiced_bool_t wwd_bus_is_flow_controlled( void )
     return wwd_bus_flow_controlled;
 }
 
+static uint32_t wwd_handle_delayed_bus_release( void )
+{
+    uint32_t result = 0;
+
+#if PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
+    if ( delayed_bus_release_scheduled )
+    {
+        delayed_bus_release_scheduled = WICED_FALSE;
+        delayed_bus_release_deadline = host_rtos_get_time() + PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS;
+
+        result = PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS;
+    }
+    else if ( delayed_bus_release_deadline )
+    {
+        wwd_time_t now = host_rtos_get_time( );
+
+        if ( delayed_bus_release_deadline - now <= PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS )
+        {
+            result = delayed_bus_release_deadline - now;
+        }
+
+        if ( result == 0 )
+        {
+            delayed_bus_release_deadline = 0;
+        }
+    }
+
+    if ( !bus_is_up )
+    {
+        result = 0;
+    }
+    else if ( platform_mcu_powersave_is_permitted( ) && (platform_mcu_powersave_get_mode( ) == PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP ) )
+    {
+        result = 0;
+    }
+#endif /* PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS */
+
+    return result;
+}
+
 void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
 {
     uint32_t timeout_ms = 1;
+    uint32_t delayed_release_timeout_ms;
     wwd_result_t result;
 
     REFERENCE_DEBUG_ONLY_VARIABLE( result );
 
-    result = wwd_bus_allow_wlan_bus_to_sleep( );
-    wiced_assert( "Error setting wlan sleep", ( result == WWD_SUCCESS ) || ( result == WWD_PENDING ) );
-
-    if ( result == WWD_SUCCESS )
+    delayed_release_timeout_ms = wwd_handle_delayed_bus_release( );
+    if ( delayed_release_timeout_ms != 0 )
     {
-        timeout_ms = NEVER_TIMEOUT;
+        timeout_ms = delayed_release_timeout_ms;
+    }
+    else
+    {
+        result = wwd_allow_wlan_bus_to_sleep( );
+        wiced_assert( "Error setting wlan sleep", ( result == WWD_SUCCESS ) || ( result == WWD_PENDING ) );
+
+        if ( result == WWD_SUCCESS )
+        {
+            timeout_ms = NEVER_TIMEOUT;
+        }
     }
 
 #ifdef M2M_RX_POLL_MODE
 
     UNUSED_PARAMETER( transceive_semaphore );
-    UNUSED_PARAMETER( timeout_ms );
+    UNUSED_VAR( timeout_ms );
+    UNUSED_VAR( delayed_release_timeout_ms );
     host_rtos_delay_milliseconds( 10 );
 
 #else
@@ -272,9 +367,28 @@ void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
 #endif /* M2M_RX_POLL_MODE */
 }
 
-/******************************************************
- *             Static Function definitions
- ******************************************************/
+static void wwd_notify_thread_atomically( void )
+{
+    uint32_t flags;
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    wwd_thread_notify_irq();
+
+    WICED_RESTORE_INTERRUPTS( flags );
+}
+
+void host_platform_bus_buffer_freed( wwd_buffer_dir_t direction )
+{
+    if ( direction == WWD_NETWORK_RX )
+    {
+        if ( refill_underflow )
+        {
+            refill_underflow = WICED_FALSE;
+            wwd_notify_thread_atomically();
+        }
+    }
+}
 
 /*
  * copy reset vector to FLOPS
@@ -335,7 +449,7 @@ wwd_result_t wwd_bus_write_wifi_nvram_image( void )
     nvram_destination_address += WLAN_RAM_STARTING_ADDRESS;
 
     /* Write NVRAM image into WLAN RAM */
-    memcpy( (uint8_t *) nvram_destination_address, wifi_nvram_image, nvram_size );
+    memcpy( (uint8_t *) nvram_destination_address, wifi_nvram_image, sizeof( wifi_nvram_image ) );
 
     /* Calculate the NVRAM image size in words (multiples of 4 bytes) and its bitwise inverse */
     nvram_size_in_words = nvram_size / 4;
@@ -374,8 +488,6 @@ static wwd_result_t boot_wlan(void)
     /* Release ARM core */
     WPRINT_WWD_INFO(("Release WLAN core..\n"));
     VERIFY_RESULT( wwd_wlan_armcore_run( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
-
-    host_rtos_delay_milliseconds( 10 );
 
     return WWD_SUCCESS;
 }
@@ -471,4 +583,3 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
     }
     return WWD_SUCCESS;
 }
-

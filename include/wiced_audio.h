@@ -10,6 +10,7 @@
 #pragma once
 
 #include "wwd_constants.h"
+#include "platform_audio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,7 +90,7 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
-#define MAX_NUM_AUDIO_DEVICES (3)
+#define MAX_NUM_AUDIO_DEVICES (4)
 
 /******************************************************
  *                   Enumerations
@@ -143,6 +144,7 @@ typedef struct
     uint32_t sample_rate;
     uint8_t  bits_per_sample;
     uint8_t  channels;
+    uint8_t  frame_size;
     uint8_t  volume;
 } wiced_audio_config_t;
 
@@ -152,8 +154,8 @@ typedef struct
  */
 typedef struct
 {
-    const char*    name;
-    void*          audio_device_driver_specific;
+    platform_audio_device_id_t  device_id;
+    void*                       audio_device_driver_specific;
     wiced_result_t (*audio_device_init)           ( void* device_data );
     wiced_result_t (*audio_device_deinit)         ( void* device_data );
     wiced_result_t (*audio_device_configure)      ( void* device_data, wiced_audio_config_t* config, uint32_t* mclk );
@@ -192,7 +194,7 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-wiced_result_t wiced_audio_init                        ( const char* device_name, wiced_audio_session_ref* sh, uint16_t period_size );
+wiced_result_t wiced_audio_init                        ( const platform_audio_device_id_t device_1d, wiced_audio_session_ref* sh, uint16_t period_size );
 wiced_result_t wiced_audio_configure                   ( wiced_audio_session_ref sh, wiced_audio_config_t* config );
 wiced_result_t wiced_audio_create_buffer               ( wiced_audio_session_ref sh, uint16_t size, uint8_t* buffer_ptr, void*(*allocator)(uint16_t size));
 wiced_result_t wiced_audio_set_volume                  ( wiced_audio_session_ref sh, double volume_in_db );
@@ -210,8 +212,9 @@ wiced_result_t wiced_audio_get_current_buffer_weight   ( wiced_audio_session_ref
 
 /* Returns the latency of the audio system in audio frames */
 wiced_result_t wiced_audio_get_latency                 ( wiced_audio_session_ref sh, uint32_t* latency );
-wiced_result_t wiced_register_audio_device             ( const char* name, wiced_audio_device_interface_t* interface );
+wiced_result_t wiced_register_audio_device             ( const platform_audio_device_id_t device_id, wiced_audio_device_interface_t* interface );
 wiced_result_t wiced_audio_set_pll_fractional_divider  ( wiced_audio_session_ref sh, float value );
+wiced_result_t wiced_audio_update_period_size          ( wiced_audio_session_ref sh, uint16_t period_size );
 
 #ifdef __cplusplus
 } /* extern "C" */

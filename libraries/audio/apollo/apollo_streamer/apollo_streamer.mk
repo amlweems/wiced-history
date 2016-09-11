@@ -17,6 +17,7 @@ $(info Using PREBUILT:  $(APOLLO_STREAMER_LIBRARY_NAME))
 $(NAME)_PREBUILT_LIBRARY :=$(APOLLO_STREAMER_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
+$(info Building SRC:  $(APOLLO_STREAMER_LIBRARY_NAME))
 include $(CURDIR)apollo_streamer_src.mk
 endif # ifneq ($(wildcard $(CURDIR)$(APOLLO_STREAMER_LIBRARY_NAME)),)
 
@@ -24,10 +25,16 @@ GLOBAL_INCLUDES += .
 
 GLOBAL_DEFINES  += WICED_USE_AUDIO
 GLOBAL_DEFINES  += BUILDCFG
-GLOBAL_DEFINES  += WICED_DCT_INCLUDE_BT_CONFIG
+
+# this needs to be FALSE to allow app to override the BTEWICED
+# linkkey management
+GLOBAL_DEFINES  += BTM_INTERNAL_LINKKEY_STORAGE_INCLUDED=FALSE
 
 $(NAME)_COMPONENTS += audio/apollo/apollocore
-$(NAME)_COMPONENTS += audio/apollo/apollo_bt
-$(NAME)_COMPONENTS += bt_audio
+$(NAME)_COMPONENTS += audio/apollo/audio_render
+$(NAME)_COMPONENTS += audio/apollo/802_dot_1as_avb
+$(NAME)_COMPONENTS += audio/apollo/audio_pll_tuner
+$(NAME)_COMPONENTS += libraries/drivers/bluetooth
+$(NAME)_COMPONENTS += libraries/audio/codec/codec_framework
 
 $(NAME)_CFLAGS  :=

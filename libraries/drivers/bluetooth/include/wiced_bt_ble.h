@@ -127,28 +127,6 @@ typedef uint8_t wiced_dev_ble_signature_t[BTM_BLE_AUTH_SIGNATURE_SIZE];     /**<
 #define BTM_BLE_ADVERT_FLAG_MASK                    (BTM_BLE_LIMITED_DISCOVERABLE_FLAG | BTM_BLE_BREDR_NOT_SUPPORTED | BTM_BLE_GENERAL_DISCOVERABLE_FLAG)
 #define BTM_BLE_LIMITED_DISCOVERABLE_MASK           (BTM_BLE_LIMITED_DISCOVERABLE_FLAG )
 
-/** Advertisement Data bit masks */
-enum wiced_bt_ble_advert_mask_e {
-    BTM_BLE_ADVERT_BIT_DEV_NAME                     = (0x00000001 << 0),    /**< Device Name */
-    BTM_BLE_ADVERT_BIT_FLAGS                        = (0x00000001 << 1),    /**< Flags */
-    BTM_BLE_ADVERT_BIT_MANUFACTURER                 = (0x00000001 << 2),    /**< Manufacturer Specific Data */
-    BTM_BLE_ADVERT_BIT_TX_POWER                     = (0x00000001 << 3),    /**< Transmit Power Level */
-    BTM_BLE_ADVERT_BIT_INTERVAL_RANGE               = (0x00000001 << 5),    /**< Slave preferred connection interval range  */
-    BTM_BLE_ADVERT_BIT_SERVICE                      = (0x00000001 << 6),    /**< Service UUID (16-bit) */
-    BTM_BLE_ADVERT_BIT_SERVICE_SOLICITATION         = (0x00000001 << 7),    /**< Service Solicitation (16-bit) */
-    BTM_BLE_ADVERT_BIT_SERVICE_DATA                 = (0x00000001 << 8),    /**< Service Data */
-    BTM_BLE_ADVERT_BIT_SIGN_DATA                    = (0x00000001 << 9),    /**< Signed data */
-    BTM_BLE_ADVERT_BIT_SERVICE_128SOLICITATION      = (0x00000001 << 10),   /**< Service Solicitation (128-bit) */
-    BTM_BLE_ADVERT_BIT_APPEARANCE                   = (0x00000001 << 11),   /**< Appearance */
-    BTM_BLE_ADVERT_BIT_PUBLIC_ADDR                  = (0x00000001 << 12),   /**< Public Target Address */
-    BTM_BLE_ADVERT_BIT_RANDOM_ADDR                  = (0x00000001 << 13),   /**< Random Target Address */
-    BTM_BLE_ADVERT_BIT_SERVICE_32                   = (0x00000001 << 4),    /**< Service UUIDs (32-bit) */
-    BTM_BLE_ADVERT_BIT_SERVICE_32SOLICITATION       = (0x00000001 << 14),   /**< Service Solicitation (32-bit) */
-    BTM_BLE_ADVERT_BIT_PROPRIETARY                  = (0x00000001 << 15),   /**< Priorpietary */
-    BTM_BLE_ADVERT_BIT_SERVICE_128                  = (0x00000001 << 16)    /**< Service UUIDs (128-bit) */
-};
-typedef uint32_t wiced_bt_ble_advert_mask_t;        /**< BLE advertisement mask (see #wiced_bt_ble_advert_mask_e) */
-
 
 /** Advertisement data types */
 enum wiced_bt_ble_advert_type_e {
@@ -188,83 +166,12 @@ enum wiced_bt_ble_sec_flags_e
     BTM_SEC_LE_LINK_PAIRED_WITH_MITM                = 0x04                  /**< Link with man-in-the-middle protection */
 };
 
-/** Slave preferred connection interval range */
 typedef struct
 {
-    uint16_t    low;    /**< Preferred low connection interval */
-    uint16_t    hi;     /**< Preferred high connection interval */
-}wiced_bt_ble_int_range_t;
-
-/** Service tag supported in the device */
-typedef struct
-{
-    uint8_t         num_service;    /**< Number of services */
-    wiced_bool_t    list_cmpl;      /**< Complete list or not */
-    uint16_t        *p_uuid;        /**< 16-bit UUID data */
-}wiced_bt_ble_service_t;
-
-/** 32 bits Service supported in the device */
-typedef struct
-{
-    uint8_t         num_service;    /**< Number of services */
-    wiced_bool_t    list_cmpl;      /**< Complete list or not */
-    uint32_t        *p_uuid;        /**< 32-bit UUID data */
-}wiced_bt_ble_32service_t;
-
-/** 128 bits Service supported in the device */
-typedef struct
-{
-    wiced_bool_t    list_cmpl;      /**< Complete list or not */
-    uint8_t         uuid128[MAX_UUID_SIZE]; /**< 128-bit UUID data */
-}wiced_bt_ble_128service_t;
-
-/** Manufacturer data supported in the device */
-typedef struct
-{
-    uint8_t     len;                /**< Length of manufacturer data */
-    uint8_t    *p_val;              /**< Manufacturer data */
-}wiced_bt_ble_manu_t;
-
-/** Service data supported in the device */
-typedef struct
-{
-    wiced_bt_uuid_t service_uuid;   /**< Service UUID data */
-    uint8_t         len;            /**< Service UUID length */
-    uint8_t         *p_val;         /**< Service data value */
-}wiced_bt_ble_service_data_t;
-
-/** Proprietary data element supported in the device */
-typedef struct
-{
-    uint8_t     advert_type;        /**< Advertisement type */
-    uint8_t     len;                /**< Advertisement length */
-    uint8_t     *p_val;             /**< Element data */
-}wiced_bt_ble_prop_elem_t;
-
-/** Proprietary data elements structure supported in the device */
-typedef struct
-{
-    uint8_t                     num_elem;   /**< Number of elements */
-    wiced_bt_ble_prop_elem_t    *p_elem;    /**< Proprietary elements */
-}wiced_bt_ble_proprietary_t;
-
-/** Advertising data */
-typedef struct
-{
-    wiced_bt_ble_int_range_t    int_range;              /**< slave preferred connection interval range (BTM_BLE_ADVERT_BIT_INTERVAL_RANGE) */
-    wiced_bt_ble_manu_t         *p_manu;                /**< manufacturer data (BTM_BLE_ADVERT_BIT_MANUFACTURER) */
-    wiced_bt_ble_service_t      *p_services;            /**< list of supported services - 16 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE) */
-    wiced_bt_ble_128service_t   *p_services_128b;       /**< list of supported services - 128 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE_128) */
-    wiced_bt_ble_32service_t    *p_service_32b;         /**< list of supported services - 32 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE_32) */
-    wiced_bt_ble_service_t      *p_sol_services;        /**< list of solicited services - 16 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE_SOLICITATION) */
-    wiced_bt_ble_32service_t    *p_sol_service_32b;     /**< list of solicited services - 32 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE_32SOLICITATION) */
-    wiced_bt_ble_128service_t   *p_sol_service_128b;    /**< list of solicited services - 128 bit UUIDs (BTM_BLE_ADVERT_BIT_SERVICE_128SOLICITATION) */
-    wiced_bt_ble_proprietary_t  *p_proprietary;         /**< list of proprietary data elements (BTM_BLE_ADVERT_BIT_PROPRIETARY) */
-    wiced_bt_ble_service_data_t *p_service_data;        /**< service data (BTM_BLE_ADVERT_BIT_SERVICE_DATA) */
-    uint16_t                    appearance;             /**< appearance (BTM_BLE_ADVERT_BIT_APPEARANCE) */
-    uint8_t                     flag;                   /**< flag (BTM_BLE_ADVERT_BIT_FLAGS) */
-    uint8_t                     tx_power;               /**< transmit power (BTM_BLE_ADVERT_BIT_TX_POWER) */
-}wiced_bt_ble_advert_data_t;
+    uint8_t                     *p_data;        /**< Advertisement data */
+    uint16_t                    len;            /**< Advertisement length */
+    wiced_bt_ble_advert_type_t  advert_type;    /**< Advertisement data type */
+}wiced_bt_ble_advert_elem_t;
 
 /** Scan result event type */
 enum wiced_bt_dev_ble_evt_type_e {
@@ -343,7 +250,7 @@ extern "C" {
  *
  *                  Start advertising.
  *
- *                  Use #wiced_bt_ble_set_advertisement_data to configure advertising data
+ *                  Use #wiced_bt_ble_set_raw_advertisement_data to configure advertising data
  *                  prior to starting avertisements.
  *
  *                  The <b>advert_mode</b> parameter determines what advertising parameters and durations
@@ -372,33 +279,34 @@ wiced_bt_ble_advert_mode_t wiced_bt_ble_get_current_advert_mode(void);
 
 /**
  *
- * Function         wiced_bt_ble_set_advertisement_data
+ * Function         wiced_bt_ble_set_raw_advertisement_data
  *
- *                  Set advertisement data.
+ *                  Set advertisement raw data.
  *
- * @param[in] data_mask :   mask of data types to include in the advertisement data
- * @param[in] p_data :      advertisement data
+ * @param[in] data_mask :   number of ADV data element
+ * @param[in] p_data :      advertisement raw data
  *
  * @return          void
  *
  */
-wiced_result_t wiced_bt_ble_set_advertisement_data(wiced_bt_ble_advert_mask_t  data_mask,
-                                               wiced_bt_ble_advert_data_t *p_data);
+wiced_result_t wiced_bt_ble_set_raw_advertisement_data(UINT8 num_elem,
+                                                       wiced_bt_ble_advert_elem_t *p_data);
+
 
 /**
  *
- * Function         wiced_bt_ble_set_scan_response_data
+ * Function         wiced_bt_ble_set_raw_scan_response_data
  *
- *                  Set scan response data
+ *                  Set scan response raw data
  *
- * @param[in] data_mask :   mask of data types to include in the scan response data
- * @param[in] p_data :      scan response data
+ * @param[in] data_mask :   number of scan response data element
+ * @param[in] p_data :      scan response raw data
  *
  * @return          status of the operation
  *
  */
-wiced_bt_dev_status_t wiced_bt_ble_set_scan_response_data(wiced_bt_ble_advert_mask_t data_mask,
-                                               wiced_bt_ble_advert_data_t *p_data);
+wiced_bt_dev_status_t wiced_bt_ble_set_raw_scan_response_data(UINT8 num_elem,
+                                                        wiced_bt_ble_advert_elem_t *p_data);
 
 /**
  * Function         wiced_bt_ble_scan
@@ -551,20 +459,6 @@ uint8_t *wiced_bt_ble_check_advertising_data( uint8_t *p_adv, wiced_bt_ble_adver
  */
 void wiced_bt_ble_enable_privacy (wiced_bool_t enable);
 
-/**
- *
- * Function         wiced_bt_ble_enable_mixed_privacy_mode
- *
- *                  This function is called to enabled Mixed mode if privacy 1.2
- *                  is applicable in controller.
- *
- * @param[in]       mixed_on:  mixed mode to be used or not.
- *
- * @return          void
- *
- */
-void wiced_bt_ble_enable_mixed_privacy_mode(wiced_bool_t mixed_on);
-
 
 /**
  *
@@ -603,9 +497,33 @@ wiced_bool_t wiced_bt_ble_update_advertising_white_list(wiced_bool_t add, wiced_
  *
  *  @param[in]      advertising_policy: advertising filter policy
  *
- *  @return         void
+ *  @return         TRUE if successful
  */
 wiced_bool_t wiced_btm_ble_update_advertisement_filter_policy(wiced_bt_ble_advert_filter_policy_t advertising_policy);
+
+/**
+ *
+ * Function         wiced_bt_ble_clear_white_list
+ *
+ *                  Flush white list in controller side to be removed
+ *
+ *
+ * @return          TRUE if request of clear is sent to controller side
+ *
+ */
+wiced_bool_t wiced_bt_ble_clear_white_list(void);
+
+/**
+ *
+ * Function         wiced_bt_ble_get_white_list_size
+ *
+ *                     Returns size of white list size in controller side
+ *
+ *
+ * @return          size of whitelist in current controller
+ *
+ */
+uint8_t wiced_bt_ble_get_white_list_size(void);
 
 /**@} btm_ble_api_functions */
 

@@ -52,7 +52,7 @@ WEAK void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
         /* Put the bus to sleep and wait for something else to do */
         if ( WWD_WLAN_MAY_SLEEP( ) )
         {
-            result = wwd_bus_allow_wlan_bus_to_sleep( );
+            result = wwd_allow_wlan_bus_to_sleep( );
             wiced_assert( "Error setting wlan sleep", result == WWD_SUCCESS );
         }
         result = host_rtos_get_semaphore( transceive_semaphore, (uint32_t) WWD_THREAD_POLL_TIMEOUT, WICED_FALSE );

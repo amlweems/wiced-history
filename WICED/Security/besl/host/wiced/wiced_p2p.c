@@ -37,7 +37,7 @@
  *                    Constants
  ******************************************************/
 
-#define DOT11_PMK_LEN                 (32)
+#define DOT11_PMK_LEN (32)
 
 /******************************************************
  *                   Enumerations
@@ -51,15 +51,11 @@
  *                    Structures
  ******************************************************/
 
-typedef struct
-{
-    uint32_t bsscfgidx;
-    char     ifname[16];
-} wl_p2p_ifq_t;
-
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+static besl_result_t besl_p2p_check_soft_ap_interface  ( p2p_workspace_t* workspace );
 
 /******************************************************
  *               Variable Definitions
@@ -94,6 +90,20 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     memcpy( workspace->listen_channel.country_string, &device_details->listen_channel.country_string,  3 );
     memcpy( workspace->device_name, device_details->wps_device_details.device_name, workspace->device_name_length );
 
+    if ( ( result = besl_p2p_check_soft_ap_interface( workspace ) ) != WWD_SUCCESS )
+    {
+        if ( result != WWD_WLAN_UNSUPPORTED )
+        {
+            return result;
+        }
+    }
+
+    /* Save the original STA MAC address */
+    if ( ( result = besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE ) ) != WWD_SUCCESS )
+    {
+        return result;
+    }
+
     /* Turn roaming off for P2P */
     data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, "roam_off");
     CHECK_IOCTL_BUFFER( data );
@@ -111,9 +121,6 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     CHECK_IOCTL_BUFFER( data );
     *data = 1;
     CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
-
-    /* Save the original STA MAC address */
-    besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE );
 
     /* Generate P2P device (used in negotiation) and P2P interface MAC addresses (used by group client or owner) */
     memcpy(&workspace->p2p_device_address, &workspace->original_mac_address, sizeof(besl_mac_t));
@@ -169,7 +176,6 @@ besl_result_t besl_p2p_init( p2p_workspace_t* workspace, const besl_p2p_device_d
     data[1] = WICED_SECURITY_WPA2_AES_PSK;
     CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE) );
 
-    /*  Add P2P event handler on the STA interface since the P2P interface is not yet up XXX */
     CHECK_RETURN( (besl_result_t) wwd_management_set_event_handler( p2p_discovery_events, p2p_event_handler, workspace, WWD_P2P_INTERFACE ) );
 
     /* Create the P2P thread */
@@ -428,20 +434,9 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
 
     BESL_DEBUG( ("Group owner start entry\n") );
 
-    if ( wiced_network_is_up( WWD_AP_INTERFACE ) )
+    if ( ( result = besl_p2p_check_soft_ap_interface( workspace ) ) != BESL_SUCCESS )
     {
-        BESL_DEBUG(( "Error: Soft AP already up\n" ));
-        return (besl_result_t)WWD_AP_ALREADY_UP;
-    }
-
-    /* Some platforms require removal of the Soft AP interface before the GO can be created. If the IOVAR fails because it is unsupported then it is non-fatal. */
-    data   = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bsscfg:" IOVAR_STR_INTERFACE_REMOVE );
-    CHECK_IOCTL_BUFFER( data );
-    *data  = WWD_AP_INTERFACE;
-    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
-    {
-        BESL_DEBUG( ( "Error: Unable to remove Soft AP interface %u\n", (unsigned int)result) );
-        if ( result != (besl_result_t)WWD_WLAN_UNSUPPORTED)
+        if ( result != (besl_result_t)WWD_WLAN_UNSUPPORTED )
         {
             return result;
         }
@@ -479,7 +474,10 @@ besl_result_t besl_p2p_group_owner_start( p2p_workspace_t* workspace )
     }
 
     /* Save the original STA MAC address */
-    besl_host_get_mac_address(&workspace->original_mac_address, 0 );
+    if ( ( result = besl_host_get_mac_address(&workspace->original_mac_address, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
+    {
+        return result;
+    }
 
     /* Create device address */
     memcpy(&workspace->p2p_device_address, &workspace->original_mac_address, sizeof(besl_mac_t));
@@ -839,4 +837,28 @@ void p2p_host_add_vendor_ie( uint32_t interface, void* data, uint16_t data_lengt
 void p2p_host_remove_vendor_ie( uint32_t interface, void* data, uint16_t data_length, uint32_t packet_mask )
 {
     wwd_wifi_manage_custom_ie( interface, WICED_REMOVE_CUSTOM_IE, (uint8_t*) P2P_OUI, P2P_OUI_SUB_TYPE, data, data_length, packet_mask );
+}
+
+/* If the AP interface is up then return an error. If it is in existence but down then remove it. */
+static besl_result_t besl_p2p_check_soft_ap_interface( p2p_workspace_t* workspace )
+{
+    wiced_buffer_t buffer;
+    uint32_t*      data;
+    besl_result_t result = BESL_SUCCESS;
+
+    if ( wiced_network_is_up( WWD_AP_INTERFACE ) )
+    {
+        BESL_DEBUG(( "Error: Soft AP already up\n" ));
+        return (besl_result_t)WWD_AP_ALREADY_UP;
+    }
+
+    /* Some platforms require removal of the Soft AP interface before the GO can be created. If the IOVAR fails because it is unsupported then it is non-fatal. */
+    data   = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, "bsscfg:" IOVAR_STR_INTERFACE_REMOVE );
+    CHECK_IOCTL_BUFFER( data );
+    *data  = wwd_get_bss_index( WWD_AP_INTERFACE );
+    if ( ( result = ( besl_result_t ) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) ) != BESL_SUCCESS )
+    {
+        BESL_DEBUG( ( "Error: Unable to remove Soft AP interface %u\n", (unsigned int)result) );
+    }
+    return result;
 }

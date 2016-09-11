@@ -27,6 +27,11 @@
 #include "wiced_tls.h"
 #endif /* ifndef WICED_DISABLE_TLS */
 
+#ifndef WICED_DISABLE_DTLS
+#include "wiced_udpip_dtls_api.h"
+#include "wiced_dtls.h"
+#endif /* ifndef WICED_DISABLE_DTLS */
+
 #include "platform_ethernet.h"
 
 /******************************************************
@@ -78,11 +83,6 @@ typedef VOID (*tcp_listen_callback_t)(NX_TCP_SOCKET *socket_ptr, UINT port);
  *               Static Function Declarations
  ******************************************************/
 
-static wiced_result_t internal_defer_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_callback_index_t index );
-static wiced_result_t internal_wiced_tcp_connect_socket_callback     ( void* arg );
-static wiced_result_t internal_wiced_tcp_disconnect_socket_callback  ( void* arg );
-static wiced_result_t internal_wiced_tcp_receive_socket_callback     ( void* arg );
-static wiced_result_t internal_wiced_udp_receive_socket_callback     ( void* arg );
 static void           internal_nx_tcp_listen_callback                ( NX_TCP_SOCKET *socket_ptr, UINT port );
 static void           internal_nx_tcp_socket_disconnect_callback     ( NX_TCP_SOCKET *socket_ptr );
 static void           internal_nx_tcp_socket_receive_callback        ( NX_TCP_SOCKET *socket_ptr );
@@ -161,13 +161,6 @@ static const wiced_result_t netx_returns[] =
     [NX_PARAMETER_ERROR     ] = WICED_TCPIP_BADARG,  /* Specific to NetX-Duo */
 };
 
-/* WICED TCP callbacks that run on WICED network thread context. Based on the given index, internal_defer_callback_to_wiced_network_thread() calls the appropriate callback from this table */
-static const event_handler_t internal_wiced_tcp_callbacks[] =
-{
-    [WICED_TCP_DISCONNECT_CALLBACK_INDEX] = internal_wiced_tcp_disconnect_socket_callback,
-    [WICED_TCP_RECEIVE_CALLBACK_INDEX   ] = internal_wiced_tcp_receive_socket_callback,
-    [WICED_TCP_CONNECT_CALLBACK_INDEX   ] = internal_wiced_tcp_connect_socket_callback,
-};
 
 /******************************************************
  *               Function Definitions
@@ -236,7 +229,10 @@ wiced_result_t wiced_tcp_server_accept( wiced_tcp_server_t* tcp_server, wiced_tc
 
     result = wiced_tcp_accept( socket );
 
-    internal_wiced_tcp_server_listen( tcp_server );
+    if ( result == WICED_SUCCESS )
+    {
+        result = internal_wiced_tcp_server_listen( tcp_server );
+    }
 
     return result;
 }
@@ -347,7 +343,7 @@ wiced_result_t wiced_tcp_accept( wiced_tcp_socket_t* socket )
 
     WICED_LINK_CHECK_TCP_SOCKET( socket );
 
-    if ( socket->callbacks[WICED_TCP_CONNECT_CALLBACK_INDEX] == 0 )
+    if ( socket->callbacks.connect == NULL )
     {
         if ( socket->socket.nx_tcp_socket_state != NX_TCP_LISTEN_STATE )
         {
@@ -482,23 +478,23 @@ wiced_result_t wiced_tcp_register_callbacks( wiced_tcp_socket_t* socket, wiced_t
 {
     if ( disconnect_callback != NULL )
     {
-        socket->callbacks[WICED_TCP_DISCONNECT_CALLBACK_INDEX] = (uint32_t)disconnect_callback;
+        socket->callbacks.disconnect = disconnect_callback;
         socket->socket.nx_tcp_disconnect_callback =  internal_nx_tcp_socket_disconnect_callback;
     }
 
     if ( receive_callback != NULL )
     {
-        socket->callbacks[WICED_TCP_RECEIVE_CALLBACK_INDEX] = (uint32_t)receive_callback;
+        socket->callbacks.receive = receive_callback;
         nx_tcp_socket_receive_notify( &socket->socket, internal_nx_tcp_socket_receive_callback );
     }
 
     if ( connect_callback != NULL )
     {
-        socket->callbacks[WICED_TCP_CONNECT_CALLBACK_INDEX] = (uint32_t)connect_callback;
+        socket->callbacks.connect = connect_callback;
         /* Note: Link to NetX_Duo callback mechanism is configured in wiced_tcp_listen() */
     }
 
-    socket->arg = arg;
+    socket->callback_arg = arg;
 
     return WICED_SUCCESS;
 }
@@ -547,7 +543,7 @@ wiced_result_t wiced_tcp_listen( wiced_tcp_socket_t* socket, uint16_t port )
     tcp_listen_callback_t        listen_callback = NULL;
     struct NX_TCP_LISTEN_STRUCT* listen_ptr;
 
-     wiced_assert("Bad args", socket != NULL);
+    wiced_assert("Bad args", socket != NULL);
 
     WICED_LINK_CHECK_TCP_SOCKET( socket );
 
@@ -570,7 +566,7 @@ wiced_result_t wiced_tcp_listen( wiced_tcp_socket_t* socket, uint16_t port )
     }
 
     /* Check if this socket has an asynchronous connect callback */
-    if (socket->callbacks[WICED_TCP_CONNECT_CALLBACK_INDEX] != 0 )
+    if (socket->callbacks.connect != NULL )
     {
         listen_callback = internal_nx_tcp_listen_callback;
     }
@@ -601,7 +597,30 @@ wiced_result_t network_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t**
 {
     UINT result;
 
-    result = nx_tcp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
+    if ( socket == NULL )
+    {
+        result = NX_NOT_CONNECTED;
+    }
+    else
+    {
+        result = nx_tcp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
+    }
+
+    return netx_returns[result];
+}
+
+wiced_result_t network_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout )
+{
+    UINT result;
+
+    if ( socket == NULL )
+    {
+        result = NX_NOT_CONNECTED;
+    }
+    else
+    {
+        result = nx_udp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
+    }
 
     return netx_returns[result];
 }
@@ -703,8 +722,28 @@ wiced_result_t wiced_packet_create_udp( wiced_udp_socket_t* socket, uint16_t con
         return netx_returns[result];
     }
 
+#ifndef WICED_DISABLE_DTLS
+    if ( socket->dtls_context != NULL )
+    {
+        uint16_t header_space;
+        uint16_t footer_pad_space = 0;
+
+        wiced_dtls_calculate_overhead( &socket->dtls_context->context, (uint16_t)((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr), &header_space, &footer_pad_space );
+
+        ( *packet )->nx_packet_prepend_ptr += header_space;
+
+        *available_space  = (uint16_t) (((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr) - footer_pad_space);
+    }
+    else
+#endif /* ifndef WICED_DISABLE_TLS */
+    {
+        //*available_space = (uint16_t) MIN((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr, maximum_segment_size);
+        *available_space = (uint16_t)((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr);
+    }
+
+    ( *packet )->nx_packet_append_ptr = ( *packet )->nx_packet_prepend_ptr;
     *data = ( *packet )->nx_packet_prepend_ptr;
-    *available_space = (uint16_t)((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr);
+
     return WICED_TCPIP_SUCCESS;
 }
 
@@ -806,6 +845,73 @@ wiced_result_t wiced_packet_get_data( wiced_packet_t* packet, uint16_t offset, u
     return WICED_TCPIP_ERROR;
 }
 
+wiced_result_t wiced_packet_pool_init( wiced_packet_pool_ref packet_pool, uint8_t* memory_pointer, uint32_t memory_size, char *pool_name )
+{
+    void* memory_pointer_aligned = PLATFORM_L1_CACHE_PTR_ROUND_UP( memory_pointer );
+    uint32_t memory_size_aligned = PLATFORM_L1_CACHE_ROUND_DOWN  ( memory_size - ( (uint32_t)memory_pointer_aligned - (uint32_t)memory_pointer ) );
+    UINT result;
+
+    if (memory_pointer == NULL || packet_pool == NULL)
+    {
+        return WICED_TCPIP_ERROR;
+    }
+
+    result = nx_packet_pool_create(&packet_pool->pool, pool_name, WICED_LINK_MTU_ALIGNED, memory_pointer_aligned, memory_size_aligned);
+    if (result != NX_SUCCESS)
+    {
+        return netx_returns[result];
+    }
+
+    return WICED_TCPIP_SUCCESS;
+}
+
+wiced_result_t wiced_packet_pool_allocate_packet( wiced_packet_pool_ref packet_pool, wiced_packet_type_t packet_type, wiced_packet_t** packet, uint8_t** data, uint16_t* available_space, uint32_t timeout )
+{
+    ULONG type;
+    UINT result;
+
+    switch (packet_type)
+    {
+        case WICED_PACKET_TYPE_RAW: type = 0;             break;
+        case WICED_PACKET_TYPE_IP:  type = NX_IP_PACKET;  break;
+        case WICED_PACKET_TYPE_TCP: type = NX_TCP_PACKET; break;
+        case WICED_PACKET_TYPE_UDP: type = NX_UDP_PACKET; break;
+        default: return WICED_TCPIP_ERROR;
+    }
+
+    result = nx_packet_allocate(&packet_pool->pool, packet, type, NX_TIMEOUT(timeout));
+    if (result != NX_SUCCESS)
+    {
+        *packet = NULL;
+        *data   = NULL;
+        *available_space = 0;
+        return netx_returns[result];
+    }
+
+    *data = (*packet)->nx_packet_prepend_ptr;
+    *available_space = (uint16_t)((*packet)->nx_packet_data_end - (*packet)->nx_packet_prepend_ptr);
+
+    return WICED_TCPIP_SUCCESS;
+}
+
+wiced_result_t wiced_packet_pool_deinit( wiced_packet_pool_ref packet_pool )
+{
+    UINT result;
+
+    if (packet_pool == NULL)
+    {
+        return WICED_TCPIP_ERROR;
+    }
+
+    result = nx_packet_pool_delete(&packet_pool->pool);
+    if (result != NX_SUCCESS)
+    {
+        return netx_returns[result];
+    }
+
+    return WICED_TCPIP_SUCCESS;
+}
+
 wiced_result_t wiced_ip_get_ipv4_address( wiced_interface_t interface, wiced_ip_address_t* ipv4_address )
 {
     ULONG temp;
@@ -865,17 +971,10 @@ wiced_result_t wiced_ip_get_ipv6_address( wiced_interface_t interface, wiced_ip_
 wiced_result_t wiced_udp_create_socket( wiced_udp_socket_t* socket, uint16_t port, wiced_interface_t interface )
 {
     UINT  result;
-    ULONG temp_ip_address;
-    ULONG temp_network_mask;
-    UNUSED_PARAMETER(temp_network_mask);
 
     WICED_LINK_CHECK( interface );
 
-    nx_ip_address_get( &IP_HANDLE(interface), &temp_ip_address, &temp_network_mask );
-    if ( temp_ip_address == 0 )
-    {
-        return WICED_TCPIP_IP_ADDRESS_IS_NOT_READY;
-    }
+    memset( socket, 0, sizeof(wiced_udp_socket_t) );
 
     /* Set magic number for validating wiced_udp_socket_t object and differentiating with a native NX_UDP_SOCKET object */
     socket->socket_magic_number = WICED_SOCKET_MAGIC_NUMBER;
@@ -912,19 +1011,15 @@ void wiced_udp_set_type_of_service( wiced_udp_socket_t* socket, uint32_t tos )
 wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_address_t* address, uint16_t port, wiced_packet_t* packet )
 {
     UINT  result;
-    ULONG temp_ip_address;
-    ULONG temp_network_mask;
 
     WICED_LINK_CHECK_UDP_SOCKET( socket );
 
-    if ( address->version == WICED_IPV4 )
+#ifndef WICED_DISABLE_DTLS
+    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER)
     {
-        nx_ip_address_get( socket->socket.nx_udp_socket_ip_ptr, &temp_ip_address, &temp_network_mask );
-        if ( temp_ip_address == 0 )
-        {
-            return WICED_TCPIP_IP_ADDRESS_IS_NOT_READY;
-        }
+        wiced_dtls_encrypt_packet( &socket->dtls_context->context, address, port,packet );
     }
+#endif /* ifndef WICED_DISABLE_DTLS */
 
     result = nxd_udp_socket_send( &socket->socket, packet, (NXD_ADDRESS*) address, port );
     return netx_returns[result];
@@ -952,6 +1047,13 @@ wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** p
     UINT result;
 
     WICED_LINK_CHECK_UDP_SOCKET( socket );
+
+#ifndef WICED_DISABLE_DTLS
+    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER )
+    {
+        return wiced_dtls_receive_packet( socket, packet, timeout );
+    }
+#endif
 
     result = nx_udp_socket_receive( &socket->socket, packet, NX_TIMEOUT(timeout) );
 
@@ -996,6 +1098,15 @@ wiced_result_t wiced_udp_delete_socket( wiced_udp_socket_t* socket )
         nx_udp_socket_unbind( &socket->socket );
     }
 
+#ifndef WICED_DISABLE_DTLS
+    if ( socket->dtls_context != NULL )
+    {
+        wiced_dtls_close_notify( socket );
+
+        wiced_dtls_deinit_context( socket->dtls_context );
+    }
+#endif /* ifndef WICED_DISABLE_DTLS */
+
     result = nx_udp_socket_delete( &socket->socket );
 
     /* Invalidate UDP socket */
@@ -1006,8 +1117,8 @@ wiced_result_t wiced_udp_delete_socket( wiced_udp_socket_t* socket )
 
 wiced_result_t wiced_udp_register_callbacks( wiced_udp_socket_t* socket, wiced_udp_socket_callback_t receive_callback, void* arg )
 {
-    socket->receive_callback = (uint32_t)receive_callback;
-    socket->arg              = arg;
+    socket->receive_callback = receive_callback;
+    socket->callback_arg     = arg;
     nx_udp_socket_receive_notify( &socket->socket, internal_nx_udp_socket_receive_callback );
     return WICED_TCPIP_SUCCESS;
 }
@@ -1020,18 +1131,11 @@ wiced_result_t wiced_udp_unregister_callbacks( wiced_udp_socket_t* socket )
 
 wiced_result_t wiced_multicast_join( wiced_interface_t interface, const wiced_ip_address_t* address )
 {
-    UINT  result = NX_IP_ADDRESS_ERROR;
+    UINT result = NX_IP_ADDRESS_ERROR;
     WICED_LINK_CHECK( interface );
 
     if ( address->version == WICED_IPV4 )
     {
-        ULONG temp_ip_address;
-        ULONG temp_network_mask;
-        nx_ip_address_get( &IP_HANDLE( interface ), &temp_ip_address, &temp_network_mask );
-        if ( temp_ip_address == 0 )
-        {
-            return WICED_TCPIP_IP_ADDRESS_IS_NOT_READY;
-        }
         result = nx_igmp_multicast_join( &IP_HANDLE( interface ), address->ip.v4 );
     }
     else if ( address->version == WICED_IPV6 )
@@ -1048,13 +1152,6 @@ wiced_result_t wiced_multicast_leave( wiced_interface_t interface, const wiced_i
 
     if ( address->version == WICED_IPV4 )
     {
-        ULONG temp_ip_address;
-        ULONG temp_network_mask;
-        nx_ip_address_get( &IP_HANDLE( interface ), &temp_ip_address, &temp_network_mask );
-        if ( temp_ip_address == 0 )
-        {
-            return WICED_TCPIP_IP_ADDRESS_IS_NOT_READY;
-        }
         nx_igmp_multicast_leave( &IP_HANDLE( interface ), address->ip.v4 );
     }
     else if ( address->version == WICED_IPV6 )
@@ -1148,71 +1245,33 @@ wiced_result_t wiced_tcp_server_enable_tls( wiced_tcp_server_t* tcp_server, wice
  *            Static Function Definitions
  ******************************************************/
 
-static wiced_result_t internal_defer_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_callback_index_t index )
-{
-    if ( ( socket->socket_magic_number == WICED_SOCKET_MAGIC_NUMBER ) && ( socket->callbacks[index] != 0 ) )
-    {
-        return wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, internal_wiced_tcp_callbacks[index], (void*)socket );
-    }
-    else
-    {
-        return WICED_SUCCESS;
-    }
-}
-
-static wiced_result_t internal_wiced_tcp_connect_socket_callback( void* arg )
-{
-    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
-
-    return ((wiced_tcp_socket_callback_t)socket->callbacks[WICED_TCP_CONNECT_CALLBACK_INDEX])( socket, socket->arg );
-}
-
-static wiced_result_t internal_wiced_tcp_disconnect_socket_callback( void* arg )
-{
-    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
-
-    return ((wiced_tcp_socket_callback_t)socket->callbacks[WICED_TCP_DISCONNECT_CALLBACK_INDEX])( socket, socket->arg );
-
-}
-
-static wiced_result_t internal_wiced_tcp_receive_socket_callback( void* arg )
-{
-    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
-
-    return ((wiced_tcp_socket_callback_t)socket->callbacks[WICED_TCP_RECEIVE_CALLBACK_INDEX])( socket, socket->arg );
-}
-
-static wiced_result_t internal_wiced_udp_receive_socket_callback( void* arg )
-{
-    wiced_udp_socket_t* socket = (wiced_udp_socket_t*)arg;
-
-    return ((wiced_udp_socket_callback_t)socket->receive_callback)( socket, socket->arg );
-}
-
 static void internal_nx_tcp_socket_disconnect_callback( NX_TCP_SOCKET* socket_ptr )
 {
-    internal_defer_callback_to_wiced_network_thread( (wiced_tcp_socket_t*)socket_ptr, WICED_TCP_DISCONNECT_CALLBACK_INDEX );
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)socket_ptr;
+    internal_defer_tcp_callback_to_wiced_network_thread( socket, socket->callbacks.disconnect );
 }
 
 static void internal_nx_tcp_socket_receive_callback( NX_TCP_SOCKET* socket_ptr )
 {
-    internal_defer_callback_to_wiced_network_thread( (wiced_tcp_socket_t*)socket_ptr, WICED_TCP_RECEIVE_CALLBACK_INDEX );
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)socket_ptr;
+    internal_defer_tcp_callback_to_wiced_network_thread( socket, socket->callbacks.receive );
 }
 
 static VOID internal_nx_tcp_listen_callback( NX_TCP_SOCKET* socket_ptr, UINT port )
 {
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)socket_ptr;
     UNUSED_PARAMETER( port );
 
-    internal_defer_callback_to_wiced_network_thread( (wiced_tcp_socket_t*)socket_ptr, WICED_TCP_CONNECT_CALLBACK_INDEX );
+    internal_defer_tcp_callback_to_wiced_network_thread( socket, socket->callbacks.connect );
 }
 
 static void internal_nx_udp_socket_receive_callback( NX_UDP_SOCKET* socket_ptr )
 {
     wiced_udp_socket_t* socket = (wiced_udp_socket_t*)socket_ptr;
 
-    if ( ( socket->socket_magic_number == WICED_SOCKET_MAGIC_NUMBER ) && ( socket->receive_callback != 0 ) )
+    if ( socket->socket_magic_number == WICED_SOCKET_MAGIC_NUMBER )
     {
-        wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, internal_wiced_udp_receive_socket_callback, (void*)socket );
+        internal_defer_udp_callback_to_wiced_network_thread( socket );
     }
 }
 

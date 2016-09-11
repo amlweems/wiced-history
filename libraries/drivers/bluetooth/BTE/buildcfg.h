@@ -7,7 +7,6 @@
  * or duplicated in any form, in whole or in part, without the prior
  * written permission of Broadcom Corporation.
  */
-
 #pragma once
 
 #ifdef __cplusplus
@@ -15,6 +14,14 @@ extern "C" {
 #endif
 
 #define BTEWICED                        TRUE
+#ifndef WICED_BLUETOOTH_PLATFORM
+#define WICED_BLUETOOTH_PLATFORM        TRUE
+#endif
+#ifndef SBC_GKI_BUFFERBASED
+#define SBC_GKI_BUFFERBASED TRUE
+#endif
+#define SBC_IS_64_MULT_IN_QUANTIZER   FALSE
+#define SBC_OPTIMIZATION        TRUE
 
 #define BTM_INCLUDED                    TRUE                # Makefile only
 #define BTM_CMD_POOL_ID                 GKI_POOL_ID_1
@@ -22,12 +29,14 @@ extern "C" {
 #define BTM_CLB_RX_INCLUDED             FALSE
 #define BTM_TBFC_INCLUDED               FALSE
 #define BTM_SCO_INCLUDED                TRUE
+#define BTM_SCO_HCI_INCLUDED            TRUE
 #define BTM_INQ_DB_INCLUDED             FALSE
 #define BTM_BUSY_LEVEL_CHANGE_INCLUDED  FALSE
 #define BTM_ALLOW_CONN_IF_NONDISCOVER   TRUE
 #define BTM_MAX_REM_BD_NAME_LEN         10
 #define BTM_DUMO_ADDR_CENTRAL_ENABLED   FALSE
 #define BTM_APP_DEV_INIT                bte_post_reset
+/* By default LINKKEY management will be handled by the application and not by BTE */
 #define BTM_INTERNAL_LINKKEY_STORAGE_INCLUDED FALSE
 #define BTM_BLE_PRIVACY_SPT             TRUE
 #define BTM_USE_CONTROLLER_PRIVATE_ADDRESS  FALSE
@@ -37,7 +46,6 @@ extern "C" {
 #define BTU_BTC_SNK_INCLUDED            FALSE
 #define BTU_STACK_LITE_ENABLED          FALSE
 #define BTU_DYNAMIC_CB_INCLUDED         TRUE
-#define BTU_MUTEX_INCLUDED              TRUE
 
 #define L2CAP_INCLUDED                  TRUE
 #define L2CAP_CMD_POOL_ID               GKI_POOL_ID_1
@@ -48,6 +56,10 @@ extern "C" {
 #define L2CAP_ROUND_ROBIN_CHANNEL_SERVICE   FALSE
 #define L2CAP_MTU_SIZE                  ((UINT16)(HCI_ACL_POOL_BUF_SIZE - BT_HDR_SIZE - 8))     /* ACL bufsize minus BT_HDR, and l2cap/hci packet headers */
 #define L2CAP_LE_COC_INCLUDED           TRUE
+#define L2CAP_EXTFEA_SUPPORTED_MASK     (L2CAP_EXTFEA_ENH_RETRANS | \
+                                         L2CAP_EXTFEA_STREAM_MODE | \
+                                         L2CAP_EXTFEA_FIXED_CHNLS | \
+                                         L2CAP_EXTFEA_NO_CRC )
 
 #define RFCOMM_INCLUDED                 TRUE
 #define RFCOMM_USE_EXTERNAL_SCN         TRUE
@@ -93,6 +105,9 @@ extern "C" {
 #define AVRC_SEC_MASK                   (p_btm_cfg_settings->security_requirement_mask)
 #define AVRC_CONTROL_MTU                (L2CAP_MTU_SIZE)
 #define AVRC_BROWSE_MTU                 (L2CAP_MTU_SIZE)
+
+#define BT_USE_TRACES       FALSE
+
 
 #define GATT_FIXED_DB                   TRUE
 #define GATTS_APPU_USE_GATT_TRACE       TRUE
@@ -145,26 +160,26 @@ extern "C" {
 #define HCI_CMD_POOL_BUF_SIZE           (p_btm_cfg_buf_pools[HCI_CMD_POOL_ID].buf_size)
 #define HCI_ACL_POOL_ID                 GKI_POOL_ID_2
 #define HCI_ACL_POOL_BUF_SIZE           (p_btm_cfg_buf_pools[HCI_ACL_POOL_ID].buf_size)
-#define HCI_SCO_POOL_ID                 GKI_POOL_ID_2
+#define HCI_SCO_POOL_ID                 GKI_POOL_ID_0
+#define HCI_SCO_POOL_BUF_SIZE           (p_btm_cfg_buf_pools[HCI_SCO_POOL_ID].buf_size)
 #define HCI_USE_VARIABLE_SIZE_CMD_BUF   TRUE
 
 #define HCISU_H4_INCLUDED               TRUE
-#define HCILP_INCLUDED                  FALSE
+#define HCILP_INCLUDED                  TRUE
 #define H4IBSS_INCLUDED                 FALSE
 #define H4IBSS_DEBUG                    FALSE
 
 #define SLIP_INCLUDED                   FALSE
 #define SLIP_STATIS_INCLUDED            FALSE
-#define SLIP_SW_FLOW_CTRL               TRUE
+#define SLIP_SW_FLOW_CTRL               FALSE
 #define BT_TRACE_SLIP                   FALSE
 #define SLIP_SLEEP_TO                   5000
 #define SLIP_HOST_SLIDING_WINDOW_SIZE   7
 
 #define BTM_INQ_DB_SIZE                 1
 #define BTM_SEC_MAX_DEVICE_RECORDS      (p_btm_cfg_settings->max_simultaneous_links)
-#if !defined(BTM_USE_CONTROLLER_PRIVATE_ADDRESS) || (BTM_USE_CONTROLLER_PRIVATE_ADDRESS == FALSE)
-#define BTM_SEC_HOST_PRIVACY_ADDR_RESOLUTION_TABLE_SIZE    3
-#endif
+#define BTM_SEC_HOST_PRIVACY_ADDR_RESOLUTION_TABLE_SIZE    (p_btm_cfg_settings->addr_resolution_db_size)
+
 #define BTM_SEC_MAX_SERVICE_RECORDS     4
 #define BTM_SEC_SERVICE_NAME_LEN        0
 #define BTM_MAX_LOC_BD_NAME_LEN         0
@@ -195,6 +210,7 @@ extern "C" {
 #define MAX_L2CAP_CLIENTS               (btu_cb.l2c_cfg_max_clients)
 #define MAX_L2CAP_LINKS                 (btu_cb.l2c_cfg_max_links)
 #define MAX_L2CAP_CHANNELS              (btu_cb.l2c_cfg_max_channels)
+#define BTM_INIT_CLASS_OF_DEVICE        (p_btm_cfg_settings->device_class)
 
 /* Connection Oriented Channel configuration */
 #define MAX_L2CAP_BLE_CLIENTS           (p_btm_cfg_settings->l2cap_application.max_le_psm)
@@ -209,16 +225,17 @@ extern "C" {
 #define GAP_CONN_INCLUDED               FALSE
 
 
-#define HCISU_TASK                      0
-#define BTU_TASK                        1
-#define BTE_APPL_TASK                   2
-#define GKI_MAX_TASKS                   3
+#define BTU_MUTEX_INCLUDED              TRUE
 
 #define BTE_IDLE_TASK_INCLUDED          FALSE
 #define BTE_IDLE_TASK_SIZE              0xA0
 #define BTE_HCI_TASK_SIZE               0x100
 #define BTE_BTU_TASK_SIZE               0x400
 
+#define HCISU_TASK                      0
+#define BTU_TASK                        1
+#define BTE_APPL_TASK                   2
+#define GKI_MAX_TASKS                   3
 /* Miscellaneous application configuration */
 #define _MAX_PATH                       16
 #define TICKS_PER_SEC                   1000
@@ -226,6 +243,8 @@ extern "C" {
 #define GKI_SHUTDOWN_EVT                APPL_EVT_7
 #define THREAD_EVT_QUEUE_MSG_SIZE       4
 #define THREAD_EVT_QUEUE_NUM_MSG        10
+
+#define A2D_VERSION                     0x0102
 
 #ifdef __cplusplus
 } /*extern "C" */

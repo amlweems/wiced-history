@@ -16,14 +16,25 @@
 #pragma once
 
 #include "wiced.h"
-#include "wiced_bt_dev.h"
 /******************************************************
  *              Constants
  ******************************************************/
 
+#define WICED_BT_SCO_CONNECTION_ACCEPT              0x00
+#define WICED_BT_SCO_CONNECTION_REJECT_RESOURCES    0x0D
+#define WICED_BT_SCO_CONNECTION_REJECT_SECURITY     0x0E
+#define WICED_BT_SCO_CONNECTION_REJECT_DEVICE       0x0F
+
 /******************************************************
  *              Type Definitions
  ******************************************************/
+/*SCO codec IDs*/
+typedef enum
+{
+    WICED_BT_SCO_ESCO_SETTING_ID_CVSD  =  0,    /* eSCO setting for CVSD */
+    WICED_BT_SCO_ESCO_SETTING_ID_MSBC_T2        /* eSCO setting for mSBC T2 */
+} wiced_bt_sco_esco_codec_setting_id_t;
+
 /* Subset for the enhanced setup/accept synchronous connection paramters
  * See BT 4.1 or later HCI spec for details */
 typedef struct
@@ -34,6 +45,20 @@ typedef struct
     wiced_bool_t use_wbs;                   /**< True to use wide band, False to use narrow band */
 
 } wiced_bt_sco_params_t;
+
+/**
+ *  SCO data read callback
+ *
+ *  @param  sco_index         : SCO Index
+ *  @param  sco_data          : pointer to BT_HDR struct containing SCO data.
+ *  @param  status            : one of the following values -
+ *                              0 = BTM_SCO_DATA_CORRECT,
+ *                              1 = BTM_SCO_DATA_PAR_ERR,
+ *                              2 = BTM_SCO_DATA_NONE,
+ *                              3 = BTM_SCO_DATA_PAR_LOST
+ *
+ */
+typedef void (wiced_bt_sco_data_cback_t) ( uint16_t sco_index, BT_HDR *sco_data, uint8_t status );
 
 /**
  *  @addtogroup  sco_api_functions       Synchronous Connection Oriented (SCO) Channel
@@ -57,9 +82,9 @@ extern "C"
  *
  *                  Creates a synchronous connection oriented connection as initiator.
  *
- *  @param[in]  bd_addr                 : Peer bd_addr
- *  @param[in]  p_params                : Pointer to the SCO parameter structure
- *  @param[out] p_sco_index             : SCO index returned
+ *  @param[in]  bd_addr                             : Peer bd_addr
+ *  @param[out] p_sco_index                         : SCO index
+ *  @param[in]  esco_set_id                         : see wiced_bt_sco_esco_codec_setting_id_t
  *
  *  @return     <b> WICED_BT_UNKNOWN_ADDR </b>      : Create connection failed, ACL connection is not up
  *              <b> WICED_BT_BUSY </b>              : Create connection failed, another SCO is being
@@ -70,8 +95,8 @@ extern "C"
  *              <b> BTM_CMD_STARTED </b>            : Create connection successfully, "p_sco_index" is returned
  */
 wiced_bt_dev_status_t wiced_bt_sco_create_as_initiator (wiced_bt_device_address_t bd_addr,
-                                                        uint16_t *p_sco_index,
-                                                        wiced_bt_sco_params_t *p_params);
+                                                                        uint16_t *p_sco_index,
+                                                                        wiced_bt_sco_esco_codec_setting_id_t esco_set_id);
 
 /**
  * Function         wiced_bt_sco_create_as_acceptor
@@ -115,15 +140,62 @@ wiced_bt_dev_status_t wiced_bt_sco_remove (uint16_t sco_index);
  *
  *  @param[in]  sco_index           : SCO index to remove
  *
- *  @param[in]  HCI status code     : HCI_SUCCESS 0x00
- *                                    HCI_ERR_HOST_REJECT_RESOURCES 0x0D
- *                                    HCI_ERR_HOST_REJECT_SECURITY  0x0E
- *                                    HCI_ERR_HOST_REJECT_DEVICE    0x0F
- *  @param[in]  p_params            : Pointer to the SCO parameter structure
+ *  @param[in]  HCI status code     : WICED_BT_SCO_CONNECTION_ACCEPT              0x00
+ *                                    WICED_BT_SCO_CONNECTION_REJECT_RESOURCES    0x0D
+ *                                    WICED_BT_SCO_CONNECTION_REJECT_SECURITY     0x0E
+ *                                    WICED_BT_SCO_CONNECTION_REJECT_DEVICE       0x0F
+ *  @param[in]  esco_set_id         : see wiced_bt_sco_esco_codec_setting_id_t
  *
+ *  @return     BTM_SUCCESS           if successful .
+ *              BTM_ILLEGAL_VALUE     invalid esco set ID.
  */
-void wiced_bt_sco_accept_connection (uint16_t sco_index, uint8_t hci_status,
-                                     wiced_bt_sco_params_t *p_params);
+wiced_bt_dev_status_t wiced_bt_sco_accept_connection (uint16_t sco_index, uint8_t hci_status,
+                                     wiced_bt_sco_esco_codec_setting_id_t esco_set_id);
+
+/**
+ * Function         wiced_bt_sco_set_data_callback
+ *
+ *                  App must call this API to register a data callback function.
+ *                  The stack calls this callback function when there are incoming SCO packets.
+ *
+ *
+ *  @param[in]  p_cb                : function pointer to the callabck function
+ *                                    Stack calls this function to deliver incoming SCO
+ *                                    packets to app.
+ *
+ *    @return   BTM_SUCCESS           if the successful (PCM or Test mode).
+ *              BTM_NO_RESOURCES      no resources to start the command.
+ *              BTM_ILLEGAL_VALUE     invalid callback function pointer.
+ *              BTM_CMD_STARTED       Command sent. Waiting for command cmpl event.
+ *
+ * @note            if the call back is NULL or if the application doesn't call this function
+ *                  to register a callback, and if the SCO route is SCO_OVER_HCI,
+ *                  the received data will be discarded.
+ */
+wiced_bt_dev_status_t wiced_bt_sco_set_data_callback ( wiced_bt_sco_data_cback_t *p_cb );
+
+
+/**
+ * Function         wiced_bt_sco_write_data
+ *
+ *                  Called to send data over (e)SCO.
+ *
+ *
+ *  @param[in]  sco_index           : SCO index.
+ *  @param[in]  sco_data            : pointer to the data to be sent over SCO.
+ *  @param[in]  data_length         : length of the data
+ *
+ *  @return     BTM_SUCCESS           data write is successful
+ *              BTM_SCO_BAD_LENGTH    SCO data length exceeds the max SCO packet
+ *                                    size.
+ *              BTM_NO_RESOURCES      no resources.
+ *              BTM_UNKNOWN_ADDR      unknown SCO connection handle, or SCO is not
+ *                                    routed via HCI.
+ */
+
+wiced_bt_dev_status_t wiced_bt_sco_write_data (uint16_t sco_index, uint8_t* sco_data,
+                                                                    uint16_t data_length);
+
 
 #ifdef __cplusplus
 }

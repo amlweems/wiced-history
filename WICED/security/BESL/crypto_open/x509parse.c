@@ -76,7 +76,7 @@
  */
 
 #include "tls_host_api.h"
-#include "cipher_suites.h"
+#include "tls_cipher_suites.h"
 #include "x509.h"
 #include "base64.h"
 #include "des.h"
@@ -146,13 +146,18 @@ int32_t asn1_read_length( const uint8_t* p, uint32_t* length, uint8_t* bytes_use
 static int32_t asn1_get_len(const unsigned char **p, const unsigned char *end, uint32_t *len)
 {
     uint8_t bytes_used;
+    int32_t result;
 
     if ( ( end - *p ) < 1 )
     {
         return ( TROPICSSL_ERR_ASN1_OUT_OF_DATA );
     }
 
-    asn1_read_length( *p, len, &bytes_used );
+    result = asn1_read_length( *p, len, &bytes_used );
+    if ( result != 0 )
+    {
+        return result;
+    }
 
     if ( bytes_used > ( end - *p ) )
     {
@@ -1060,7 +1065,10 @@ int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uin
         if (crt->sig_oid1.len == 7)
         {
             hash_algorithm = crt->sig_oid1.p[6];
-            if ( hash_algorithm != 1 || hash_algorithm != 2 )
+            /* Value 1 = ecdsa-with-SHA1         See http://oid-info.com/get/1.2.840.10045.4.1
+             * Value 2 = ecdsa-with-Recommended  See http://oid-info.com/get/1.2.840.10045.4.2
+             */
+            if ( ( hash_algorithm != 1 ) && ( hash_algorithm != 2 ) )
             {
                 return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
             }
@@ -1068,7 +1076,12 @@ int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uin
         else if ( crt->sig_oid1.len == 8 )
         {
             hash_algorithm = crt->sig_oid1.p[7];
-            if ( crt->sig_oid1.p[ 6 ] != 3 || hash_algorithm > 4 || hash_algorithm == 0 )
+            /* Value 3.1 = ecdsa-with-SHA224  See http://oid-info.com/get/1.2.840.10045.4.3.1
+             * Value 3.2 = ecdsa-with-SHA256  See http://oid-info.com/get/1.2.840.10045.4.3.2
+             * Value 3.3 = ecdsa-with-SHA384  See http://oid-info.com/get/1.2.840.10045.4.3.3
+             * Value 3.4 = ecdsa-with-SHA512  See http://oid-info.com/get/1.2.840.10045.4.3.4
+             */
+            if ( ( crt->sig_oid1.p[ 6 ] != 3 ) || ( ( hash_algorithm > 4 ) || ( hash_algorithm == 0 ) ) )
             {
                 return ( TROPICSSL_ERR_X509_CERT_UNKNOWN_SIG_ALG );
             }
@@ -1138,6 +1151,10 @@ int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uin
     }
 
     ret = x509_get_public_key(crt, &p, p + len );
+    if ( ret != 0 )
+    {
+        return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
+    }
 
     /*
      *      issuerUniqueID  [1]      IMPLICIT UniqueIdentifier OPTIONAL,
@@ -1213,8 +1230,10 @@ int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t b
 {
     int            ret;
     const uint8_t* der_certificate;
+    const uint8_t* current_cert_pointer;
     uint32_t       der_certificate_length;
     uint32_t       total_der_bytes = 0;
+    char           malloced_der_certificate = 1;
 
     /* Check if certificate is PEM
      * Note: This function will malloc space for DER cert */
@@ -1223,21 +1242,27 @@ int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t b
     {
         der_certificate = buf;
         total_der_bytes = buflen;
+        malloced_der_certificate = 0;
     }
 
+    current_cert_pointer = der_certificate;
     do
     {
-        der_certificate_length = x509_read_cert_length( der_certificate );
+        der_certificate_length = x509_read_cert_length( current_cert_pointer );
 
-        ret = x509_parse_certificate_data( chain, der_certificate, der_certificate_length );
+        ret = x509_parse_certificate_data( chain, current_cert_pointer, der_certificate_length );
         if ( ret != 0 )
         {
             x509_free( chain );
+            if ( malloced_der_certificate == 1)
+            {
+                tls_host_free( (void*) der_certificate );
+            }
             return ret;
         }
 
         total_der_bytes -= der_certificate_length;
-        der_certificate += der_certificate_length;
+        current_cert_pointer += der_certificate_length;
 
         if ( total_der_bytes > 0 )
         {
@@ -1246,6 +1271,10 @@ int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t b
             if ( chain->next == NULL )
             {
                 x509_free( chain );
+                if ( malloced_der_certificate == 1)
+                {
+                    tls_host_free( (void*) der_certificate );
+                }
                 return ( 1 );
             }
 
@@ -1253,6 +1282,11 @@ int32_t x509_parse_certificate( x509_cert* chain, const uint8_t* buf, uint32_t b
             memset( chain, 0, sizeof(x509_cert) );
         }
     } while ( total_der_bytes > 0 );
+
+    chain->der_certificate_malloced = malloced_der_certificate;
+    chain->der_certificate_data = (uint8_t*)der_certificate;
+    chain->der_certificate_length = der_certificate_length;
+
     return ret;
 }
 
@@ -1857,8 +1891,18 @@ char *x509parse_cert_info(char *buf, size_t buf_size,
         break;
     }
 
-    snprintf(p, end - p, "\n%sRSA key size  : %ld bits\n", prefix,
-              (long)(crt->rsa.N.n * (int) sizeof(uint32_t) * 8));
+    if ( crt->public_key->type == TLS_RSA_KEY )
+    {
+        rsa_context* rsa = (rsa_context*) &crt->public_key;
+        snprintf(p, end - p, "\n%sRSA key size  : %ld bits\n", prefix,
+                  (long)(rsa->N.n * (int) sizeof(uint32_t) * 8));
+    }
+    else if ( crt->public_key->type == TLS_ECC_KEY )
+    {
+        wiced_tls_ecc_key_t* ecc = (wiced_tls_ecc_key_t*) &crt->public_key;
+        snprintf(p, end - p, "\n%sECC key size  : %ld bits\n", prefix,
+                  (long)(ecc->length * 8));
+    }
 
     return (buf);
 }
@@ -2052,7 +2096,7 @@ void x509_free(x509_cert * crt)
             }
             else
             {
-                __asm("bkpt");
+                tls_host_free( cert_cur->public_key );
             }
             cert_cur->public_key = NULL;
         }
@@ -2073,9 +2117,10 @@ void x509_free(x509_cert * crt)
             tls_host_free ( name_prv );
         }
 
-        if (cert_cur->raw.p != NULL) {
-//            memset(cert_cur->raw.p, 0, cert_cur->raw.len);
-//            tls_host_free ( cert_cur->raw.p );
+        if ( cert_cur->der_certificate_malloced == 1)
+        {
+            memset( cert_cur->der_certificate_data, 0, cert_cur->der_certificate_length );
+            tls_host_free( (void*) cert_cur->der_certificate_data );
         }
 
         cert_cur = cert_cur->next;
@@ -2111,7 +2156,7 @@ int32_t x509_self_test(int32_t verbose)
 
     memset(&clicert, 0, sizeof(x509_cert));
 
-    ret = x509parse_crt(&clicert, (const unsigned char *)test_cli_crt,
+    ret = x509_parse_certificate(&clicert, (const unsigned char *)test_cli_crt,
                 strlen(test_cli_crt));
     if (ret != 0) {
         if (verbose != 0)
@@ -2122,12 +2167,13 @@ int32_t x509_self_test(int32_t verbose)
 
     memset(&cacert, 0, sizeof(x509_cert));
 
-    ret = x509parse_crt(&cacert, (const unsigned char *)test_ca_crt,
+    ret = x509_parse_certificate(&cacert, (const unsigned char *)test_ca_crt,
                 strlen(test_ca_crt));
     if (ret != 0) {
         if (verbose != 0)
             printf("failed\n");
 
+        x509_free(&clicert);
         return (ret);
     }
 
@@ -2143,6 +2189,8 @@ int32_t x509_self_test(int32_t verbose)
         if (verbose != 0)
             printf("failed\n");
 
+        x509_free(&cacert);
+        x509_free(&clicert);
         return (ret);
     }
 
@@ -2154,6 +2202,9 @@ int32_t x509_self_test(int32_t verbose)
         if (verbose != 0)
             printf("failed\n");
 
+        x509_free(&cacert);
+        x509_free(&clicert);
+        rsa_free(&rsa);
         return (ret);
     }
 

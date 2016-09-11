@@ -53,7 +53,7 @@
  *               Function Definitions
  ******************************************************/
 
-#ifdef POWER_MANAGEMENT_ON_BCM943907WAE_1
+#if defined(POWER_MANAGEMENT_ON_BCM943907WAE_1) && !defined(BOOTLOADER)
 wiced_result_t power_management_init(uint32_t minutes)
 {
     if (max17040_initialize_i2c_device() != WICED_SUCCESS || max8971_initialize() != WICED_SUCCESS)
@@ -139,6 +139,7 @@ wiced_result_t power_management_update(power_management_status_t* return_status,
     return WICED_SUCCESS;
 }
 #else
+
 wiced_result_t power_management_init(uint32_t minutes)
 {
     return WICED_UNSUPPORTED;

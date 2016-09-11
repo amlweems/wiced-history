@@ -17,6 +17,33 @@
 #include "spi_flash.h"
 #include <stdint.h>
 
+#ifndef SFLASH_SUPPORT_MACRONIX_PARTS
+#define SFLASH_SUPPORT_MACRONIX_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_ISSI_LP_PARTS
+#define SFLASH_SUPPORT_ISSI_LP_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_ISSI_CQ_PARTS
+#define SFLASH_SUPPORT_ISSI_CQ_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_MICRON_PARTS
+#define SFLASH_SUPPORT_MICRON_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_WINBOND_PARTS
+#define SFLASH_SUPPORT_WINBOND_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_SST_PARTS
+#define SFLASH_SUPPORT_SST_PARTS    0
+#endif
+
+#ifndef SFLASH_SUPPORT_EON_PARTS
+#define SFLASH_SUPPORT_EON_PARTS    0
+#endif
 
 /* Status Register bit definitions */
 #define SFLASH_STATUS_REGISTER_BUSY                          ( (unsigned char) 0x01 )
@@ -81,6 +108,8 @@ typedef enum
 
 
 #define SFLASH_MANUFACTURER( id )      ( (uint8_t) ( ( (id) & 0x00ff0000 ) >> 16 ) )
+#define SFLASH_SUPPORTED(NAME)         ( SFLASH_SUPPORT_##NAME##_PARTS )
+#define SFLASH_MANUFACTURER_SUPPORTED( id, NAME )  ( SFLASH_SUPPORTED( NAME ) && (SFLASH_MANUFACTURER( id ) == SFLASH_MANUFACTURER_##NAME ) )
 
 #define SFLASH_MANUFACTURER_SST        ( (uint8_t) 0xBF )
 #define SFLASH_MANUFACTURER_MACRONIX   ( (uint8_t) 0xC2 )

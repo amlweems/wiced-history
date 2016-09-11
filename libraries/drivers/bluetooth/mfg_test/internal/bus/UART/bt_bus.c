@@ -79,7 +79,7 @@ do \
  ******************************************************/
 
 static wiced_result_t bluetooth_wiced_init_platform   ( void );
-static wiced_result_t bluetooth_wiced_init_config_uart( const platform_uart_config_t* bt_uart_config );
+wiced_result_t bluetooth_wiced_init_config_uart( const platform_uart_config_t* bt_uart_config );
 
 /******************************************************
  *               Variable Definitions

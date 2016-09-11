@@ -443,11 +443,11 @@
 #else /* ifdef SYS_TIME_H_AVAILABLE */
 
 #ifndef __time_t_defined
-typedef ULONG       time_t;
+typedef LONG       time_t;
 #endif
 
 #ifndef __suseconds_t_defined
-typedef ULONG       suseconds_t;
+typedef LONG       suseconds_t;
 #endif /* ifndef __suseconds_t_defined */
 
 struct timeval

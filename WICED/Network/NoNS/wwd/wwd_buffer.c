@@ -36,13 +36,12 @@ wwd_result_t host_buffer_check_leaked( void )
     return WWD_SUCCESS;
 }
 
-wwd_result_t host_buffer_get( /*@out@*/ wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait )
+wwd_result_t internal_host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, unsigned long timeout_ms )
 {
     /*@-noeffect@*/
     UNUSED_PARAMETER( direction );
-    UNUSED_PARAMETER( wait );
+    UNUSED_PARAMETER( timeout_ms );
     /*@+noeffect@*/
-    wiced_assert("Error: Invalid buffer size\n", size != 0);
 
     if ( (uint16_t) size > internal_buffer_max_size )
     {
@@ -51,7 +50,14 @@ wwd_result_t host_buffer_get( /*@out@*/ wiced_buffer_t * buffer, wwd_buffer_dir_
     }
     internal_buffer_curr_size = (uint16_t) size;
     *buffer = internal_buffer;
+
     return WWD_SUCCESS;
+}
+
+wwd_result_t host_buffer_get( /*@out@*/ wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait )
+{
+    wiced_assert("Error: Invalid buffer size\n", size != 0);
+    return internal_host_buffer_get(buffer, direction, size, wait);
 }
 
 void host_buffer_release( /*@only@*/ wiced_buffer_t buffer, wwd_buffer_dir_t direction )

@@ -91,6 +91,9 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_filesystem.c \
                    WAF/waf_platform.c \
 
+#for DCT with crc checking
+$(NAME)_COMPONENTS  += utilities/crc
+
 ifdef PLATFORM_SUPPORTS_BUTTONS
 $(NAME)_SOURCES += ../platform_button.c
 endif

@@ -59,6 +59,7 @@
 
 #define MAX_SSID_LEN         ( 32 )
 #define MAX_PASSPHRASE_LEN   ( 64 )
+#define MIN_PASSPHRASE_LEN   (  8 )
 #define A_SHA_DIGEST_LEN     ( 20 )
 #define DOT11_PMK_LEN        ( 32 )
 
@@ -67,8 +68,10 @@
  ******************************************************/
 
 static wiced_result_t scan_result_handler( wiced_scan_handler_result_t* malloced_scan_result );
-static int wifi_join_specific(char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint16_t key_length, char* bssid, char* channel, char* ip, char* netmask, char* gateway);
-static void ac_params_print( const wiced_edcf_ac_param_t *acp, const int *priority );
+static int            wifi_join_specific(char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint16_t key_length, char* bssid, char* channel, char* ip, char* netmask, char* gateway);
+static void           ac_params_print( const wiced_edcf_ac_param_t *acp, const int *priority );
+static eap_type_t     str_to_enterprise_security_type ( char* arg );
+static void           analyse_failed_join_result( wiced_result_t join_result );
 
 /******************************************************
  *               Variable Definitions
@@ -191,24 +194,37 @@ int join_ent( int argc, char* argv[] )
     char* ssid = argv[1];
     supplicant_workspace_t supplicant_workspace;
     wiced_security_t auth_type;
+    eap_type_t       eap_type;
     char eap_identity[] = "wifi-user@wifilabs.local";
     wiced_tls_context_t context;
     wiced_tls_identity_t identity;
 
-    if ( argc != 3 )
+    if ( argc < 4 )
     {
         return ERR_INSUFFICENT_ARGS;
     }
 
-    auth_type = str_to_enterprise_authtype(argv[2]);
-    if ( auth_type == WICED_SECURITY_UNKNOWN )
+    eap_type = str_to_enterprise_security_type(argv[2]);
+    if ( eap_type == EAP_TYPE_NONE )
     {
         WPRINT_APP_INFO(("Unknown security type\n" ));
         return ERR_CMD_OK;
     }
 
+    auth_type = str_to_enterprise_authtype(argv[argc-1]);
+    if ( auth_type == WICED_SECURITY_UNKNOWN )
+    {
+        WPRINT_APP_INFO(("Unknown security type\n" ));
+        return ERR_CMD_OK;
+    }
+    if ( ( eap_type == EAP_TYPE_PEAP ) && ( argc < 6 ) )
+    {
+        return ERR_INSUFFICENT_ARGS;
+    }
+
     wiced_tls_init_identity( &identity, WIFI_USER_PRIVATE_KEY_STRING, WIFI_USER_CERTIFICATE_STRING, (uint32_t)strlen( (char*)WIFI_USER_CERTIFICATE_STRING ) );
-    context.identity = &identity;
+
+    wiced_tls_init_context( &context, &identity, NULL );
 
     if ( tls_session.length > 0 )
     {
@@ -221,10 +237,36 @@ int join_ent( int argc, char* argv[] )
 
     wiced_tls_init_root_ca_certificates( WIFI_ROOT_CERTIFICATE_STRING );
 
-    if ( besl_supplicant_init( &supplicant_workspace, EAP_TYPE_TLS, WWD_STA_INTERFACE ) == BESL_SUCCESS )
+    if ( besl_supplicant_init( &supplicant_workspace, eap_type, WWD_STA_INTERFACE ) == BESL_SUCCESS )
     {
         wiced_supplicant_enable_tls( &supplicant_workspace, &context );
         besl_supplicant_set_identity( &supplicant_workspace, eap_identity, strlen( eap_identity ) );
+        if ( eap_type == EAP_TYPE_PEAP )
+        {
+            /* Default for now is MSCHAPV2 */
+            supplicant_mschapv2_identity_t mschap_identity;
+            char mschap_password[32];
+
+            /* Convert ASCII to UTF16 */
+            int i;
+            uint8_t*  password = (uint8_t*)argv[4];
+            uint8_t*  unicode  = (uint8_t*)mschap_password;
+
+            for ( i = 0; i <= strlen(argv[4]); i++ )
+            {
+                *unicode++ = *password++;
+                *unicode++ = '\0';
+            }
+
+            mschap_identity.identity = (uint8_t*)argv[3];
+            mschap_identity.identity_length = strlen(argv[3]);
+
+            mschap_identity.password = (uint8_t*)mschap_password;
+            mschap_identity.password_length = 2*(i-1);
+
+            besl_supplicant_set_inner_identity( &supplicant_workspace, eap_type, &mschap_identity );
+
+        }
         if ( besl_supplicant_start( &supplicant_workspace ) == BESL_SUCCESS )
         {
             if ( wifi_join( ssid, auth_type, NULL, 0, NULL, NULL, NULL ) == ERR_CMD_OK )
@@ -250,10 +292,11 @@ int join_ent( int argc, char* argv[] )
 
 int wifi_join(char* ssid, wiced_security_t auth_type, uint8_t* key, uint16_t key_length, char* ip, char* netmask, char* gateway)
 {
-    wiced_network_config_t network_config;
-    wiced_ip_setting_t* ip_settings = NULL;
-    wiced_ip_setting_t static_ip_settings;
+    wiced_network_config_t      network_config;
+    wiced_ip_setting_t*         ip_settings = NULL;
+    wiced_ip_setting_t          static_ip_settings;
     platform_dct_wifi_config_t* dct_wifi_config;
+    wiced_result_t              result;
 
     if (wwd_wifi_is_ready_to_transceive(WWD_STA_INTERFACE) == WWD_SUCCESS)
     {
@@ -291,7 +334,7 @@ int wifi_join(char* ssid, wiced_security_t auth_type, uint8_t* key, uint16_t key
         ip_settings = &static_ip_settings;
     }
 
-    if ( wiced_network_up( WICED_STA_INTERFACE, network_config, ip_settings ) != WICED_SUCCESS )
+    if ( ( result = wiced_network_up( WICED_STA_INTERFACE, network_config, ip_settings ) ) != WICED_SUCCESS )
     {
         if ( auth_type == WICED_SECURITY_WEP_PSK ) /* Now try shared instead of open authentication */
         {
@@ -312,7 +355,9 @@ int wifi_join(char* ssid, wiced_security_t auth_type, uint8_t* key, uint16_t key
             }
         }
 
+        analyse_failed_join_result( result );
         wiced_dct_read_unlock( (void*) dct_wifi_config, WICED_TRUE );
+
         return ERR_UNKNOWN;
     }
 
@@ -408,8 +453,9 @@ int join_specific( int argc, char* argv[] )
 static int wifi_join_specific(char* ssid, wiced_security_t auth_type, uint8_t* security_key, uint16_t key_length, char* bssid, char* channel, char* ip, char* netmask, char* gateway)
 {
     wiced_network_config_t network_config;
-    wiced_ip_setting_t static_ip_settings;
-    wiced_scan_result_t ap;
+    wiced_ip_setting_t     static_ip_settings;
+    wiced_scan_result_t    ap;
+    wiced_result_t         result;
 
     if (wwd_wifi_is_ready_to_transceive(WWD_STA_INTERFACE) == WWD_SUCCESS)
     {
@@ -425,26 +471,33 @@ static int wifi_join_specific(char* ssid, wiced_security_t auth_type, uint8_t* s
     ap.band = WICED_802_11_BAND_2_4GHZ;
     ap.bss_type = WICED_BSS_TYPE_INFRASTRUCTURE;
 
-    if ( !( NULL_MAC(ap.BSSID.octet) ) && wwd_wifi_join_specific( &ap, security_key, key_length, NULL, WWD_STA_INTERFACE ) == WWD_SUCCESS )
+    if ( !( NULL_MAC(ap.BSSID.octet) ) )
     {
-
-        /* Tell the network stack to setup it's interface */
-        if (ip == NULL )
+        result = wwd_wifi_join_specific( &ap, security_key, key_length, NULL, WWD_STA_INTERFACE );
+        if ( result == WICED_SUCCESS )
         {
-            network_config = WICED_USE_EXTERNAL_DHCP_SERVER;
+            /* Tell the network stack to setup it's interface */
+            if (ip == NULL )
+            {
+                network_config = WICED_USE_EXTERNAL_DHCP_SERVER;
+            }
+            else
+            {
+                network_config = WICED_USE_STATIC_IP;
+                str_to_ip( ip,      &static_ip_settings.ip_address );
+                str_to_ip( netmask, &static_ip_settings.netmask );
+                str_to_ip( gateway, &static_ip_settings.gateway );
+            }
+
+            if ( ( result = wiced_ip_up( WICED_STA_INTERFACE, network_config, &static_ip_settings ) ) == WICED_SUCCESS )
+            {
+                strncpy(last_joined_ssid, ssid, MAX_SSID_LEN);
+                return ERR_CMD_OK;
+            }
         }
         else
         {
-            network_config = WICED_USE_STATIC_IP;
-            str_to_ip( ip,      &static_ip_settings.ip_address );
-            str_to_ip( netmask, &static_ip_settings.netmask );
-            str_to_ip( gateway, &static_ip_settings.gateway );
-        }
-
-        if ( wiced_ip_up( WICED_STA_INTERFACE, network_config, &static_ip_settings ) == WICED_SUCCESS )
-        {
-            strncpy(last_joined_ssid, ssid, MAX_SSID_LEN);
-            return ERR_CMD_OK;
+            analyse_failed_join_result( result );
         }
     }
 
@@ -583,6 +636,12 @@ int start_ap( int argc, char* argv[] )
 
     key_length = strlen(security_key);
 
+    if ( ( auth_type & WPA2_SECURITY ) && ( key_length < MIN_PASSPHRASE_LEN ) )
+    {
+        WPRINT_APP_INFO(("Error: WPA key too short\n" ));
+        return ERR_UNKNOWN;
+    }
+
     /* Read config */
     wiced_dct_read_lock( (void**) &dct_wifi_config, WICED_TRUE, DCT_WIFI_CONFIG_SECTION, 0, sizeof(platform_dct_wifi_config_t) );
 
@@ -683,72 +742,11 @@ int stop_ap( int argc, char* argv[] )
     disable_ap_registrar_events();
 #endif
 
-    deauth_all_associated_client_stas(WWD_DOT11_RC_UNSPECIFIED, WICED_AP_INTERFACE);
+    wwd_wifi_deauth_all_associated_client_stas(WWD_DOT11_RC_UNSPECIFIED, WICED_AP_INTERFACE);
 
     return wiced_network_down( WICED_AP_INTERFACE );
 }
 
-wiced_result_t deauth_all_associated_client_stas(wwd_dot11_reason_code_t reason, wwd_interface_t interface )
-{
-    uint8_t* buffer = NULL;
-    wiced_maclist_t * clients = NULL;
-    const wiced_mac_t * current;
-    wiced_result_t      result;
-    wl_bss_info_t ap_info;
-    wiced_security_t sec;
-    uint32_t max_clients = 0;
-    size_t size = 0;
-
-    result = wwd_wifi_get_max_associations( &max_clients );
-    if ( result != WICED_SUCCESS )
-    {
-        WPRINT_APP_INFO( ("Failed to get max number of associated clients\n") );
-        max_clients = 5;
-    }
-
-    size = ( sizeof(uint32_t) + (max_clients * sizeof(wiced_mac_t)));
-    buffer = calloc(1, size);
-
-    if (buffer == NULL)
-    {
-        WPRINT_APP_INFO(("Unable to allocate memory for associated clients list\n"));
-        return WICED_ERROR;
-    }
-    clients = (wiced_maclist_t*)buffer;
-    clients->count = max_clients;
-    memset(&ap_info, 0, sizeof(wl_bss_info_t));
-
-    result = wwd_wifi_get_associated_client_list(clients, size);
-    if ( result != WICED_SUCCESS)
-    {
-        WPRINT_APP_INFO(("Failed to get client list\n"));
-        free( buffer );
-        return result;
-    }
-
-    current = &clients->mac_list[0];
-    wwd_wifi_get_ap_info( &ap_info, &sec );
-
-    while ((clients->count > 0) && (!(NULL_MAC(current->octet))))
-    {
-        if (memcmp(current->octet, &(ap_info.BSSID), sizeof(wiced_mac_t) ) != 0)
-        {
-            WPRINT_APP_INFO(("Deauthenticating STA MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", current->octet[0], current->octet[1], current->octet[2], current->octet[3], current->octet[4], current->octet[5]));
-            result = wwd_wifi_deauth_sta(current, reason, interface );
-            if ( result  != WICED_SUCCESS)
-            {
-                WPRINT_APP_INFO(("Failed to deauth client\n"));
-            }
-        }
-
-        --clients->count;
-        ++current;
-    }
-
-    free( buffer );
-
-    return WWD_SUCCESS;
-}
 
 int get_associated_sta_list( int argc, char* argv[] )
 {
@@ -813,7 +811,7 @@ int get_associated_sta_list( int argc, char* argv[] )
         }
         else
         {
-            result = wwd_wifi_get_rssi( &rssi );
+            wwd_wifi_get_rssi( &rssi );
             WPRINT_APP_INFO(("%3lddBm  AP\n", rssi));
         }
         --clients->count;
@@ -1149,49 +1147,29 @@ int wifi_powersave( int argc, char* argv[] )
 
 /*!
  ******************************************************************************
- * Enables or disables power save mode as specified by the arguments
+ * Resumes networking after deep-sleep
  *
  * @return  0 for success, otherwise error
  */
 
-int set_wifi_powersave_mode( int argc, char* argv[] )
+int wifi_resume( int argc, char* argv[] )
 {
-    int a = atoi( argv[1] );
+    wiced_network_config_t network_config = WICED_USE_EXTERNAL_DHCP_SERVER;
+    wiced_ip_setting_t* ip_settings = NULL;
+    wiced_ip_setting_t static_ip_settings;
 
-    switch( a )
+    if ( argc == 4 )
     {
-        case 0:
-        {
-            if ( wiced_wifi_disable_powersave( ) != WICED_SUCCESS )
-            {
-                WPRINT_APP_INFO( ("Failed to disable Wi-Fi powersave\n") );
-            }
-            break;
-        }
+        network_config = WICED_USE_STATIC_IP;
+        str_to_ip( argv[1], &static_ip_settings.ip_address );
+        str_to_ip( argv[2], &static_ip_settings.netmask );
+        str_to_ip( argv[3], &static_ip_settings.gateway );
+        ip_settings = &static_ip_settings;
+    }
 
-        case 1:
-        {
-            if ( wiced_wifi_enable_powersave( ) != WICED_SUCCESS )
-            {
-                WPRINT_APP_INFO( ("Failed to enable Wi-Fi powersave\n") );
-            }
-            break;
-        }
-
-        case 2:
-        {
-            uint8_t return_to_sleep_delay_ms = (uint8_t) atoi( argv[ 2 ] );
-
-            if ( wiced_wifi_enable_powersave_with_throughput( return_to_sleep_delay_ms ) != WICED_SUCCESS )
-            {
-                WPRINT_APP_INFO( ("Failed to enable Wi-Fi powersave with throughput\n") );
-            }
-            break;
-        }
-
-        default:
-            return ERR_UNKNOWN_CMD;
-
+    if ( wiced_network_resume_after_deep_sleep( WICED_STA_INTERFACE, network_config, ip_settings ) != WICED_SUCCESS )
+    {
+        WPRINT_APP_INFO( ("Failed to resume networking\n") );
     }
 
     return ERR_CMD_OK;
@@ -1512,8 +1490,7 @@ int get_country( int argc, char* argv[] )
         memcpy( (char *)&cspec, (char *)host_buffer_get_current_piece_data_pointer( response ), sizeof(wl_country_t) );
         host_buffer_release(response, WWD_NETWORK_RX);
         char* c = (char*)&(cspec.country_abbrev);
-        WPRINT_APP_INFO(( "Country is %s\n", c ));
-
+        WPRINT_APP_INFO(( "Country is %s/%ld\n", c , cspec.rev));
     }
     else
     {
@@ -1649,7 +1626,7 @@ int get_data_rate( int argc, char* argv[] )
 
     if ( result != WWD_SUCCESS )
     {
-        printf("Unable to get data rate %u\n", (unsigned int)result);
+        WPRINT_APP_INFO(("Unable to get data rate %u\n", (unsigned int)result));
         return ERR_UNKNOWN;
     }
 
@@ -1743,6 +1720,49 @@ int read_wlan_chip_console_log( int argc, char* argv[] )
     free( buffer );
 
     return result;
+}
+
+int peek(int argc, char* argv[])
+{
+    unsigned int *addr;
+    unsigned int value;
+
+    addr = (unsigned int *)((strtol( argv[1], (char **)NULL, 16 )) & 0xFFFFFFFC);
+
+    if (addr != NULL)
+    {
+        wwd_bus_set_backplane_window( (uint32_t) addr );
+        memcpy ((void *)&value, (void *)addr, sizeof(value));
+        WPRINT_APP_INFO(("addr 0x%x = 0x%x.\n", (unsigned int)addr, value));
+    }
+    else
+    {
+        WPRINT_APP_INFO(("Usage: peek <hex address>\n"));
+    }
+
+    return ERR_CMD_OK;
+}
+
+int poke(int argc, char* argv[])
+{
+    volatile unsigned int *addr;
+    volatile unsigned int value = 0xDEADF00D;
+
+    addr  = (unsigned int *)((strtol( argv[1], (char **)NULL, 16 )) & 0xFFFFFFFC);
+    value = (unsigned int)   (strtol( argv[2], (char **)NULL, 16 ));
+
+    if (addr != NULL)
+    {
+        if (value != 0xDEADF00D)
+            *addr = value;
+        WPRINT_APP_INFO(("addr 0x%x = 0x%x (wrote 0x%x).\n", (unsigned int)addr, *addr, value));
+    }
+    else
+    {
+        WPRINT_APP_INFO(("Usage: peek <hex address>\n"));
+    }
+
+    return ERR_CMD_OK;
 }
 
 /*!
@@ -1913,7 +1933,7 @@ wiced_security_t str_to_authtype( char* arg )
     }
     else
     {
-        printf ("Bad auth type: '%s'\r\n", arg);
+        WPRINT_APP_INFO( ("Bad auth type: '%s'\r\n", arg) );
         return WICED_SECURITY_UNKNOWN;
     }
 }
@@ -1947,8 +1967,33 @@ wiced_security_t str_to_enterprise_authtype( char* arg )
     }
     else
     {
-        printf ("Bad auth type: '%s'\r\n", arg);
+        WPRINT_APP_INFO( ("Bad auth type: '%s'\r\n", arg) );
         return WICED_SECURITY_UNKNOWN;
+    }
+}
+
+/*!
+ ******************************************************************************
+ * Convert a security enterprise type string to an eap_type_t type.
+ *
+ * @param[in] arg  The string containing the value.
+ *
+ * @return    The value represented by the string.
+ */
+static eap_type_t str_to_enterprise_security_type( char* arg )
+{
+    if ( strcmp( arg, "eap_tls" ) == 0 )
+    {
+        return EAP_TYPE_TLS;
+    }
+    else if ( strcmp( arg, "peap" ) == 0 )
+    {
+        return EAP_TYPE_PEAP;
+    }
+    else
+    {
+        WPRINT_APP_INFO( ("Bad EAP type: '%s'\r\n", arg) );
+        return EAP_TYPE_NONE;
     }
 }
 
@@ -1985,3 +2030,52 @@ void str_to_mac( char* arg, wiced_mac_t* mac )
     } while ( a < 6 && end != NULL );
 }
 
+
+/*!
+ ******************************************************************************
+ * Analyse failed join result
+ *
+ * @param[in] join_result  Result of join attempts.
+ *
+ * @return
+ */
+void analyse_failed_join_result( wiced_result_t join_result )
+{
+    /* Note that DHCP timeouts and EAPOL key timeouts may happen at the edge of the cell. If possible move closer to the AP. */
+    /* Also note that the default number of join attempts is three and the join result is returned for the last attempt. */
+    WPRINT_APP_INFO( ("Join result %u: ", (unsigned int)join_result) );
+    switch( join_result )
+    {
+        case WICED_ERROR:
+            WPRINT_APP_INFO( ("General error\n") ); /* Getting a DHCP address may fail if at the edge of a cell and the join may timeout before DHCP has completed. */
+            break;
+
+        case WWD_NETWORK_NOT_FOUND:
+            WPRINT_APP_INFO( ("Failed to find network\n") ); /* Check that he SSID is correct and that the AP is up */
+            break;
+
+        case WWD_NOT_AUTHENTICATED:
+            WPRINT_APP_INFO( ("Failed to authenticate\n") ); /* May happen at the edge of the cell. Try moving closer to the AP. */
+            break;
+
+        case WWD_EAPOL_KEY_PACKET_M1_TIMEOUT:
+            WPRINT_APP_INFO( ("Timeout waiting for first EAPOL key frame from AP\n") );
+            break;
+
+        case WWD_EAPOL_KEY_PACKET_M3_TIMEOUT:
+            WPRINT_APP_INFO( ("Check the passphrase and try again\n") ); /* The M3 timeout will occur if the passphrase is incorrect */
+            break;
+
+        case WWD_EAPOL_KEY_PACKET_G1_TIMEOUT:
+            WPRINT_APP_INFO( ("Timeout waiting for group key from AP\n") );
+            break;
+
+        case WWD_INVALID_JOIN_STATUS:
+            WPRINT_APP_INFO( ("Some part of the join process did not complete\n") ); /* May happen at the edge of the cell. Try moving closer to the AP. */
+            break;
+
+        default:
+            WPRINT_APP_INFO( ("\n") );
+            break;
+    }
+}

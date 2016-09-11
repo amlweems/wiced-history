@@ -17,7 +17,13 @@
 #define uint8_t         UINT8
 #define uint16_t        UINT16
 #define uint32_t        UINT32
-#define wiced_bool_t    BOOLEAN
+/*
+ * TODO: wiced_bool_t(enum) should not be redefined to BOOLEAN(uint8).
+ * It will lead to certain data-type mismatch errors and wrong calculations in DCT if wiced_bt_int.h
+ * overrides the Wiced-SDK's definition of wiced_bool_t.
+ * This change might possibly break BTEWICED build and need further discussion.
+ */
+//#define wiced_bool_t    BOOLEAN
 
 #define wiced_bt_dev_status_t                                   tBTM_STATUS
 #define wiced_bt_management_evt_t                               tBTM_EVENT
@@ -44,6 +50,8 @@
 #ifndef wiced_bt_dev_vendor_specific_command_complete_params_t
 #define wiced_bt_dev_vendor_specific_command_complete_params_t  tBTM_VSC_CMPL
 #endif
+#define wiced_bt_dev_vendor_specific_event_callback_t           tBTM_VS_EVT_CB
+
 #define wiced_bt_ble_advert_elem_t                              tBTM_BLE_ADV_ELEM
 #define wiced_bt_ble_conn_type_t                                tBTM_BLE_CONN_TYPE
 #define wiced_bt_ble_selective_conn_cback_t                     tBTM_BLE_SEL_CBACK
@@ -86,4 +94,8 @@
 /* HCI trace call back */
 #define wiced_bt_hci_trace_cback_t                              BTU_HCI_TRACE_CALLBACK
 #define wiced_bt_hci_trace_type_t                               bte_glue_hci_trace_type_t
+
+#define wiced_bt_link_key_t                                     LINK_KEY
+#define wiced_bt_ble_keys_t                                     tBTM_SEC_BLE_KEYS
+#define wiced_bt_device_sec_keys_t                              tBTM_SEC_KEYS
 #endif

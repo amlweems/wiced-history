@@ -25,6 +25,7 @@
 #include "FreeRTOSConfig.h"
 #include "timers.h"
 #include "wiced_time.h"
+#include "internal/wiced_internal_api.h"
 #include "wwd_assert.h"
 #include "platform_init.h"
 
@@ -41,7 +42,7 @@
 #endif
 
 #ifndef TIMER_THREAD_STACK_SIZE
-#define TIMER_THREAD_STACK_SIZE      1024 + 4*1024
+#define TIMER_THREAD_STACK_SIZE      1024
 #endif
 #define TIMER_QUEUE_LENGTH  5
 
@@ -79,7 +80,6 @@ typedef struct
  ******************************************************/
 
 static void application_thread_main( void *arg );
-extern void system_monitor_thread_main( void* arg );
 
 /******************************************************
  *               Variable Definitions
@@ -119,7 +119,7 @@ int main( void )
 
 #ifndef WICED_DISABLE_WATCHDOG
     /* Start the watchdog kicking thread */
-    xTaskCreate( system_monitor_thread_main, "system monitor", SYSTEM_MONITOR_THREAD_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, RTOS_HIGHEST_PRIORITY, &system_monitor_thread_handle);
+    xTaskCreate( (TaskFunction_t) system_monitor_thread_main, "system monitor", SYSTEM_MONITOR_THREAD_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, RTOS_HIGHEST_PRIORITY, &system_monitor_thread_handle);
 #endif /* WICED_DISABLE_WATCHDOG */
     /* Create an initial thread */
     xTaskCreate( application_thread_main, "app_thread", APPLICATION_STACK_SIZE/sizeof( portSTACK_TYPE ), NULL, WICED_PRIORITY_TO_NATIVE_PRIORITY(WICED_APPLICATION_PRIORITY), &app_thread_handle);
@@ -277,6 +277,12 @@ wiced_result_t wiced_rtos_push_to_queue_front( wiced_queue_t* queue, void* messa
 }
 #endif
 
+wiced_result_t wiced_rtos_get_queue_occupancy( wiced_queue_t* queue, uint32_t *count )
+{
+    UNUSED_PARAMETER( queue );
+    UNUSED_PARAMETER( count );
+    return WICED_UNSUPPORTED;
+}
 
 wiced_result_t wiced_rtos_deinit_queue( wiced_queue_t* queue )
 {

@@ -13,7 +13,8 @@
 #include <stddef.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /******************************************************
@@ -71,10 +72,14 @@ typedef enum
 
 typedef enum
 {
+    DTLS_PSK_KEY,
+} wiced_dtls_key_type_t;
+
+typedef enum
+{
     RSA_PUBLIC      = 0,
     RSA_PRIVATE     = 1,
 } rsa_mode_t;
-
 
 /******************************************************
  *                 Type Definitions
@@ -119,6 +124,15 @@ typedef struct
     unsigned char ipad[64];
     unsigned char opad[64];
 } md5_context;
+
+typedef struct {
+    uint32_t total[2];
+    uint32_t state[4];
+    unsigned char buffer[64];
+
+    unsigned char ipad[64];
+    unsigned char opad[64];
+} md4_context;
 
 typedef struct
 {
@@ -174,6 +188,27 @@ typedef struct
     uint32_t             length;
     uint8_t              key[64];
 } wiced_tls_ecc_key_t;
+
+/* Below structures are only specific to DTLS */
+typedef struct
+{
+    wiced_dtls_key_type_t type;
+    uint32_t              version;
+    uint32_t              length;
+    uint8_t               data[1];
+} wiced_dtls_key_t;
+
+/* this PSK structure is specific to DTLS */
+typedef struct
+{
+    wiced_tls_key_type_t type;
+    uint32_t             version;
+    uint32_t             length;
+    uint8_t              psk_identity[256];
+    uint8_t              psk_key[256];
+} wiced_dtls_psk_key_t;
+
+/* End of DTLS structures */
 
 typedef wiced_tls_rsa_key_t rsa_context;
 
@@ -250,6 +285,10 @@ typedef struct _x509_cert
     x509_buf sig_oid2;
     x509_buf sig;
 
+    uint8_t  der_certificate_malloced;
+    uint8_t* der_certificate_data;
+    uint32_t der_certificate_length;
+
     struct _x509_cert *next;
 } x509_cert;
 
@@ -304,49 +343,44 @@ typedef struct
 
 typedef struct
 {
-    int32_t mode;                   /*!<  encrypt/decrypt   */
+    int32_t mode;          /*!<  encrypt/decrypt   */
     uint32_t sk[96];       /*!<  3DES subkeys      */
-}
-des3_context;
+} des3_context;
 
 typedef struct
 {
-    int32_t mode;                   /*!<  encrypt/decrypt   */
-    uint32_t sk[32];       /*!<  DES subkeys       */
-}
-des_context;
+    int32_t mode;       /*!<  encrypt/decrypt   */
+    uint32_t sk[32];    /*!<  DES subkeys       */
+} des_context;
 
 typedef struct
 {
-    uint32_t total[2];     /*!< number of bytes processed  */
-    uint32_t state[8];     /*!< intermediate digest state  */
+    uint32_t total[2];          /*!< number of bytes processed  */
+    uint32_t state[8];          /*!< intermediate digest state  */
     unsigned char buffer[64];   /*!< data block being processed */
 
     unsigned char ipad[64];     /*!< HMAC: inner padding        */
     unsigned char opad[64];     /*!< HMAC: outer padding        */
-    int32_t is224;                  /*!< 0 => SHA-256, else SHA-224 */
-}
-sha2_context;
+    int32_t is224;              /*!< 0 => SHA-256, else SHA-224 */
+} sha2_context;
 
 typedef struct
 {
-    int64_t total[2];    /*!< number of bytes processed  */
-    int64_t state[8];    /*!< intermediate digest state  */
+    int64_t total[2];           /*!< number of bytes processed  */
+    int64_t state[8];           /*!< intermediate digest state  */
     unsigned char buffer[128];  /*!< data block being processed */
 
     unsigned char ipad[128];    /*!< HMAC: inner padding        */
     unsigned char opad[128];    /*!< HMAC: outer padding        */
-    int32_t is384;                  /*!< 0 => SHA-512, else SHA-384 */
-}
-sha4_context;
+    int32_t is384;              /*!< 0 => SHA-512, else SHA-384 */
+} sha4_context;
 
 typedef struct
 {
-    int32_t x;                      /*!< permutation index */
-    int32_t y;                      /*!< permutation index */
+    int32_t x;                  /*!< permutation index */
+    int32_t y;                  /*!< permutation index */
     unsigned char m[256];       /*!< permutation table */
-}
-arc4_context;
+} arc4_context;
 
 typedef struct poly1305_context {
     size_t aligner;
@@ -367,9 +401,11 @@ typedef struct {
     uint32_t data[32];
 } seed_context_t;
 
+#ifndef ED25519_H
 typedef unsigned char ed25519_signature[64];
 typedef unsigned char ed25519_public_key[32];
 typedef unsigned char ed25519_secret_key[32];
+#endif
 
 /******************************************************
  *                 Global Variables

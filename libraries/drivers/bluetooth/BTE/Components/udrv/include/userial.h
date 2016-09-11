@@ -184,6 +184,18 @@ typedef UINT8 tUSERIAL_FEATURE;
 
 typedef UINT8 tUSERIAL_EVT;
 
+/* HCI Transport Layer Packet Type */
+typedef enum
+{
+    HCI_UNINITIALIZED = 0x00, // Uninitialized
+    HCI_COMMAND_PACKET = 0x01, // HCI Command packet from Host to Controller
+    HCI_ACL_DATA_PACKET = 0x02, // Bidirectional Asynchronous Connection-Less Link (ACL) data packet
+    HCI_SCO_DATA_PACKET = 0x03, // Bidirectional Synchronous Connection-Oriented (SCO) link data packet
+    HCI_EVENT_PACKET = 0x04, // Events
+    HCI_LOOPBACK_MODE = 0xFF,
+// Loopback mode
+// HCI Event packet from Controller to Host
+} hci_packet_type_t;
 
 /* Structure used to configure serial port during open        */
 typedef struct 

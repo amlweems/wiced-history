@@ -1,20 +1,20 @@
-/**************************************************************************/ 
-/*                                                                        */ 
-/*            Copyright (c) 1996-2013 by Express Logic Inc.               */ 
-/*                                                                        */ 
-/*  This software is copyrighted by and is the sole property of Express   */ 
-/*  Logic, Inc.  All rights, title, ownership, or other interests         */ 
-/*  in the software remain the property of Express Logic, Inc.  This      */ 
-/*  software may only be used in accordance with the corresponding        */ 
-/*  license agreement.  Any unauthorized use, duplication, transmission,  */ 
-/*  distribution, or disclosure of this software is expressly forbidden.  */ 
+/**************************************************************************/
 /*                                                                        */
-/*  This Copyright notice may not be removed or modified without prior    */ 
-/*  written consent of Express Logic, Inc.                                */ 
-/*                                                                        */ 
-/*  Express Logic, Inc. reserves the right to modify this software        */ 
-/*  without notice.                                                       */ 
-/*                                                                        */ 
+/*            Copyright (c) 1996-2015 by Express Logic Inc.               */
+/*                                                                        */
+/*  This software is copyrighted by and is the sole property of Express   */
+/*  Logic, Inc.  All rights, title, ownership, or other interests         */
+/*  in the software remain the property of Express Logic, Inc.  This      */
+/*  software may only be used in accordance with the corresponding        */
+/*  license agreement.  Any unauthorized use, duplication, transmission,  */
+/*  distribution, or disclosure of this software is expressly forbidden.  */
+/*                                                                        */
+/*  This Copyright notice may not be removed or modified without prior    */
+/*  written consent of Express Logic, Inc.                                */
+/*                                                                        */
+/*  Express Logic, Inc. reserves the right to modify this software        */
+/*  without notice.                                                       */
+/*                                                                        */
 /*  Express Logic, Inc.                     info@expresslogic.com         */
 /*  11423 West Bernardo Court               http://www.expresslogic.com   */
 /*  San Diego, CA  92127                                                  */
@@ -24,48 +24,48 @@
 
 /**************************************************************************/
 /**************************************************************************/
-/**                                                                       */ 
+/**                                                                       */
 /** NetX Component                                                        */
 /**                                                                       */
-/**   Dynamic Host Configuration Protocol (DHCP)                          */ 
+/**   Dynamic Host Configuration Protocol (DHCP)                          */
 /**                                                                       */
 /**************************************************************************/
 /**************************************************************************/
 
 
-/**************************************************************************/ 
-/*                                                                        */ 
-/*  APPLICATION INTERFACE DEFINITION                       RELEASE        */ 
-/*                                                                        */ 
-/*    nxd_dhcp_client.h                                   PORTABLE C      */ 
-/*                                                           5.4          */ 
-/*  AUTHOR                                                                */ 
-/*                                                                        */ 
-/*    William E. Lamie, Express Logic, Inc.                               */ 
-/*                                                                        */ 
-/*  DESCRIPTION                                                           */ 
-/*                                                                        */ 
-/*    This file defines the NetX Dynamic Host Configuration Protocol      */ 
-/*    (DHCP) component, including all data types and external references. */ 
-/*    It is assumed that nx_api.h and nx_port.h have already been         */ 
+/**************************************************************************/
+/*                                                                        */
+/*  APPLICATION INTERFACE DEFINITION                       RELEASE        */
+/*                                                                        */
+/*    nxd_dhcp_client.h                                   PORTABLE C      */
+/*                                                           5.8 SP2      */
+/*  AUTHOR                                                                */
+/*                                                                        */
+/*    William E. Lamie, Express Logic, Inc.                               */
+/*                                                                        */
+/*  DESCRIPTION                                                           */
+/*                                                                        */
+/*    This file defines the NetX Dynamic Host Configuration Protocol      */
+/*    (DHCP) component, including all data types and external references. */
+/*    It is assumed that nx_api.h and nx_port.h have already been         */
 /*    included.                                                           */
-/*                                                                        */ 
-/*  RELEASE HISTORY                                                       */ 
-/*                                                                        */ 
-/*    DATE              NAME                      DESCRIPTION             */ 
-/*                                                                        */ 
-/*  03-01-2006     William E. Lamie         Initial Version 5.0           */ 
-/*  04-01-2010     Janet Christiansen       Modified comment(s), changed  */ 
-/*                                            NX_BOOTP_OFFSET_END to      */ 
-/*                                            conform to RFC, changed     */ 
-/*                                            calculations of ticks per   */ 
-/*                                            second, added multiple      */ 
-/*                                            constants, and added        */ 
-/*                                            support for multihomed IP   */ 
-/*                                            instances, resulting in     */ 
+/*                                                                        */
+/*  RELEASE HISTORY                                                       */
+/*                                                                        */
+/*    DATE              NAME                      DESCRIPTION             */
+/*                                                                        */
+/*  03-01-2006     William E. Lamie         Initial Version 5.0           */
+/*  04-01-2010     Janet Christiansen       Modified comment(s), changed  */
+/*                                            NX_BOOTP_OFFSET_END to      */
+/*                                            conform to RFC, changed     */
+/*                                            calculations of ticks per   */
+/*                                            second, added multiple      */
+/*                                            constants, and added        */
+/*                                            support for multihomed IP   */
+/*                                            instances, resulting in     */
 /*                                            version 5.1                 */
 /*  10-10-2011     Janet Christiansen       Modified comment(s), and      */
-/*                                            added new internal services,*/ 
+/*                                            added new internal services,*/
 /*                                            new API, and new DHCP client*/
 /*                                            configuration options,      */
 /*                                            and corrected the minimum   */
@@ -90,18 +90,38 @@
 /*                                            NX_PACKET_ALLOCATE_TIMEOUT, */
 /*                                            created nx_dhcp_decline,    */
 /*                                            created NX_DHCP_CLIENT_     */
-/*                                            CLEAR_QUEUE to clear packets*/ 
+/*                                            CLEAR_QUEUE to clear packets*/
 /*                                            from DHCP queue,added fields*/
 /*                                            to DHCP Client to  store    */
 /*                                            network data extracted,     */
 /*                                            added an internal flag for  */
 /*                                            the Skip Discovery option,  */
 /*                                            resulting in version 5.4    */
-/*                                                                        */ 
-/**************************************************************************/ 
+/*  01-12-2015     Janet Christiansen       Modified comment(s), and      */
+/*                                            added a seconds elapsed     */
+/*                                            field, corrected the DHCP   */
+/*                                            message size buffer         */
+/*                                            NX_DHCP_BUFFER_SIZE to 548  */
+/*                                            to comply with RFC 2131,    */
+/*                                            added broadcast flag option,*/
+/*                                            removed MULTI HOME macro    */
+/*                                            definition, added variables */
+/*                                            to store DNS and NTP server */
+/*                                            address, resulting in       */
+/*                                            version 5.8                 */
+/*  04-20-2015     Yuxin Zhou               Modified comment(s), and      */
+/*                                            unified ticks per second,   */
+/*                                            resulting in version 5.8 SP1*/
+/*  xx-xx-xxxx     Yuxin Zhou               Modified comment(s), and      */
+/*                                            added support for sending   */
+/*                                            maximum DHCP messsage size  */
+/*                                            option, resulting in        */
+/*                                            version 5.8 SP2             */
+/*                                                                        */
+/**************************************************************************/
 
-#ifndef NX_DHCP_CLIENT_H
-#define NX_DHCP_CLIENT_H
+#ifndef NXD_DHCP_CLIENT_H
+#define NXD_DHCP_CLIENT_H
 
 /* Determine if a C++ compiler is being used.  If so, ensure that standard
    C is used to process the API information.  */
@@ -121,40 +141,43 @@ extern   "C" {
 #include "nx_ipv4.h"
 #endif  /* FEATURE_NX_IPV6 */
 
-/* The DHCP client needs to support multihoming if
-   this is a NetX Duo v5.6 or later. */
 
-#ifndef MULTI_HOME_NETXDUO
-#if ((__NETXDUO_MAJOR_VERSION__  == 5) && (__NETXDUO_MINOR_VERSION__  >= 6))
-#define  MULTI_HOME_NETXDUO
-#endif  /* NETX Duo VERSION check */
-#endif
-
-     
-/*  Enable support for client state preserved between reboots   
-#define NX_DHCP_CLIENT_RESTORE_STATE  
+/* Enable BOOTP protocol instead of DHCP, define this option.
+#define NX_DHCP_ENABLE_BOOTP
 */
 
+/*  Enable support for client state preserved between reboots
+#define NX_DHCP_CLIENT_RESTORE_STATE
+*/
 
-/* Set NX_MAX_PHYSICAL_INTERFACES to 1 in nx_api.h for NetX/NetX Duo environments that
-   do not support multihomed devices.  */
+/* Enable support for clear the DHCP Client queue packet.  */
+#define NX_DHCP_CLIENT_CLEAR_QUEUE
+
+/* Enable the DHCP Client to accept a pointer to the DHCP packet pool.
+#define NX_DHCP_CLIENT_USER_CREATE_PACKET_POOL
+*/
+
+/* Enables an ARP probe for verifying the assigned DHCP address is
+   not owned by another host.  This is recommended, but not required by RFC 2131 (4.4.1).
+*/
+#define NX_DHCP_CLIENT_SEND_ARP_PROBE
+
+/* Enables DHCP Client send Maximum DHCP Message Size Option. RFC2132, Section9.10, Page29.
+#define NX_DHCP_CLIENT_SEND_MAX_DHCP_MESSAGE_OPTION
+*/
+
 
 /* Define the DHCP ID that is used to mark the DHCP structure as created.  */
 
 #define NX_DHCP_ID                      0x44484350UL
 
-/* Define the size of the BOOT buffer. This should be large enough for all the
-   required DHCP fields plus the minimum requirement of 312 bytes of option data
-   stated in RFC 2131; 2. Protocol Summary. */
-#define NX_BOOT_CLIENT_BUFFER_SIZE      548
-
 /* Define the DHCP stack size.  */
 
 #ifndef NX_DHCP_THREAD_STACK_SIZE
-#define NX_DHCP_THREAD_STACK_SIZE       2048 
+#define NX_DHCP_THREAD_STACK_SIZE       2048
 #endif
 
-/* Define the DHCP stack priority. This priority must be high enough to insure the 
+/* Define the DHCP stack priority. This priority must be high enough to insure the
    DHCP client gets scheduled promptly, and thus assigned an IP address.  Assigning
    it a higher priority increases the risk of 'starving' out the IP thread task which
    needs to initialize the network driver (which is required to be able to transmit packets). */
@@ -166,75 +189,74 @@ extern   "C" {
 /* Define DHCP timeout between DHCP messages processed. */
 
 #ifndef NX_DHCP_TIME_INTERVAL
-#define NX_DHCP_TIME_INTERVAL          (1 * _nx_system_ticks_per_second)   
+#define NX_DHCP_TIME_INTERVAL          (1 * NX_IP_PERIODIC_RATE)
 #endif
 
- 
-#define NX_DHCP_CLIENT_CLEAR_QUEUE
+/* Define the number of DNS name servers the Client will store. */
 
+#ifndef NX_DHCP_NUM_DNS_SERVERS
+#define NX_DHCP_NUM_DNS_SERVERS         2
+#endif
 
-/* 
-   Configure the DHCP Client to accept a pointer to the DHCP packet pool.   
-#define NX_DHCP_CLIENT_USER_CREATE_PACKET_POOL
-*/
+/* Define the number of Network Time Protocol servers the Client will store. */
 
-/* 
-   If the DHCP Client is configured for the DHCP Client to create its own
-   packet pool, establish the packet pool parameters here. 
-*/
+#ifndef NX_DHCP_NUM_NTP_SERVERS
+#define NX_DHCP_NUM_NTP_SERVERS         1
+#endif
 
-/* 
-   Define the packet payload size, keeping in mind the DHCP Client must support
-   at least a 548 byte DHCP message as per RFC 2131 and allow room for Ethernet, UDP and 
-   IP headers. 
-*/
+/* Define the size of the BOOT buffer. This should be large enough for all the
+   required DHCP header fields plus the minimum requirement of 312 bytes of option data
+   (total: 548 bytes) as per RFC 2131; Section 2. Protocol Summary. */
+#define NX_BOOT_CLIENT_BUFFER_SIZE      548
+
+/* Define the minimum IP datafram size as per RFC 2131; Section 2. Protocol Summary. */
+#define NX_DHCP_MINIMUM_IP_DATAGRAM     576
+
+/* Define the packet payload size, keeping in mind the DHCP Client must be prepared to
+   receive a message of up to 576 octets and allow room for physical network header,
+   as per RFC 2131; Section 2. Protocol Summary.  */
+
 #ifndef NX_DHCP_PACKET_PAYLOAD
-#define NX_DHCP_PACKET_PAYLOAD          (NX_BOOT_CLIENT_BUFFER_SIZE + NX_PHYSICAL_HEADER +  sizeof(NX_IPV4_HEADER) + sizeof(NX_UDP_HEADER))
+#define NX_DHCP_PACKET_PAYLOAD          (NX_DHCP_MINIMUM_IP_DATAGRAM + NX_PHYSICAL_HEADER)
 #endif /* NX_DHCP_PACKET_PAYLOAD */
 
-/* 
-   Define the packet pool size. 
-*/
-#ifndef NX_DHCP_PACKET_POOL_SIZE        
+/* Define the packet pool size.  */
+
+#ifndef NX_DHCP_PACKET_POOL_SIZE
 #define NX_DHCP_PACKET_POOL_SIZE        (5 * NX_DHCP_PACKET_PAYLOAD)
 #endif
 
-/* 
-    Define the wait option for packet allocation.
-*/
+/*  Define the wait option for packet allocation.  */
 
 #ifndef NX_PACKET_ALLOCATE_TIMEOUT
-#define NX_PACKET_ALLOCATE_TIMEOUT      (NX_DHCP_TIME_INTERVAL)
+#define NX_PACKET_ALLOCATE_TIMEOUT      (NX_IP_PERIODIC_RATE)
 #endif
 
 
 /* Define time out options for retransmission in seconds.  */
-
-/* Define the minimum amount of time to retransmit a DHCP IP address request. The 
+/* Define the minimum amount of time to retransmit a DHCP IP address request. The
    recommended wait time is 4 seconds in RFC 2131. */
-   
-#ifndef NX_DHCP_MIN_RETRANS_TIMEOUT 
-#define NX_DHCP_MIN_RETRANS_TIMEOUT     (4 * _nx_system_ticks_per_second)
+
+#ifndef NX_DHCP_MIN_RETRANS_TIMEOUT
+#define NX_DHCP_MIN_RETRANS_TIMEOUT     (4 * NX_IP_PERIODIC_RATE)
 #endif
 
-/* Define the maximum amount of time to retransmit a DHCP IP address request. The 
+/* Define the maximum amount of time to retransmit a DHCP IP address request. The
    recommended wait time is 64 seconds in RFC 2131. */
 
-#ifndef NX_DHCP_MAX_RETRANS_TIMEOUT 
-#define NX_DHCP_MAX_RETRANS_TIMEOUT     (64 * _nx_system_ticks_per_second)
+#ifndef NX_DHCP_MAX_RETRANS_TIMEOUT
+#define NX_DHCP_MAX_RETRANS_TIMEOUT     (64 * NX_IP_PERIODIC_RATE)
 #endif
 
-/* Define the minimum amount of time to retransmit a DHCP renew/rebind request. The 
+/* Define the minimum amount of time to retransmit a DHCP renew/rebind request. The
    recommended wait time is 60 seconds in RFC 2131. */
 
-#ifndef NX_DHCP_MIN_RENEW_TIMEOUT 
-#define NX_DHCP_MIN_RENEW_TIMEOUT       (60 * _nx_system_ticks_per_second)
+#ifndef NX_DHCP_MIN_RENEW_TIMEOUT
+#define NX_DHCP_MIN_RENEW_TIMEOUT       (60 * NX_IP_PERIODIC_RATE)
 #endif
 
-
-
- /* Define the number of NX_DHCP_TIME_INTERVAL intervals the DHCP Client waits to check for a server message. 
-    For example, if NX_DHCP_TIMEOUT_DECREMENTS is set to 60, the DHCP Client checks its receive queue every 
+ /* Define the number of NX_DHCP_TIME_INTERVAL intervals the DHCP Client waits to check for a server message.
+    For example, if NX_DHCP_TIMEOUT_DECREMENTS is set to 60, the DHCP Client checks its receive queue every
     60 * NX_DHCP_TIME_INTERVAL's. The default value of 0xFFFFFFFF disables checking for server messages. */
 
 #ifndef NX_DHCP_TIMEOUT_DECREMENTS
@@ -249,7 +271,7 @@ extern   "C" {
 
 #ifndef NX_DHCP_FRAGMENT_OPTION
 #define NX_DHCP_FRAGMENT_OPTION         NX_DONT_FRAGMENT
-#endif  
+#endif
 
 #ifndef NX_DHCP_TIME_TO_LIVE
 #define NX_DHCP_TIME_TO_LIVE            0x80
@@ -259,27 +281,12 @@ extern   "C" {
 #define NX_DHCP_QUEUE_DEPTH             4
 #endif
 
-/* This enables an ARP probe for verifying the assigned DHCP address is
-   not owned by another host.  This is recommended, but not required
-   by RFC 2131 (4.4.1).  
-*/
-#define NX_DHCP_CLIENT_SEND_ARP_PROBE
-
-
 #ifdef NX_DHCP_CLIENT_SEND_ARP_PROBE
-
 /*  Define the wait option to receive a response to the ARP probe in timer ticks. */
 #ifndef NX_DHCP_ARP_PROBE_TIMEOUT
-#define NX_DHCP_ARP_PROBE_TIMEOUT       1000
+#define NX_DHCP_ARP_PROBE_TIMEOUT       1 * NX_IP_PERIODIC_RATE
 #endif
-
 #endif
-
-/* To enable BOOTP protocol instead of DHCP, define this option.    
-#define NX_DHCP_ENABLE_BOOTP      
-*/
-
-
 
 /* Define the BootP Message Area Offsets.  The DHCP message format is identical to that of BootP, except
    for the Vendor options that start at the offset specified by NX_BOOTP_OFFSET_OPTIONS.  */
@@ -300,9 +307,9 @@ extern   "C" {
 #define NX_BOOTP_OFFSET_BOOT_FILE       108     /* 128 Boot file name, null if unused                       */
 #define NX_BOOTP_OFFSET_VENDOR          236     /* 64 Vendor options, set first 4 bytes to a magic number   */
 #define NX_BOOTP_OFFSET_OPTIONS         240     /* First variable vendor option                             */
-#define NX_BOOTP_OFFSET_END             NX_BOOT_CLIENT_BUFFER_SIZE     /* End of BOOTP buffer (NX_DHCP_PACKET_PAYLOAD-(16+20+8)    */
+#define NX_BOOTP_OFFSET_END             300     /* End of BOOTP buffer                                      */
 
-#define NX_DHCP_OPTION_ADDRESSS_SIZE    4
+#define NX_DHCP_OPTION_ADDRESS_SIZE     4
 
 
 /* Define the DHCP Specific Vendor Extensions. */
@@ -310,7 +317,7 @@ extern   "C" {
 #define NX_DHCP_OPTION_PAD              0
 #define NX_DHCP_OPTION_PAD_SIZE         0
 #define NX_DHCP_OPTION_SUBNET_MASK      1
-#define NX_DHCP_OPTION_SUBNET_MASK_SIZE NX_DHCP_OPTION_ADDRESSS_SIZE
+#define NX_DHCP_OPTION_SUBNET_MASK_SIZE NX_DHCP_OPTION_ADDRESS_SIZE
 #define NX_DHCP_OPTION_TIME_OFFSET      2
 #define NX_DHCP_OPTION_TIME_OFFSET_SIZE 4
 #define NX_DHCP_OPTION_GATEWAYS         3
@@ -321,21 +328,22 @@ extern   "C" {
 #define NX_DHCP_OPTION_NTP_SVR          42
 #define NX_DHCP_OPTION_VENDOR_OPTIONS   43
 #define NX_DHCP_OPTION_DHCP_IP_REQ      50
-#define NX_DHCP_OPTION_DHCP_IP_REQ_SIZE NX_DHCP_OPTION_ADDRESSS_SIZE
+#define NX_DHCP_OPTION_DHCP_IP_REQ_SIZE NX_DHCP_OPTION_ADDRESS_SIZE
 #define NX_DHCP_OPTION_DHCP_LEASE       51
 #define NX_DHCP_OPTION_DHCP_LEASE_SIZE  4
 #define NX_DHCP_OPTION_DHCP_TYPE        53
 #define NX_DHCP_OPTION_DHCP_TYPE_SIZE   1
 #define NX_DHCP_OPTION_DHCP_SERVER      54
-#define NX_DHCP_OPTION_DHCP_SERVER_SIZE NX_DHCP_OPTION_ADDRESSS_SIZE
+#define NX_DHCP_OPTION_DHCP_SERVER_SIZE NX_DHCP_OPTION_ADDRESS_SIZE
 #define NX_DHCP_OPTION_DHCP_PARAMETERS  55
 #define NX_DHCP_OPTION_DHCP_MESSAGE     56
+#define NX_DHCP_OPTION_MAX_DHCP_MESSAGE 57
 #define NX_DHCP_OPTION_RENEWAL          58
 #define NX_DHCP_OPTION_RENEWAL_SIZE     4
 #define NX_DHCP_OPTION_REBIND           59
 #define NX_DHCP_OPTION_REBIND_SIZE      4
 #define NX_DHCP_OPTION_CLIENT_ID        61
-#define NX_DHCP_OPTION_CLIENT_ID_SIZE   7 /* 1 byte for address type (01 = Ethernet), 6 bytes for address */ 
+#define NX_DHCP_OPTION_CLIENT_ID_SIZE   7 /* 1 byte for address type (01 = Ethernet), 6 bytes for address */
 #define NX_DHCP_OPTION_FDQN             81
 #define NX_DHCP_OPTION_FDQN_FLAG_N      8
 #define NX_DHCP_OPTION_FDQN_FLAG_E      4
@@ -357,7 +365,7 @@ extern   "C" {
 #define NX_BOOTP_OP_REPLY               2
 #define NX_BOOTP_TYPE_ETHERNET          1
 #define NX_BOOTP_HLEN_ETHERNET          6
-#define NX_BOOTP_FLAGS_BROADCAST        0x80 
+#define NX_BOOTP_FLAGS_BROADCAST        0x80
 #define NX_BOOTP_FLAGS_UNICAST          0x00
 #define NX_BOOTP_MAGIC_COOKIE           IP_ADDRESS(99, 130, 83, 99)
 #define NX_BOOTP_NO_ADDRESS             IP_ADDRESS(0, 0, 0, 0)
@@ -398,13 +406,13 @@ extern   "C" {
 
 /* Define error codes from DHCP API.  */
 
-#define NX_DHCP_ERROR                   0x90    /* General DHCP error code                                  */ 
-#define NX_DHCP_NO_RESPONSE             0x91    /* No response from server for option request               */ 
-#define NX_DHCP_BAD_IP_ADDRESS          0x92    /* Bad IP address or invalid interface input                */ 
+#define NX_DHCP_ERROR                   0x90    /* General DHCP error code                                  */
+#define NX_DHCP_NO_RESPONSE             0x91    /* No response from server for option request               */
+#define NX_DHCP_BAD_IP_ADDRESS          0x92    /* Bad IP address or invalid interface input                */
 #define NX_DHCP_ALREADY_STARTED         0x93    /* DHCP was already started                                 */
-#define NX_DHCP_NOT_BOUND               0x94    /* DHCP is not in a bound state                             */ 
-#define NX_DHCP_DEST_TO_SMALL           0x95    /* DHCP response is too big for destination                 */ 
-#define NX_DHCP_NOT_STARTED             0x96    /* DHCP was not started when stop was issued                */ 
+#define NX_DHCP_NOT_BOUND               0x94    /* DHCP is not in a bound state                             */
+#define NX_DHCP_DEST_TO_SMALL           0x95    /* DHCP response is too big for destination                 */
+#define NX_DHCP_NOT_STARTED             0x96    /* DHCP was not started when stop was issued                */
 #define NX_DHCP_PARSE_ERROR             0x97    /* Error extracting DHCP option data                        */
 #define NX_DHCP_BAD_XID                 0x98    /* DHCP packet received with mismatched XID                 */
 #define NX_DHCP_BAD_MAC_ADDRESS         0x99    /* DHCP packet received with mismatched MAC address         */
@@ -412,20 +420,19 @@ extern   "C" {
 #define NX_DHCP_INVALID_MESSAGE         0x9B    /* Invalid message received or requested to send            */
 #define NX_DHCP_INVALID_PAYLOAD         0x9C    /* Client receives DHCP message exceeding packet payload    */
 #define NX_DHCP_INVALID_IP_REQUEST      0x9D    /* Null IP address input for requesting IP address          */
+#define NX_DHCP_UNKNOWN_OPTION          0x9F    /* This option is unknow.                                   */
 
 
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
 /* Define a Client record for restore DHCP Client state from non volatile memory/across reboots. */
 
-typedef struct NX_DHCP_CLIENT_RECORD_STRUCT 
+typedef struct NX_DHCP_CLIENT_RECORD_STRUCT
 {
     UCHAR           nx_dhcp_state;              /* The current state of the DHCP Client                     */
-    ULONG           nx_dhcp_ip_address;         /* Server assigned IP Address                               */ 
-    ULONG           nx_dhcp_network_mask;       /* Server assigned network mask                             */  
-    ULONG           nx_dhcp_gateway_address;    /* Server assigned gateway address                          */  
-#ifdef MULTI_HOME_NETXDUO
-    UINT            nx_dhcp_interface_index;    /* Index of DHCP Client network interface                   */  
-#endif
+    ULONG           nx_dhcp_ip_address;         /* Server assigned IP Address                               */
+    ULONG           nx_dhcp_network_mask;       /* Server assigned network mask                             */
+    ULONG           nx_dhcp_gateway_address;    /* Server assigned gateway address                          */
+    UINT            nx_dhcp_interface_index;    /* Index of DHCP Client network interface                   */
     ULONG           nx_dhcp_timeout;            /* The current value of any timeout, in seconds             */
     ULONG           nx_dhcp_server_ip;          /* The server IP Address                                    */
     ULONG           nx_dhcp_lease_remain_time;  /* Time remaining before lease expires                      */
@@ -438,43 +445,45 @@ typedef struct NX_DHCP_CLIENT_RECORD_STRUCT
 } NX_DHCP_CLIENT_RECORD;
 #endif /* NX_DHCP_CLIENT_RESTORE_STATE */
 
-/* Define the DHCP structure that contains all the information necessary for this DHCP 
+/* Define the DHCP structure that contains all the information necessary for this DHCP
    instance.  */
 
-typedef struct NX_DHCP_STRUCT 
+typedef struct NX_DHCP_STRUCT
 {
     ULONG           nx_dhcp_id;                 /* DHCP Structure ID                                        */
-    CHAR           *nx_dhcp_name;               /* DHCP name supplied at create                             */ 
-    UCHAR           nx_dhcp_started;            /* DHCP started flag                                        */ 
+    CHAR           *nx_dhcp_name;               /* DHCP name supplied at create                             */
+    UCHAR           nx_dhcp_started;            /* DHCP started flag                                        */
     UCHAR           nx_dhcp_state;              /* The current state of the DHCP Client                     */
-    UCHAR           nx_dhcp_sleep_flag;         /* The flag indicating the DHCP Client is sleeping          */ 
+    UCHAR           nx_dhcp_sleep_flag;         /* The flag indicating the DHCP Client is sleeping          */
     ULONG           nx_dhcp_xid;                /* Transaction ID for all transmissions                     */
-    ULONG           nx_dhcp_ip_address;         /* Server assigned IP Address                               */ 
+    ULONG           nx_dhcp_seconds;            /* Number of seconds elapsed waiting for server OFFER       */
+    ULONG           nx_dhcp_ip_address;         /* Server assigned IP Address                               */
     UINT            nx_dhcp_skip_discovery;     /* Indicate if host should skip the discovery message       */
-    ULONG           nx_dhcp_network_mask;       /* Server assigned network mask                             */  
-    ULONG           nx_dhcp_gateway_address;    /* Server assigned gateway address                          */  
-#ifdef MULTI_HOME_NETXDUO
-    UINT            nx_dhcp_interface_index;    /* Index of DHCP Client network interface                   */  
-#endif
-    NX_IP           *nx_dhcp_ip_ptr;            /* The associated IP pointer for this DHCP instance         */ 
+    ULONG           nx_dhcp_network_mask;       /* Server assigned network mask                             */
+    ULONG           nx_dhcp_gateway_address;    /* Server assigned gateway address                          */
+    ULONG           nx_dhcp_DNS_server_address[NX_DHCP_NUM_DNS_SERVERS]; /* Server assigned DNS server address  */
+    ULONG           nx_dhcp_NTP_server_address[NX_DHCP_NUM_NTP_SERVERS]; /* Server assigned NTP server address  */
+    UINT            nx_dhcp_clear_broadcast;    /* Client sends messages with unicast reply requested       */
+    UINT            nx_dhcp_interface_index;    /* Index of DHCP Client network interface                   */
+    NX_IP           *nx_dhcp_ip_ptr;            /* The associated IP pointer for this DHCP instance         */
     ULONG           nx_dhcp_server_ip;          /* The server IP Address                                    */
-    ULONG           nx_dhcp_internal_errors;    /* The number of internal DHCP errors encountered           */ 
-    ULONG           nx_dhcp_discoveries_sent;   /* The number of Discovery attempts made                    */ 
-    ULONG           nx_dhcp_offers_received;    /* The number of Offers received                            */ 
-    ULONG           nx_dhcp_requests_sent;      /* The number of Request attempts made                      */ 
-    ULONG           nx_dhcp_acks_received;      /* The number of ACKs received                              */ 
-    ULONG           nx_dhcp_nacks_received;     /* The number of NACKs received                             */ 
-    ULONG           nx_dhcp_releases_sent;      /* The number of Releases sent                              */ 
-    ULONG           nx_dhcp_force_renewal_rec;  /* The number of Forced Renewal received                    */ 
-    ULONG           nx_dhcp_informs_sent;       /* The number of Inform (option requests) sent              */ 
-    ULONG           nx_dhcp_inform_responses;   /* The number of Inform responses                           */ 
+    ULONG           nx_dhcp_internal_errors;    /* The number of internal DHCP errors encountered           */
+    ULONG           nx_dhcp_discoveries_sent;   /* The number of Discovery attempts made                    */
+    ULONG           nx_dhcp_offers_received;    /* The number of Offers received                            */
+    ULONG           nx_dhcp_requests_sent;      /* The number of Request attempts made                      */
+    ULONG           nx_dhcp_acks_received;      /* The number of ACKs received                              */
+    ULONG           nx_dhcp_nacks_received;     /* The number of NACKs received                             */
+    ULONG           nx_dhcp_releases_sent;      /* The number of Releases sent                              */
+    ULONG           nx_dhcp_force_renewal_rec;  /* The number of Forced Renewal received                    */
+    ULONG           nx_dhcp_informs_sent;       /* The number of Inform (option requests) sent              */
+    ULONG           nx_dhcp_inform_responses;   /* The number of Inform responses                           */
     ULONG           nx_dhcp_timeout;            /* The current value of any timeout, in seconds             */
     ULONG           nx_dhcp_lease_time;         /* The current Lease Time in seconds                        */
     ULONG           nx_dhcp_renewal_time;       /* The current Renewal Time in seconds                      */
     ULONG           nx_dhcp_rebind_time;        /* The current Rebind Time in seconds                       */
     ULONG           nx_dhcp_renewal_remain_time;/* Time remaining to renew (before rebinding necessary)     */
     ULONG           nx_dhcp_rebind_remain_time; /* Time remaining to rebind (before lease expires)          */
-    UCHAR           nx_dhcp_user_option;        /* User option request */  
+    UCHAR           nx_dhcp_user_option;        /* User option request */
     NX_PACKET       *nx_dhcp_packet_received;   /* Peek into receive queue for packets waiting              */
 #ifndef NX_DHCP_CLIENT_USER_CREATE_PACKET_POOL
     NX_PACKET_POOL  nx_dhcp_pool;               /* The pool of UDP data packets for DHCP messages           */
@@ -483,11 +492,15 @@ typedef struct NX_DHCP_STRUCT
     NX_PACKET_POOL *nx_dhcp_packet_pool_ptr;    /* Pointer to DHCP Client packet pool                       */
     NX_UDP_SOCKET   nx_dhcp_socket;             /* The Socket used for DHCP messages                        */
     TX_THREAD       nx_dhcp_thread;             /* The DHCP processing thread                               */
-    TX_MUTEX        nx_dhcp_mutex;              /* The DHCP mutex for protecting access                     */ 
+    TX_MUTEX        nx_dhcp_mutex;              /* The DHCP mutex for protecting access                     */
     UCHAR           nx_dhcp_thread_stack[NX_DHCP_THREAD_STACK_SIZE];
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
     struct NX_DHCP_CLIENT_RECORD_STRUCT nx_dhcp_client_record; /* A subset of the Client data to restore the DHCP Client state. */
 #endif
+
+#ifdef NX_DHCP_CLIENT_SEND_MAX_DHCP_MESSAGE_OPTION
+    ULONG           nx_dhcp_max_dhcp_message_size;             /* The maximum length DHCP message that DHCP Client is willing to accept.   */
+#endif /* NX_DHCP_CLIENT_SEND_MAX_DHCP_MESSAGE_OPTION */
 
     /* Define the callback function for DHCP state change notification. If specified
        by the application, this function is called whenever a state change occurs for
@@ -504,9 +517,9 @@ typedef struct NX_DHCP_STRUCT
 
 /* Application caller is present, perform API mapping.  */
 
-/* Determine if error checking is desired.  If so, map DHCP API functions 
+/* Determine if error checking is desired.  If so, map DHCP API functions
    to the appropriate error checking front-ends.  Otherwise, map API
-   functions to the core functions that actually perform the work. 
+   functions to the core functions that actually perform the work.
    Note: error checking is enabled by default.  */
 
 #ifdef NX_DISABLE_ERROR_CHECKING
@@ -530,9 +543,8 @@ typedef struct NX_DHCP_STRUCT
 #define nx_dhcp_user_option_convert     _nx_dhcp_user_option_convert
 #define nx_dhcp_reinitialize            _nx_dhcp_reinitialize
 #define nx_dhcp_send_request            _nx_dhcp_send_request
-#ifdef MULTI_HOME_NETXDUO
 #define nx_dhcp_set_interface_index     _nx_dhcp_set_interface_index
-#endif
+#define nx_dhcp_clear_broadcast_flag    _nx_dhcp_clear_broadcast_flag
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
 #define nx_dhcp_resume                          _nx_dhcp_resume
 #define nx_dhcp_suspend                         _nx_dhcp_suspend
@@ -562,9 +574,8 @@ typedef struct NX_DHCP_STRUCT
 #define nx_dhcp_user_option_convert     _nxe_dhcp_user_option_convert
 #define nx_dhcp_reinitialize            _nxe_dhcp_reinitialize
 #define nx_dhcp_send_request            _nxe_dhcp_send_request
-#ifdef MULTI_HOME_NETXDUO
 #define nx_dhcp_set_interface_index     _nxe_dhcp_set_interface_index
-#endif    
+#define nx_dhcp_clear_broadcast_flag    _nxe_dhcp_clear_broadcast_flag
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
 #define nx_dhcp_resume                          _nxe_dhcp_resume
 #define nx_dhcp_suspend                         _nxe_dhcp_suspend
@@ -594,17 +605,15 @@ UINT        nx_dhcp_user_option_retrieve(NX_DHCP *dhcp_ptr, UINT request_option,
 ULONG       nx_dhcp_user_option_convert(UCHAR *source_ptr);
 UINT        nx_dhcp_reinitialize(NX_DHCP *dhcp_ptr);
 UINT        nx_dhcp_send_request(NX_DHCP *dhcp_ptr, UINT dhcp_message_type);
-ULONG       nx_dhcp_user_option_convert(UCHAR *source_ptr);
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
-UINT        nx_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);               
-UINT        nx_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);           
+UINT        nx_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);
+UINT        nx_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);
 UINT        nx_dhcp_client_update_time_remaining(NX_DHCP *dhcp_ptr, ULONG time_elapsed);
 UINT        nx_dhcp_resume(NX_DHCP *dhcp_ptr);
 UINT        nx_dhcp_suspend(NX_DHCP *dhcp_ptr);
 #endif /* NX_DHCP_CLIENT_RESTORE_STATE */
-#ifdef MULTI_HOME_NETXDUO
 UINT        nx_dhcp_set_interface_index(NX_DHCP *dhcp_ptr, UINT interface_index);
-#endif
+UINT        nx_dhcp_clear_broadcast_flag(NX_DHCP *dhcp_ptr, UINT clear_flag);
 
 #else
 
@@ -636,21 +645,21 @@ UINT        _nxe_dhcp_server_address_get(NX_DHCP *dhcp_ptr, ULONG *server_addres
 UINT        _nx_dhcp_server_address_get(NX_DHCP *dhcp_ptr, ULONG *server_address);
 UINT        _nxe_dhcp_user_option_retrieve(NX_DHCP *dhcp_ptr, UINT request_option, UCHAR *destination_ptr, UINT *destination_size);
 UINT        _nx_dhcp_user_option_retrieve(NX_DHCP *dhcp_ptr, UINT request_option, UCHAR *destination_ptr, UINT *destination_size);
+ULONG       _nxe_dhcp_user_option_convert(UCHAR *source_ptr);
+ULONG       _nx_dhcp_user_option_convert(UCHAR *source_ptr);
 UINT        _nxe_dhcp_reinitialize(NX_DHCP *dhcp_ptr);
 UINT        _nx_dhcp_reinitialize(NX_DHCP *dhcp_ptr);
 UINT        _nxe_dhcp_send_request(NX_DHCP *dhcp_ptr, UINT dhcp_message_type);
 UINT        _nx_dhcp_send_request(NX_DHCP *dhcp_ptr, UINT dhcp_message_type);
-ULONG       _nxe_dhcp_user_option_convert(UCHAR *source_ptr);
-ULONG       _nx_dhcp_user_option_convert(UCHAR *source_ptr);
-#ifdef MULTI_HOME_NETXDUO
 UINT        _nxe_dhcp_set_interface_index(NX_DHCP *dhcp_ptr, UINT interface_index);
 UINT        _nx_dhcp_set_interface_index(NX_DHCP *dhcp_ptr, UINT interface_index);
-#endif
+UINT        _nxe_dhcp_clear_broadcast_flag(NX_DHCP *dhcp_ptr, UINT clear_flag);
+UINT        _nx_dhcp_clear_broadcast_flag(NX_DHCP *dhcp_ptr, UINT clear_flag);
 #ifdef NX_DHCP_CLIENT_RESTORE_STATE
-UINT        _nxe_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);               
-UINT        _nx_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);               
-UINT        _nxe_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);           
-UINT        _nx_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);           
+UINT        _nxe_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);
+UINT        _nx_dhcp_client_get_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr);
+UINT        _nxe_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);
+UINT        _nx_dhcp_client_restore_record(NX_DHCP *dhcp_ptr, NX_DHCP_CLIENT_RECORD *record_ptr, ULONG time_elapsed);
 UINT        _nxe_dhcp_client_update_time_remaining(NX_DHCP *dhcp_ptr, ULONG time_elapsed);
 UINT        _nx_dhcp_client_update_time_remaining(NX_DHCP *dhcp_ptr, ULONG time_elapsed);
 UINT        _nxe_dhcp_resume(NX_DHCP *dhcp_ptr);
@@ -658,29 +667,7 @@ UINT        _nx_dhcp_resume(NX_DHCP *dhcp_ptr);
 UINT        _nxe_dhcp_suspend(NX_DHCP *dhcp_ptr);
 UINT        _nx_dhcp_suspend(NX_DHCP *dhcp_ptr);
 #endif /* NX_DHCP_CLIENT_RESTORE_STATE */
-
 #endif   /* NX_DHCP_SOURCE_CODE */
-
-VOID        _nx_dhcp_thread_entry(ULONG ip_instance);
-VOID        _nx_dhcp_process(NX_DHCP *dhcp_ptr);
-VOID        _nx_dhcp_extract_information(NX_DHCP *dhcp_ptr, UCHAR *dhcp_message, UINT length);
-UINT        _nx_dhcp_get_response(NX_DHCP *dhcp_ptr, ULONG wait_time, NX_PACKET **packet_ptr, UINT *timed_out);
-UINT        _nx_dhcp_get_option_value(UCHAR *bootp_message, UINT option, ULONG *value, UINT length);
-UINT        _nx_dhcp_add_option_value(UCHAR *bootp_message, UINT option, UINT size, ULONG value);
-UINT        _nx_dhcp_add_option_string(UCHAR *bootp_message, UINT option, UINT size, UCHAR *value);
-ULONG       _nx_dhcp_update_timeout(ULONG timeout);
-ULONG       _nx_dhcp_update_renewal_timeout(ULONG timeout);
-UCHAR       *_nx_dhcp_search_buffer(UCHAR *bootp_message, UINT option, UINT length);
-ULONG       _nx_dhcp_get_data(UCHAR *data, UINT size);
-VOID        _nx_dhcp_store_data(UCHAR *data, UINT size, ULONG value);
-VOID        _nx_dhcp_move_string(UCHAR *dest, UCHAR *source, UINT size);
-UINT        _nx_dhcp_ip_address_set(NX_DHCP *dhcp_ptr, ULONG ip_address, ULONG network_mask);
-UINT        _nx_dhcp_send_request_internal(NX_DHCP *dhcp_ptr, UINT dhcp_message_type);
-UINT        _nx_dhcp_client_send_arp_probe(NX_DHCP *dhcp_ptr, ULONG ip_address_to_probe, UINT timeout, UINT *is_unique);
-ULONG       _nx_dhcp_add_randomize(ULONG timeout);
-#ifdef NX_DHCP_CLIENT_RESTORE_STATE
-UINT        _nx_dhcp_client_create_record(NX_DHCP *dhcp_ptr);
-#endif /* NX_DHCP_CLIENT_RESTORE_STATE */
 
 
 /* Determine if a C++ compiler is being used.  If so, complete the standard
@@ -689,4 +676,4 @@ UINT        _nx_dhcp_client_create_record(NX_DHCP *dhcp_ptr);
 }
 #endif  /* __cplusplus */
 
-#endif  /* NX_DHCP_CLIENT_H */
+#endif  /* NXD_DHCP_CLIENT_H */

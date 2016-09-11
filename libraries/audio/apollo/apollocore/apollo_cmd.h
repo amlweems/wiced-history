@@ -71,7 +71,8 @@ typedef wiced_result_t (*apollo_cmd_callback_t)(void* handle, void* userdata, AP
  *
  * @param[in] interface   : Interface for the command listener socket.
  * @param[in] mac         : Client MAC address to use for processing commands.
- * @paran[in] callback    : Callback handler for command events.
+ * @param[in] userdata    : Userdata pointer passed back in event callback.
+ * @param[in] callback    : Callback handler for command events.
  *
  * @return Pointer to the command instance or NULL
  */
@@ -80,7 +81,7 @@ void* apollo_cmd_init(wiced_interface_t interface, wiced_mac_t* mac, void* userd
 
 /** Deinitialize the Apollo command library.
  *
- * @param[in] audio  : handle to the command instance.
+ * @param[in] handle  : handle to the command instance.
  *
  * @return    Status of the operation.
  */

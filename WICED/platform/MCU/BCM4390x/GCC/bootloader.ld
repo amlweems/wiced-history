@@ -18,16 +18,7 @@ irq_instruction_vector_low_reset = 0xB03EF000;
 
 ENTRY( _low_start );
 
-MEMORY
-{
-    ROM              (rx)   : ORIGIN = 0x00400000, LENGTH = 640K
-    FLOPS            (rwx)  : ORIGIN = 0x00000000, LENGTH = 32
-    BOOTLOADER_SRAM  (rwx)  : ORIGIN = 0x00697000, LENGTH = 32K  /* Uses the top 32K of SRAM (apart from the 4K used by the ROM bootloader */
-
-    /* These will be written to by the ROM bootloader as it loads the this 2nd stage RAM bootloader, hence must be avoided */
-    ROM_BOOTLOADER_GLOBALS (r) : ORIGIN = 0x00554000, LENGTH = 4K
-    ROM_BOOTLOADER_STACK   (r) : ORIGIN = 0x0069F000, LENGTH = 4K
-}
+INCLUDE GCC_bootloader_memory.ld
 
 SECTIONS
 {

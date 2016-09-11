@@ -33,6 +33,39 @@ extern "C" {
 /* Maximum supported AK4954 devices. */
 #define AK4954_MAX_DEVICES      1
 
+/* standard audio device information */
+#define AK4954_ADC_NAME         "ak4954_adc"
+#define AK4954_ADC_DIRECTION    PLATFORM_AUDIO_DEVICE_INPUT
+#define AK4954_ADC_PORT_TYPE    PLATFORM_AUDIO_LINE
+#define AK4954_ADC_CHANNELS     2
+#define AK4954_ADC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_24_BIT)
+#define AK4954_ADC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_8KHZ | PLATFORM_AUDIO_SAMPLE_RATE_16KHZ |      \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_22_05KHZ | PLATFORM_AUDIO_SAMPLE_RATE_32KHZ |  \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ | PLATFORM_AUDIO_SAMPLE_RATE_48KHZ |   \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_96KHZ)
+
+#define AK4954_DAC_NAME         "ak4954_dac"
+#define AK4954_DAC_DIRECTION    PLATFORM_AUDIO_DEVICE_OUTPUT
+#define AK4954_DAC_PORT_TYPE    PLATFORM_AUDIO_LINE
+#define AK4954_DAC_CHANNELS     2
+#define AK4954_DAC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_24_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_32_BIT)
+#define AK4954_DAC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_8KHZ | PLATFORM_AUDIO_SAMPLE_RATE_16KHZ |      \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_22_05KHZ | PLATFORM_AUDIO_SAMPLE_RATE_32KHZ |  \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ | PLATFORM_AUDIO_SAMPLE_RATE_48KHZ |   \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_96KHZ)
+
+#define AUDIO_DEVICE_ID_AK4954_ADC_LINE_INFO                    \
+        { AUDIO_DEVICE_ID_AK4954_ADC_LINE, AK4954_ADC_NAME,     \
+          AK4954_ADC_DESCRIPTION, AK4954_ADC_DIRECTION,         \
+          AK4954_ADC_PORT_TYPE, AK4954_ADC_CHANNELS,            \
+          AK4954_ADC_SIZES, AK4954_ADC_RATES }
+
+#define AUDIO_DEVICE_ID_AK4954_DAC_LINE_INFO                    \
+        { AUDIO_DEVICE_ID_AK4954_DAC_LINE, AK4954_DAC_NAME,     \
+          AK4954_DAC_DESCRIPTION, AK4954_DAC_DIRECTION,         \
+          AK4954_DAC_PORT_TYPE, AK4954_DAC_CHANNELS,            \
+          AK4954_DAC_SIZES, AK4954_DAC_RATES }
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -76,6 +109,7 @@ struct ak4954_device_cmn_data
     wiced_i2c_device_t *            i2c_data;
     ak4954_clock_settings_t         ck;
     wiced_gpio_t                    pdn;
+    uint8_t                         playback_volume;
 };
 
 struct ak4954_device_data
@@ -99,7 +133,7 @@ extern const ak4954_device_route_t ak4954_adc_mic;
 
 wiced_result_t ak4954_platform_configure( ak4954_device_data_t *device_data, uint32_t mclk, uint32_t fs, uint8_t width );
 
-wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const char *name );
+wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const platform_audio_device_id_t device_id );
 
 /* Don't use these functions directly; use macros provided. */
 ak4954_ckcfg_fn_t   ak4954_mpll, ak4954_spll, ak4954_ext;

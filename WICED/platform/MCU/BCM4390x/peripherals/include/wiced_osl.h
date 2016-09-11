@@ -144,6 +144,9 @@ extern dmaaddr_t osl_dma_map(void *va, uint size, int direction);
         BCM_REFERENCE(dmah); \
     })
 
+/* API for DMA addressing capability */
+#define OSL_DMADDRWIDTH(osh, addrwidth) BCM_REFERENCE(osh)
+
 /* Shared (dma-able) memory access macros */
 #define R_SM(r)                         *(r)
 #define W_SM(r, v)                      (*(r) = (v))
@@ -185,8 +188,8 @@ extern void   osl_wrapper_enable(void *wrapper);
 /* OSH structure */
 typedef struct wiced_osh
 {
-    int32_t pktget_add_remove;
-    int32_t pktfree_add_remove;
+    int32_t rx_pktget_add_remove;
+    int32_t tx_pktfree_add_remove;
 } wiced_osh_t;
 
 #ifdef __cplusplus

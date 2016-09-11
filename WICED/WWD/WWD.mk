@@ -15,7 +15,7 @@ GLOBAL_INCLUDES := . \
                    include/network \
                    include/RTOS \
                    internal/bus_protocols/$(subst .,/,$(BUS)) \
-                   internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)
+                   internal/chips/$(WLAN_CHIP_FAMILY)
 
 
 $(NAME)_SOURCES := internal/wwd_thread.c \
@@ -41,7 +41,7 @@ $(NAME)_CHECK_HEADERS := \
                          internal/wwd_thread_internal.h \
                          internal/bus_protocols/wwd_bus_protocol_interface.h \
                          internal/bus_protocols/$(subst .,/,$(BUS))/wwd_bus_protocol.h \
-                         internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)/chip_constants.h \
+                         internal/chips/$(WLAN_CHIP_FAMILY)/chip_constants.h \
                          include/wwd_assert.h \
                          include/wwd_constants.h \
                          include/wwd_debug.h \
@@ -83,6 +83,18 @@ GLOBAL_DEFINES += FIRMWARE_WITH_PMK_CALC_SUPPORT
 endif
 endif
 
+ifeq ($(WLAN_CHIP_FAMILY),4343x)
+ifeq ($(BUS),SPI)
+GLOBAL_DEFINES += WWD_SPI_IRQ_FALLING_EDGE
+endif
+endif
+
+ifeq ($(WLAN_CHIP_FAMILY),4334x)
+ifeq ($(BUS),SPI)
+GLOBAL_DEFINES += WWD_DISABLE_SAVE_RESTORE
+endif
+endif
+
 ifeq ($(WLAN_CHIP),)
 $(error ERROR: WLAN_CHIP must be defined in your platform makefile)
 endif
@@ -91,12 +103,16 @@ ifeq ($(WLAN_CHIP_REVISION),)
 $(error ERROR: WLAN_CHIP_REVISION must be defined in your platform makefile)
 endif
 
+ifeq ($(WLAN_CHIP_FAMILY),)
+$(error ERROR: WLAN_CHIP_FAMILY must be defined in your platform makefile)
+endif
+
 ifeq ($(HOST_OPENOCD),)
 $(error ERROR: HOST_OPENOCD must be defined in your platform makefile)
 endif
 
-$(NAME)_SOURCES += internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)/wwd_ap.c \
-                   internal/chips/$(WLAN_CHIP)$(WLAN_CHIP_REVISION)/wwd_chip_specific_functions.c
+$(NAME)_SOURCES += internal/chips/$(WLAN_CHIP_FAMILY)/wwd_ap.c \
+                   internal/chips/$(WLAN_CHIP_FAMILY)/wwd_chip_specific_functions.c
 
 $(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 

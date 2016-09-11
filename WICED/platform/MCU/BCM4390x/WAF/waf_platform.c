@@ -81,7 +81,7 @@ void platform_load_app_chunk_from_fs( const image_location_t* app_header_locatio
 
     if ( platform_is_load_permitted( physical_address, size, &aon_segment ) )
     {
-        WFILE* stream = file_handler;
+        wicedfs_file_t* stream = file_handler;
 
         wicedfs_fread( physical_address, size, 1, stream );
 

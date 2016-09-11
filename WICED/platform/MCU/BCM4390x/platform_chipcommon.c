@@ -100,9 +100,6 @@ WWD_RTOS_DEFINE_ISR( platform_chipcommon_isr )
 #ifndef BCM4390X_UART_SLOW_POLL_MODE
         /* Slow UART interrupt */
         platform_uart_irq(&platform_uart_drivers[WICED_UART_1]);
-#else
-        /* Unsolicited slow UART interrupt */
-        wiced_assert("Invalid ChipCommon interrupt source: Slow UART", 0);
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE */
     }
 
@@ -111,10 +108,12 @@ WWD_RTOS_DEFINE_ISR( platform_chipcommon_isr )
 #ifndef BCM4390X_UART_FAST_POLL_MODE
         /* Fast UART interrupt */
         platform_uart_irq(&platform_uart_drivers[WICED_UART_2]);
-#else
-        /* Unsolicited fast UART interrupt */
-        wiced_assert("Invalid ChipCommon interrupt source: Fast UART", 0);
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
+
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+        /* GCI UART interrupt */
+        platform_uart_irq(&platform_uart_drivers[WICED_UART_3]);
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
     }
 
     if ( ( ( int_status & CC_INT_STATUS_MASK_ASCURXINT ) != 0 ) && ( ( int_mask & CC_INT_STATUS_MASK_ASCURXINT ) != 0 ) )

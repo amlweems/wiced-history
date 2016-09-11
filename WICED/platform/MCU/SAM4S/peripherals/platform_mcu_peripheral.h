@@ -14,7 +14,6 @@
 #pragma once
 #include "platform_cmsis.h"
 #include "platform_constants.h"
-#include "platform_peripheral.h"
 
 /* ASF library headers */
 #include "sam4s.h"

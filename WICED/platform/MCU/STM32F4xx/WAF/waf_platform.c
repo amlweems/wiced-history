@@ -23,7 +23,18 @@
 #include "waf_platform.h"
 
 #define PLATFORM_APP_START_SECTOR      ( FLASH_Sector_3  )
+
+#if defined(STM32F401xx)
+#define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_5 )
+#elif defined(STM32F411xE)
+#define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_7 )
+#elif defined(STM32F40_41xxx)
 #define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_11 )
+#elif defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#define PLATFORM_APP_END_SECTOR        ( FLASH_Sector_23 )
+#else
+#error Platform maximum number of flash sectors not defined
+#endif
 
 #define APP_CODE_START_ADDR   ((uint32_t)&app_code_start_addr_loc)
 #define SRAM_START_ADDR       ((uint32_t)&sram_start_addr_loc)

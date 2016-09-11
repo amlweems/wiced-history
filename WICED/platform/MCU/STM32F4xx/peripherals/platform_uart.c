@@ -478,6 +478,12 @@ uint8_t platform_uart_get_port_number( USART_TypeDef* uart )
     {
         return 1;
     }
+#if defined(STM32F401xx) || defined(STM32F411xE)
+    else if ( uart == USART6 )
+    {
+        return 2;
+    }
+#else
     else if ( uart == USART3 )
     {
         return 2;
@@ -494,6 +500,7 @@ uint8_t platform_uart_get_port_number( USART_TypeDef* uart )
     {
         return 5;
     }
+#endif
     else
     {
         return 0xff;

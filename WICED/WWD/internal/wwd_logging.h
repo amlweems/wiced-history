@@ -16,24 +16,24 @@ extern "C"
 #endif
 
 /*
-#define WWD_LOGGING_UART_ENABLE
+#define WWD_LOGGING_STDOUT_ENABLE
 */
 /*
 #define WWD_LOGGING_BUFFER_ENABLE
 */
 
-#if defined( WWD_LOGGING_UART_ENABLE )
+#if defined( WWD_LOGGING_STDOUT_ENABLE )
 
 #include <stdio.h>
-
-#define WWD_LOG( x ) {printf x; }
+extern int wwd_logging_enabled;
+#define WWD_LOG( x ) if (wwd_logging_enabled) {printf x; }
 
 #elif defined( WWD_LOGGING_BUFFER_ENABLE )
-
+extern int wwd_logging_enabled;
 
 extern int wwd_logging_printf(const char *format, ...);
 
-#define WWD_LOG( x ) {wwd_logging_printf x; }
+#define WWD_LOG( x ) if (wwd_logging_enabled) {wwd_logging_printf x; }
 
 
 #else /* if defined( WWD_LOGGING_BUFFER_ENABLE ) */

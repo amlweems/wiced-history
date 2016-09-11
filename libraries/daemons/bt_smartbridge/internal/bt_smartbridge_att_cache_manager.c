@@ -12,17 +12,13 @@
  *
  */
 
-#include "bt_smartbridge_att_cache_manager.h"
-#include "linked_list.h"
-#if 1
-#include "bt_smart_gatt.h"
-#endif
-
 #include "wiced.h"
+#include "linked_list.h"
 #include "wiced_bt_smartbridge.h"
 #include "wiced_bt_smart_interface.h"
-#include "smartbridge_stack_if.h"
-#include "smartbridge_helper.h"
+#include "bt_smartbridge_stack_interface.h"
+#include "bt_smartbridge_helper.h"
+#include "bt_smartbridge_att_cache_manager.h"
 
 
 /******************************************************
@@ -665,13 +661,12 @@ static wiced_result_t smartbridge_att_cache_discover_all( bt_smartbridge_att_cac
 
                 CHECK_FOR_ERROR( result != WICED_BT_SUCCESS, result );
             }
-#if 0
             /******************************************************************
              * Characteristic Descriptor Discovery
              ******************************************************************/
             if ( characteristic_array[j]->value.characteristic.descriptor_start_handle <= characteristic_array[j]->value.characteristic.descriptor_end_handle )
             {
-                //result = bt_smart_gatt_discover_all_characteristic_descriptors( connection_handle, characteristic_array[j]->value.characteristic.descriptor_start_handle, characteristic_array[j]->value.characteristic.descriptor_end_handle, &descriptor_list );
+                result = smartbridge_bt_interface_discover_all_characteristic_descriptors( connection_handle, characteristic_array[j]->value.characteristic.descriptor_start_handle, characteristic_array[j]->value.characteristic.descriptor_end_handle, &descriptor_list );
 
                 CHECK_FOR_ERROR( result == WICED_BT_GATT_TIMEOUT, result );
 
@@ -683,7 +678,7 @@ static wiced_result_t smartbridge_att_cache_discover_all( bt_smartbridge_att_cac
                     /* Initialise variable for this iteration */
                     descriptor_with_value = NULL;
 
-                    //result = bt_smart_gatt_read_characteristic_descriptor( connection_handle, descriptor_with_no_value->handle, &descriptor_with_no_value->type, &descriptor_with_value );
+                    result = smartbridge_bt_interface_read_characteristic_descriptor( connection_handle, descriptor_with_no_value->handle, &descriptor_with_no_value->type, &descriptor_with_value );
 
                     CHECK_FOR_ERROR( result == WICED_BT_GATT_TIMEOUT, result );
 
@@ -700,7 +695,6 @@ static wiced_result_t smartbridge_att_cache_discover_all( bt_smartbridge_att_cac
 
                 CHECK_FOR_ERROR( result != WICED_BT_SUCCESS, result );
             }
-#endif
         }
 
         /* Merge Characteristics to main list */

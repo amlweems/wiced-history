@@ -14,6 +14,7 @@
 
 
 #include "wwd_debug.h"
+#include "wwd_assert.h"
 #include "network/wwd_buffer_interface.h"
 #include "platform/wwd_resource_interface.h"
 #include "network/wwd_network_constants.h"
@@ -221,4 +222,11 @@ WEAK wwd_result_t wwd_bus_set_backplane_window( uint32_t addr )
 
     backplane_window_current_base_address = base;
     return WWD_SUCCESS;
+}
+
+/* Default implementation of WWD bus resume function, which does nothing */
+WEAK wwd_result_t wwd_bus_resume_after_deep_sleep( void )
+{
+    wiced_assert( "In order to support deep-sleep platform need to implement this function", 0 );
+    return WWD_UNSUPPORTED;
 }

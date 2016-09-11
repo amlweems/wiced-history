@@ -759,11 +759,52 @@ typedef struct
     wiced_bt_dev_le_key_type_t  resp_keys;              /**< keys to be distributed, bit mask                                           */
 } wiced_bt_dev_ble_io_caps_req_t;
 
+typedef struct
+{
+    BT_OCTET16          irk;            /**< peer diverified identity root */
+#if SMP_INCLUDED == TRUE && SMP_LE_SC_INCLUDED == TRUE
+    BT_OCTET16          pltk;           /**< peer long term key */
+    BT_OCTET16          pcsrk;          /**< peer SRK peer device used to secured sign local data  */
+
+    BT_OCTET16          lltk;           /**< local long term key */
+    BT_OCTET16          lcsrk;          /**< local SRK peer device used to secured sign local data  */
+#else
+    BT_OCTET16          ltk;            /**< peer long term key */
+    BT_OCTET16          csrk;           /**< peer SRK peer device used to secured sign local data  */
+#endif
+
+    BT_OCTET8           rand;           /**< random vector for LTK generation */
+    UINT16              ediv;           /**< LTK diversifier of this slave device */
+    UINT16              div;            /**< local DIV  to generate local LTK=d1(ER,DIV,0) and CSRK=d1(ER,DIV,1)  */
+    uint8_t             sec_level;      /**< local pairing security level */
+    uint8_t             key_size;       /**< key size of the LTK delivered to peer device */
+    uint8_t             srk_sec_level;  /**< security property of peer SRK for this device */
+    uint8_t             local_csrk_sec_level;  /**< security property of local CSRK for this device */
+
+    UINT32              counter;        /**< peer sign counter for verifying rcv signed cmd */
+    UINT32              local_counter;  /**< local sign counter for sending signed write cmd*/
+}wiced_bt_ble_keys_t;
+
+
+typedef struct
+{
+    /* BR/EDR key */
+    uint8_t                           br_edr_key_type;        /**<  BR/EDR Link Key type */
+    wiced_bt_link_key_t               br_edr_key;             /**<  BR/EDR Link Key */
+
+    /* LE Keys */
+    wiced_bt_dev_le_key_type_t        le_keys_available_mask; /**<  Mask of available BLE keys */
+    wiced_bt_ble_address_type_t       ble_addr_type;          /**<  LE device type: public or random address */
+    wiced_bt_ble_address_type_t       static_addr_type;       /**<  static address type */
+    wiced_bt_device_address_t         static_addr;            /**<  static address */
+    wiced_bt_ble_keys_t               le_keys;                /**<  LE keys */
+} wiced_bt_device_sec_keys_t;
+
 /** Paired device link key notification (used by BTM_PAIRED_DEVICE_LINK_KEYS_UPDATE_EVT notication) */
 typedef struct
 {
     wiced_bt_device_address_t   bd_addr;                                    /**< [in] BD Address of remote */
-    uint8_t                     key_data[BTM_SECURITY_KEY_DATA_LEN];        /**< [in/out] Key data */
+    wiced_bt_device_sec_keys_t  key_data;                                   /**< [in/out] Key data */
 } wiced_bt_device_link_keys_t;
 
 
@@ -898,6 +939,7 @@ typedef void (wiced_bt_dev_cmpl_cback_t) (void *p_data);
  * @return Nothing
  */
 typedef void (wiced_bt_dev_vendor_specific_command_complete_cback_t) (wiced_bt_dev_vendor_specific_command_complete_params_t *p_command_complete_params);
+typedef void (wiced_bt_dev_vendor_specific_event_callback_t) (uint8_t len, uint8_t *p);
 
 /******************************************************
  *               Function Declarations
@@ -986,7 +1028,7 @@ void wiced_bt_dev_read_local_addr (wiced_bt_device_address_t bd_addr);
  * @return          wiced_result_t
  *
  *                  WICED_BT_SUCCESS : on success;
- *                  WICED_BT_FAILED  : if an error occurred
+ *                  WICED_BT_ERROR  : if an error occurred
  */
 wiced_result_t wiced_bt_dev_set_advanced_connection_params (wiced_bt_dev_inquiry_scan_result_t *p_inquiry_scan_result);
 
@@ -1009,6 +1051,23 @@ wiced_result_t wiced_bt_dev_set_advanced_connection_params (wiced_bt_dev_inquiry
  */
 wiced_result_t wiced_bt_dev_vendor_specific_command (uint16_t opcode, uint8_t param_len, uint8_t *p_param_buf,
                                 wiced_bt_dev_vendor_specific_command_complete_cback_t *p_cback);
+
+/**
+ * Function         wiced_bt_dev_register_vendor_specific_event
+ *
+ *                  Register/deregister a callback for vendor specific HCI events
+ *
+ * @param[in]       p_event_callback    : Callback to be registered
+ * @param[in]       is_register         : If is_register=TRUE, then the function will be registered;
+**                                        if is_register=FALSE, then the function will be deregistered.
+ *
+ * @return
+ *
+ *                  WICED_BT_SUCCESS    : if Registration/deregistration successful
+ *                  WICED_BT_BUSY       : if maximum number of callbacks have already been registered.
+ *
+ */
+wiced_bt_dev_status_t wiced_bt_dev_register_vendor_specific_event( wiced_bt_dev_vendor_specific_event_callback_t* p_event_callback, wiced_bool_t is_register );
 
 /**
  * Function         wiced_bt_dev_set_discoverability
@@ -1063,7 +1122,7 @@ wiced_result_t wiced_bt_dev_set_connectability (uint8_t page_mode, uint16_t wind
  * @return          wiced_result_t
  *
  *                  WICED_BT_SUCCESS : on success;
- *                  WICED_BT_FAILED : if an error occurred
+ *                  WICED_BT_ERROR : if an error occurred
  */
 wiced_result_t wiced_bt_dev_register_connection_status_change(wiced_bt_connection_status_change_cback_t *p_wiced_bt_connection_status_change_cback);
 
@@ -1470,11 +1529,12 @@ wiced_result_t wiced_bt_dev_delete_bonded_device(wiced_bt_device_address_t bd_ad
  *                  add link key information to internal address resolution db
  *
  * @param[in]      p_link_keys    : link keys information stored in application side
+ * @param[in]      addr_type      : peer address type stored in application side
  *
  * @return          wiced_result_t
  *
  */
-wiced_result_t wiced_bt_dev_add_device_to_address_resolution_db(wiced_bt_device_link_keys_t *p_link_keys);
+wiced_result_t wiced_bt_dev_add_device_to_address_resolution_db(wiced_bt_device_link_keys_t *p_link_keys, wiced_bt_ble_address_type_t addr_type);
 
 
 /**

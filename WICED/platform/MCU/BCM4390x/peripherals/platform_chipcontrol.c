@@ -15,10 +15,6 @@
  *                      Macros
  ******************************************************/
 
-#define GCI_INDIRECT_ADDR_REG    (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x040))
-#define GCI_CHIP_CONTROL_REG     (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x200))
-#define GCI_CHIP_STATUS_REG      (volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x204))
-
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -89,13 +85,31 @@ platform_chipstatus(volatile uint32_t* addr_reg, volatile uint32_t* status_reg,
 
 uint32_t platform_gci_chipcontrol(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
 {
-    return platform_chipcontrol(GCI_INDIRECT_ADDR_REG, GCI_CHIP_CONTROL_REG,
+    return platform_chipcontrol(GCI_INDIRECT_ADDR_REG, GCI_CHIPCONTROL_REG,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_gci_gpiocontrol(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(GCI_INDIRECT_ADDR_REG, GCI_GPIOCONTROL_REG,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_gci_gpiostatus(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(GCI_INDIRECT_ADDR_REG, GCI_GPIOSTATUS_REG,
+                                reg_offset, clear_mask, set_mask);
+}
+
+uint32_t platform_gci_gpiowakemask(uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask)
+{
+    return platform_chipcontrol(GCI_INDIRECT_ADDR_REG, GCI_GPIOWAKEMASK_REG,
                                 reg_offset, clear_mask, set_mask);
 }
 
 uint32_t platform_gci_chipstatus(uint8_t reg_offset)
 {
-    return platform_chipstatus(GCI_INDIRECT_ADDR_REG, GCI_CHIP_STATUS_REG,
+    return platform_chipstatus(GCI_INDIRECT_ADDR_REG, GCI_CHIPSTATUS_REG,
                                reg_offset);
 }
 

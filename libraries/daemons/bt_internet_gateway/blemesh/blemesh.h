@@ -33,7 +33,7 @@ extern "C"
 #define PKT_CMD_CONFIG            0x00
 #define PKT_CMD_ADD_GROUP         0x01
 #define PKT_CMD_SEND_DATA         0x02
-#define MESH_NODE_INFO_LENGTH     80
+#define MESH_NODE_INFO_LENGTH     96
 #define FLOODMESH_VENDOR_COMMAND  0x0192
 
 
@@ -45,6 +45,9 @@ extern "C"
 #define  PKT_PTR_TO_PTR_WITH_ACK     0x13
 #define  PKT_VISIBILITY_MAP          0x20
 
+#define  CMD_RESET_BIG_MESH_NODE     0xFF
+#define  CMD_DELETE_GROUP            0XF1
+#define FLOOD_MESH_CNTRLR_ID       1
 #define FLOOD_MESH_PKT_CNTR_LEN    5
 
 #define FLOOD_MESH_NET_IV_LEN       8
@@ -111,7 +114,8 @@ enum
     FLOODMESH_NET_P2MP_DATA_EVT     = 0x02,
     FLOODMESH_NET_P2P_DATA_EVT      = 0x03,
     FLOODMESH_NET_P2P_ACK_EVT       = 0x04,
-    FLOODMESH_NODE_SYNC_INFO_EVT    = 0x05
+    FLOODMESH_NODE_SYNC_INFO_EVT    = 0x05,
+    FLOODMESH_NET_P2MP_ACK_EVT      = 0x06,
 };
 
 /******************************************************
@@ -153,17 +157,17 @@ mesh_pkt* build_pt_to_multi_pt_pkt( mesh_value_handle_t* value );
 mesh_pkt* build_pt_to_pt_pkt( mesh_value_handle_t* value );
 
 void wiced_mesh_vse_cback( UINT8 len, UINT8 *p );
-void wiced_mesh_vsc_cback_net_start( tBTM_MESH_VSC_CMPL *p_vsc_result );
-void wiced_mesh_vsc_cback_restore( tBTM_MESH_VSC_CMPL *p_vsc_result );
-void wiced_mesh_vsc_cback_node_config( tBTM_MESH_VSC_CMPL *p_vsc_result );
+void wiced_mesh_vsc_cback_net_start( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
+void wiced_mesh_vsc_cback_restore( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
+void wiced_mesh_vsc_cback_node_config( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
 
-void send_mesh_command( byte sub_cmd, mesh_pkt *dt, tBTM_MESH_VSC_CMPL *p_cb );
-wiced_result_t send_mesh_command_rest( wiced_http_response_stream_t* stream, byte sub_cmd, mesh_pkt *dt, tBTM_MESH_VSC_CMPL *p_cb );
-wiced_result_t send_mesh_command_proxy( byte sub_cmd, mesh_pkt *dt, tBTM_MESH_VSC_CMPL *p_cb );
+void send_mesh_command( byte sub_cmd, mesh_pkt *dt, wiced_bt_dev_vendor_specific_command_complete_cback_t *p_cb );
+wiced_result_t send_mesh_command_rest( wiced_http_response_stream_t* stream, byte sub_cmd, mesh_pkt *dt, wiced_bt_dev_vendor_specific_command_complete_cback_t *p_cb );
+wiced_result_t send_mesh_command_proxy( byte sub_cmd, mesh_pkt *dt, wiced_bt_dev_vendor_specific_command_complete_cback_t *p_cb );
 
-void wiced_mesh_vsc_proxy_data_cback( tBTM_MESH_VSC_CMPL *p_vsc_result );
-void wiced_mesh_vsc_rest_data_cback( tBTM_MESH_VSC_CMPL *p_vsc_result );
-void wiced_mesh_vsc_ver_cback( tBTM_MESH_VSC_CMPL *p_vsc_result );
+void wiced_mesh_vsc_proxy_data_cback( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
+void wiced_mesh_vsc_rest_data_cback( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
+void wiced_mesh_vsc_ver_cback( wiced_bt_dev_vendor_specific_command_complete_params_t *p_vsc_result );
 void blemesh_node_config( byte *config_data );
 
 #ifdef __cplusplus

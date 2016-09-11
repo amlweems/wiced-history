@@ -406,8 +406,8 @@ wiced_result_t wiced_ssdp_multicast_send_notify(wiced_ssdp_internal_t* internal,
     if (byebye != WICED_TRUE)
     {
         uint32_t    notify_time_ms;
-        uint16_t    wiced_random_16;
 
+        uint16_t    wiced_random_16;
         wiced_crypto_get_random( &wiced_random_16, sizeof( wiced_random_16 ) );
 
         /* send first 5 within 1 second */

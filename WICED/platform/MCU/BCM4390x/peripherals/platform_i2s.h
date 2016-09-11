@@ -57,6 +57,12 @@ typedef enum
     WICED_I2S_WRITE
 } wiced_i2s_transfer_t;
 
+typedef enum
+{
+    WICED_I2S_SPDIF_MODE_OFF,
+    WICED_I2S_SPDIF_MODE_ON,
+} wiced_i2s_spdif_mode_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -70,7 +76,8 @@ typedef struct
     uint16_t period_size;
     uint8_t bits_per_sample;
     uint8_t channels;
-}wiced_i2s_params_t;
+    wiced_i2s_spdif_mode_t i2s_spdif_mode;
+} wiced_i2s_params_t;
 
 typedef struct
 {

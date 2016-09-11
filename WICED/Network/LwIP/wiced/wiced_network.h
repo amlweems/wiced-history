@@ -9,14 +9,14 @@
  */
 #pragma once
 
-#include "FreeRTOS.h"
-#include "task.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "tls_types.h"
+#include "dtls_types.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
+#include "arch/sys_arch.h"
 #include "wiced_result.h"
 #include "wiced_wifi.h"
 
@@ -77,13 +77,6 @@ typedef enum
     WICED_SOCKET_ERROR
 } wiced_socket_state_t;
 
-typedef enum
-{
-    WICED_TCP_DISCONNECT_CALLBACK_INDEX = 0,
-    WICED_TCP_RECEIVE_CALLBACK_INDEX    = 1,
-    WICED_TCP_CONNECT_CALLBACK_INDEX    = 2,
-} wiced_tcp_callback_index_t;
-
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -93,8 +86,14 @@ typedef struct netbuf wiced_packet_t;
 /******************************************************
  *                    Structures
  ******************************************************/
+/* These should be in wiced_tcpip.h but are needed by wiced_tcp_socket_t, which would cause a circular include chain */
+typedef struct wiced_tcp_socket_struct wiced_tcp_socket_t;
+typedef struct wiced_udp_socket_struct wiced_udp_socket_t;
 
-typedef struct
+typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
+typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
+
+struct wiced_tcp_socket_struct
 {
     wiced_tcp_socket_type_t     type;
     int                         socket;
@@ -105,10 +104,15 @@ typedef struct
     int                         interface;
     wiced_tls_context_t*        tls_context;
     wiced_bool_t                context_malloced;
-    uint32_t                    callbacks[3];
-    void*                       arg;
+    struct
+    {
+        wiced_tcp_socket_callback_t disconnect;
+        wiced_tcp_socket_callback_t receive;
+        wiced_tcp_socket_callback_t connect;
+    } callbacks;
+    void*                       callback_arg;
     wiced_socket_state_t        socket_state; /* internal LwIP socket states do not seem to work correctly */
-} wiced_tcp_socket_t;
+};
 
 typedef struct
 {
@@ -119,17 +123,18 @@ typedef struct
     wiced_tls_identity_t* tls_identity;
 } wiced_tcp_server_t;
 
-typedef struct
+struct wiced_udp_socket_struct
 {
-    int             socket;
-    struct netconn* conn_handler;
-    struct netconn* accept_handler;
-    ip_addr_t       local_ip_addr;
-    wiced_bool_t    is_bound;
-    int             interface;
-    uint32_t        receive_callback;
-    void*           arg;
-} wiced_udp_socket_t;
+    int                         socket;
+    struct netconn*             conn_handler;
+    struct netconn*             accept_handler;
+    ip_addr_t                   local_ip_addr;
+    wiced_bool_t                is_bound;
+    int                         interface;
+    wiced_dtls_context_t*       dtls_context;
+    wiced_udp_socket_callback_t receive_callback;
+    void*                       callback_arg;
+};
 
 typedef struct
 {
@@ -141,15 +146,14 @@ typedef struct
     wiced_tls_key_t*         key;
 } wiced_tls_socket_t;
 
-typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
-typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
+
 
 /******************************************************
  *                 Global Variables
  ******************************************************/
 
 /* Note: These objects are for internal use only! */
-extern TaskHandle_t    wiced_thread_handle;
+extern sys_thread_t    wiced_thread_handle;
 extern struct netif*   wiced_ip_handle[3];
 extern struct dhcp     wiced_dhcp_handle;
 

@@ -41,8 +41,6 @@
 /* Taken from FALCON_5_90_195_26 dhd/sys/dhd_sdio.c. */
 #define SDIO_F2_WATERMARK     (8)
 
-#define WLAN_BUS_UP_ATTEMPTS  (1000)
-
 #define INITIAL_READ   4
 
 #define BUS_PROTOCOL_LEVEL_MAX_RETRIES   5
@@ -143,7 +141,6 @@ typedef union
  *             Variables
  ******************************************************/
 
-static wiced_bool_t bus_is_up               = WICED_FALSE;
 static wiced_bool_t wwd_bus_flow_controlled = WICED_FALSE;
 
 /******************************************************
@@ -155,7 +152,6 @@ static wwd_result_t wwd_bus_sdio_cmd52                  ( wwd_bus_transfer_direc
 static wwd_result_t wwd_bus_sdio_cmd53                  ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, sdio_transfer_mode_t mode, uint32_t address, uint16_t data_size, /*@in@*/ /*@out@*/  uint8_t* data, sdio_response_needed_t response_expected, /*@null@*/ /*@out@*/ uint32_t* response );
 static wwd_result_t wwd_bus_sdio_abort_read             ( wiced_bool_t retry );
 static wwd_result_t wwd_bus_sdio_download_firmware      ( void );
-static wwd_result_t wwd_bus_sdio_read_register_value    ( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value );
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE
 static wwd_result_t wwd_bus_sdio_set_oob_interrupt      ( uint8_t gpio_pin_number );
@@ -250,7 +246,7 @@ wwd_result_t wwd_bus_init( void )
         {
             (void) host_rtos_delay_milliseconds( (uint32_t) 1 );  /* Ignore return - nothing can be done if it fails */
         }
-        VERIFY_RESULT( wwd_bus_sdio_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, &byte_data ) );
+        VERIFY_RESULT( wwd_bus_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_IOEN, (uint8_t) 1, &byte_data ) );
         loop_count++;
         if ( loop_count >= (uint32_t) F0_WORKING_TIMEOUT_MS )
         {
@@ -260,7 +256,7 @@ wwd_result_t wwd_bus_init( void )
 
 #ifndef SDIO_1_BIT
     /* Read the bus width and set to 4 bits */
-    VERIFY_RESULT( wwd_bus_sdio_read_register_value (BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, &byte_data) );
+    VERIFY_RESULT( wwd_bus_read_register_value (BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, &byte_data) );
     VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SDIOD_CCCR_BICTRL, (uint8_t) 1, (byte_data & (~BUS_SD_DATA_WIDTH_MASK)) | BUS_SD_DATA_WIDTH_4BIT ) );
     /* NOTE: We don't need to change our local bus settings since we're not sending any data (only using CMD52) until after we change the bus speed further down */
 #endif
@@ -269,7 +265,7 @@ wwd_result_t wwd_bus_init( void )
     /* Wait till the backplane is ready */
     loop_count = 0;
     while ( ( ( result = wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, (uint32_t) SDIO_64B_BLOCK ) ) == WWD_SUCCESS ) &&
-            ( ( result = wwd_bus_sdio_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, &byte_data                ) ) == WWD_SUCCESS ) &&
+            ( ( result = wwd_bus_read_register_value ( BUS_FUNCTION, SDIOD_CCCR_BLKSIZE_0, (uint8_t) 1, &byte_data                ) ) == WWD_SUCCESS ) &&
             ( byte_data != (uint8_t)  SDIO_64B_BLOCK ) &&
             ( loop_count < (uint32_t) F0_WORKING_TIMEOUT_MS ) )
     {
@@ -312,7 +308,7 @@ wwd_result_t wwd_bus_init( void )
 
     /* Wait till the backplane is ready */
     loop_count = 0;
-    while ( ( ( result = wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SDIO_FUNC_READY_1 ) == 0 ) &&
             ( loop_count < (uint32_t) F1_AVAIL_TIMEOUT_MS ) )
     {
@@ -330,7 +326,7 @@ wwd_result_t wwd_bus_init( void )
     VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t)( SBSDIO_FORCE_HW_CLKREQ_OFF | SBSDIO_ALP_AVAIL_REQ | SBSDIO_FORCE_ALP ) ) );
 
     loop_count = 0;
-    while ( ( ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SBSDIO_ALP_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) ALP_AVAIL_TIMEOUT_MS ) )
     {
@@ -368,13 +364,13 @@ wwd_result_t wwd_bus_init( void )
     /* Enable F2 interrupt only */
     VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SDIOD_CCCR_INTEN, (uint8_t) 1, INTR_CTL_MASTER_EN | INTR_CTL_FUNC2_EN ) );
 
-    VERIFY_RESULT( wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) );
+    VERIFY_RESULT( wwd_bus_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) );
 
     VERIFY_RESULT( wwd_bus_sdio_download_firmware( ) );
 
     /* Wait for F2 to be ready */
     loop_count = 0;
-    while ( ( ( result = wwd_bus_sdio_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BUS_FUNCTION, SDIOD_CCCR_IORDY, (uint8_t) 1, &byte_data ) ) == WWD_SUCCESS ) &&
             ( ( byte_data & SDIO_FUNC_READY_2 ) == 0 ) &&
             ( loop_count < (uint32_t) F2_READY_TIMEOUT_MS ) )
     {
@@ -394,17 +390,18 @@ wwd_result_t wwd_bus_init( void )
         /*@+unreachable@*/
     }
 
-    wwd_bus_ensure_is_up();
+    wwd_chip_specific_init();
+    wwd_ensure_wlan_bus_is_up();
 
     return result;
 }
 
 wwd_result_t wwd_bus_deinit( void )
 {
+    wwd_allow_wlan_bus_to_sleep();
+
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
-
-    bus_is_up = WICED_FALSE;
 
     return WWD_SUCCESS;
 }
@@ -452,7 +449,7 @@ wwd_result_t wwd_bus_read_frame( /*@out@*/ wiced_buffer_t* buffer )
     *buffer = NULL;
 
     /* Ensure the wlan backplane bus is up */
-    VERIFY_RESULT( wwd_bus_ensure_is_up() );
+    VERIFY_RESULT( wwd_ensure_wlan_bus_is_up() );
 
     /* Read the frame header and verify validity */
     memset( hwtag, 0, sizeof(hwtag) );
@@ -591,7 +588,6 @@ static wwd_result_t wwd_bus_sdio_transfer( wwd_bus_transfer_direction_t directio
         ++retry_count;
     } while ( ( result != WWD_SUCCESS ) && ( retry_count < (uint8_t) BUS_PROTOCOL_LEVEL_MAX_RETRIES ) );
 
-    wiced_assert( "too many sdio retries", result == WWD_SUCCESS );
 
     return result;
 }
@@ -664,6 +660,7 @@ static wwd_result_t wwd_bus_sdio_download_firmware( void )
     VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
     VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
 
+    VERIFY_RESULT( wwd_disable_sram3_remap( ));
 #if 0
     /* 43362 specific: Remap JTAG pins to UART output */
     uint32_t data = 0;
@@ -695,7 +692,7 @@ static wwd_result_t wwd_bus_sdio_download_firmware( void )
 
     /* Wait until the High Throughput clock is available */
     loop_count = 0;
-    while ( ( ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WWD_SUCCESS ) &&
             ( ( csr_val & SBSDIO_HT_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) HT_AVAIL_TIMEOUT_MS ) )
     {
@@ -770,50 +767,10 @@ static wwd_result_t wwd_bus_sdio_abort_read( wiced_bool_t retry )
     return WWD_SUCCESS;
 }
 
-static wwd_result_t wwd_bus_sdio_read_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
+wwd_result_t wwd_bus_read_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
 {
     memset( value, 0, (size_t) value_length );
     return wwd_bus_sdio_transfer( BUS_READ, function, address, value_length, value, RESPONSE_NEEDED );
-}
-
-wwd_result_t wwd_bus_ensure_is_up( void )
-{
-    wwd_result_t result;
-    uint8_t csr = 0;
-    uint32_t attempts = (uint32_t) WLAN_BUS_UP_ATTEMPTS;
-
-    /* Ensure HT clock is up */
-    if (bus_is_up == WICED_TRUE)
-    {
-        return WWD_SUCCESS;
-    }
-
-    if ( WWD_SUCCESS != ( result = wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, (uint32_t) SBSDIO_HT_AVAIL_REQ ) ) )
-    {
-        return result;
-    }
-
-    do
-    {
-        if ( WWD_SUCCESS != ( result = wwd_bus_sdio_read_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr ) ) )
-        {
-            return result;
-        }
-        --attempts;
-    }
-    while ( ( ( csr & SBSDIO_HT_AVAIL ) == 0 ) &&
-            ( attempts != 0 ) &&
-            ( host_rtos_delay_milliseconds( (uint32_t) 1 ), 1==1 ) );
-
-    if (attempts == 0)
-    {
-        return WWD_SDIO_BUS_UP_FAIL;
-    }
-    else
-    {
-        bus_is_up = WICED_TRUE;
-        return WWD_SUCCESS;
-    }
 }
 
 wwd_result_t wwd_bus_poke_wlan( void )
@@ -840,18 +797,14 @@ wiced_bool_t wwd_bus_is_flow_controlled( void )
     return wwd_bus_flow_controlled;
 }
 
-wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
+wwd_result_t wwd_bus_specific_wakeup( void )
 {
-    /* Clear HT clock request */
-    if (bus_is_up == WICED_TRUE)
-    {
-        bus_is_up = WICED_FALSE;
-        return wwd_bus_write_register_value( BACKPLANE_FUNCTION, (uint32_t) SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, 0 );
-    }
-    else
-    {
-        return WWD_SUCCESS;
-    }
+    return WWD_SUCCESS;
+}
+
+wwd_result_t wwd_bus_specific_sleep( void )
+{
+    return WWD_SUCCESS;
 }
 
 #ifndef WICED_DISABLE_MCU_POWERSAVE

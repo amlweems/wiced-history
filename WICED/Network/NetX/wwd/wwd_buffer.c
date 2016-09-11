@@ -20,6 +20,8 @@
 #include "wwd_assert.h"
 #include "wwd_bus_protocol.h"
 
+#define IS_POOL_FULL( pool )   ( ( (pool) == NULL ) || ( (pool)->nx_packet_pool_available == (pool)->nx_packet_pool_total ) )
+
 static NX_PACKET_POOL* rx_pool = NULL;
 static NX_PACKET_POOL* tx_pool = NULL;
 
@@ -49,17 +51,32 @@ wwd_result_t host_buffer_add_application_defined_pool( void* pool_in, wwd_buffer
     return WWD_SUCCESS;
 }
 
+wiced_bool_t host_buffer_pool_is_full( wwd_buffer_dir_t direction )
+{
+    wiced_bool_t result;
+
+    if( direction == WWD_NETWORK_TX )
+    {
+        result = IS_POOL_FULL( tx_pool) && IS_POOL_FULL( application_defined_tx_pool );
+    }
+    else
+    {
+        result = IS_POOL_FULL( rx_pool) && IS_POOL_FULL( application_defined_rx_pool );
+    }
+
+    return result;
+}
+
 wwd_result_t host_buffer_check_leaked( void )
 {
-    wiced_assert( "TX Buffer leakage", tx_pool->nx_packet_pool_available == tx_pool->nx_packet_pool_total );
-    wiced_assert( "RX Buffer leakage", rx_pool->nx_packet_pool_available == rx_pool->nx_packet_pool_total );
+    wiced_assert( "TX Buffer leakage", host_buffer_pool_is_full( WWD_NETWORK_TX ) );
+    wiced_assert( "RX Buffer leakage", host_buffer_pool_is_full( WWD_NETWORK_RX ) );
     return WWD_SUCCESS;
 }
 
-wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait )
+wwd_result_t internal_host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, unsigned long timeout_ms )
 {
     volatile UINT status;
-    ULONG wait_option = ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT;
     NX_PACKET **nx_buffer = (NX_PACKET **) buffer;
     NX_PACKET_POOL* pool = ( direction == WWD_NETWORK_TX ) ? tx_pool : rx_pool;
     wiced_assert("Error: pools have not been set up\n", pool != NULL);
@@ -70,7 +87,7 @@ wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t directio
         return WWD_BUFFER_UNAVAILABLE_PERMANENT;
     }
 
-    status = nx_packet_allocate( pool, nx_buffer, 0, wait_option );
+    status = nx_packet_allocate( pool, nx_buffer, 0, timeout_ms );
 
     if( status == NX_NO_PACKET )
     {
@@ -79,7 +96,7 @@ wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t directio
         pool = ( direction == WWD_NETWORK_TX ) ? application_defined_tx_pool : application_defined_rx_pool;
         if ( pool != NULL )
         {
-            status = nx_packet_allocate( pool, nx_buffer, 0, wait_option );
+            status = nx_packet_allocate( pool, nx_buffer, 0, timeout_ms );
         }
     }
 
@@ -99,6 +116,12 @@ wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t directio
     return WWD_SUCCESS;
 }
 
+wwd_result_t host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait )
+{
+    unsigned long wait_option = ( wait == WICED_TRUE ) ? NX_WAIT_FOREVER : NX_NO_WAIT;
+    return internal_host_buffer_get(buffer, direction, size, wait_option);
+}
+
 void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
 {
     wiced_assert( "Error: Invalid buffer\n", buffer != NULL );
@@ -112,9 +135,9 @@ void host_buffer_release( wiced_buffer_t buffer, wwd_buffer_dir_t direction )
          * Return prepend pointer to the original location which the stack expects (the start of IP header).
          * For other packets, resetting prepend pointer isn't required.
          */
-        if ( nx_buffer->nx_packet_length > sizeof(wwd_buffer_header_t) + MAX_SDPCM_HEADER_LENGTH + WICED_ETHERNET_SIZE )
+        if ( nx_buffer->nx_packet_length > HOST_BUFFER_RELEASE_REMOVE_AT_FRONT_FULL_SIZE )
         {
-            if ( host_buffer_add_remove_at_front( &buffer, sizeof(wwd_buffer_header_t) + MAX_SDPCM_HEADER_LENGTH + WICED_ETHERNET_SIZE ) != WWD_SUCCESS )
+            if ( host_buffer_add_remove_at_front( &buffer, HOST_BUFFER_RELEASE_REMOVE_AT_FRONT_FULL_SIZE ) != WWD_SUCCESS )
             {
                 WPRINT_NETWORK_DEBUG(("Could not move packet pointer\r\n"));
             }
@@ -246,11 +269,41 @@ wwd_result_t host_buffer_set_size( wiced_buffer_t buffer, unsigned short size )
     return WWD_SUCCESS;
 }
 
+void host_buffer_push_to_fifo( wiced_buffer_fifo_t* fifo, wiced_buffer_t buffer, wwd_interface_t interface )
+{
+    buffer->nx_packet_ip_interface = (struct NX_INTERFACE_STRUCT*)interface;
+    buffer->nx_packet_queue_next   = NULL;
+
+    if ( fifo->first == NULL )
+    {
+        fifo->first = buffer;
+        fifo->last  = buffer;
+    }
+    else
+    {
+        fifo->last->nx_packet_queue_next = buffer;
+        fifo->last                       = buffer;
+    }
+}
+
+wiced_buffer_t host_buffer_pop_from_fifo( wiced_buffer_fifo_t* fifo, wwd_interface_t* interface )
+{
+    wiced_buffer_t buffer = NULL;
+
+    if ( fifo->first != NULL )
+    {
+        buffer      = fifo->first;
+        *interface  = (wwd_interface_t)buffer->nx_packet_ip_interface;
+        fifo->first = buffer->nx_packet_queue_next;
+    }
+
+    return buffer;
+}
 
 void packet_release_notify( void* pool )
 {
 #ifdef PLAT_NOTIFY_FREE
-    if ( pool == rx_pool )
+    if ( ( pool == rx_pool ) || ( pool == application_defined_rx_pool ) )
     {
         host_platform_bus_buffer_freed( WWD_NETWORK_RX );
     }
@@ -262,5 +315,3 @@ void packet_release_notify( void* pool )
 
     UNUSED_PARAMETER( pool );
 }
-
-

@@ -248,7 +248,7 @@ try_cooee_again:
         wiced_dct_read_unlock( cooee_key, WICED_FALSE );
     }
 
-    if (aes_decrypt_ccm( &aes_ctx, content_length, 10, cooee_nonce, (uint8_t*) cooee_header, &workspace->received_cooee_data[10], &workspace->received_cooee_data[10] ) != 0)
+    if (aes_decrypt_ccm( &aes_ctx, content_length, 10, cooee_nonce, sizeof(cooee_nonce),(uint8_t*) cooee_header, &workspace->received_cooee_data[10], &workspace->received_cooee_data[10] ) != 0)
     {
         WPRINT_WICED_INFO( ("Cooee payload decryption failed\n") );
         goto return_with_error;

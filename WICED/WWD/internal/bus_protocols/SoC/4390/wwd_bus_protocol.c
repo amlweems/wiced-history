@@ -231,13 +231,13 @@ wwd_result_t wwd_bus_read_frame( wiced_buffer_t* buffer )
 
 }
 
-wwd_result_t wwd_bus_ensure_is_up( void )
+wwd_result_t wwd_ensure_wlan_bus_is_up( void )
 {
     platform_pmu_wifi_needed( );
     return WWD_SUCCESS;
 }
 
-wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
+wwd_result_t wwd_allow_wlan_bus_to_sleep( void )
 {
     platform_pmu_wifi_not_needed( );
     return WWD_SUCCESS;

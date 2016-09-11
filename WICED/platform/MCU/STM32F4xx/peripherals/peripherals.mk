@@ -25,4 +25,5 @@ $(NAME)_SOURCES := platform_adc.c \
                    platform_uart.c \
                    platform_watchdog.c \
                    platform_i2s.c \
-                   platform_ext_memory.c
+                   platform_ext_memory.c \
+                   platform_audio_timer.c

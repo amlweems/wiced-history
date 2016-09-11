@@ -82,6 +82,9 @@ extern "C"
 #define WICED_DHCP_IP_ADDRESS_RESOLUTION_TIMEOUT (15000)
 #define WICED_AUTO_IP_ADDRESS_RESOLUTION_TIMEOUT (15000)
 
+/************************************************************************
+ * Default WICED IOCTL/IOVAR timeouts in milliseconds */
+#define WICED_DEFAULT_IOCTL_PACKET_TIMEOUT       ( WICED_NEVER_TIMEOUT )
 
 /************************************************************************
  *   WICED thread priority table
@@ -131,7 +134,7 @@ extern "C"
 
 /************************************************************************
  * Country code */
-#define WICED_DEFAULT_COUNTRY_CODE            WICED_COUNTRY_AUSTRALIA
+#define WICED_DEFAULT_COUNTRY_CODE            ( WICED_COUNTRY_UNITED_STATES )
 
 /************************************************************************
  * Application thread stack size */

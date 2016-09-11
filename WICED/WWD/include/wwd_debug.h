@@ -19,7 +19,9 @@ extern "C"
 {
 #endif
 
-
+/******************************************************
+ *                      Macros
+ ******************************************************/
 
 #ifdef DEBUG
 #include "platform_assert.h"
@@ -28,11 +30,18 @@ extern "C"
     #define WICED_BREAK_IF_DEBUG( )
 #endif
 
+#ifdef WPRINT_PLATFORM_PERMISSION
+int platform_wprint_permission(void);
+#define WPRINT_PLATFORM_PERMISSION_FUNC() platform_wprint_permission()
+#else
+#define WPRINT_PLATFORM_PERMISSION_FUNC() 1
+#endif
+
 /******************************************************
  *             Print declarations
  ******************************************************/
 
-#define WPRINT_MACRO(args) do {printf args;} while(0==1)
+#define WPRINT_MACRO(args) do {if (WPRINT_PLATFORM_PERMISSION_FUNC()) printf args;} while(0==1)
 
 /* WICED printing macros for general SDK/Library functions*/
 #ifdef WPRINT_ENABLE_LIB_INFO

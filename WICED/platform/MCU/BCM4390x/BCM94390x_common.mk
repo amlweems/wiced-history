@@ -8,6 +8,8 @@
 # written permission of Broadcom Corporation.
 #
 
+SECTOR_NUMBER_SCRIPT  := $(TOOLS_ROOT)/text_to_c/sector_number.pl
+
 ifdef BUILD_ROM
 $(NAME)_SOURCES += ROM_build/reference.S
 $(NAME)_COMPONENTS += BESL
@@ -18,7 +20,7 @@ NETWORK:=NetX_Duo
 endif
 
 # FreeRTOS is not yet supported for Cortex-R4
-VALID_OSNS_COMBOS := ThreadX-NetX ThreadX-NetX_Duo NoOS-NoNS
+VALID_OSNS_COMBOS := ThreadX-NetX ThreadX-NetX_Duo NoOS
 
 # BCM94390x-specific make targets
 EXTRA_TARGET_MAKEFILES += WICED/platform/MCU/BCM4390x/BCM94390x_targets.mk
@@ -33,6 +35,14 @@ INTERNAL_MEMORY_RESOURCES =
 
 $(NAME)_COMPONENTS += filesystems/wicedfs
 $(NAME)_COMPONENTS += inputs/gpio_button
+
+ifneq ($(WICED_USB_SUPPORT),)
+GLOBAL_DEFINES += WICED_USB_SUPPORT=1
+endif
+
+ifneq ($(WICED_SDIO_SUPPORT),)
+GLOBAL_DEFINES += WICED_SDIO_SUPPORT=1
+endif
 
 # Uses spi_flash interface but implements own functions
 GLOBAL_INCLUDES += $(WICED_BASE)/Library/drivers/spi_flash
@@ -69,12 +79,17 @@ $(error This platform only supports SoC.43909 bus protocol. Currently set to "$(
 endif
 
 ifeq (1, $(SECURE_SFLASH))
+ifeq (1, $(OTP_SECUREKEYS_OFFSETS_DEFINED))
 $(info SecureSflash Enabled)
-GLOBAL_DEFINES += FEATURE_SECURESFLASH=1
+GLOBAL_DEFINES += PLATFORM_SECURESFLASH_ENABLED=1
 APP0_SECURE := 1
 else
-GLOBAL_DEFINES += FEATURE_SECURESFLASH=0
-endif
+$(error Securesflash not enabled, OTP KEY offsets not defined)
+endif # ifeq (1, $(OTP_SECUREKEYS_OFFSETS_DEFINED))
+else
+GLOBAL_DEFINES += PLATFORM_SECURESFLASH_ENABLED=0
+endif # ifeq (1, $(SECURE_SFLASH))
+
 #PRE_APP_BUILDS := generated_mac_address.txt
 
 # WICED APPS
@@ -89,9 +104,21 @@ endif
 # APP2 :=
 
 # WICED APPS LOOKUP TABLE
+
+# include the correct FLASH positioning
+ifeq (1, $(OTA2_SUPPORT))
+include platforms/$(subst .,/,$(PLATFORM))/ota2_image_defines.mk
+#OTA2_IMAGE_CURR_LUT_AREA_BASE
+APPS_LUT_HEADER_LOC := $(OTA2_IMAGE_CURR_LUT_AREA_BASE)
+# The start of the Filesystem, actually
+APPS_START_SECTOR := $(shell $(PERL) $(SECTOR_NUMBER_SCRIPT) $(OTA2_IMAGE_CURR_FS_AREA_BASE) 4096)
+else
+
 APPS_LUT_HEADER_LOC := 0x10000
 APPS_START_SECTOR := 17
+endif # OTA2_SUPPORT
 
+ifneq ($(APP),ota2_bootloader)
 ifneq ($(APP),bootloader)
 ifneq ($(APP),tiny_bootloader)
 ifneq ($(APP),sflash_write)
@@ -116,10 +143,17 @@ $(info |    reference clock to the sleep clock input pin of the WLAN chip. Pleas
 $(info |    Application Note located in the documentation directory if you plan to use powersave features.   | )
 $(info +-----------------------------------------------------------------------------------------------------+ )
 endif  # ($(MAIN_COMPONENT_PROCESSING),1)
+
+ifeq ($(BEATS_AUDIO),1)
+GLOBAL_DEFINES += $(BEATS_GLOBAL_DEFINES)
+$(NAME)_COMPONENTS += $(BEATS_COMPONENTS)
+endif  # ($(BEATS_AUDIO),1)
+
 endif  # ($(APP),rom_test)
 endif  # ($(APP),sflash_write)
 endif  # ($(APP),tiny_bootloader)
 endif  # ($(APP),bootloader)
+endif  # ($(APP),ota2_bootloader)
 
 # uncomment for non-bootloader apps to avoid adding a DCT
 # NODCT := 1

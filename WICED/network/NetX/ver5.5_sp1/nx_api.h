@@ -674,6 +674,7 @@ VOID    _nx_trace_event_update(TX_TRACE_BUFFER_ENTRY *event, ULONG timestamp, UL
 #define NX_LINK_DEFERRED_PROCESSING 18
 #define NX_LINK_INTERFACE_ATTACH    19
 #define NX_LINK_USER_COMMAND        50      /* Values after this value are reserved for application.  */
+#define NX_LINK_PTP_SEND            51      /* Precision Time Protocol */
 
 
 /* Define the macro for building IP addresses.  */

@@ -41,6 +41,12 @@
 #error wwd_rtos.h must define either RTOS_USE_DYNAMIC_THREAD_STACK or RTOS_USE_STATIC_THREAD_STACK
 #endif
 
+#ifdef __x86_64__
+typedef uint64_t wwd_thread_arg_t;
+#else
+typedef uint32_t wwd_thread_arg_t;
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -86,7 +92,7 @@ extern "C"
  *
  * @return WWD_SUCCESS or Error code
  */
-extern wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority ) /*@modifies *thread@*/;
+extern wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( wwd_thread_arg_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority ) /*@modifies *thread@*/;
 
 
 /**
@@ -104,7 +110,7 @@ extern wwd_result_t host_rtos_create_thread( /*@out@*/ host_thread_type_t* threa
  *
  * @return WWD result code
  */
-extern wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, uint32_t arg );
+extern wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thread, void(*entry_function)( wwd_thread_arg_t arg ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, wwd_thread_arg_t arg );
 
 /**
  * Exit a thread

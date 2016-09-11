@@ -55,12 +55,14 @@ typedef struct
 
 /* Initialisation functions */
 extern wwd_result_t wwd_bus_init                       ( void );
+extern wwd_result_t wwd_bus_resume_after_deep_sleep    ( void );
 extern wwd_result_t wwd_bus_deinit                     ( void );
 
 /* Device register access functions */
 extern wwd_result_t wwd_bus_write_backplane_value      ( uint32_t address, uint8_t register_length, uint32_t value );
 extern wwd_result_t wwd_bus_read_backplane_value       ( uint32_t address, uint8_t register_length, /*@out@*/ uint8_t* value );
 extern wwd_result_t wwd_bus_write_register_value       ( wwd_bus_function_t function, uint32_t address, uint8_t value_length, uint32_t value );
+extern wwd_result_t wwd_bus_read_register_value        ( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value );
 
 /* Device data transfer functions */
 extern wwd_result_t wwd_bus_send_buffer                ( wiced_buffer_t buffer );
@@ -68,10 +70,6 @@ extern wwd_result_t wwd_bus_transfer_bytes             ( wwd_bus_transfer_direct
 
 /* Frame transfer function */
 extern wwd_result_t wwd_bus_read_frame( /*@out@*/  wiced_buffer_t* buffer );
-
-/* Bus energy saving functions */
-extern wwd_result_t wwd_bus_allow_wlan_bus_to_sleep    ( void );
-extern wwd_result_t wwd_bus_ensure_is_up               ( void );
 
 extern wwd_result_t wwd_bus_poke_wlan                  ( void );
 extern wwd_result_t wwd_bus_set_flow_control           ( uint8_t value );
@@ -82,6 +80,9 @@ extern wwd_result_t wwd_bus_write_wifi_firmware_image  ( void );
 extern wwd_result_t wwd_bus_write_wifi_nvram_image     ( void );
 extern void         wwd_bus_init_backplane_window      ( void );
 extern wwd_result_t wwd_bus_set_backplane_window       ( uint32_t addr );
+
+extern wwd_result_t wwd_bus_specific_wakeup( void );
+extern wwd_result_t wwd_bus_specific_sleep( void );
 
 #ifdef WWD_TEST_NVRAM_OVERRIDE
 extern wwd_result_t wwd_bus_get_wifi_nvram_image       ( char** nvram, uint32_t* size);

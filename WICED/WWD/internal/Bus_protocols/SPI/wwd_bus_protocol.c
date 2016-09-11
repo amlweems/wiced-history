@@ -42,8 +42,6 @@
 #define GSPI_PACKET_AVAILABLE  (1 << 8)
 #define GSPI_UNDERFLOW         (1 << 1)
 
-#define WLAN_BUS_UP_ATTEMPTS   (1000)
-
 #define VERIFY_RESULT( x )     { wwd_result_t verify_result; verify_result = ( x ); if ( verify_result != WWD_SUCCESS ) return verify_result; }
 
 #define SWAP32_16BIT_PARTS(val) ((uint32_t)(( ((uint32_t)(val)) >> 16) + ((((uint32_t)(val)) & 0xffff)<<16)))
@@ -98,7 +96,6 @@ static const uint8_t wwd_bus_gspi_command_mapping[] =
     1
 };
 
-static wiced_bool_t bus_is_up               = WICED_FALSE;
 static wiced_bool_t wwd_bus_flow_controlled = WICED_FALSE;
 
 
@@ -107,7 +104,6 @@ static wiced_bool_t wwd_bus_flow_controlled = WICED_FALSE;
  ******************************************************/
 
 static wwd_result_t wwd_download_firmware   ( void );
-static wwd_result_t wwd_read_register_value ( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value );
 static wwd_result_t wwd_bus_transfer_buffer   ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, wiced_buffer_t buffer );
 
 /******************************************************
@@ -217,7 +213,7 @@ static wwd_result_t wwd_bus_transfer_buffer( wwd_bus_transfer_direction_t direct
         {
             uint32_t wwd_bus_gspi_status;
             uint32_t loop_count = 0;
-            while ( ( ( result = wwd_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
+            while ( ( ( result = wwd_bus_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
                     ( ( wwd_bus_gspi_status & ( 1 << 5 ) ) == 0 ) &&
                     ( loop_count < (uint32_t) F2_READY_TIMEOUT_LOOPS ) )
             {
@@ -277,8 +273,10 @@ uint32_t wwd_bus_packet_available_to_read(void)
 {
     uint16_t interrupt_register;
 
+    VERIFY_RESULT( wwd_ensure_wlan_bus_is_up());
+
     /* Read the interrupt register */
-    if (wwd_read_register_value( BUS_FUNCTION, SPI_INTERRUPT_REGISTER, (uint8_t) 2, (uint8_t*) &interrupt_register ) != WWD_SUCCESS)
+    if (wwd_bus_read_register_value( BUS_FUNCTION, SPI_INTERRUPT_REGISTER, (uint8_t) 2, (uint8_t*) &interrupt_register ) != WWD_SUCCESS)
     {
         goto return_with_error;
     }
@@ -312,21 +310,27 @@ return_with_error:
     uint32_t wiced_gspi_bytes_pending;
 
     /* Ensure the wlan backplane bus is up */
-    VERIFY_RESULT( wwd_bus_ensure_is_up() );
+    VERIFY_RESULT( wwd_ensure_wlan_bus_is_up() );
 
-    result = wwd_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status );
-    if ( result != WWD_SUCCESS )
+    do
     {
-        return result;
+        result = wwd_bus_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status );
+        if ( result != WWD_SUCCESS )
+        {
+            return result;
+        }
+    } while ( wwd_bus_gspi_status == 0xFFFFFFFF );
+
+    if ( ( wwd_bus_gspi_status & GSPI_PACKET_AVAILABLE ) != 0)
+    {
+        if ( ((( wwd_bus_gspi_status >> 9 ) & 0x7FF )== 0 ) ||
+             ((( wwd_bus_gspi_status >> 9 ) & 0x7FF ) > ( WICED_LINK_MTU - WWD_BUS_GSPI_PACKET_OVERHEAD )) ||
+               ( wwd_bus_gspi_status & GSPI_UNDERFLOW ))
+        {
+            wwd_bus_write_register_value( BACKPLANE_FUNCTION, SPI_FRAME_CONTROL, 1, ( 1 << 0 ));
+            return WWD_NO_PACKET_TO_RECEIVE;
+        }
     }
-
-#ifdef DEBUG
-    if ((wwd_bus_gspi_status & GSPI_PACKET_AVAILABLE)&&(( (wwd_bus_gspi_status >> 9) & 0x7FF )== 0 )) { WPRINT_WWD_DEBUG(("gSPI packet of size zero available\n")); }
-
-    if ((wwd_bus_gspi_status & GSPI_PACKET_AVAILABLE)&&(( (wwd_bus_gspi_status >> 9) & 0x7FF ) > WICED_LINK_MTU - WWD_BUS_GSPI_PACKET_OVERHEAD )) { WPRINT_WWD_DEBUG(("gSPI packet size available is too big for buffers\n")); }
-
-    if ((wwd_bus_gspi_status & GSPI_PACKET_AVAILABLE)&&( wwd_bus_gspi_status & GSPI_UNDERFLOW) ) { WPRINT_WWD_ERROR(("gSPI underflow - packet size will be wrong\n")); }
-#endif /* ifdef DEBUG */
 
     wiced_gspi_bytes_pending = 0;
 
@@ -378,7 +382,13 @@ wwd_result_t wwd_bus_init( void )
     uint32_t loop_count;
     wwd_result_t result;
     uint8_t init_data[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    uint32_t interrupt_polarity = 0;
+
     wwd_bus_gspi_32bit = WICED_FALSE;
+
+#ifndef WWD_SPI_IRQ_FALLING_EDGE
+    interrupt_polarity = INTERRUPT_POLARITY_HIGH;
+#endif /* WWD_SPI_IRQ_FALLING_EDGE */
 
     wwd_bus_init_backplane_window( );
 
@@ -415,16 +425,16 @@ wwd_result_t wwd_bus_init( void )
 
     /* Keep/reset defaults for registers 0x0-0x4 except for, 0x0: Change word length to 32bit, set endianness, enable wakeup. 0x2: enable interrupt with status. */
 #if defined(IL_BIGENDIAN)
-    VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint32_t) ( WORD_LENGTH_32 | (0 & ENDIAN_BIG) | INTR_POLARITY_HIGH | WAKE_UP | (0x4 << (8*SPI_RESPONSE_DELAY)) | ((0 & STATUS_ENABLE) << (8*SPI_STATUS_ENABLE)) | ( INTR_WITH_STATUS << (8*SPI_STATUS_ENABLE)) ) ) );
+    VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint32_t) ( WORD_LENGTH_32 | (0 & ENDIAN_BIG) | ( interrupt_polarity & INTERRUPT_POLARITY_HIGH ) | WAKE_UP | (0x4 << (8*SPI_RESPONSE_DELAY)) | ((0 & STATUS_ENABLE) << (8*SPI_STATUS_ENABLE)) | ( INTR_WITH_STATUS << (8*SPI_STATUS_ENABLE)) ) ) );
 #else
-    VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint32_t) ( WORD_LENGTH_32 | ENDIAN_BIG       | INTR_POLARITY_HIGH | WAKE_UP | (0x4 << (8*SPI_RESPONSE_DELAY)) | ((0 & STATUS_ENABLE) << (8*SPI_STATUS_ENABLE)) | ( INTR_WITH_STATUS << (8*SPI_STATUS_ENABLE)) ) ) );
+    VERIFY_RESULT( wwd_bus_write_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint32_t) ( WORD_LENGTH_32 | ENDIAN_BIG       | ( interrupt_polarity & INTERRUPT_POLARITY_HIGH ) | WAKE_UP | (0x4 << (8*SPI_RESPONSE_DELAY)) | ((0 & STATUS_ENABLE) << (8*SPI_STATUS_ENABLE)) | ( INTR_WITH_STATUS << (8*SPI_STATUS_ENABLE)) ) ) );
 #endif
     wwd_bus_gspi_32bit = WICED_TRUE;
-    VERIFY_RESULT( wwd_read_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint8_t*)&data ) );
+    VERIFY_RESULT( wwd_bus_read_register_value(BUS_FUNCTION, SPI_BUS_CONTROL, (uint8_t) 4, (uint8_t*)&data ) );
 
     /* Check feedbead can be read - i.e. the device is alive */
     data = 0;
-    VERIFY_RESULT( wwd_read_register_value( BUS_FUNCTION, SPI_READ_TEST_REGISTER, (uint8_t) 4, (uint8_t*) &data ) );
+    VERIFY_RESULT( wwd_bus_read_register_value( BUS_FUNCTION, SPI_READ_TEST_REGISTER, (uint8_t) 4, (uint8_t*) &data ) );
 
     if ( data != SPI_READ_TEST_REGISTER_VALUE )
     {
@@ -443,7 +453,7 @@ wwd_result_t wwd_bus_init( void )
 
     /* Wait until ALP is available */
     loop_count = 0;
-    while ( ( ( result = wwd_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 2, (uint8_t*) &data16 ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 2, (uint8_t*) &data16 ) ) == WWD_SUCCESS ) &&
             ( ( data16 & SBSDIO_ALP_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) ALP_AVAIL_TIMEOUT_MS ) )
     {
@@ -472,7 +482,7 @@ wwd_result_t wwd_bus_init( void )
 
     /* Wait for F2 to be ready */
     loop_count = 0;
-    while ( ( ( result = wwd_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
             ( ( wwd_bus_gspi_status & ( 1 << 5 ) ) == 0 ) &&
             ( loop_count < (uint32_t) F2_READY_TIMEOUT_MS ) )
     {
@@ -490,17 +500,18 @@ wwd_result_t wwd_bus_init( void )
         return WWD_TIMEOUT;
     }
 
-    wwd_bus_ensure_is_up();
+    wwd_chip_specific_init();
+    wwd_ensure_wlan_bus_is_up();
 
     return result;
 }
 
 wwd_result_t wwd_bus_deinit( void )
 {
+    wwd_allow_wlan_bus_to_sleep();
+
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
-
-    bus_is_up = WICED_FALSE;
 
     return WWD_SUCCESS;
 }
@@ -548,7 +559,7 @@ wwd_result_t wwd_bus_read_backplane_value( uint32_t address, uint8_t register_le
 {
     *value = 0;
     VERIFY_RESULT( wwd_bus_set_backplane_window(address) );
-    return wwd_read_register_value( BACKPLANE_FUNCTION, address & BACKPLANE_ADDRESS_MASK, register_length, value );
+    return wwd_bus_read_register_value( BACKPLANE_FUNCTION, address & BACKPLANE_ADDRESS_MASK, register_length, value );
 }
 
 wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint16_t size, /*@in@*/ /*@out@*/ wwd_transfer_bytes_packet_t* data )
@@ -589,7 +600,7 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
         }
 
         /* Wait for WLAN FIFO to be ready to accept data */
-        while ( ( ( result = wwd_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
+        while ( ( ( result = wwd_bus_read_register_value( BUS_FUNCTION, SPI_STATUS_REGISTER, (uint8_t) 4, (uint8_t*) &wwd_bus_gspi_status ) ) == WWD_SUCCESS ) &&
                 ( ( wwd_bus_gspi_status & ( 1 << 5 ) ) == 0 ) &&
                 ( loop_count < (uint32_t) F2_READY_TIMEOUT_LOOPS ) )
         {
@@ -621,63 +632,6 @@ wwd_result_t wwd_bus_transfer_bytes( wwd_bus_transfer_direction_t direction, wwd
     return result;
 }
 
-wwd_result_t wwd_bus_ensure_is_up( void )
-{
-    uint32_t attempts = (uint32_t) WLAN_BUS_UP_ATTEMPTS;
-    uint32_t spi_bus_reg_value;
-    uint8_t  csr_reg_value;
-
-    if ( bus_is_up == WICED_TRUE )
-    {
-        return WWD_SUCCESS;
-    }
-
-    /* Wake up WLAN SPI interface module */
-    VERIFY_RESULT( wwd_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
-    spi_bus_reg_value |= (uint32_t)( WAKE_UP );
-    VERIFY_RESULT( wwd_bus_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value ) );
-
-    /* Ensure HT clock is up */
-    VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, SBSDIO_HT_AVAIL_REQ ) );
-
-    do
-    {
-        VERIFY_RESULT( wwd_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, &csr_reg_value ) );
-        --attempts;
-    }
-    while ( ( ( csr_reg_value & SBSDIO_HT_AVAIL ) == 0 ) && ( attempts != 0 ) && ( host_rtos_delay_milliseconds( 1 ), 1 == 1 ) );
-
-    if ( attempts == 0 )
-    {
-        return WWD_TIMEOUT;
-    }
-
-    bus_is_up = WICED_TRUE;
-    return WWD_SUCCESS;
-}
-
-wwd_result_t wwd_bus_allow_wlan_bus_to_sleep( void )
-{
-    if ( bus_is_up == WICED_TRUE )
-    {
-        uint32_t spi_bus_reg_value;
-
-        bus_is_up = WICED_FALSE;
-
-        /* Clear HT clock request */
-        VERIFY_RESULT( wwd_bus_write_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, 1, 0 ) );
-
-        /* Put SPI interface block to sleep */
-        VERIFY_RESULT( wwd_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
-        spi_bus_reg_value &= ~(uint32_t) ( WAKE_UP );
-        return wwd_bus_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value );
-    }
-    else
-    {
-        return WWD_SUCCESS;
-    }
-}
-
 /******************************************************
  *             Static  Function definitions
  ******************************************************/
@@ -691,6 +645,8 @@ static wwd_result_t wwd_download_firmware( void )
     VERIFY_RESULT( wwd_disable_device_core( WLAN_ARM_CORE, WLAN_CORE_FLAG_NONE ) );
     VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
     VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
+
+    VERIFY_RESULT( wwd_disable_sram3_remap( ));
 
 #ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
     VERIFY_RESULT( external_write_wifi_firmware_and_nvram_image( ) );
@@ -709,7 +665,7 @@ static wwd_result_t wwd_download_firmware( void )
     }
 
     /* Wait until the HT clock is available */
-    while ( ( ( result = wwd_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WWD_SUCCESS ) &&
+    while ( ( ( result = wwd_bus_read_register_value( BACKPLANE_FUNCTION, SDIO_CHIP_CLOCK_CSR, (uint8_t) 1, &csr_val ) ) == WWD_SUCCESS ) &&
             ( ( csr_val & SBSDIO_HT_AVAIL ) == 0 ) &&
             ( loop_count < (uint32_t) HT_AVAIL_TIMEOUT_MS ) )
     {
@@ -736,7 +692,7 @@ static wwd_result_t wwd_download_firmware( void )
  * Read the value of a register NOT on the backplane
  * Prerequisites: value_length <= 4
  */
-static wwd_result_t wwd_read_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
+wwd_result_t wwd_bus_read_register_value( wwd_bus_function_t function, uint32_t address, uint8_t value_length, /*@out@*/ uint8_t* value )
 {
     uint32_t* data_ptr;
     wwd_result_t result;
@@ -762,4 +718,24 @@ static wwd_result_t wwd_read_register_value( wwd_bus_function_t function, uint32
     memcpy( value, data_ptr, value_length );
 
     return result;
+}
+
+wwd_result_t wwd_bus_specific_wakeup( void )
+{
+    uint32_t spi_bus_reg_value;
+
+    /* Wake up WLAN SPI interface module */
+    VERIFY_RESULT( wwd_bus_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
+    spi_bus_reg_value |= (uint32_t)( WAKE_UP );
+    return wwd_bus_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value );
+}
+
+wwd_result_t wwd_bus_specific_sleep( void )
+{
+    uint32_t spi_bus_reg_value;
+
+    /* Put SPI interface block to sleep */
+    VERIFY_RESULT( wwd_bus_read_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), (uint8_t*)&spi_bus_reg_value ) );
+    spi_bus_reg_value &= ~(uint32_t) ( WAKE_UP );
+    return wwd_bus_write_register_value( BUS_FUNCTION, SPI_BUS_CONTROL, sizeof(uint32_t), spi_bus_reg_value );
 }

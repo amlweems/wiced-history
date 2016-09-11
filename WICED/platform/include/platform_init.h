@@ -13,6 +13,7 @@
  */
 #pragma once
 #include <stdint.h>
+#include "wiced_result.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,14 @@ extern "C" {
  * \li Defined by RTOS or application and called by CRT0
  */
 int main( void );
+
+
+/**
+ * Initialise the platform during wiced_init
+ * @return    : result code
+ *
+ */
+wiced_result_t wiced_platform_init( void );
 
 /**
  * Initialise system clock(s)

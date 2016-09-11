@@ -3129,7 +3129,7 @@ The H5 work around sequence will be:
     9: H5 with in band signal of SLIP without Host/BT wake
 */
 #ifndef HCILP_SLEEP_MODE
-#define HCILP_SLEEP_MODE                (0)
+#define HCILP_SLEEP_MODE                (1)
 #endif
 
 /* Host Stack Idle Threshold in 300ms or 25ms, it depends on controller
@@ -3143,7 +3143,7 @@ The H5 work around sequence will be:
   Not applicable for sleep mode 4(H4IBSS) and 9(H5)
 */
 #ifndef HCILP_IDLE_THRESHOLD
-#define HCILP_IDLE_THRESHOLD             (1)
+#define HCILP_IDLE_THRESHOLD             (0)
 #endif
 
 /* Host Controller Idle Threshold in 300ms or 25ms, it depends on controller
@@ -3162,13 +3162,13 @@ The H5 work around sequence will be:
 /* GPIO for BT_WAKE signal */
 /* Not applicable for sleep mode 4(H4IBSS) and 9(H5) */
 #ifndef HCILP_BT_WAKE_GPIO
-#define HCILP_BT_WAKE_GPIO              UPIO_GENERAL1
+#define HCILP_BT_WAKE_GPIO              WICED_BT_PIN_DEVICE_WAKE
 #endif
 
 /* GPIO for HOST_WAKE signal */
 /* Not applicable for sleep mode 4(H4IBSS) and 9(H5) */
 #ifndef HCILP_HOST_WAKE_GPIO
-#define HCILP_HOST_WAKE_GPIO            UPIO_GENERAL2
+#define HCILP_HOST_WAKE_GPIO            WICED_BT_PIN_HOST_WAKE
 #endif
 
 /* BT_WAKE Polarity - 0=Active Low, 1= Active High */

@@ -27,11 +27,15 @@ extern "C" {
 
 #define APOLLO_MULTICAST_IPV4_ADDRESS_DEFAULT MAKE_IPV4_ADDRESS(224, 0, 0, 55)
 
+#define APOLLO_MAX_SPEAKERS         (24)
+#define APOLLO_SPEAKER_NAME_LENGTH  (36)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
 
-typedef enum {
+typedef enum
+{
     CHANNEL_MAP_NONE  = 0,          /* None or undefined    */
     CHANNEL_MAP_FL    = (1 << 0),   /* Front Left           */
     CHANNEL_MAP_FR    = (1 << 1),   /* Front Right          */
@@ -58,6 +62,12 @@ typedef enum {
     CHANNEL_MAP_BTFL  = (1 << 22),  /* Bottom Front Left    */
     CHANNEL_MAP_BTFR  = (1 << 23)   /* Bottom Front Right   */
 } APOLLO_CHANNEL_MAP_T;
+
+typedef enum
+{
+    APOLLO_ROLE_SOURCE,
+    APOLLO_ROLE_SINK
+} apollo_role_t;
 
 /******************************************************
  *                    Structures

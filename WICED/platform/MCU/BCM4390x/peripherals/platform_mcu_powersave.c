@@ -12,11 +12,13 @@
  *  MCU powersave implementation
  */
 
+#include "platform_config.h"
 #include "platform_peripheral.h"
 #include "platform_appscr4.h"
-#include "platform_config.h"
+
 #include "wwd_assert.h"
 #include "wwd_rtos.h"
+
 #include "cr4.h"
 
 #include "typedefs.h"
@@ -24,6 +26,7 @@
 #include "sbchipc.h"
 
 #include "wiced_deep_sleep.h"
+#include "wiced_time.h"
 
 /******************************************************
  *                      Macros
@@ -45,17 +48,18 @@
 
 #define PMU_RES_WLAN_UP_EVENT_MASK            PMU_RES_MASK( PMU_RES_WLAN_UP_EVENT )
 
-/* Values are based on chip RTL reading */
-#define PMU_RES_INTSTATUS_WRITE_LATENCY_TICKS 4
-#define PMU_RES_TIMER_WRITE_LATENCY_TICKS     4
-
 #ifdef DEBUG
 #define POWERSAVE_WLAN_EVENT_WAIT_MS          1000
 #define POWERSAVE_WLAN_EVENT_ASSERT_SEC       1
 #define POWERSAVE_WLAN_TIMER_ASSERT_SEC       1
+#define POWERSAVE_APPS_CLOCK_WAIT_ASSERT_SEC  1
 #else
 #define POWERSAVE_WLAN_EVENT_WAIT_MS          NEVER_TIMEOUT
 #endif
+
+#define POWERSAVE_CLOCKSTATUS_REG             PLATFORM_CLOCKSTATUS_REG(PLATFORM_APPSCR4_REGBASE(0x0))
+
+#define POWERSAVE_MCU_GPIO_WAKE_UP_PIN        PIN_GPIO_0 /* Only this single pin can be used to wake-up if GCI GPIOs are not used */
 
 /******************************************************
  *                    Constants
@@ -81,34 +85,43 @@
  *               Variables Definitions
  ******************************************************/
 
-static wiced_bool_t          powersave_is_warmboot              = WICED_FALSE;
+static wiced_bool_t                  powersave_is_warmboot              = WICED_FALSE;
+
+#if PLATFORM_TICK_POWERSAVE && PLATFORM_TICK_STATS
+/* Statistic variables */
+float                                powersave_stat_avg_sleep_ticks     = 0;
+float                                powersave_stat_avg_run_ticks       = 0;
+float                                powersave_stat_avg_load            = 0;
+float                                powersave_stat_avg_ticks_req       = 0;
+float                                powersave_stat_avg_ticks_adj       = 0;
+uint32_t                             powersave_stat_call_number         = 0;
+uint32_t                             powersave_stat_power_down_perm     = 0;
+uint32_t                             powersave_stat_power_down_not_perm = 0;
+#endif /* PLATFORM_TICK_POWERSAVE && PLATFORM_TICK_STATS */
+
+#if PLATFORM_TICK_POWERSAVE || PLATFORM_APPS_POWERSAVE
+static int                           powersave_disable_counter          = PLATFORM_MCU_POWERSAVE_INIT_STATE;
+#endif
 
 #if PLATFORM_TICK_POWERSAVE
+static platform_tick_powersave_mode_t powersave_tick_mode               = PLATFORM_TICK_POWERSAVE_MODE_INIT;
+#endif
 
-static int                   powersave_disable_counter          = PLATFORM_TICK_POWERSAVE_DISABLE ? 1 : 0;
-
-#if PLATFORM_TICK_STATS
-/* Statistic variables */
-float                        powersave_stat_avg_sleep_ticks     = 0;
-float                        powersave_stat_avg_run_ticks       = 0;
-float                        powersave_stat_avg_load            = 0;
-float                        powersave_stat_avg_ticks_req       = 0;
-float                        powersave_stat_avg_ticks_adj       = 0;
-uint32_t                     powersave_stat_call_number         = 0;
-#endif /* PLATFORM_TICK_STATS */
-
-#endif /* PLATFORM_TICK_POWERSAVE */
+#if PLATFORM_APPS_POWERSAVE
+static platform_mcu_powersave_mode_t powersave_mcu_mode                 = PLATFORM_MCU_POWERSAVE_MODE_MAX; /* Initial state is unknown */
+static uint32_t                      powersave_mcu_clock_ref_counters[ PLATFORM_MCU_POWERSAVE_CLOCK_MAX ];
+#endif /* PLATFORM_APPS_POWERSAVE */
 
 #if PLATFORM_WLAN_POWERSAVE
-static int                   powersave_wlan_res_ref_counter     = 0;
-static host_semaphore_type_t powersave_wlan_res_event;
-static uint32_t              powersave_wlan_res_event_ack_stamp = 0;
-static host_semaphore_type_t powersave_wlan_res_lock;
+static int                           powersave_wlan_res_ref_counter     = 0;
+static host_semaphore_type_t         powersave_wlan_res_event;
+static uint32_t                      powersave_wlan_res_event_ack_stamp = 0;
+static host_semaphore_type_t         powersave_wlan_res_lock;
 #if PLATFORM_WLAN_POWERSAVE_STATS
-static uint32_t              powersave_wlan_res_call_counter    = 0;
-static uint32_t              powersave_wlan_res_up_begin_stamp  = 0;
-static uint32_t              powersave_wlan_res_up_time         = 0;
-static uint32_t              powersave_wlan_res_wait_up_time    = 0;
+static uint32_t                      powersave_wlan_res_call_counter    = 0;
+static uint32_t                      powersave_wlan_res_up_begin_stamp  = 0;
+static uint32_t                      powersave_wlan_res_up_time         = 0;
+static uint32_t                      powersave_wlan_res_wait_up_time    = 0;
 #endif /* PLATFORM_WLAN_POWERSAVE_STATS */
 #endif /* PLATFORM_WLAN_POWERSAVE */
 
@@ -116,21 +129,21 @@ static uint32_t              powersave_wlan_res_wait_up_time    = 0;
  *               Function Definitions
  ******************************************************/
 
-inline static wiced_bool_t
-platform_mcu_powersave_permission( void )
+wiced_bool_t
+platform_mcu_powersave_is_permitted( void )
 {
-#if PLATFORM_TICK_POWERSAVE
+#if PLATFORM_TICK_POWERSAVE || PLATFORM_APPS_POWERSAVE
     return ( powersave_disable_counter == 0 ) ? WICED_TRUE : WICED_FALSE;
 #else
-    return WICED_FALSE;
+    return ( PLATFORM_MCU_POWERSAVE_INIT_STATE == 0 ) ? WICED_TRUE : WICED_FALSE;
 #endif
 }
 
 static void
 platform_mcu_powersave_fire_event( void )
 {
-    const wiced_bool_t            powersave = platform_mcu_powersave_permission();
-    const platform_tick_command_t command   = powersave ? PLATFORM_TICK_COMMAND_POWERSAVE_BEGIN : PLATFORM_TICK_COMMAND_POWERSAVE_END;
+    const wiced_bool_t            permission = platform_mcu_powersave_is_permitted();
+    const platform_tick_command_t command    = permission ? PLATFORM_TICK_COMMAND_POWERSAVE_BEGIN : PLATFORM_TICK_COMMAND_POWERSAVE_END;
 
     platform_tick_execute_command( command );
 }
@@ -138,7 +151,7 @@ platform_mcu_powersave_fire_event( void )
 static platform_result_t
 platform_mcu_powersave_add_disable_counter( int add )
 {
-#if PLATFORM_TICK_POWERSAVE
+#if PLATFORM_TICK_POWERSAVE || PLATFORM_APPS_POWERSAVE
     uint32_t flags;
 
     WICED_SAVE_INTERRUPTS( flags );
@@ -153,7 +166,201 @@ platform_mcu_powersave_add_disable_counter( int add )
     return PLATFORM_SUCCESS;
 #else
     return PLATFORM_FEATURE_DISABLED;
-#endif /* PLATFORM_TICK_POWERSAVE */
+#endif /* #if PLATFORM_TICK_POWERSAVE || PLATFORM_APPS_POWERSAVE */
+}
+
+#if PLATFORM_APPS_POWERSAVE
+static wiced_bool_t
+platform_mcu_powersave_is_clock_ready( platform_mcu_powersave_clock_t clock )
+{
+    volatile clock_control_status_t* reg    = POWERSAVE_CLOCKSTATUS_REG;
+    uint32_t                         result = 0;
+
+    switch ( clock )
+    {
+        case PLATFORM_MCU_POWERSAVE_CLOCK_ALP_AVAILABLE:
+            result = reg->bits.alp_clock_available;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_HT_AVAILABLE:
+            result = reg->bits.ht_clock_available;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ILP:
+            result = 1;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ALP:
+            result = reg->bits.bp_on_alp || reg->bits.bp_on_ht;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT:
+            result = reg->bits.bp_on_ht;
+            break;
+
+        default:
+            wiced_assert( "unhandled element" , 0 );
+            break;
+    }
+
+    return result ? WICED_TRUE : WICED_FALSE;
+}
+
+static void
+platform_mcu_powersave_set_clock( platform_mcu_powersave_clock_t clock, wiced_bool_t set )
+{
+    volatile clock_control_status_t* reg = POWERSAVE_CLOCKSTATUS_REG;
+
+    switch ( clock )
+    {
+        case PLATFORM_MCU_POWERSAVE_CLOCK_ALP_AVAILABLE:
+            reg->bits.alp_avail_request = set ? 1 : 0;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_HT_AVAILABLE:
+            reg->bits.ht_avail_request = set ? 1 : 0;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ILP:
+            reg->bits.force_ilp_request = set ? 1 : 0;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ALP:
+            reg->bits.force_alp_request = set ? 1 : 0;
+            break;
+
+        case PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT:
+            reg->bits.force_ht_request = set ? 1 : 0;
+            break;
+
+        default:
+            wiced_assert( "unhandled element" , 0 );
+            break;
+    }
+}
+#endif /* PLATFORM_APPS_POWERSAVE */
+
+void
+platform_mcu_powersave_request_clock( platform_mcu_powersave_clock_t clock )
+{
+#if PLATFORM_APPS_POWERSAVE
+    uint32_t flags;
+
+    wiced_assert( "wrong clock" , clock < PLATFORM_MCU_POWERSAVE_CLOCK_MAX );
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    if ( powersave_mcu_clock_ref_counters[ clock ] == 0 )
+    {
+        platform_mcu_powersave_set_clock( clock, WICED_TRUE );
+    }
+
+    powersave_mcu_clock_ref_counters[ clock ]++;
+
+    wiced_assert( "wrapped counter", powersave_mcu_clock_ref_counters[ clock ] != 0 );
+
+    WICED_RESTORE_INTERRUPTS( flags );
+
+    PLATFORM_TIMEOUT_BEGIN( start_stamp );
+    while ( !platform_mcu_powersave_is_clock_ready( clock ) )
+    {
+        PLATFORM_TIMEOUT_SEC_ASSERT( "wait clock for too long", start_stamp, platform_mcu_powersave_is_clock_ready( clock ), POWERSAVE_APPS_CLOCK_WAIT_ASSERT_SEC );
+    }
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+void
+platform_mcu_powersave_release_clock( platform_mcu_powersave_clock_t clock )
+{
+#if PLATFORM_APPS_POWERSAVE
+    uint32_t flags;
+
+    wiced_assert( "wrong clock" , clock < PLATFORM_MCU_POWERSAVE_CLOCK_MAX );
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    wiced_assert( "unbalanced counter", powersave_mcu_clock_ref_counters[ clock ] != 0 );
+
+    powersave_mcu_clock_ref_counters[ clock ]--;
+
+    if ( powersave_mcu_clock_ref_counters[ clock ] == 0 )
+    {
+        platform_mcu_powersave_set_clock( clock, WICED_FALSE );
+    }
+
+    WICED_RESTORE_INTERRUPTS( flags );
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+uint32_t
+platform_mcu_powersave_get_clock_request_counter( platform_mcu_powersave_clock_t clock )
+{
+#if PLATFORM_APPS_POWERSAVE
+    return powersave_mcu_clock_ref_counters[ clock ];
+#else
+    return 0;
+#endif
+}
+
+void
+platform_mcu_powersave_set_mode( platform_mcu_powersave_mode_t mode )
+{
+#if PLATFORM_APPS_POWERSAVE
+    const wiced_bool_t deep_sleep = ( mode == PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP ) ? WICED_TRUE : WICED_FALSE;
+
+    /*
+     * Force power switches on for non deep-sleep modes, otherwise clear forcing.
+     * If forced on then APPS is not going into deep-sleep even if all resources are down and clocks switched off.
+     */
+    platform_pmu_chipcontrol( PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_REG,
+                              PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_MASK,
+                              deep_sleep ? 0x0 : PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_EN );
+    platform_pmu_chipcontrol( PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_REG,
+                              PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_MASK,
+                              deep_sleep ? 0x0 : PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_EN );
+
+#ifdef WICED_NO_WIFI
+    /*
+     * If there is WLAN firmware, expected it drops resources low.
+     * Otherwise we do it here.
+     */
+    PLATFORM_PMU->min_res_mask = PMU_RES_DEEP_SLEEP_MASK;
+#endif
+
+    powersave_mcu_mode = mode;
+#else
+    UNUSED_PARAMETER( mode );
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+platform_mcu_powersave_mode_t
+platform_mcu_powersave_get_mode( void )
+{
+#if PLATFORM_APPS_POWERSAVE
+    return powersave_mcu_mode;
+#else
+    return PLATFORM_MCU_POWERSAVE_MODE_MAX;
+#endif
+}
+
+void
+platform_mcu_powersave_set_tick_mode( platform_tick_powersave_mode_t mode )
+{
+#if PLATFORM_TICK_POWERSAVE
+    powersave_tick_mode = mode;
+#else
+    UNUSED_PARAMETER( mode );
+#endif
+}
+
+platform_tick_powersave_mode_t
+platform_mcu_powersave_get_tick_mode( void )
+{
+#if PLATFORM_TICK_POWERSAVE
+    return powersave_tick_mode;
+#else
+    return PLATFORM_TICK_POWERSAVE_MODE_MAX;
+#endif
 }
 
 platform_result_t
@@ -165,15 +372,12 @@ platform_mcu_powersave_init( void )
     /* Define resource mask used to wake up application domain. */
     PLATFORM_PMU->res_req_mask1 = PMU_RES_APPS_UP_MASK;
 
-    /* Clear status fields which may affect warm-boot and which are cleared by power-on-reset only. */
-    PLATFORM_APPSCR4->core_status.raw = PLATFORM_APPSCR4->core_status.raw;
-
     if ( !powersave_is_warmboot )
     {
-        /* For deep sleep current measuring. */
+        /* To reduce deep-sleep current reduce voltage used in deep-sleep. */
         platform_pmu_regulatorcontrol( PMU_REGULATOR_LPLDO1_REG,
                                        PMU_REGULATOR_LPLDO1_MASK,
-                                       PMU_REGULATOR_LPLDO1_1_0_V );
+                                       PLATFORM_LPLDO_VOLTAGE );
 
         /*
          * Spread over the time power-switch up-delays.
@@ -216,6 +420,8 @@ platform_mcu_powersave_init( void )
                                   GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_SET );
     }
 
+    platform_mcu_powersave_set_mode( PLATFORM_MCU_POWERSAVE_MODE_INIT );
+
     res = PLATFORM_SUCCESS;
 #endif /* PLATFORM_APPS_POWERSAVE */
 
@@ -239,7 +445,7 @@ platform_mcu_powersave_init( void )
         platform_pmu_res_updown_time( PMU_RES_WL_CORE_READY_BUF,
                                       PMU_RES_UPDOWN_TIME_DOWN_MASK,
                                       MAX( platform_pmu_res_updown_time( PMU_RES_WL_CORE_READY_BUF, 0, 0) & PMU_RES_UPDOWN_TIME_DOWN_MASK,
-                                           PMU_RES_UPDOWN_TIME_DOWN_VAL( PMU_RES_TIMER_WRITE_LATENCY_TICKS ) ) );
+                                           PMU_RES_UPDOWN_TIME_DOWN_VAL( PMU_MAX_WRITE_LATENCY_ILP_TICKS ) ) );
     }
 #endif /* PLATFORM_WLAN_POWERSAVE */
 
@@ -249,40 +455,11 @@ platform_mcu_powersave_init( void )
 }
 
 void
-platform_mcu_powersave_set_mode( platform_mcu_powersave_mode_t mode )
-{
-#if PLATFORM_APPS_POWERSAVE
-    uint32_t mask = PLATFORM_PMU->max_res_mask;
-
-    switch ( mode )
-    {
-        case MCU_POWERSAVE_DEEP_SLEEP:
-            mask = PMU_RES_DEEP_SLEEP_MASK;
-            break;
-
-        case MCU_POWERSAVE_SLEEP:
-            mask = PMU_RES_SLEEP_MASK;
-            break;
-
-        default:
-            wiced_assert( "Bad mode", 0 );
-            break;
-    }
-
-    PLATFORM_PMU->min_res_mask = mask;
-#else
-    UNUSED_PARAMETER( mode );
-#endif /* PLATFORM_APPS_POWERSAVE */
-}
-
-void
 platform_mcu_powersave_warmboot_init( void )
 {
-    appscr4_core_status_reg_t status = { .raw =  PLATFORM_APPSCR4->core_status.raw };
-
     powersave_is_warmboot = WICED_FALSE;
 
-    if ( status.bits.s_error_log || status.bits.s_bp_reset_log )
+    if ( platform_boot_is_reset() )
     {
         /* Board was resetted. */
     }
@@ -316,10 +493,6 @@ platform_mcu_powersave_enable( void )
     return platform_mcu_powersave_add_disable_counter( -1 );
 }
 
-/******************************************************
- *               RTOS Powersave Hooks
- ******************************************************/
-
 #if PLATFORM_TICK_POWERSAVE
 
 inline static uint32_t
@@ -339,7 +512,7 @@ static void
 platform_mcu_suspend( void )
 {
 #if PLATFORM_APPS_POWERSAVE
-    wiced_bool_t permission = platform_mcu_powersave_permission();
+    wiced_bool_t permission = platform_mcu_powersave_is_permitted();
 #endif
 
     WICED_DEEP_SLEEP_CALL_EVENT_HANDLERS( permission, WICED_DEEP_SLEEP_EVENT_ENTER );
@@ -387,27 +560,88 @@ platform_mcu_suspend( void )
 
 #endif /* PLATFORM_TICK_POWERSAVE */
 
-/* Expect to be called with interrupts disabled */
-void platform_idle_hook( void )
+void
+platform_mcu_powersave_sleep( uint32_t ticks, platform_tick_sleep_force_interrupts_mode_t mode )
 {
 #if PLATFORM_TICK_POWERSAVE
-    (void)platform_tick_sleep( platform_mcu_suspend, 0, WICED_TRUE );
+    wiced_time_t curr_time_ms;
+    uint32_t     sleep_ticks;
+    uint32_t     flags;
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    platform_watchdog_kick_seconds( 2 * ticks / SYSTICK_FREQUENCY );
+
+    wiced_time_get_time( &curr_time_ms );
+
+    sleep_ticks = platform_tick_sleep_force( platform_mcu_suspend, ticks, mode );
+
+    curr_time_ms += sleep_ticks * 1000 / SYSTICK_FREQUENCY;
+
+    wiced_time_set_time( &curr_time_ms );
+
+    platform_watchdog_kick();
+
+    WICED_RESTORE_INTERRUPTS( flags );
+#else
+    UNUSED_PARAMETER( ticks );
+#endif /* PLATFORM_TICK_POWERSAVE */
+}
+
+/* Expect to be called by RTOS with interrupts disabled */
+void
+platform_idle_hook( void )
+{
+#if PLATFORM_TICK_POWERSAVE
+    (void)platform_tick_sleep_rtos( platform_mcu_suspend, 0, platform_mcu_powersave_is_permitted() );
 #endif
 }
 
-/* Expect to be called with interrupts disabled */
-uint32_t platform_power_down_hook( uint32_t ticks )
+/*
+ * Expect to be called by RTOS with interrupts disabled.
+ * Function to be called only if platform_power_down_permission() returned true.
+ */
+uint32_t
+platform_power_down_hook( uint32_t ticks )
 {
 #if PLATFORM_TICK_POWERSAVE
-    uint32_t ret = 0;
+    uint32_t ret = platform_tick_sleep_rtos( platform_mcu_suspend, ticks, platform_mcu_powersave_is_permitted() );
 
-    if ( platform_mcu_powersave_permission() )
+    POWERSAVE_MOVING_AVERAGE_CALC( powersave_stat_avg_ticks_req, ticks );
+    POWERSAVE_MOVING_AVERAGE_CALC( powersave_stat_avg_ticks_adj, ret );
+
+    return ret;
+#else
+    UNUSED_PARAMETER( ticks );
+    return 0;
+#endif /* PLATFORM_TICK_POWERSAVE */
+}
+
+/* Expect to be called by RTOS with interrupts disabled */
+int
+platform_power_down_permission( void )
+{
+#if PLATFORM_TICK_POWERSAVE
+    int          ret = 1;
+    wiced_bool_t permission = platform_mcu_powersave_is_permitted();
+
+    if ( ( powersave_tick_mode == PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_NEVER ) ||
+         ( ( powersave_tick_mode == PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_IF_MCU_POWERSAVE_ENABLED ) && !permission ) )
     {
-        ret = platform_tick_sleep( platform_mcu_suspend, ticks, WICED_TRUE );
-
-        POWERSAVE_MOVING_AVERAGE_CALC( powersave_stat_avg_ticks_req, ticks );
-        POWERSAVE_MOVING_AVERAGE_CALC( powersave_stat_avg_ticks_adj, ret );
+        (void)platform_tick_sleep_rtos( platform_mcu_suspend, 0, permission );
+        ret = 0;
     }
+
+#if PLATFORM_TICK_STATS
+    if ( ret )
+    {
+        powersave_stat_power_down_perm++;
+    }
+    else
+    {
+        powersave_stat_power_down_not_perm++;
+    }
+#endif /* PLATFORM_TICK_STATS */
 
     return ret;
 #else
@@ -415,21 +649,274 @@ uint32_t platform_power_down_hook( uint32_t ticks )
 #endif /* PLATFORM_TICK_POWERSAVE */
 }
 
-/* Expect to be called with interrupts disabled */
-int platform_power_down_permission( void )
+#if PLATFORM_APPS_POWERSAVE
+platform_pin_config_t
+platform_mcu_powersave_gpio_wakeup_config_to_pin_config( platform_mcu_powersave_gpio_wakeup_config_t config )
 {
-#if PLATFORM_TICK_POWERSAVE
-    wiced_bool_t permission = platform_mcu_powersave_permission();
-
-    if ( !permission )
+    switch ( config )
     {
-        (void)platform_tick_sleep( platform_mcu_suspend, 0, WICED_FALSE );
+        default:
+            wiced_assert( "bad config", 0 );
+        case PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_HIGH_IMPEDANCE:
+            return INPUT_HIGH_IMPEDANCE;
+
+        case PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_PULL_UP:
+            return INPUT_PULL_UP;
+
+        case PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_PULL_DOWN:
+            return INPUT_PULL_DOWN;
     }
 
-    return permission;
+}
+
+static wiced_bool_t
+platform_mcu_powersave_gci_gpio_wakeup_is_valid_pin( platform_pin_t pin )
+{
+    return ( ( pin >= PIN_GPIO_0 ) && ( pin <= PIN_GPIO_15 ) && ( pin != PIN_GPIO_13 ) ) ? WICED_TRUE : WICED_FALSE;
+}
+
+static unsigned int
+platform_mcu_powersave_gpio_number( platform_pin_t gpio_pin )
+{
+    return ( gpio_pin - PIN_GPIO_0 );
+}
+
+typedef enum
+{
+    PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_WL_DEV_WAKE,
+    PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI2WL_WAKE,
+    PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE,
+    PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_GCI_GPIO_WAKE,
+    PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_MAX /* not valid, use to denote number of elements */
+} platform_mcu_powersave_misc_wakeup_config_t;
+
+static void
+platform_mcu_powersave_misc_wakeup_config_enable( platform_mcu_powersave_misc_wakeup_config_t config, wiced_bool_t enable )
+{
+    static uint32_t ref_counters[ PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_MAX ];
+    uint32_t flags;
+
+    wiced_assert( "bad config", config < PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_MAX );
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    if ( enable )
+    {
+        if ( ref_counters[ config ] == 0 )
+        {
+            switch ( config )
+            {
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_WL_DEV_WAKE:
+                    platform_pmu_chipcontrol( PMU_CHIPCONTROL_WL_DEV_WAKE_REG,
+                                              PMU_CHIPCONTROL_WL_DEV_WAKE_MASK,
+                                              PMU_CHIPCONTROL_WL_DEV_WAKE_EN );
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI2WL_WAKE:
+                    platform_pmu_chipcontrol( PMU_CHIPCONTROL_GCI2WL_WAKE_REG,
+                                              PMU_CHIPCONTROL_GCI2WL_WAKE_MASK,
+                                              PMU_CHIPCONTROL_GCI2WL_WAKE_EN );
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE:
+                    PLATFORM_PMU->ext_wake_mask1.bits.gci = 1;
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_GCI_GPIO_WAKE:
+                    GCI_WAKEMASK_REG->bits.gci_gpio_wake = 1;
+                    break;
+
+                default:
+                    wiced_assert( "not supported config", 0 );
+                    break;
+            }
+        }
+
+        ref_counters[ config ]++;
+
+        wiced_assert( "wrapped counter", ref_counters[ config ] != 0 );
+    }
+    else
+    {
+        wiced_assert( "unbalanced counter", ref_counters[ config ] != 0 );
+
+        ref_counters[ config ]--;
+
+        if ( ref_counters[ config ] == 0 )
+        {
+            switch ( config )
+            {
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_WL_DEV_WAKE:
+                    platform_pmu_chipcontrol( PMU_CHIPCONTROL_WL_DEV_WAKE_REG,
+                                              PMU_CHIPCONTROL_WL_DEV_WAKE_MASK,
+                                              0x0 );
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI2WL_WAKE:
+                    platform_pmu_chipcontrol( PMU_CHIPCONTROL_GCI2WL_WAKE_REG,
+                                              PMU_CHIPCONTROL_GCI2WL_WAKE_MASK,
+                                              0x0 );
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE:
+                    PLATFORM_PMU->ext_wake_mask1.bits.gci = 0;
+                    break;
+
+                case PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_GCI_GPIO_WAKE:
+                    GCI_WAKEMASK_REG->bits.gci_gpio_wake = 0;
+                    break;
+
+                default:
+                    wiced_assert( "not supported config", 0 );
+                    break;
+            }
+        }
+    }
+
+    WICED_RESTORE_INTERRUPTS( flags );
+}
+#endif /* PLATFORM_APPS_POWERSAVE */
+
+platform_result_t
+platform_mcu_powersave_gpio_wakeup_enable( platform_mcu_powersave_gpio_wakeup_config_t config )
+{
+#if PLATFORM_APPS_POWERSAVE
+    const platform_gpio_t gpio = { POWERSAVE_MCU_GPIO_WAKE_UP_PIN };
+    platform_result_t     result;
+
+    result = platform_gpio_init( &gpio, platform_mcu_powersave_gpio_wakeup_config_to_pin_config( config ) );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        return result;
+    }
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_WL_DEV_WAKE, WICED_TRUE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE, WICED_TRUE );
+
+    return PLATFORM_SUCCESS;
 #else
-    return 0;
-#endif /* PLATFORM_TICK_POWERSAVE */
+    return PLATFORM_FEATURE_DISABLED;
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+void
+platform_mcu_powersave_gpio_wakeup_ack( void )
+{
+#if PLATFORM_APPS_POWERSAVE
+    PLATFORM_PMU->ext_wakeup_status.bits.gci = 1;
+#endif
+}
+
+void
+platform_mcu_powersave_gpio_wakeup_disable( void )
+{
+#if PLATFORM_APPS_POWERSAVE
+    const platform_gpio_t gpio = { POWERSAVE_MCU_GPIO_WAKE_UP_PIN };
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE, WICED_FALSE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_WL_DEV_WAKE, WICED_FALSE );
+
+    (void)platform_gpio_deinit( &gpio );
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+platform_result_t
+platform_mcu_powersave_gci_gpio_wakeup_enable( platform_pin_t gpio_pin, platform_mcu_powersave_gpio_wakeup_config_t config, platform_gci_gpio_irq_trigger_t trigger )
+{
+#if PLATFORM_APPS_POWERSAVE
+    platform_result_t     result;
+    const unsigned int    gpio_number     = platform_mcu_powersave_gpio_number( gpio_pin );
+    const platform_gpio_t gpio            = { gpio_pin };
+    uint32_t              gpio_wake_mask  = 0x0;
+
+    if ( platform_mcu_powersave_gci_gpio_wakeup_is_valid_pin( gpio_pin ) != WICED_TRUE )
+    {
+        return PLATFORM_BADARG;
+    }
+
+    result = platform_gpio_init( &gpio, platform_mcu_powersave_gpio_wakeup_config_to_pin_config( config ) );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        return result;
+    }
+
+    if ( trigger & PLATFORM_GCI_GPIO_IRQ_TRIGGER_FAST_EDGE )
+    {
+        gpio_wake_mask |= GCI_CHIPCONTROL_GPIO_WAKEMASK_FAST_EDGE( gpio_number );
+    }
+    if ( trigger & PLATFORM_GCI_GPIO_IRQ_TRIGGER_RISING_EDGE )
+    {
+        gpio_wake_mask |= GCI_CHIPCONTROL_GPIO_WAKEMASK_POS_EDGE( gpio_number );
+    }
+    if ( trigger & PLATFORM_GCI_GPIO_IRQ_TRIGGER_FALLING_EDGE )
+    {
+        gpio_wake_mask |= GCI_CHIPCONTROL_GPIO_WAKEMASK_NEG_EDGE( gpio_number );
+    }
+    if ( trigger & PLATFORM_GCI_GPIO_IRQ_TRIGGER_LEVEL_HIGH )
+    {
+        gpio_wake_mask |= GCI_CHIPCONTROL_GPIO_WAKEMASK_IN( gpio_number );
+    }
+    platform_gci_gpiowakemask( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ),
+                               GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ),
+                               gpio_wake_mask );
+
+    platform_gci_gpiocontrol( GCI_CHIPCONTROL_GPIO_CONTROL_REG( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_MASK( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SET( gpio_number ) );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_GCI_GPIO_WAKE, WICED_TRUE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI2WL_WAKE, WICED_TRUE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE, WICED_TRUE );
+
+    return PLATFORM_SUCCESS;
+#else
+    return PLATFORM_FEATURE_DISABLED;
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+void
+platform_mcu_powersave_gci_gpio_wakeup_disable( platform_pin_t gpio_pin )
+{
+#if PLATFORM_APPS_POWERSAVE
+    const unsigned int    gpio_number = platform_mcu_powersave_gpio_number( gpio_pin );
+    const platform_gpio_t gpio        = { gpio_pin };
+
+    wiced_assert( "wrong pin", platform_mcu_powersave_gci_gpio_wakeup_is_valid_pin( gpio_pin ) );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI_WAKE, WICED_FALSE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_PMU_GCI2WL_WAKE, WICED_FALSE );
+
+    platform_mcu_powersave_misc_wakeup_config_enable( PLATFORM_MCU_POWERSAVE_MISC_WAKEUP_CONFIG_GCI_GPIO_WAKE, WICED_FALSE );
+
+    platform_gci_gpiocontrol( GCI_CHIPCONTROL_GPIO_CONTROL_REG( gpio_number ),
+                              GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_MASK( gpio_number ),
+                              0x0 );
+
+    platform_gci_gpiowakemask( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ),
+                               GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ),
+                               0x0 );
+
+    (void)platform_gpio_deinit( &gpio );
+#endif /* PLATFORM_APPS_POWERSAVE */
+}
+
+void
+platform_mcu_powersave_gci_gpio_wakeup_ack( platform_pin_t gpio_pin )
+{
+#if PLATFORM_APPS_POWERSAVE
+    const unsigned int gpio_number = platform_mcu_powersave_gpio_number( gpio_pin );
+
+    platform_gci_gpiostatus( GCI_CHIPCONTROL_GPIO_WAKEMASK_REG( gpio_number ),
+                             GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ),
+                             GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK( gpio_number ) );
+
+    PLATFORM_PMU->ext_wakeup_status.bits.gci = 1;
+#endif /* PLATFORM_APPS_POWERSAVE */
 }
 
 #if PLATFORM_WLAN_POWERSAVE
@@ -440,7 +927,8 @@ platform_wlan_powersave_pmu_timer_slow_write_pending( void )
     return ( PLATFORM_PMU->pmustatus & PST_SLOW_WR_PENDING ) ? WICED_TRUE : WICED_FALSE;
 }
 
-static void platform_wlan_powersave_pmu_timer_slow_write( uint32_t val )
+static void
+platform_wlan_powersave_pmu_timer_slow_write( uint32_t val )
 {
     PLATFORM_TIMEOUT_BEGIN( start_stamp );
 
@@ -459,7 +947,8 @@ static void platform_wlan_powersave_pmu_timer_slow_write( uint32_t val )
     }
 }
 
-static void platform_wlan_powersave_res_ack_event( void )
+static void
+platform_wlan_powersave_res_ack_event( void )
 {
     pmu_intstatus_t status;
 
@@ -471,7 +960,8 @@ static void platform_wlan_powersave_res_ack_event( void )
     powersave_wlan_res_event_ack_stamp = platform_tick_get_time( PLATFORM_TICK_GET_SLOW_TIME_STAMP );
 }
 
-static wiced_bool_t platform_wlan_powersave_res_is_event_unmask_permitted( void )
+static wiced_bool_t
+platform_wlan_powersave_res_is_event_unmask_permitted( void )
 {
     /*
      * ISR acks interrupt, but it take few ILP cycles to do it.
@@ -485,7 +975,7 @@ static wiced_bool_t platform_wlan_powersave_res_is_event_unmask_permitted( void 
         powersave_wlan_res_event_ack_stamp = now;
         return WICED_FALSE;
     }
-    else if ( now - powersave_wlan_res_event_ack_stamp < (uint32_t)PMU_RES_INTSTATUS_WRITE_LATENCY_TICKS )
+    else if ( now - powersave_wlan_res_event_ack_stamp < (uint32_t)PMU_MAX_WRITE_LATENCY_ILP_TICKS )
     {
         return WICED_FALSE;
     }
@@ -493,7 +983,8 @@ static wiced_bool_t platform_wlan_powersave_res_is_event_unmask_permitted( void 
     return WICED_TRUE;
 }
 
-static wiced_bool_t platform_wlan_powersave_res_mask_event( wiced_bool_t enable )
+static wiced_bool_t
+platform_wlan_powersave_res_mask_event( wiced_bool_t enable )
 {
     pmu_intstatus_t mask;
 
@@ -521,7 +1012,8 @@ static wiced_bool_t platform_wlan_powersave_res_mask_event( wiced_bool_t enable 
  * Function return synchronized state of 2 registers.
  * As resources can go down let's remove pending one from current resource mask.
  */
-static uint32_t platform_wlan_powersave_res_get_current_resources( uint32 mask )
+static uint32_t
+platform_wlan_powersave_res_get_current_resources( uint32 mask )
 {
     while ( WICED_TRUE )
     {
@@ -542,7 +1034,8 @@ static uint32_t platform_wlan_powersave_res_get_current_resources( uint32 mask )
     }
 }
 
-static void platform_wlan_powersave_res_wait_event( void )
+static void
+platform_wlan_powersave_res_wait_event( void )
 {
     PLATFORM_TIMEOUT_BEGIN( start_stamp );
 
@@ -575,7 +1068,8 @@ static void platform_wlan_powersave_res_wait_event( void )
     }
 }
 
-void platform_wlan_powersave_res_event( void )
+void
+platform_wlan_powersave_res_event( void )
 {
     platform_wlan_powersave_res_ack_event();
 
@@ -584,7 +1078,8 @@ void platform_wlan_powersave_res_event( void )
     host_rtos_set_semaphore( &powersave_wlan_res_event, WICED_TRUE );
 }
 
-wiced_bool_t platform_wlan_powersave_res_up( void )
+wiced_bool_t
+platform_wlan_powersave_res_up( void )
 {
     wiced_bool_t res_up = WICED_FALSE;
 
@@ -632,7 +1127,8 @@ wiced_bool_t platform_wlan_powersave_res_up( void )
     return res_up;
 }
 
-wiced_bool_t platform_wlan_powersave_res_down( wiced_bool_t(*check_ready)(void), wiced_bool_t force )
+wiced_bool_t
+platform_wlan_powersave_res_down( wiced_bool_t(*check_ready)(void), wiced_bool_t force )
 {
     wiced_bool_t res_down = WICED_FALSE;
 
@@ -649,6 +1145,7 @@ wiced_bool_t platform_wlan_powersave_res_down( wiced_bool_t(*check_ready)(void),
     }
     else if ( powersave_wlan_res_ref_counter != 0 )
     {
+        wiced_assert( "unbalanced call", 0 ); /* in case of 'force' forgive unbalanced call, but in release build only */
         powersave_wlan_res_ref_counter = 0;
         res_down                       = WICED_TRUE;
     }
@@ -676,7 +1173,13 @@ wiced_bool_t platform_wlan_powersave_res_down( wiced_bool_t(*check_ready)(void),
     return res_down;
 }
 
-uint32_t platform_wlan_powersave_get_stats( platform_wlan_powersave_stats_t which_counter )
+wiced_bool_t platform_wlan_powersave_is_res_up( void )
+{
+    return ( powersave_wlan_res_ref_counter != 0 ) ? WICED_TRUE : WICED_FALSE;
+}
+
+uint32_t
+platform_wlan_powersave_get_stats( platform_wlan_powersave_stats_t which_counter )
 {
 #if PLATFORM_WLAN_POWERSAVE_STATS
     switch ( which_counter )

@@ -14,6 +14,7 @@
 #include "netx_applications/dhcp/nx_dhcp.h"
 #endif
 #include "tls_types.h"
+#include "dtls_types.h"
 #include "wiced_result.h"
 
 #ifdef __cplusplus
@@ -48,13 +49,6 @@ extern "C"
 
 typedef enum
 {
-    WICED_TCP_DISCONNECT_CALLBACK_INDEX = 0,
-    WICED_TCP_RECEIVE_CALLBACK_INDEX    = 1,
-    WICED_TCP_CONNECT_CALLBACK_INDEX    = 2,
-} wiced_tcp_callback_index_t;
-
-typedef enum
-{
     WICED_SOCKET_ERROR
 } wiced_socket_state_t;
 
@@ -63,11 +57,10 @@ typedef enum
  ******************************************************/
 typedef struct
 {
-    int dunmmy;
+    int dummy;
 }NOOS_DUMMY;
 typedef NOOS_DUMMY    wiced_udp_socket_t;
-typedef NOOS_DUMMY        wiced_packet_t;
-typedef wiced_result_t (*wiced_socket_callback_t)( void* socket );
+typedef NOOS_DUMMY    wiced_packet_t;
 
 //typedef NOOS_DUMMY wiced_tls_context_type_t;
 //typedef NOOS_DUMMY wiced_tls_context_t;
@@ -85,8 +78,6 @@ typedef struct
     NOOS_TCP_SOCKET             socket;
     wiced_tls_context_t*        tls_context;
     wiced_bool_t                context_malloced;
-    wiced_socket_callback_t     callbacks[3];
-
 } wiced_tcp_socket_t;
 
 typedef struct
@@ -96,19 +87,19 @@ typedef struct
     uint16_t            port;
 } wiced_tcp_server_t;
 
-typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
-typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
+typedef NOOS_DUMMY wiced_tcp_socket_callback_t;
+typedef NOOS_DUMMY wiced_udp_socket_callback_t;
 
 /******************************************************
  *                 Global Variables
  ******************************************************/
 typedef struct
 {
-    int dunmmy;
+    int dummy;
 }NOOS_IP;
 typedef struct
 {
-    int dunmmy;
+    int dummy;
 }NOOS_PACKET_POOL;
 /*
  * Note: These objects are for internal use only!

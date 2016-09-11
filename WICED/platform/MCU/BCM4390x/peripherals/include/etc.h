@@ -16,6 +16,7 @@
 #ifndef _etc_h_
 #define _etc_h_
 
+#include "wwd_wlioctl.h"
 #include <etioctl.h>
 
 #define	MAXMULTILIST	32

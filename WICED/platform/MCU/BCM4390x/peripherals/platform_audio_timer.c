@@ -62,9 +62,11 @@ wiced_result_t platform_audio_timer_enable( uint32_t audio_frame_count )
     wiced_jump_when_not_true( (result == WICED_SUCCESS), _exit );
 
     platform_ascu_disable_interrupts   ( ASCU_ASTP_INT_MASK );
-    platform_ascu_set_frame_sync_period( audio_frame_count );
-    platform_ascu_enable_interrupts    ( ASCU_ASTP_INT_MASK );
-
+    if ( audio_frame_count > 0 )
+    {
+        platform_ascu_set_frame_sync_period( audio_frame_count );
+        platform_ascu_enable_interrupts    ( ASCU_ASTP_INT_MASK );
+    }
     platform_pmu_chipcontrol(PMU_CHIPCONTROL_PWM_CLK_ASCU_REG, 0, PMU_CHIPCONTROL_PWM_CLK_ASCU_MASK);
 
     audio_timer_enabled = WICED_TRUE;
@@ -112,7 +114,7 @@ wiced_result_t platform_audio_timer_set_frame_sync( void )
 
 wiced_result_t platform_audio_timer_get_time( uint32_t *time_hi, uint32_t *time_lo )
 {
-    return (wiced_result_t) platform_ascu_read_frame_sync_audio_timer( time_hi, time_lo );
+    return (wiced_result_t) platform_ascu_read_fw_audio_timer( time_hi, time_lo );
 }
 
 

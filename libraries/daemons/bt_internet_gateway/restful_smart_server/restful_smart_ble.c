@@ -462,50 +462,6 @@ wiced_result_t restful_smart_read_characteristic_value( wiced_http_response_stre
     return result;
 }
 
-wiced_result_t restful_smart_read_characteristic_long_value( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic )
-{
-    big_gatt_connection_t*     connection;
-    big_gatt_request_buffer_t* buffer  = NULL;
-    big_gatt_request_t*        request = NULL;
-    wiced_result_t             result  = WICED_NOT_FOUND;
-
-    connection = big_find_gatt_connection_by_ble_address( &restful_app_interface, (wiced_bt_ble_address_t*)node );
-    if ( connection == NULL )
-    {
-        goto exit;
-    }
-
-    result = big_get_gatt_request_buffer( &buffer, &request );
-    if ( result != WICED_BT_SUCCESS )
-    {
-        goto exit;
-    }
-
-    /* Fill out request parameters */
-    request->arg                             = (void*)stream;
-    request->feature                         = BIG_GATT_READ_LONG_CHARACTERISTIC_VALUE;
-    request->parameter.read.partial.auth_req = GATT_AUTH_REQ_NONE;
-    request->parameter.read.partial.handle   = characteristic->value_handle;
-    request->parameter.read.partial.offset   = 0;
-
-    /* Set global vars */
-    memcpy( &current_characteristic_handle, characteristic, sizeof( current_characteristic_handle ) );
-    current_procedure_count = 0;
-
-    result = big_send_gatt_request( connection, buffer );
-
-    exit:
-    if ( result != WICED_SUCCESS )
-    {
-        if ( buffer != NULL )
-        {
-            big_release_gatt_request_buffer( buffer );
-        }
-        rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
-    }
-    return result;
-}
-
 wiced_result_t restful_smart_read_characteristic_values_by_uuid( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const wiced_bt_uuid_t* uuid )
 {
     big_gatt_connection_t*     connection;
@@ -578,52 +534,6 @@ wiced_result_t restful_smart_write_characteristic_value( wiced_http_response_str
     request->parameter.write.len      = value->length;
     request->parameter.write.offset   = 0;
     memcpy( request->parameter.write.value, value->value, value->length );
-
-    /* Set global vars */
-    memcpy( &current_characteristic_handle, characteristic, sizeof( current_characteristic_handle ) );
-    current_procedure_count = 0;
-
-    result = big_send_gatt_request( connection, buffer );
-
-    exit:
-    if ( result != WICED_SUCCESS )
-    {
-        if ( buffer != NULL )
-        {
-            big_release_gatt_request_buffer( buffer );
-        }
-        rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
-    }
-    return result;
-}
-
-wiced_result_t restful_smart_write_long_characteristic_value( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const smart_value_handle_t* value )
-{
-    big_gatt_connection_t*     connection;
-    big_gatt_request_buffer_t* buffer  = NULL;
-    big_gatt_request_t*        request = NULL;
-    wiced_result_t             result  = WICED_NOT_FOUND;
-
-    connection = big_find_gatt_connection_by_ble_address( &restful_app_interface, (wiced_bt_ble_address_t*)node );
-    if ( connection == NULL )
-    {
-        goto exit;
-    }
-
-    result = big_get_gatt_request_buffer( &buffer, &request );
-    if ( result != WICED_BT_SUCCESS )
-    {
-        goto exit;
-    }
-
-    /* Fill out request parameters */
-    request->arg                      = (void*)stream;
-    request->feature                  = BIG_GATT_WRITE_LONG_CHARACTERISTIC_VALUE;
-    request->parameter.write.auth_req = GATT_AUTH_REQ_NONE;
-    request->parameter.write.handle   = characteristic->value_handle;
-    request->parameter.write.len      = MIN( ( GATT_DEF_BLE_MTU_SIZE - 1 ), value->length );
-    request->parameter.write.offset   = 0;
-    memcpy( request->parameter.write.value, value->value, request->parameter.write.handle );
 
     /* Set global vars */
     memcpy( &current_characteristic_handle, characteristic, sizeof( current_characteristic_handle ) );
@@ -2042,7 +1952,16 @@ static wiced_result_t handle_gatt_read_response( big_gatt_connection_t* connecti
 
     if ( data->status != WICED_BT_GATT_SUCCESS )
     {
-        rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
+        if ( ( current_request->feature == BIG_GATT_READ_LONG_CHARACTERISTIC_VALUE ) && ( current_request->parameter.read.partial.offset > 0 ) )
+        {
+            /* Not the first partial read of a long value. Close the stream */
+            rest_smart_response_write_long_characteristic_value_end( stream );
+            rest_smart_response_end_stream( stream );
+        }
+        else
+        {
+            rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );
+        }
         return WICED_ERROR;
     }
 
@@ -2082,9 +2001,10 @@ static wiced_result_t handle_gatt_read_response( big_gatt_connection_t* connecti
             break;
         }
 
-        case BIG_GATT_READ_MULTIPLE_CHARACTERISTIC_VALUES:
-        case BIG_GATT_READ_LONG_CHARACTERISTIC_DESCRIPTOR:
+        /* BIG_GATT_READ_LONG_CHARACTERISTIC_VALUE/DESCRIPTOR aren't used. For long read, BIG_GATT_READ_CHARACTERISTIC_VALUE/DESCRIPTOR are used */
         case BIG_GATT_READ_LONG_CHARACTERISTIC_VALUE:
+        case BIG_GATT_READ_LONG_CHARACTERISTIC_DESCRIPTOR:
+        case BIG_GATT_READ_MULTIPLE_CHARACTERISTIC_VALUES:
         {
             /* TODO: Currently unsupported */
             rest_smart_response_send_error_message( stream, REST_SMART_STATUS_404 );

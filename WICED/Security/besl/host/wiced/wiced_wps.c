@@ -126,12 +126,13 @@ static       wps_pbc_probreq_notify_callback_t pbc_probreq_notify_callback;
  *             Static Function Prototypes
  ******************************************************/
 
-static void          wiced_wps_thread             ( uint32_t arg );
-static void          wps_wwd_scan_result_handler  ( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status );
-static void*         wps_softap_event_handler     ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
-static besl_result_t besl_wps_pbc_overlap_check   ( const besl_mac_t* mac );
-static int           wps_compute_pin_checksum     (unsigned long int PIN);
-static void          host_network_process_wps_eapol_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface );
+static void           wiced_wps_thread             ( wwd_thread_arg_t arg );
+static void           wps_wwd_scan_result_handler  ( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status );
+static void*          wps_softap_event_handler     ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data );
+static besl_result_t  besl_wps_pbc_overlap_check   ( const besl_mac_t* mac );
+static int            wps_compute_pin_checksum     (unsigned long int PIN);
+static void           host_network_process_wps_eapol_data( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface );
+static tlv8_header_t* wps_parse_dot11_tlvs        ( const tlv8_header_t* tlv_buf, uint32_t buflen, dot11_ie_id_t key );
 
 /******************************************************
  *             Function definitions
@@ -290,7 +291,7 @@ besl_result_t besl_wps_start( wps_agent_t* workspace, besl_wps_mode_t mode, cons
     result = wps_internal_init( workspace, workspace->interface, mode, password, credentials, credential_length );
     if ( result == BESL_SUCCESS )
     {
-        result = (besl_result_t) host_rtos_create_thread_with_arg( &host_workspace->thread, wiced_wps_thread, "wps", host_workspace->thread_stack, WPS_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (uint32_t) workspace );
+        result = (besl_result_t) host_rtos_create_thread_with_arg( &host_workspace->thread, wiced_wps_thread, "wps", host_workspace->thread_stack, WPS_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (wwd_thread_arg_t) workspace );
     }
     wiced_rtos_delay_milliseconds(10); /* Delay required to allow the WPS thread to run */
 
@@ -309,7 +310,7 @@ besl_result_t besl_p2p_wps_start( wps_agent_t* workspace )
         return BESL_PBC_OVERLAP;
     }
 
-    result = (besl_result_t) host_rtos_create_thread_with_arg( &host_workspace->thread, wiced_wps_thread, "wps", host_workspace->thread_stack, WPS_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (uint32_t) workspace );
+    result = (besl_result_t) host_rtos_create_thread_with_arg( &host_workspace->thread, wiced_wps_thread, "wps", host_workspace->thread_stack, WPS_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (wwd_thread_arg_t) workspace );
 
     return result;
 }
@@ -409,6 +410,160 @@ besl_result_t besl_wps_scan( wps_agent_t* workspace, wps_ap_t** ap_array, uint16
     return (besl_result_t) result;
 }
 
+void wps_scan_result_handler( wl_escan_result_t* result, void* user_data )
+{
+    /* Process scan result */
+    uint8_t                  keep_record = 0;
+    wps_agent_t*             workspace;
+    uint8_t*                 data;
+    uint32_t                 length;
+    tlv8_data_t*             tlv8;
+    wps_uuid_t               uuid;
+    dsss_parameter_set_ie_t* dsie = NULL;
+    ht_operation_ie_t*       ht_operation_ie = NULL;
+    wl_bss_info_t*           bss_info;
+    uint16_t                 ie_offset;
+    uint32_t                 bss_info_length;
+
+    if ( ( result == NULL ) || ( user_data == NULL ) )
+    {
+        goto exit;
+    }
+
+    /* Validate the BSS count */
+    if ( result->bss_count != 1 )
+    {
+        wiced_verify( "More than one result returned by firmware", result->bss_count == 1 );
+        goto exit;
+    }
+
+    workspace = (wps_agent_t*) user_data;
+    bss_info = &result->bss_info[0];
+
+    length = WICED_READ_32(&bss_info->ie_length);
+    ie_offset = WICED_READ_16(&bss_info->ie_offset);
+    bss_info_length = WICED_READ_32(&bss_info->length);
+
+    /* Validate the length of the IE section */
+    if ( ( ie_offset > bss_info_length ) ||
+         ( length > bss_info_length - ie_offset ) )
+    {
+        wiced_verify( "Invalid ie length", 1 == 0 );
+        goto exit;
+    }
+
+    data  = (uint8_t*) ( ( (uint8_t*) bss_info ) + ie_offset );
+
+    do
+    {
+        if ( length == 0 )
+        {
+            break;
+        }
+        /* Scan result for vendor specific IE */
+        tlv8 = tlv_find_tlv8( data, length, DOT11_IE_ID_VENDOR_SPECIFIC );
+        if ( tlv8 == NULL )
+        {
+            break;
+        }
+
+        /* Check if the TLV we've found is outside the bounds of the scan result length. i.e. Something is bad */
+        if (( (uint32_t)( (uint8_t*) tlv8 - data ) + tlv8->length + sizeof(tlv8_header_t)) > length)
+        {
+            goto exit;
+        }
+
+        length -= (uint32_t)( (uint8_t*) tlv8 - data ) + tlv8->length + sizeof(tlv8_header_t);
+        data = (uint8_t*) tlv8 + tlv8->length + sizeof(tlv8_header_t);
+
+        /* Verify extension is WPS extension */
+        if ( memcmp( tlv8->data, WPS_OUI, 3 ) == 0 && tlv8->data[3] == WPS_OUI_TYPE )
+        {
+            tlv16_data_t* tlv16;
+
+            /* Look for pwd ID */
+            tlv16_uint16_t* pwd_id = (tlv16_uint16_t*) tlv_find_tlv16( &tlv8->data[4], (uint32_t)( tlv8->length - 4 ), WPS_ID_DEVICE_PWD_ID );
+            if ( workspace->wps_mode == WPS_PIN_MODE ||
+                 ( pwd_id != NULL && besl_host_hton16( pwd_id->data ) == WPS_PUSH_BTN_DEVICEPWDID ) ) /* XXX needs to change if NFC is in use */
+            {
+                keep_record = 1;
+
+                /* Look for the AP's UUID */
+                tlv16 = tlv_find_tlv16( &tlv8->data[4], (uint32_t)( tlv8->length - 4 ), WPS_ID_UUID_E );
+                if ( ( tlv16 == NULL ) || ( besl_host_hton16(tlv16->length) != WPS_UUID_LENGTH ) )
+                {
+                    memset( &uuid, 0, sizeof( wps_uuid_t ) );
+                }
+                else
+                {
+                    memcpy( &uuid, tlv16->data, sizeof( wps_uuid_t ) );
+                }
+
+                /* Check if the Selected Registrar attribute is missing or false. Only applicable to PBC mode */
+                if ( workspace->wps_mode == WPS_PBC_MODE )
+                {
+                    /* Check if the registrar is using PBC mode */
+                    if ( ( pwd_id != NULL && besl_host_hton16( pwd_id->data ) == WPS_PUSH_BTN_DEVICEPWDID ) )
+                    {
+                        tlv16 = tlv_find_tlv16( &tlv8->data[4], (uint32_t)( tlv8->length - 4 ), WPS_ID_SEL_REGISTRAR );
+                        if ( tlv16 != NULL )
+                        {
+                            /* Check that selected registrar is asserted */
+                            if (tlv16->data[0] == 0)
+                            {
+                                keep_record = 0;
+                            }
+                        }
+                        else
+                        {
+                            keep_record = 0;
+                        }
+                    }
+                    else
+                    {
+                        keep_record = 0;
+                    }
+                }
+            }
+        }
+    } while ( tlv8 != NULL );
+
+    if ( keep_record == 1 )
+    {
+        /* Adjust the channel */
+        data   = (uint8_t*) ( ( (uint8_t*) bss_info ) + ie_offset );
+        length = BESL_READ_32(&result->bss_info[0].ie_length);
+
+        /* In 2.4 GHz the radio firmware may report off channel probe responses. Parse the response to check if it is on or off the AP operating channel. */
+        dsie =  (dsss_parameter_set_ie_t*) wps_parse_dot11_tlvs( (tlv8_header_t*)data, length, DOT11_IE_ID_DSSS_PARAMETER_SET );
+        if ( ( dsie != NULL ) && ( dsie->length == DSSS_PARAMETER_SET_LENGTH ) )
+        {
+            result->bss_info[0].chanspec &= (wl_chanspec_t)( ~WL_CHANSPEC_CHAN_MASK );
+            result->bss_info[0].chanspec = (wl_chanspec_t)( result->bss_info[0].chanspec | dsie->current_channel );
+        }
+
+        /* In 5GHz the DS Parameter Set element may not be present. If it's not present then for an 802.11a AP we use the channel from the chanspec, since
+         * it will be a 20 MHz wide channel. If it's an 802.11n AP then we need to examine the HT operations element to find the primary 20 MHz channel
+         * since the chanspec may report the center frequency if it's an 802.11n 40MHz or wider channel, which is not the same as the 20 MHz channel that the
+         * beacons are on. */
+        if ( ( dsie == NULL ) )
+        {
+            /* Find the primary channel */
+            ht_operation_ie = (ht_operation_ie_t*)wps_parse_dot11_tlvs( (tlv8_header_t*)data, length, DOT11_IE_ID_HT_OPERATION );
+            if ( ( ht_operation_ie != NULL ) && ( ht_operation_ie->length == HT_OPERATION_IE_LENGTH ) )
+            {
+                result->bss_info[0].chanspec &= (wl_chanspec_t)( ~WL_CHANSPEC_CHAN_MASK );
+                result->bss_info[0].chanspec = (wl_chanspec_t)( result->bss_info[0].chanspec | ht_operation_ie->primary_channel );
+            }
+        }
+
+        wps_host_store_ap( workspace->wps_host_workspace, result, &uuid );
+    }
+
+exit:
+    return;
+}
+
 besl_result_t besl_wps_set_directed_wps_target( wps_agent_t* workspace, wps_ap_t* ap, uint32_t maximum_join_attempts )
 {
     workspace->directed_wps_max_attempts = maximum_join_attempts;
@@ -426,17 +581,13 @@ static besl_result_t besl_wps_pbc_overlap_check( const besl_mac_t* mac )
     return BESL_SUCCESS;
 }
 
-static void wiced_wps_thread( uint32_t arg )
+static void wiced_wps_thread( wwd_thread_arg_t arg )
 {
-    besl_host_workspace_t* host = &((wps_host_workspace_t*)((wps_agent_t*)arg)->wps_host_workspace)->host_workspace;
-
     wiced_wps_thread_main( arg );
-
-    host_rtos_finish_thread( &host->thread );
     WICED_END_OF_CURRENT_THREAD( );
 }
 
-void wiced_wps_thread_main( uint32_t arg )
+void wiced_wps_thread_main( wwd_thread_arg_t arg )
 {
     wiced_time_t          current_time;
     wps_result_t          result;
@@ -713,8 +864,8 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap, wwd_interface_t inter
 
     uint8_t attempts = 0;
     wps_result_t ret;
-    wiced_semaphore_t semaphore;
-    wiced_rtos_init_semaphore(&semaphore);
+    host_semaphore_type_t semaphore;
+    host_rtos_init_semaphore(&semaphore);
     do
     {
         ++attempts;
@@ -723,10 +874,10 @@ wps_result_t wps_host_join( void* workspace, wps_ap_t* ap, wwd_interface_t inter
         {
             continue;
         }
-        ret = (wps_result_t) wiced_rtos_get_semaphore(&semaphore, DEFAULT_WPS_JOIN_TIMEOUT);
+        ret = (wps_result_t) host_rtos_get_semaphore(&semaphore, DEFAULT_WPS_JOIN_TIMEOUT, WICED_FALSE );
     } while ( ret != WPS_SUCCESS && attempts < 2 );
 
-    wiced_rtos_deinit_semaphore(&semaphore);
+    host_rtos_deinit_semaphore(&semaphore);
 
     if ( ret != WPS_SUCCESS )
     {
@@ -1277,4 +1428,11 @@ void wps_register_result_callback( wps_agent_t* workspace, void (*wps_result_cal
 void wps_register_internal_result_callback( wps_agent_t* workspace, void (*wps_internal_result_callback)(wps_result_t*) )
 {
     workspace->wps_internal_result_callback = wps_internal_result_callback;
+}
+
+/* Note that there is an identical function in wwd_wifi.c which can't be used currently because making it non-static causes build errors related to the tlv8 structs. */
+static tlv8_header_t* wps_parse_dot11_tlvs( const tlv8_header_t* tlv_buf, uint32_t buflen, dot11_ie_id_t key )
+{
+
+    return (tlv8_header_t*) tlv_find_tlv8( (const uint8_t*) tlv_buf, buflen, key );
 }

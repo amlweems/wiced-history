@@ -41,7 +41,10 @@
 #define I2S_INTRECE_LAZY_FC_MASK    0xFF000000
 #define I2S_INTRECE_LAZY_FC_SHIFT   24
 
-#define I2S_INT_ERROR_MASK          (I2S_INT_DESCERR | I2S_INT_DATAERR | I2S_INT_DESC_PROTO_ERR | I2S_INT_SPDIF_PAR_ERR)
+#define SPDIF_INT_MASK              (0)
+#define SPDIF_INT_ERROR_MASK        (0)
+
+#define I2S_INT_ERROR_MASK          (I2S_INT_DESCERR | I2S_INT_DATAERR | I2S_INT_DESC_PROTO_ERR | SPDIF_INT_ERROR_MASK)
 
 /* FIXME What device ID should be passed to si_attach? */
 #define I2S_DEV_ID                  0
@@ -58,9 +61,6 @@
 /* HNDDMA requires one slot for counting, so round-up to nearest power-of-2. */
 #define I2S_NR_DMA_TXDS_MAX         (4)
 #define I2S_NR_DMA_RXDS_MAX         (4)
-
-/* Payload is 4KiB. */
-#define I2S_NR_RX_DATA_BYTES_MAX    (1024*4)
 
 /******************************************************
  *                   Enumerations
@@ -104,6 +104,7 @@ struct i2s_control
     uint8_t                         sample_bits;
     uint8_t                         channels;
     uint32_t                        sample_rate;
+    wiced_i2s_spdif_mode_t          i2s_spdif_mode;
 
     /* Standard wrappers. */
     osl_t                           *osh;
@@ -288,6 +289,11 @@ wiced_result_t wiced_i2s_init( wiced_audio_session_ref sh, wiced_i2s_t i2s, wice
     wiced_bool_t                is_locked   = WICED_FALSE;
     i2s_control_t               *control    = I2S_CONTROL(port);
 
+    if ( !PLATFORM_FEATURE_ENAB( I2S ) )
+    {
+        return WICED_UNSUPPORTED;
+    }
+
     /* Check arguments. */
     if (((dir == PLATFORM_I2S_WRITE) && (config->period_size > I2S_TX_PERIOD_BYTES_MAX)) ||
         ((dir == PLATFORM_I2S_READ)  && (config->period_size > I2S_RX_PERIOD_BYTES_MAX)) )
@@ -312,9 +318,10 @@ wiced_result_t wiced_i2s_init( wiced_audio_session_ref sh, wiced_i2s_t i2s, wice
         {
             /* The other stream is in-use. */
             /* Verify that the configuration is compatible with the other stream. */
-            result = (control->channels      == config->channels         &&
-                      control->sample_rate   == config->sample_rate      &&
-                      control->sample_bits   == config->bits_per_sample   ) ? WICED_SUCCESS : WICED_BADARG;
+            result = (control->channels       == config->channels         &&
+                      control->sample_rate    == config->sample_rate      &&
+                      control->sample_bits    == config->bits_per_sample  &&
+                      control->i2s_spdif_mode == config->i2s_spdif_mode) ? WICED_SUCCESS : WICED_BADARG;
 
             /* Don't do a full configuration since the settings are shared. */
             goto DONE_OTHER_STREAM_IN_USE;
@@ -361,6 +368,7 @@ wiced_result_t wiced_i2s_init( wiced_audio_session_ref sh, wiced_i2s_t i2s, wice
         control->sample_bits    = config->bits_per_sample;
         control->channels       = config->channels;
         control->sample_rate    = config->sample_rate;
+        control->i2s_spdif_mode = config->i2s_spdif_mode;
     }
 
     if (result != WICED_SUCCESS)
@@ -757,14 +765,20 @@ wiced_result_t wiced_i2s_pll_set_fractional_divider(wiced_i2s_t i2s, float value
     i2s_control_t    *control = I2S_CONTROL(port);
     si_t                 *sih = I2S_CONTROL(port)->sih;
     uint32_t     new_frac_div = 0;
-    double                VCO = 0.0f;
+    double                VCO = -1.0f;
     double            new_VCO = 0.0f;
     double new_frac_div_float = 0.0f;
+    double         ndiv_float = -1.0f;
     wiced_bool_t      b_apply = WICED_FALSE;
-    int        ch = 2;
+    int                    ch = 2;
+
     enum  {
         FREQUENCY_44p1K=0,
-        FREQUENCY_48K
+        FREQUENCY_48K,
+        FREQUENCY_88p2K,
+        FREQUENCY_96K,
+        FREQUENCY_192K,
+        FREQUENCY_384K
     };
 
     static const struct i2s_pll_config
@@ -777,10 +791,18 @@ wiced_result_t wiced_i2s_pll_set_fractional_divider(wiced_i2s_t i2s, float value
             double      vco;
     } i2s_pll_config[] =
     {
-            /* 11.2896MHz */
-            {.frequency=44100, .mclk = 11289600,  .i_ndiv_int = 38,  .i_ndiv_frac = 10707273, .i_mdiv = 64, .vco = 722534399.91 },
-            /* 12.288MHz */
-            {.frequency=48000, .mclk = 12288000,  .i_ndiv_int = 39,  .i_ndiv_frac =  7159475, .i_mdiv = 60, .vco = 737279999.93 },
+            /* 11.2896 MHz */
+            {.frequency =  44100, .mclk = 11289600,  .i_ndiv_int = 38,  .i_ndiv_frac = 10707273, .i_mdiv = 64, .vco = 722534399.91 },
+            /* 12.288  MHz  */
+            {.frequency =  48000, .mclk = 12288000,  .i_ndiv_int = 42,  .i_ndiv_frac =   925887, .i_mdiv = 64, .vco = 786432000.00 },
+            /* 22.5792 MHz */
+            {.frequency =  88200, .mclk = 22579200,  .i_ndiv_int = 38,  .i_ndiv_frac = 10707273, .i_mdiv = 32, .vco = 722534399.91 },
+            /* 24.576  MHz  */
+            {.frequency =  96000, .mclk = 24576000,  .i_ndiv_int = 42,  .i_ndiv_frac =   925887, .i_mdiv = 32, .vco = 786432000.00 },
+            /* 24.576  MHz  */
+            {.frequency = 192000, .mclk = 24576000,  .i_ndiv_int = 42,  .i_ndiv_frac =   925887, .i_mdiv = 32, .vco = 786432000.00 },
+            /* 49.152  MHz  */
+            {.frequency = 384000, .mclk = 49152000,  .i_ndiv_int = 42,  .i_ndiv_frac =   925887, .i_mdiv = 16, .vco = 786432000.00 },
     };
 
     /**
@@ -788,23 +810,48 @@ wiced_result_t wiced_i2s_pll_set_fractional_divider(wiced_i2s_t i2s, float value
      * This needs to be converted to the fractional value.
      */
 
-    if( control->sample_rate == i2s_pll_config[FREQUENCY_48K].frequency )
+    switch( control->sample_rate )
     {
-        VCO                = i2s_pll_config[FREQUENCY_48K].vco;
-        new_VCO            = ( VCO * ( (double)1.0f + ( value / (double)1000000.0f) ) );
-        new_frac_div_float = ( ( ( 2 * new_VCO ) / (double)XTAL_FREQUENCY )  - (double)i2s_pll_config[FREQUENCY_48K].i_ndiv_int ) * TWO_POW24;
-        new_frac_div       = (uint32_t) new_frac_div_float;
-        /* integral divider can't exceed (TWO_POW24 - 1) ! */
-        b_apply            = (new_frac_div < TWO_POW24) ? WICED_TRUE : WICED_FALSE;
+        case 44100:
+            VCO        = i2s_pll_config[FREQUENCY_44p1K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_44p1K].i_ndiv_int;
+            break;
+
+        case 48000:
+            VCO        = i2s_pll_config[FREQUENCY_48K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_48K].i_ndiv_int;
+            break;
+
+        case 88200:
+            VCO        = i2s_pll_config[FREQUENCY_88p2K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_88p2K].i_ndiv_int;
+            break;
+
+        case 96000:
+            VCO        = i2s_pll_config[FREQUENCY_96K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_96K].i_ndiv_int;
+            break;
+
+        case 192000:
+            VCO        = i2s_pll_config[FREQUENCY_192K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_192K].i_ndiv_int;
+            break;
+
+        case 384000:
+            VCO        = i2s_pll_config[FREQUENCY_384K].vco;
+            ndiv_float = (double)i2s_pll_config[FREQUENCY_384K].i_ndiv_int;
+            break;
+
+        default:
+            break;
     }
-    else if( control->sample_rate == i2s_pll_config[FREQUENCY_44p1K].frequency )
+
+    if ( (VCO >= 0) && (ndiv_float >=0) )
     {
-        VCO                = i2s_pll_config[FREQUENCY_44p1K].vco;
-        new_VCO            = (  VCO * ( (double)1.0f + ( value / (double)1000000.0f) ) );
-        new_frac_div_float = ( ( ( 2 * new_VCO ) / (double)XTAL_FREQUENCY )  - (double)i2s_pll_config[FREQUENCY_44p1K].i_ndiv_int ) * TWO_POW24;
+        new_VCO            = ( VCO * ( (double)1.0f + ( value / (double)1000000.0f) ) );
+        new_frac_div_float = ( ( ( 2 * new_VCO ) / (double)XTAL_FREQUENCY )  - ndiv_float ) * TWO_POW24;
+        b_apply            = ((new_frac_div_float >= 0) && (new_frac_div_float < TWO_POW24)) ? WICED_TRUE : WICED_FALSE;
         new_frac_div       = (uint32_t) new_frac_div_float;
-        /* integral divider can't exceed (TWO_POW24 - 1) ! */
-        b_apply            = (new_frac_div < TWO_POW24) ? WICED_TRUE : WICED_FALSE;
     }
 
     if ( b_apply == WICED_TRUE )
@@ -984,6 +1031,13 @@ static wiced_result_t i2s_set_clkdiv( platform_i2s_port_t port, const wiced_i2s_
         {
             I2S_CONTROL(port)->pll_configured = 1;
         }
+
+        if (config->i2s_spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+        {
+            uint32_t period_cnt = i2s_clkdiv_coeffs[ii].spdif_period_cnt;
+
+            W_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->srxpcnt, period_cnt);
+        }
     }
     else
     {
@@ -997,6 +1051,7 @@ static wiced_result_t i2s_configure_peripheral( platform_i2s_port_t port, const 
 {
     wiced_result_t      result      = WICED_SUCCESS;
     uint32_t            devctrl     = R_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->devcontrol);
+    uint32_t            srxctrl     = R_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->srxctrl);
     uint32_t            i2sctrl     = 0;
 
     /* Touching DevControl when in_use will cause the I2S FIFO to be
@@ -1057,22 +1112,28 @@ static wiced_result_t i2s_configure_peripheral( platform_i2s_port_t port, const 
         /* DevControl.WL_RX */
         {
             devctrl &= ~I2S_DC_WL_RX_MASK;
+            srxctrl &= ~I2S_SRXC_WL_MASK;
+
             switch ( config->bits_per_sample )
             {
                 /* Available in I2S core rev > 2. */
                 case 8:
                     devctrl |= 0x8000;
+                    srxctrl |= 0x1000;
                     break;
                 case 16:
                     devctrl |= 0x0;
+                    srxctrl |= 0x0;
                     /* LCH data in least-significant word. */
                     i2sctrl |= I2S_CTRL_RXLR_CHSEL;
                     break;
                 case 20:
                     devctrl |= 0x1000;
+                    srxctrl |= 0x1;
                     break;
                 case 24:
                     devctrl |= 0x2000;
+                    srxctrl |= 0x2;
                     break;
                 case 32:
                     devctrl |= 0x3000;
@@ -1115,10 +1176,18 @@ static wiced_result_t i2s_configure_peripheral( platform_i2s_port_t port, const 
         }
     }
 
-    /* DevControl.DPX */
+    /* Only enable full duplex when not in SPDIF mode */
+    devctrl &= (~I2S_DC_DPX_MASK);
+    if (config->i2s_spdif_mode != WICED_I2S_SPDIF_MODE_ON)
     {
         /* Full duplex. */
         devctrl |= I2S_DC_DPX_MASK;
+    }
+
+    if (config->i2s_spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+    {
+        srxctrl |= (I2S_SRXC_RXEN | I2S_SRXC_RXSTEN | I2S_SRXC_HW_PCNTEN);
+        W_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->srxctrl, srxctrl);
     }
 
     /* Write I2S devcontrol reg. */
@@ -1285,7 +1354,12 @@ static wiced_result_t i2s_op_tx_dma_init( platform_i2s_port_t port, wiced_bool_t
 
 static wiced_result_t i2s_op_rx_interrupts_on( platform_i2s_port_t port, wiced_bool_t on )
 {
-    static const uint32 intmask_capture    = I2S_INT_RCV_INT | I2S_INT_RCVFIFO_OFLOW;
+    uint32 intmask_capture = I2S_INT_RCV_INT | I2S_INT_RCVFIFO_OFLOW;
+
+    if (I2S_CONTROL(port)->i2s_spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+    {
+        intmask_capture |= SPDIF_INT_MASK;
+    }
 
     if (on == WICED_TRUE)
     {
@@ -1294,6 +1368,7 @@ static wiced_result_t i2s_op_rx_interrupts_on( platform_i2s_port_t port, wiced_b
         /* Clear any pending interrupts. */
         W_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intstatus, intmask_capture);
         /* Enable interrupts. */
+        I2S_CONTROL(port)->intmask |= intmask_capture;
         OR_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intmask, intmask_capture);
 
         /* Enable I2S lazy interrupt.  The lazy interrupt is required
@@ -1304,8 +1379,6 @@ static wiced_result_t i2s_op_rx_interrupts_on( platform_i2s_port_t port, wiced_b
         i2sintrecelazy  &= ~I2S_INTRECE_LAZY_FC_MASK;
         i2sintrecelazy  |= 1 << I2S_INTRECE_LAZY_FC_SHIFT;
         W_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intrecvlazy, i2sintrecelazy);
-
-        I2S_CONTROL(port)->intmask |= intmask_capture;
     }
     else
     {
@@ -1413,14 +1486,18 @@ static void service_xrun( platform_i2s_port_t port, platform_i2s_direction_t dir
 void platform_i2s_isr( platform_i2s_port_t port )
 {
     uint32_t intstatus;
+    wiced_i2s_spdif_mode_t spdif_mode;
 
     platform_irq_disable_irq( I2S_PORT_INFO(port)->irqn );
     i2s_intrsoff(port);
 
-    intstatus   = R_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intstatus);
+    intstatus  = R_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intstatus);
+    spdif_mode = I2S_CONTROL(port)->i2s_spdif_mode;
 
-    /* Check for unsolicited interrupts. */
-    if (intstatus & ~I2S_CONTROL(port)->intmask)
+    /* Check for unsolicited interrupts.
+     * In SPDIF mode, the SPDIF status bits may be set even if the interrupt is not enabled.
+     */
+    if ((spdif_mode != WICED_I2S_SPDIF_MODE_ON) && (intstatus & ~I2S_CONTROL(port)->intmask))
     {
         /* Unsolicited interrupt! */
         wiced_assert("Invalid interrupt source", 0);
@@ -1467,6 +1544,12 @@ void platform_i2s_isr( platform_i2s_port_t port )
         /* Big-hammer. */
         /* Keep interrupts disabled; bail. */
         return;
+    }
+
+    if (spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+    {
+        /* Clear any remaining interrupts. */
+        W_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->intstatus, intstatus);
     }
 
     i2s_intrson(port);

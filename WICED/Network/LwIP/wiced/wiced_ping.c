@@ -49,7 +49,6 @@ wiced_result_t wiced_ping_send(wiced_interface_t interface, const wiced_ip_addre
 {
     wiced_time_t send_time;
     err_t result;
-    UNUSED_PARAMETER(interface);
 
     /* Open a local socket for pinging */
     socket_for_ping = lwip_socket( AF_INET, SOCK_RAW, IP_PROTO_ICMP );
@@ -61,8 +60,16 @@ wiced_result_t wiced_ping_send(wiced_interface_t interface, const wiced_ip_addre
     /* Set the receive timeout on local socket so pings will time out. */
     lwip_setsockopt( socket_for_ping, SOL_SOCKET, SO_RCVTIMEO, &timeout_ms, sizeof( timeout_ms ) );
 
+    wiced_rtos_lock_mutex( &lwip_send_interface_mutex );
+
+    /* Set to default the requested interface */
+    netif_set_default( &IP_HANDLE(interface));
+
     /* Send a ping */
     result = ping_send( socket_for_ping, address );
+
+    wiced_rtos_unlock_mutex( &lwip_send_interface_mutex );
+
     if ( result != ERR_OK )
     {
         /* close a socket */

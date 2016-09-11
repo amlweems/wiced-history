@@ -151,7 +151,9 @@ typedef struct
 #define SDP_ATTR_VALUE_UINT8(value)     (UINT_DESC_TYPE << 3)    | SIZE_EIGHT_BYTES, SDP_UINT8(value)
 #define SDP_ATTR_VALUE_BOOLEAN(value)   (BOOLEAN_DESC_TYPE << 3),                    SDP_UINT1(value)
 
-#define SDP_ATTR_VALUE_TEXT             (TEXT_STR_DESC_TYPE << 3) | SIZE_IN_NEXT_BYTE
+#define SDP_ATTR_VALUE_TEXT_1(len)      (TEXT_STR_DESC_TYPE << 3) | SIZE_IN_NEXT_BYTE, SDP_UINT1(len)
+#define SDP_ATTR_VALUE_TEXT_2(len)      (TEXT_STR_DESC_TYPE << 3) | SIZE_IN_NEXT_WORD, SDP_UINT2(len)
+#define SDP_ATTR_VALUE_TEXT_4(len)      (TEXT_STR_DESC_TYPE << 3) | SIZE_IN_NEXT_LONG, SDP_UINT4(len)
 
 #define SDP_ATTR_UINT1(id, value)       SDP_ATTR_ID(id), SDP_ATTR_VALUE_UINT1(value)
 #define SDP_ATTR_UINT2(id, value)       SDP_ATTR_ID(id), SDP_ATTR_VALUE_UINT2(value)
@@ -163,7 +165,9 @@ typedef struct
 
 #define SDP_ATTR_UUID16(uuid)           ((UUID_DESC_TYPE << 3) | SIZE_TWO_BYTES), SDP_UINT2(uuid)
 
-#define SDP_ATTR_TEXT(id, len)          SDP_ATTR_ID(id), SDP_ATTR_VALUE_TEXT, (len)
+#define SDP_ATTR_TEXT_1(id, len)        SDP_ATTR_ID(id), SDP_ATTR_VALUE_TEXT_1(len)
+#define SDP_ATTR_TEXT_2(id, len)        SDP_ATTR_ID(id), SDP_ATTR_VALUE_TEXT_2(len)
+#define SDP_ATTR_TEXT_4(id, len)        SDP_ATTR_ID(id), SDP_ATTR_VALUE_TEXT_4(len)
 
 #define SDP_ATTR_SEQUENCE_1(length)     ((DATA_ELE_SEQ_DESC_TYPE << 3) | SIZE_IN_NEXT_BYTE), (length)
 #define SDP_ATTR_SEQUENCE_2(length)     ((DATA_ELE_SEQ_DESC_TYPE << 3) | SIZE_IN_NEXT_WORD), SDP_UINT2(length)
@@ -233,28 +237,28 @@ typedef struct
 
 /* Documentation URL 0x000A */
 #define SDP_ATTR_DOCUMENTATION_URL(len)                                 \
-    SDP_ATTR_TEXT(ATTR_ID_DOCUMENTATION_URL, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_DOCUMENTATION_URL, len)
 
 /* Client Executable URL 0x000B */
 #define SDP_ATTR_CLIENT_EXECUTABLE_URL(len)                             \
-    SDP_ATTR_TEXT(ATTR_ID_CLIENT_EXE_URL, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_CLIENT_EXE_URL, len)
 
 /* Icon URL 0x000C */
 #define SDP_ATTR_ICON_URL(len)                                          \
-    SDP_ATTR_TEXT(ATTR_ID_ICON_URL, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_ICON_URL, len)
 
 /* Service Name LANGUAGE_BASE_ID (0x0100) + 0x0000 = 0x0100 */
 #define SDP_ATTR_SERVICE_NAME(len)                                      \
-    SDP_ATTR_TEXT(ATTR_ID_SERVICE_NAME, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_SERVICE_NAME, len)
 
 
 /* Service Description LANGUAGE_BASE_ID (0x0100) + 0x0001 = 0x0101 */
 #define SDP_ATTR_SERVICE_DESCRIPTION(len)                               \
-    SDP_ATTR_TEXT(ATTR_ID_SERVICE_DESCRIPTION, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_SERVICE_DESCRIPTION, len)
 
 /* Provider Name LANGUAGE_BASE_ID (0x0100) + 0x0002 = 0x0102 */
 #define SDP_ATTR_PROVIDER_NAME(len)                                     \
-    SDP_ATTR_TEXT(ATTR_ID_PROVIDER_NAME, len)
+    SDP_ATTR_TEXT_1(ATTR_ID_PROVIDER_NAME, len)
 
 /* Group ID 0x0200 */
 #define SDP_ATTR_GROUP_ID(uuid)                                         \

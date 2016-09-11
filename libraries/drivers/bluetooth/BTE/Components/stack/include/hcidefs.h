@@ -1,12 +1,13 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/*****************************************************************************
+**
+**  Name        hcidefs.h
+**
+**  Function    this file contains Host Controller Interface definitions
+**
+**  Copyright (c) 1999-2015, Broadcom Corp., All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+**
+******************************************************************************/
 
 #ifndef HCIDEFS_H
 #define HCIDEFS_H
@@ -869,7 +870,7 @@
 */
 
 /* the event mask page 2 (CLB + CSA4 + SC) for BR/EDR controller */
-#define HCI_PAGE_2_EVENT_MASK                  "\x00\x00\x00\x00\x00\xFF\xC0\x00"
+#define HCI_PAGE_2_EVENT_MASK                  "\x00\x00\x00\x00\x00\xBF\xC0\x00"
 /*  0x0000000000004000 Triggered Clock Capture Event
     0x0000000000008000 Sync Train Complete Event
     0x0000000000010000 Sync Train Received Event
@@ -878,15 +879,14 @@
     0x0000000000080000 Truncated Page Complete Event
     0x0000000000100000 Salve Page Response Timeout Event
     0x0000000000200000 Connectionless Broadcast Channel Map Change Event
-    0x0000000000400000 Inquiry Response Notification Event
+    0x0000000000400000 Inquiry Response Notification Event  // mask off this event, not processed on host
     0x0000000000800000 Authenticated_Payload_Timeout_Expired Event
 */
-
+#if BTM_BLE_PRIVACY_SPT == TRUE
 /* BLE event mask */
-#if BTM_BLE_PRIVACY_SPT == TRUE 
 #define HCI_BLE_EVENT_MASK_DEF               "\x00\x00\x00\x00\x00\x00\x07\xff"
 #else
-#define HCI_BLE_EVENT_MASK_DEF "\x00\x00\x00\x00\x00\x00\x00\x7f"
+#define HCI_BLE_EVENT_MASK_DEF              "\x00\x00\x00\x00\x00\x00\x00\x7f"
 #endif
 /*
 ** Definitions for packet type masks (BT1.2 and BT2.0 definitions)
@@ -2808,7 +2808,7 @@ typedef struct
 #define HCI_SET_EXTERNAL_FRAME_CONFIGURATION_SUPPORTED(x)   ((x)[HCI_SUPP_COMMANDS_SET_EXT_FRAME_CONF_OFF] & HCI_SUPP_COMMANDS_SET_EXT_FRAME_CONF_MASK)
 
 
-/* Supported Commands Byte 30 */
+/* Supported Commands (Byte 30) */
 #define HCI_SUPP_COMMANDS_SET_MWS_SIGNALING_MASK     0x01
 #define HCI_SUPP_COMMANDS_SET_MWS_SIGNALING_OFF      30
 #define HCI_SET_MWS_SIGNALING_SUPPORTED(x)   ((x)[HCI_SUPP_COMMANDS_SET_MWS_SIGNALING_OFF] & HCI_SUPP_COMMANDS_SET_MWS_SIGNALING_MASK)
@@ -2916,6 +2916,9 @@ typedef struct
 #define HCI_SUPP_COMMANDS_LE_RC_CONN_PARAM_UPD_NEG_RPY_OFF           33
 #define HCI_LE_RC_CONN_PARAM_UPD_NEG_RPY_SUPPORTED(x)      ((x)[HCI_SUPP_COMMANDS_LE_RC_CONN_PARAM_UPD_NEG_RPY_OFF] & HCI_SUPP_COMMANDS_RLE_RC_CONN_PARAM_UPD_NEG_RPY_MASK)
 
+#if defined(MPAF_ZIGBEE)
+#define HCI_BRCM_I15DOT4_COMMAND            (0x0177 | HCI_GRP_VENDOR_SPECIFIC)
+#endif
 /*
 Commands of HCI_GRP_VENDOR_SPECIFIC group for WIDCOMM SW LM Simulator
 */

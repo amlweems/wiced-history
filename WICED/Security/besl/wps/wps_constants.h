@@ -297,6 +297,7 @@ extern "C" {
 
 /* Size constants */
 #define SIZE_SSID_LENGTH       33
+#define WPS_UUID_LENGTH        16
 
 #define SIZE_64_BITS        8
 #define SIZE_128_BITS       16

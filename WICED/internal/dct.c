@@ -39,6 +39,14 @@
 #endif /* #ifdef BT_CONFIG_APPLICATION_DEFINED */
 #endif /* #ifdef WICED_DCT_INCLUDE_BT_CONFIG */
 
+#ifdef WICED_DCT_INCLUDE_P2P_CONFIG
+#ifdef P2P_CONFIG_APPLICATION_DEFINED
+#include "p2p_config_dct.h"
+#else/* #ifdef P2P_CONFIG_APPLICATION_DEFINED */
+#include "default_p2p_config_dct.h"
+#endif /* #ifdef P2P_CONFIG_APPLICATION_DEFINED */
+#endif /* #ifdef WICED_DCT_INCLUDE_P2P_CONFIG */
+
 #include "generated_mac_address.txt"
 
 /******************************************************
@@ -86,6 +94,10 @@ extern const void * const dct_used_size_loc; /* Defined by linker script */
 #define CONFIG_AP_PASSPHRASE_LENGTH    sizeof(CONFIG_AP_PASSPHRASE)-1
 #endif
 
+#ifndef P2P_GROUP_OWNER_PASSPHRASE_LENGTH
+#define P2P_GROUP_OWNER_PASSPHRASE_LENGTH    sizeof(P2P_GROUP_OWNER_PASSPHRASE)-1
+#endif
+
 #ifndef COOEE_KEY_STRING
 #define COOEE_KEY_STRING       "abcdabcdabcdabcd"
 #endif
@@ -118,10 +130,12 @@ static const platform_dct_data_t initial_dct =
     .dct_header.used_size            = (unsigned long)&dct_used_size_loc,
 #endif
     .dct_header.write_incomplete     = 0,
-    .dct_header.is_current_dct       = 1,
     .dct_header.app_valid            = 1,
     .dct_header.mfg_info_programmed  = 0,
     .dct_header.magic_number         = BOOTLOADER_MAGIC_NUMBER,
+    .dct_header.sequence             = 0,
+    .dct_header.crc32                = 0,
+    .dct_header.initial_write        = 1,
 
     .dct_header.apps_locations[ DCT_FR_APP_INDEX ].id       = EXTERNAL_FIXED_LOCATION,
     .dct_header.apps_locations[ DCT_DCT_IMAGE_INDEX ].id    = EXTERNAL_FIXED_LOCATION,
@@ -171,7 +185,7 @@ static const platform_dct_data_t initial_dct =
     .wifi_config.device_configured   = WICED_FALSE,
 #endif
     .wifi_config.stored_ap_list      = DEFAULT_AP_LIST,
-    .wifi_config.soft_ap_settings    = {{sizeof(SOFT_AP_SSID)-1,   SOFT_AP_SSID},   SOFT_AP_SECURITY,   SOFT_AP_CHANNEL,   SOFT_AP_PASSPHRASE_LENGTH, SOFT_AP_PASSPHRASE},
+    .wifi_config.soft_ap_settings    = {{sizeof(SOFT_AP_SSID)-1,   SOFT_AP_SSID},   SOFT_AP_SECURITY,   SOFT_AP_CHANNEL,   SOFT_AP_PASSPHRASE_LENGTH,   SOFT_AP_PASSPHRASE},
     .wifi_config.config_ap_settings  = {{sizeof(CONFIG_AP_SSID)-1, CONFIG_AP_SSID}, CONFIG_AP_SECURITY, CONFIG_AP_CHANNEL, CONFIG_AP_PASSPHRASE_LENGTH, CONFIG_AP_PASSPHRASE, CONFIG_VALIDITY_VALUE},
 #ifdef WICED_COUNTRY_CODE
     .wifi_config.country_code        = WICED_COUNTRY_CODE,
@@ -196,6 +210,16 @@ static const platform_dct_data_t initial_dct =
      .bt_config.ssp_debug_mode                      = WICED_FALSE,
 #endif
 #endif
+
+#ifdef WICED_DCT_INCLUDE_P2P_CONFIG
+     .p2p_config.p2p_group_owner_settings = {{sizeof(P2P_GROUP_OWNER_SSID)-1, P2P_GROUP_OWNER_SSID}, P2P_GROUP_OWNER_SECURITY, P2P_GROUP_OWNER_CHANNEL, P2P_GROUP_OWNER_PASSPHRASE_LENGTH, P2P_GROUP_OWNER_PASSPHRASE, CONFIG_VALIDITY_VALUE},
+#endif
+
+#if defined(OTA2_SUPPORT)
+    .ota2_config.update_count          = 0,
+    .ota2_config.boot_type             = 0,
+#endif
+
 };
 
 #if defined ( __IAR_SYSTEMS_ICC__ )

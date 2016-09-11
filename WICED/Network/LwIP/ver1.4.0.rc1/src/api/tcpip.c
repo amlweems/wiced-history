@@ -93,6 +93,8 @@ tcpip_thread(void *arg)
     switch (msg->type) {
         case TCPIP_EXIT:
             quitflag = 1;
+            tcpip_init_done = 0;
+            tcpip_init_done_arg = NULL;
             sys_sem_signal( msg->sem );
             memp_free(MEMP_TCPIP_MSG_API, msg);
             break;
@@ -497,7 +499,7 @@ tcpip_init(tcpip_init_done_fn initfunc, void *arg)
   }
 #endif /* LWIP_TCPIP_CORE_LOCKING */
 
-  tcpip_thread_handle = sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+  sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO, &tcpip_thread_handle );
 }
 
 
@@ -531,7 +533,7 @@ tcpip_deinit( void )
 
     lwip_deinit( );
 
-    sys_thread_free( tcpip_thread_handle );
+    sys_thread_free( &tcpip_thread_handle );
 
 }
 

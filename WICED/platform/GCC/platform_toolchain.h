@@ -21,7 +21,12 @@ extern "C"
  ******************************************************/
 
 #ifndef WEAK
+#ifndef __MINGW32__
 #define WEAK             __attribute__((weak))
+#else
+/* MinGW doesn't support weak */
+#define WEAK
+#endif
 #endif
 
 #ifndef MAY_BE_UNUSED
@@ -73,6 +78,12 @@ extern "C"
  ******************************************************/
 
 void *memrchr( const void *s, int c, size_t n );
+
+
+/* Windows doesn't come with support for strlcpy */
+#ifdef WIN32
+size_t strlcpy (char *dest, const char *src, size_t size);
+#endif /* WIN32 */
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -55,6 +55,10 @@ wiced_bool_t   wiced_tls_is_encryption_enabled        ( wiced_tcp_socket_t* sock
 wiced_result_t wiced_tls_close_notify                 ( wiced_tcp_socket_t* socket );
 wiced_result_t wiced_tls_calculate_overhead           ( wiced_tls_workspace_t* context, uint16_t available_space, uint16_t* header, uint16_t* footer );
 
+#ifndef DISABLE_EAP_TLS
+wiced_result_t wiced_tls_receive_eap_packet           ( supplicant_workspace_t* supplicant, besl_packet_t* packet, uint32_t timeout );
+#endif /* DISABLE_EAP_TLS */
+
 #ifdef __cplusplus
 } /*extern "C" */
 #endif

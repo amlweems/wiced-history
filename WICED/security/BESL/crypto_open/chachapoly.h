@@ -30,7 +30,7 @@
 #ifndef CHACHA_POLY_AEAD_H
 #define CHACHA_POLY_AEAD_H
 
-#include <sys/types.h>
+#include <stdint.h>
 #include "chacha.h"
 #include "poly1305.h"
 
@@ -45,11 +45,11 @@ extern "C"
 {
 #endif
 
-void chachapoly_init(struct chachapoly_ctx *ctx, const u_char *key, u_int keylen);
+void chachapoly_init(struct chachapoly_ctx *ctx, const uint8_t *key, uint32_t keylen);
 
-int chachapoly_crypt(struct chachapoly_ctx *ctx, u_int seqnr, u_char *dest, const u_char *src, u_int len, u_int aadlen, u_int authlen, int do_encrypt);
+int chachapoly_crypt(struct chachapoly_ctx *ctx, uint32_t seqnr, uint8_t *dest, const uint8_t *src, uint32_t len, uint32_t aadlen, uint32_t authlen, int do_encrypt);
 
-int chachapoly_get_length(struct chachapoly_ctx *ctx, u_int *plenp, u_int seqnr, const u_char *cp, u_int len);
+int chachapoly_get_length(struct chachapoly_ctx *ctx, uint32_t *plenp, uint32_t seqnr, const uint8_t *cp, uint32_t len);
 
 #ifdef __cplusplus
 } /*extern "C" */

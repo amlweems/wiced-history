@@ -158,7 +158,7 @@ wiced_result_t wiced_rtos_pop_from_queue( wiced_queue_t* queue, void* message, u
     return (wiced_result_t) host_rtos_pop_from_queue( WICED_GET_QUEUE_HANDLE( queue ), message, timeout_ms );
 }
 
-static void worker_thread_main( uint32_t arg )
+static void worker_thread_main( wiced_thread_arg_t arg )
 {
     wiced_worker_thread_t* worker_thread = (wiced_worker_thread_t*) arg;
 

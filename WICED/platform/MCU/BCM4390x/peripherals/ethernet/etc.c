@@ -810,7 +810,7 @@ etc_watchdog(etc_info_t *etc)
 		}
 	}
 
-	if (etc->loopbk |= LOOPBACK_MODE_NONE) {
+	if (etc->loopbk != LOOPBACK_MODE_NONE) {
 		status |= STAT_LINK;
 	}
 

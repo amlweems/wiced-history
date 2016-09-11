@@ -71,8 +71,13 @@ Possible values for uECC_PLATFORM are defined below: */
 /* Enable square function by default */
 #define uECC_SQUARE_FUNC 1
 
-/* Set the platform */
+/* Set the platform */  /* see http://sourceforge.net/p/predef/wiki/Architectures/ */
+#if defined ( __x86_64__ )  || defined ( __i386__ ) || defined ( _M_X64 ) || defined ( _M_IX86 )
+#define uECC_PLATFORM   uECC_x86
+#else
 #define uECC_PLATFORM   uECC_arm_thumb2
+#endif
+
 
 #define uECC_WORD_SIZE    4
 

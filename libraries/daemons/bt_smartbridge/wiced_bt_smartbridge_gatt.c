@@ -15,8 +15,8 @@
 #include "wiced.h"
 #include "wiced_bt_smartbridge.h"
 #include "wiced_bt_smartbridge_gatt.h"
-#include "bt_smart_gatt.h"
-#include "smartbridge_stack_if.h"
+#include "bt_smartbridge_stack_interface.h"
+#include "bt_smartbridge_helper.h"
 
 /******************************************************
  *                      Macros
@@ -84,7 +84,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_discover_primary_services_by_uuid( cons
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return bt_smart_gatt_discover_primary_services_by_uuid( socket->connection_handle, uuid, service_list );
+    return smartbridge_bt_interface_discover_primary_services_by_uuid( socket->connection_handle, uuid, service_list );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_find_included_services( const wiced_bt_smartbridge_socket_t* socket, uint16_t start_handle, uint16_t end_handle, wiced_bt_smart_attribute_list_t* include_list )
@@ -102,8 +102,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_find_included_services( const wiced_bt_
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_find_included_services( socket->connection_handle, start_handle, end_handle, include_list );
+    return smartbridge_bt_interface_find_included_services( socket->connection_handle, start_handle, end_handle, include_list );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_discover_all_characteristics_in_a_service( const wiced_bt_smartbridge_socket_t* socket, uint16_t start_handle, uint16_t end_handle, wiced_bt_smart_attribute_list_t* characteristic_list )
@@ -138,8 +137,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_discover_characteristic_by_uuid( const 
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_discover_characteristics_by_uuid( socket->connection_handle, uuid, start_handle, end_handle, characteristic_list );
+    return smartbridge_bt_interface_discover_characteristic_by_uuid( socket->connection_handle, uuid, start_handle, end_handle, characteristic_list );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_discover_handle_and_type_of_all_characteristic_descriptors( const wiced_bt_smartbridge_socket_t* socket, uint16_t start_handle, uint16_t end_handle, wiced_bt_smart_attribute_list_t* descriptor_list )
@@ -157,8 +155,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_discover_handle_and_type_of_all_charact
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_discover_all_characteristic_descriptors( socket->connection_handle, start_handle, end_handle, descriptor_list );
+    return smartbridge_bt_interface_discover_all_characteristic_descriptors( socket->connection_handle, start_handle, end_handle, descriptor_list );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_read_characteristic_descriptor( const wiced_bt_smartbridge_socket_t* socket, uint16_t handle, const wiced_bt_uuid_t* uuid, wiced_bt_smart_attribute_t** descriptor )
@@ -176,8 +173,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_read_characteristic_descriptor( const w
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_read_characteristic_descriptor( socket->connection_handle, handle, uuid, descriptor );
+    return smartbridge_bt_interface_read_characteristic_descriptor( socket->connection_handle, handle, uuid, descriptor );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_read_long_characteristic_descriptor( const wiced_bt_smartbridge_socket_t* socket, uint16_t handle, const wiced_bt_uuid_t* uuid, wiced_bt_smart_attribute_t** descriptor )
@@ -195,8 +191,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_read_long_characteristic_descriptor( co
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_read_long_characteristic_descriptor( socket->connection_handle, handle, uuid, descriptor );
+    return smartbridge_bt_interface_read_long_characteristic_descriptor( socket->connection_handle, handle, uuid, descriptor );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_write_characteristic_descriptor( const wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_attribute_t* descriptor )
@@ -214,8 +209,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_write_characteristic_descriptor( const 
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_write_characteristic_descriptor( socket->connection_handle, (wiced_bt_smart_attribute_t*)descriptor );
+    return smartbridge_bt_interface_write_characteristic_descriptor( socket->connection_handle, (wiced_bt_smart_attribute_t*)descriptor );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_write_long_characteristic_descriptor( const wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_attribute_t* descriptor )
@@ -233,8 +227,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_write_long_characteristic_descriptor( c
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_write_long_characteristic_descriptor( socket->connection_handle, (wiced_bt_smart_attribute_t*)descriptor );
+    return smartbridge_bt_interface_write_long_characteristic_descriptor( socket->connection_handle, (wiced_bt_smart_attribute_t*)descriptor );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_read_characteristic_value( const wiced_bt_smartbridge_socket_t* socket, uint16_t handle, const wiced_bt_uuid_t* uuid, wiced_bt_smart_attribute_t** characteristic_value )
@@ -270,8 +263,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_read_characteristic_values_using_uuid( 
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_read_characteristic_values_using_uuid( socket->connection_handle, uuid, characteristic_value_list );
+    return smartbridge_bt_interface_read_characteristic_values_using_uuid( socket->connection_handle, uuid, characteristic_value_list );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_read_long_characteristic_value( const wiced_bt_smartbridge_socket_t* socket, uint16_t handle, const wiced_bt_uuid_t* uuid, wiced_bt_smart_attribute_t** characteristic_value )
@@ -289,8 +281,7 @@ wiced_result_t wiced_bt_smartbridge_gatt_read_long_characteristic_value( const w
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
 
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_read_long_characteristic_value( socket->connection_handle, handle, uuid, characteristic_value );
+    return smartbridge_bt_interface_read_long_characteristic_value( socket->connection_handle, handle, uuid, characteristic_value );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_write_characteristic_value_without_response( const wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_attribute_t* characteristic_value )
@@ -334,8 +325,8 @@ wiced_result_t wiced_bt_smartbridge_gatt_write_long_characteristic_value( const 
     {
         return WICED_BT_SOCKET_NOT_CONNECTED;
     }
-    return WICED_SUCCESS;
-    //return bt_smart_gatt_write_long_characteristic_value( socket->connection_handle, (wiced_bt_smart_attribute_t*)characteristic_value );
+
+    return smartbridge_bt_interface_write_long_characteristic_value( socket->connection_handle, (wiced_bt_smart_attribute_t*)characteristic_value );
 }
 
 wiced_result_t wiced_bt_smartbridge_gatt_reliable_write_characteristic_value( const wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_attribute_t* characteristic_value )

@@ -35,6 +35,7 @@ extern "C" {
 
 wiced_result_t wiced_http_get ( wiced_ip_address_t* address, const char* query, void* buffer, uint32_t buffer_length );
 wiced_result_t wiced_https_get( wiced_ip_address_t* address, const char* query, void* buffer, uint32_t buffer_length, const char* peer_cn );
+wiced_result_t wiced_https_get_with_specified_port( wiced_ip_address_t* address, const char* query, void* buffer, uint32_t buffer_length, uint16_t port, const char* peer_cn );
 
 #ifdef __cplusplus
 } /* extern "C" */

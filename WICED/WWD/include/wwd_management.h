@@ -33,16 +33,26 @@ extern "C"
 /*@-exportlocal@*/
 
 /**
- * Turn on the Wi-Fi device
+ * Initialise Wi-Fi platform
  *
  * - Initialises the required parts of the hardware platform
  *   i.e. pins for SDIO/SPI, interrupt, reset, power etc.
  *
- * - Bring the Wireless interface "Up"
  * - Initialises the Wiced thread which arbitrates access
  *   to the SDIO/SPI bus
  *
  * @return WWD_SUCCESS if initialization is successful, Error code otherwise
+ */
+wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wiced_bool_t resume_after_deep_sleep );
+
+/**
+ * Turn on the Wi-Fi device
+ *
+ * - Initialise Wi-Fi platform
+ *
+ * - Program various WiFi parameters and modes
+ *
+ * @return WWD_SUCCESS if initialization is successful, error code otherwise
  */
 wwd_result_t wwd_management_wifi_on( wiced_country_code_t country );
 

@@ -10,7 +10,13 @@
 #pragma once
 
 #include <stdint.h>
+
 #include "platform_toolchain.h"
+
+#include "wwd_buffer.h"
+#include "wwd_constants.h"
+
+#include "wiced_constants.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +30,8 @@ typedef enum
 {
     WICED_DEEP_SLEEP_EVENT_ENTER,
     WICED_DEEP_SLEEP_EVENT_CANCEL,
-    WICED_DEEP_SLEEP_EVENT_LEAVE
+    WICED_DEEP_SLEEP_EVENT_LEAVE,
+    WICED_DEEP_SLEEP_EVENT_WLAN_RESUME
 } wiced_deep_sleep_event_type_t;
 
 typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t event );
@@ -67,6 +74,10 @@ typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t
 #define WICED_DEEP_SLEEP_IS_WARMBOOT_HANDLE( )                                          ( WICED_DEEP_SLEEP_IS_ENABLED( ) && WICED_DEEP_SLEEP_IS_WARMBOOT( ) )
 #endif
 
+#ifndef WICED_DEEP_SLEEP_SAVE_PACKETS_NUM
+#define WICED_DEEP_SLEEP_SAVE_PACKETS_NUM                                               0
+#endif
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -91,7 +102,15 @@ typedef void( *wiced_deep_sleep_event_handler_t )( wiced_deep_sleep_event_type_t
  *               Function Declarations
  ******************************************************/
 
-uint32_t wiced_deep_sleep_ticks_since_enter( void );
+uint32_t     wiced_deep_sleep_ticks_since_enter( void );
+
+wiced_bool_t wiced_deep_sleep_save_packet( wiced_buffer_t buffer, wwd_interface_t interface );
+
+void         wiced_deep_sleep_set_networking_ready( void );
+
+void         wiced_deep_sleep_application_init_on_networking_ready_handler( void );
+
+wiced_bool_t wiced_deep_sleep_is_networking_idle( wiced_interface_t interface );
 
 #ifdef __cplusplus
 } /* extern "C" */

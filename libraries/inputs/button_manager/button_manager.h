@@ -35,7 +35,7 @@ typedef enum
     BUTTON_MEDIUM_DURATION_EVENT       = (1 << 2),
     BUTTON_LONG_DURATION_EVENT         = (1 << 3),
     BUTTON_VERY_LONG_DURATION_EVENT    = (1 << 4),
-    BUTTON_DOUBLE_CLICK_EVENT          = (1 << 5),
+    BUTTON_DOUBLE_CLICK_EVENT          = (1 << 5), //!> A double click is a combination of two single clicks with some delay between them
 } button_manager_event_t;
 
 typedef enum
@@ -66,6 +66,8 @@ typedef struct
     button_manager_event_t               last_sent_event;
     uint32_t                             pressed_timestamp;
     uint32_t                             released_timestamp;
+    uint32_t                             last_released_timestamp;
+    wiced_bool_t                         check_for_double_click;
 } button_manager_button_t;
 
 typedef void ( *wiced_button_event_handler_t )( const button_manager_button_t* button, button_manager_event_t event, button_manager_button_state_t state );
@@ -77,6 +79,7 @@ typedef struct
     uint16_t                      long_hold_duration;
     uint16_t                      very_long_hold_duration;
     uint16_t                      debounce_duration;
+    uint16_t                      double_click_interval; //!> Time interval between two RELEASE events
     wiced_button_event_handler_t  event_handler;
 } wiced_button_manager_configuration_t;
 

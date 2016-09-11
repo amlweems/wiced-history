@@ -16,6 +16,11 @@
 #include "wwd_assert.h"
 #include "dns.h"
 
+static wiced_result_t internal_wiced_tcp_connect_socket_callback     ( void* arg );
+static wiced_result_t internal_wiced_tcp_disconnect_socket_callback  ( void* arg );
+static wiced_result_t internal_wiced_tcp_receive_socket_callback     ( void* arg );
+static wiced_result_t internal_wiced_udp_receive_socket_callback     ( void* arg );
+
 wiced_result_t wiced_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t* packet )
 {
 #ifndef WICED_DISABLE_TLS
@@ -303,4 +308,73 @@ wiced_result_t wiced_hostname_lookup( const char* hostname, wiced_ip_address_t* 
     }
 
     return dns_client_hostname_lookup( hostname, address, timeout_ms );
+}
+
+
+wiced_result_t internal_defer_tcp_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_socket_callback_t callback  )
+{
+    event_handler_t defer_function;
+    if ( callback == NULL )
+    {
+        return WICED_SUCCESS;
+    }
+
+    if ( ( callback == socket->callbacks.receive ) && ( ( socket->tls_context == NULL ) || ( wiced_tls_is_encryption_enabled( socket ) == WICED_TRUE ) ) )
+    {
+        /* If TLS is enabled, only notify application on receive after TLS handshake is over */
+        defer_function = internal_wiced_tcp_receive_socket_callback;
+    }
+    else if ( callback == socket->callbacks.connect )
+    {
+        defer_function = internal_wiced_tcp_connect_socket_callback;
+    }
+    else if ( callback == socket->callbacks.disconnect )
+    {
+        defer_function = internal_wiced_tcp_disconnect_socket_callback;
+    }
+    else
+    {
+        return WICED_ERROR;
+    }
+
+    return wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, defer_function, (void*)socket );
+}
+
+static wiced_result_t internal_wiced_tcp_connect_socket_callback( void* arg )
+{
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
+
+    return socket->callbacks.connect( socket, socket->callback_arg );
+}
+
+static wiced_result_t internal_wiced_tcp_disconnect_socket_callback( void* arg )
+{
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
+
+    return socket->callbacks.disconnect( socket, socket->callback_arg );
+}
+
+static wiced_result_t internal_wiced_tcp_receive_socket_callback( void* arg )
+{
+    wiced_tcp_socket_t* socket = (wiced_tcp_socket_t*)arg;
+
+    return socket->callbacks.receive( socket, socket->callback_arg );
+}
+
+
+wiced_result_t internal_defer_udp_callback_to_wiced_network_thread( wiced_udp_socket_t* socket )
+{
+    if ( socket->receive_callback == NULL )
+    {
+        return WICED_SUCCESS;
+    }
+
+    return wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, internal_wiced_udp_receive_socket_callback, (void*)socket );
+}
+
+static wiced_result_t internal_wiced_udp_receive_socket_callback( void* arg )
+{
+    wiced_udp_socket_t* socket = (wiced_udp_socket_t*)arg;
+
+    return socket->receive_callback( socket, socket->callback_arg );
 }

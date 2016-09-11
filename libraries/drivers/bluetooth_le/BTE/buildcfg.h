@@ -128,7 +128,7 @@ extern "C" {
 #define SMP_LE_SC_OOB_INCLUDED          TRUE
 #define ATT_DEBUG                       FALSE
 #define SMP_DEBUG                       FALSE
-#define BLE_BRCM_INCLUDED               FALSE
+#define BLE_BRCM_INCLUDED               TRUE
 #define BLE_BRCM_MULTI_ADV_INCLUDED     FALSE
 #define BLE_DATA_LEN_EXT_INCLUDED       TRUE
 #define BLE_LLT_INCLUDED                TRUE
@@ -162,7 +162,7 @@ extern "C" {
 #define HCI_USE_VARIABLE_SIZE_CMD_BUF   TRUE
 
 #define HCISU_H4_INCLUDED               TRUE
-#define HCILP_INCLUDED                  FALSE
+#define HCILP_INCLUDED                  TRUE
 #define H4IBSS_INCLUDED                 FALSE
 #define H4IBSS_DEBUG                    FALSE
 

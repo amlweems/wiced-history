@@ -97,11 +97,11 @@ extern wiced_result_t wiced_ip_down       ( wiced_interface_t interface );
 /* NOTE:
  * The notify link functions below are called from within the context of the WICED thread
  * The link handler functions below are called from within the context of the Network Worker thread */
-extern void           wiced_network_notify_link_up    ( wiced_interface_t interface );
-extern void           wiced_network_notify_link_down  ( wiced_interface_t interface );
+extern void           wiced_network_notify_link_up     ( wiced_interface_t interface );
+extern void           wiced_network_notify_link_down   ( wiced_interface_t interface );
 extern wiced_result_t wiced_wireless_link_down_handler ( void* arg );
 extern wiced_result_t wiced_wireless_link_up_handler   ( void* arg );
-extern wiced_result_t wiced_wireless_link_renew_handler( void );
+extern wiced_result_t wiced_wireless_link_renew_handler( void* arg );
 #ifdef WICED_USE_ETHERNET_INTERFACE
 extern wiced_result_t wiced_ethernet_link_down_handler ( void );
 extern wiced_result_t wiced_ethernet_link_up_handler   ( void );
@@ -113,6 +113,15 @@ extern wiced_result_t wiced_wifi_cooee( wiced_cooee_workspace_t* workspace );
 /* TLS helper function to do TCP without involving TLS context */
 wiced_result_t network_tcp_send_packet( wiced_tcp_socket_t* socket, wiced_packet_t*  packet );
 wiced_result_t network_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
+wiced_result_t network_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
+
+void system_monitor_thread_main( wiced_thread_arg_t arg );
+
+wiced_result_t internal_defer_tcp_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_socket_callback_t callback  );
+wiced_result_t internal_defer_udp_callback_to_wiced_network_thread( wiced_udp_socket_t* socket );
+
+wiced_result_t internal_defer_tcp_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_socket_callback_t callback  );
+wiced_result_t internal_defer_udp_callback_to_wiced_network_thread( wiced_udp_socket_t* socket );
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -59,6 +59,7 @@ typedef struct
 {
     uint32_t                          patchram_download_baud_rate;
     wiced_bt_patchram_download_mode_t patchram_download_mode;
+    uint32_t                          featured_baud_rate;
 } platform_bluetooth_config_t;
 
 /******************************************************

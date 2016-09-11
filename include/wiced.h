@@ -25,6 +25,7 @@
 #include "wiced_network.h"
 #include "wiced_management.h"
 #include "wiced_easy_setup.h"
+#include "wiced_usb.h"
 #include "wwd_debug.h"
 #include "wwd_assert.h"
 

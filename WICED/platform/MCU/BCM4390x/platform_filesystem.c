@@ -30,6 +30,7 @@
 #include "wiced_framework.h"
 #include "wiced_dct_common.h"
 #include "wiced_apps_common.h"
+#include "wiced_block_device.h"
 
 /******************************************************
  *                      Macros
@@ -38,6 +39,8 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+
+#define DDR_BASE      PLATFORM_DDR_BASE(0x0)
 
 /******************************************************
  *                   Enumerations
@@ -55,21 +58,15 @@
  *               Function Declarations
  ******************************************************/
 
-extern uint32_t        sfi_read      ( uint32_t addr, uint32_t len, const uint8_t *buffer )   __attribute__((long_call));
-extern uint32_t        sfi_write     ( uint32_t addr, uint32_t len, const uint8_t *buffer )   __attribute__((long_call));
-extern uint32_t        sfi_size      ( void )                                                 __attribute__((long_call));
-extern void            sfi_erase     ( uint32_t addr, uint32_t len )                          __attribute__((long_call));
 static wicedfs_usize_t read_callback ( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos );
 
 /******************************************************
  *               Variables Definitions
  ******************************************************/
 
-extern char bcm439x_platform_inited;
-
 host_semaphore_type_t sflash_mutex;
 sflash_handle_t       wicedfs_sflash_handle;
-wiced_filesystem_t    resource_fs_handle;
+wicedfs_filesystem_t  resource_fs_handle;
 static  wiced_app_t   fs_app;
 static  uint8_t       fs_init_done = 0;
 
@@ -79,11 +76,9 @@ static  uint8_t       fs_init_done = 0;
 
 void platform_sflash_init( void )
 {
-
     host_rtos_init_semaphore( &sflash_mutex );
 
     host_rtos_set_semaphore( &sflash_mutex, WICED_FALSE );
-
 }
 
 /* To handle WWD applications that don't go through wiced_init() (yet need to use the file system):
@@ -130,3 +125,96 @@ platform_result_t platform_get_sflash_dct_loc( sflash_handle_t* sflash_handle, u
     *loc = 0;
     return PLATFORM_SUCCESS;
 }
+
+#if !PLATFORM_NO_DDR
+
+static wiced_result_t ddr_block_device_init( wiced_block_device_t* device, wiced_block_device_write_mode_t write_mode )
+{
+    ddr_block_device_specific_data_t* ddr_specific_data = (ddr_block_device_specific_data_t*) device->device_specific_data;
+
+    if ( ! PLATFORM_FEATURE_ENAB(DDR) )
+    {
+        return WICED_ERROR;
+    }
+
+    device->device_id        = 0;
+    if ( device->init_data->maximum_size == 0 )
+    {
+        device->device_size = platform_ddr_size - device->init_data->base_address_offset;
+    }
+    else
+    {
+        device->device_size = MIN( platform_ddr_size - device->init_data->base_address_offset, device->init_data->maximum_size );
+    }
+
+    device->erase_block_size = 0;
+    device->read_block_size  = 1;
+    device->write_block_size = 1;
+
+    ddr_specific_data->write_mode = write_mode;
+
+    device->initialized = WICED_TRUE;
+
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_device_deinit( wiced_block_device_t* device )
+{
+    device->initialized = WICED_FALSE;
+
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_write( wiced_block_device_t* device, uint64_t start_address, const uint8_t* data, uint64_t size )
+{
+    if ( start_address + size > device->device_size )
+    {
+        return WICED_BADARG;
+    }
+    memcpy( (void*)(ptrdiff_t)(DDR_BASE + start_address), data, (size_t) size );
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_flush( wiced_block_device_t* device )
+{
+    UNUSED_PARAMETER( device );
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_read( wiced_block_device_t* device, uint64_t start_address, uint8_t* data, uint64_t size )
+{
+    if ( start_address + size > device->device_size )
+    {
+        return WICED_BADARG;
+    }
+    memcpy( data, (void*)(ptrdiff_t)(DDR_BASE + start_address + device->init_data->base_address_offset ), (size_t) size );
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_register_callback( wiced_block_device_t* device, wiced_block_device_status_change_callback_t callback )
+{
+    UNUSED_PARAMETER( device );
+    UNUSED_PARAMETER( callback );
+    return WICED_SUCCESS;
+}
+
+static wiced_result_t ddr_block_status( wiced_block_device_t* device, wiced_block_device_status_t* status )
+{
+    UNUSED_PARAMETER( device );
+    *status = BLOCK_DEVICE_UP_READ_WRITE;
+    return WICED_SUCCESS;
+}
+
+const wiced_block_device_driver_t ddr_block_device_driver =
+{
+    .init                = ddr_block_device_init,
+    .deinit              = ddr_block_device_deinit,
+    .erase               = NULL,
+    .write               = ddr_block_write,
+    .flush               = ddr_block_flush,
+    .read                = ddr_block_read,
+    .register_callback   = ddr_block_register_callback,
+    .status              = ddr_block_status,
+};
+
+#endif /* !PLATFORM_NO_DDR */

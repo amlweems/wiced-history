@@ -11,6 +11,8 @@
 #ifndef WICED_BT_DM_H
 #define WICED_BT_DM_H
 
+#include "platform_audio.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -124,12 +126,9 @@ typedef struct
 **/
 typedef struct
 {
-    char*    adc_name_str;      //!<Audio-Input path
-    char*    dac_name_str;      //!<Audio-output path
-    uint32_t app_dct_offset;    /*!<From what offset, bluetooth library can use the DCT_APP_SECTION.
-                                    This offset is required when Application(and other libraries)also uses DCT_APP_SECTION.
-                                    By default, when no other entity(library/app) is using DCT_APP_SECTION, it would be zero.
-                                */
+    platform_audio_device_id_t adc_id;
+    platform_audio_device_id_t dac_id;
+    uint32_t app_dct_offset;
 }wiced_bt_audio_pref_t;
 
 /** \brief Initialize bluetooth library.

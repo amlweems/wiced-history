@@ -17,7 +17,6 @@
 #define INCLUDED_WWD_CONSTANTS_H_
 
 #include <stdint.h>
-#include "wwd_wlioctl.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -64,6 +63,9 @@ extern int DIV_ROUND_UP (int m, /*@sef@*/ int n); /* LINT : This tells lint that
 #define WIFI_IE_OUI_LENGTH    (3)
 
 /** @cond !ADDTHIS*/
+#define WEP_ENABLED            0x0001
+#define TKIP_ENABLED           0x0002
+#define AES_ENABLED            0x0004
 #define SHARED_ENABLED     0x00008000
 #define WPA_SECURITY       0x00200000
 #define WPA2_SECURITY      0x00400000
@@ -464,9 +466,15 @@ typedef enum
     RESULT_ENUM( prefix, SET_BLOCK_ACK_WINDOW_FAIL,    1055 ),   /**< Failed to set block ack window */ \
     RESULT_ENUM( prefix, DELAY_TOO_SHORT,              1056 ),   /**< Requested delay is too short */ \
     RESULT_ENUM( prefix, INVALID_INTERFACE,            1057 ),   /**< Invalid interface provided */ \
-    RESULT_ENUM( prefix, WEP_KEYLEN_BAD,               1058 ),   /**< WEP / WEP_SHARED key length must be 5 & 13 bytes */ \
+    RESULT_ENUM( prefix, WEP_KEYLEN_BAD,               1058 ),   /**< WEP / WEP_SHARED key length must be 5 or 13 bytes */ \
     RESULT_ENUM( prefix, HANDLER_ALREADY_REGISTERED,   1059 ),   /**< EAPOL handler already registered */ \
-    RESULT_ENUM( prefix, AP_ALREADY_UP,                1060 ),   /**< Soft AP or P2P group owner already up */
+    RESULT_ENUM( prefix, AP_ALREADY_UP,                1060 ),   /**< Soft AP or P2P group owner already up */ \
+    RESULT_ENUM( prefix, EAPOL_KEY_PACKET_M1_TIMEOUT,  1061 ),   /**< Timeout occurred while waiting for EAPOL packet M1 from AP */ \
+    RESULT_ENUM( prefix, EAPOL_KEY_PACKET_M3_TIMEOUT,  1062 ),   /**< Timeout occurred while waiting for EAPOL packet M3 from AP, which may indicate incorrect WPA2/WPA passphrase */ \
+    RESULT_ENUM( prefix, EAPOL_KEY_PACKET_G1_TIMEOUT,  1063 ),   /**< Timeout occurred while waiting for EAPOL packet G1 from AP */ \
+    RESULT_ENUM( prefix, EAPOL_KEY_FAILURE,            1064 ),   /**< Unknown failure occurred during the EAPOL key handshake */ \
+    RESULT_ENUM( prefix, MALLOC_FAILURE,               1065 ),   /**< Memory allocation failure */ \
+    RESULT_ENUM( prefix, ACCESS_POINT_NOT_FOUND,       1066 ),   /**< Access point not found */
 
 
 /* These Enum result values are returned directly from the WLAN during an ioctl or iovar call.
@@ -576,9 +584,9 @@ typedef enum
  */
 
 #ifdef IL_BIGENDIAN
-#define MK_CNTRY( a, b, rev )  (((unsigned char)(b)) + (((unsigned char)(a))<<8) + (((unsigned char)(rev))<<24) )
+#define MK_CNTRY( a, b, rev )  (((unsigned char)(b)) + (((unsigned char)(a))<<8) + (((unsigned short)(rev))<<16))
 #else /* ifdef IL_BIGENDIAN */
-#define MK_CNTRY( a, b, rev )  (((unsigned char)(a)) + (((unsigned char)(b))<<8) + (((unsigned char)(rev))<<24) )
+#define MK_CNTRY( a, b, rev )  (((unsigned char)(a)) + (((unsigned char)(b))<<8) + (((unsigned short)(rev))<<16))
 #endif /* ifdef IL_BIGENDIAN */
 
 /* Suppress unused parameter warning */

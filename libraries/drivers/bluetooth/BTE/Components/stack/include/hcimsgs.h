@@ -5,7 +5,7 @@
 **  Function    this file defines Host Controller Interface messages
 **
 **
-**  Copyright (c) 1999-2014, Broadcom Corp., All Rights Reserved.
+**  Copyright (c) 1999-2015, Broadcom Corp., All Rights Reserved.
 **  Broadcom Bluetooth Core. Proprietary and confidential.
 **
 ******************************************************************************/
@@ -1628,9 +1628,9 @@ HCI_API extern BOOLEAN btsnd_hcic_receive_clb(BD_ADDR bd_addr, UINT8 enable, UIN
         UINT16 timeout, UINT8 remote_timing_accuracy, UINT8 skip, UINT16 packet_type,
         UINT8 *p_afhchannelmap);
 
-#define HCIC_PARAM_SIZE_WRITE_SYNC_TRAIN_PARAM 7
+#define HCIC_PARAM_SIZE_WRITE_SYNC_TRAIN_PARAM 9
 HCI_API extern BOOLEAN btsnd_hcic_write_sync_train_param(UINT16 int_min, UINT16 int_max,
-        UINT16 timeout, UINT8 service_data);
+        UINT32 timeout, UINT8 service_data);
 
 #define HCIC_PARAM_SIZE_READ_SYNC_TRAIN_PARAM 0
 HCI_API extern BOOLEAN btsnd_hcic_read_sync_train_param(void);

@@ -51,6 +51,8 @@ extern "C" {
 #define AK4961_ADC_MIC_AMP_GAIN_0DB_DEFAULT     (0x00)
 #define AK4961_DAC_DIGITAL_VOLUME_0DB_DEFAULT   (0x19)
 
+#define AK4961_DAC_HP_AMP_GAIN_MUTE             (0x00)
+
 #define AK4961_MIC_POWER_OUTPUT_VOLTAGE_DEFAULT (AK4961_MIC_POWER_OUTPUT_VOLTAGE_2V8)
 
 #define AK4961_DMIC_POLARITY_DEFAULT            (AK4961_DMIC_POLARITY_LCH_LO_RCH_HI)
@@ -96,6 +98,54 @@ extern "C" {
 /******************************************************
  *            Constants
  ******************************************************/
+/*
+ * audio device information - used in platform_audio.c
+ * to build information tables for platfrom_audio_device_info.c
+ */
+#define AK4961_ADC_NAME         "ak4961_adc"
+#define AK4961_ADC_DIRECTION    PLATFORM_AUDIO_DEVICE_INPUT
+#define AK4961_ADC_PORT_TYPE    PLATFORM_AUDIO_LINE
+#define AK4961_ADC_CHANNELS     2
+#define AK4961_ADC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_8_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT)
+#define AK4961_ADC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_32KHZ | PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ | \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_48KHZ | PLATFORM_AUDIO_SAMPLE_RATE_96KHZ)
+
+#define AK4961_ADC_DIGITAL_MIC_NAME         "ak4961_adc_dmic1"
+#define AK4961_ADC_DIGITAL_MIC_DIRECTION    PLATFORM_AUDIO_DEVICE_INPUT
+#define AK4961_ADC_DIGITAL_MIC_PORT_TYPE    PLATFORM_AUDIO_DIGITAL_MIC
+#define AK4961_ADC_DIGITAL_MIC_CHANNELS     2
+#define AK4961_ADC_DIGITAL_MIC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_8_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT)
+#define AK4961_ADC_DIGITAL_MIC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_8KHZ     | PLATFORM_AUDIO_SAMPLE_RATE_16KHZ |   \
+                                             PLATFORM_AUDIO_SAMPLE_RATE_22_05KHZ | PLATFORM_AUDIO_SAMPLE_RATE_32KHZ |   \
+                                             PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ  | PLATFORM_AUDIO_SAMPLE_RATE_48KHZ |   \
+                                             PLATFORM_AUDIO_SAMPLE_RATE_96KHZ)
+
+#define AK4961_DAC_NAME         "ak4961_dac"
+#define AK4961_DAC_DIRECTION    PLATFORM_AUDIO_DEVICE_OUTPUT
+#define AK4961_DAC_PORT_TYPE    PLATFORM_AUDIO_LINE
+#define AK4961_DAC_CHANNELS     2
+#define AK4961_DAC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_24_BIT)
+#define AK4961_DAC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_8KHZ     | PLATFORM_AUDIO_SAMPLE_RATE_16KHZ |   \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_22_05KHZ | PLATFORM_AUDIO_SAMPLE_RATE_32KHZ |   \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ  | PLATFORM_AUDIO_SAMPLE_RATE_48KHZ |   \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_96KHZ    | PLATFORM_AUDIO_SAMPLE_RATE_192KHZ)
+
+#define AUDIO_DEVICE_ID_AK4961_ADC_LINE_INFO                                        \
+    {   AUDIO_DEVICE_ID_AK4961_ADC_LINE, AK4961_ADC_NAME, AK4961_ADC_DESCRIPTION,   \
+        AK4961_ADC_DIRECTION, AK4961_ADC_PORT_TYPE,                                 \
+        AK4961_ADC_CHANNELS,  AK4961_ADC_SIZES, AK4961_ADC_RATES    }
+
+#define AUDIO_DEVICE_ID_AK4961_ADC_DIGITAL_MIC_INFO                                 \
+    {   AUDIO_DEVICE_ID_AK4961_ADC_DIGITAL_MIC, AK4961_ADC_DIGITAL_MIC_NAME,        \
+        AK4961_ADC_DIGITAL_MIC_DESCRIPTION,                                         \
+        AK4961_ADC_DIGITAL_MIC_DIRECTION, AK4961_ADC_DIGITAL_MIC_PORT_TYPE,         \
+        AK4961_ADC_DIGITAL_MIC_CHANNELS,  AK4961_ADC_DIGITAL_MIC_SIZES,             \
+        AK4961_ADC_DIGITAL_MIC_RATES }
+
+#define AUDIO_DEVICE_ID_AK4961_DAC_LINE_INFO                                        \
+    {   AUDIO_DEVICE_ID_AK4961_DAC_LINE, AK4961_DAC_NAME, AK4961_DAC_DESCRIPTION,   \
+        AK4961_DAC_DIRECTION, AK4961_DAC_PORT_TYPE,                                 \
+        AK4961_DAC_CHANNELS,  AK4961_DAC_SIZES, AK4961_DAC_RATES }
 
 /******************************************************
  *                 Type Definitions
@@ -108,6 +158,7 @@ typedef enum ak4961_dac_output_select ak4961_dac_output_select_t;
 typedef enum ak4961_sync_domain_select ak4961_sync_domain_select_t;
 typedef enum ak4961_mic_power_supply ak4961_mic_power_supply_t;
 typedef enum ak4961_route_id ak4961_route_id_t;
+typedef enum ak4961_device_type ak4961_device_type_t;
 typedef enum ak4961_mic_power_output_voltage ak4961_mic_power_output_voltage_t;
 typedef enum ak4961_dmic_polarity ak4961_dmic_polarity_t;
 
@@ -154,6 +205,15 @@ enum ak4961_route_id
 
     /* Not a route id! */
     AK4961_ROUTE_ID_MAX,
+};
+
+enum ak4961_device_type
+{
+    AK4961_DEVICE_TYPE_PLAYBACK             = 0,
+    AK4961_DEVICE_TYPE_CAPTURE,
+
+    /* Not a device type! */
+    AK4961_DEVICE_TYPE_MAX,
 };
 
 enum ak4961_sync_domain_select
@@ -227,6 +287,7 @@ struct ak4961_route_data
 {
     /* AK4961_ROUTE_ID_XXX */
     ak4961_route_id_t               id;
+    ak4961_device_type_t            device_type;
 
     const ak4961_device_route_t     *device_route;
 };
@@ -264,7 +325,9 @@ struct ak4961_dac_route_data
     ak4961_dac_output_select_t      output_right_select;
 
     /* Table 36/40/44. */
-    uint8_t                         amp_gain;
+    uint8_t                         amp_gain_default;
+    uint8_t                         amp_gain_current;
+    uint8_t                         amp_gain_mute;
 
     /* Digital Volume: Table 32. */
     uint8_t                         digital_volume;
@@ -401,7 +464,7 @@ extern const ak4961_adc_route_t ak4961_adc2_dmic2_route;
 
 wiced_result_t ak4961_platform_configure( ak4961_device_data_t *device_data, uint32_t mclk, uint32_t fs, uint8_t width );
 
-wiced_result_t ak4961_device_register( ak4961_device_data_t *device_data, const char *name );
+wiced_result_t ak4961_device_register( ak4961_device_data_t *device_data, const platform_audio_device_id_t dev_id );
 
 /* Don't use these functions directly; use macros provided. */
 ak4961_ckcfg_fn_t ak4961_sext;

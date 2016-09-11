@@ -62,7 +62,7 @@ extern platform_hibernation_t hibernation_config;
  *               Variables Definitions
  ******************************************************/
 
-static char bcm4390x_platform_inited = 0;
+static wiced_bool_t platform_inited = WICED_FALSE;
 
 uint32_t platform_capabilities_word = 0;
 
@@ -120,6 +120,10 @@ static uint32_t platform_capabilities_table[] =
     [14] = (PLATFORM_CAPS_COMMON),
     [15] = (0)
 };
+
+static appscr4_core_status_reg_t appscr4_saved_core_status;
+
+uint32_t platform_ddr_size;
 
 /******************************************************
  *               Function Definitions
@@ -179,12 +183,23 @@ static void platform_slow_clock_init( void )
     PLATFORM_PMU->slowclkperiod.raw = period.raw;
 }
 
-/* BCM4390x common clock initialisation function
- * - weak attribute is intentional in case a specific platform (board) needs to override this.
- */
-WEAK void platform_init_system_clocks( void )
+static void platform_boot_status_init( void )
+{
+    /*
+     * Save and clear core status.
+     * Warm-boot especially require that bits which indicate reset happened to be cleared.
+     */
+    appscr4_saved_core_status.raw     = PLATFORM_APPSCR4->core_status.raw;
+#ifndef BOOTLOADER
+    PLATFORM_APPSCR4->core_status.raw = appscr4_saved_core_status.raw;
+#endif
+}
+
+void platform_init_system_clocks( void )
 {
     platform_watchdog_init( );
+
+    platform_boot_status_init( );
 
     platform_mcu_powersave_warmboot_init( );
 
@@ -199,20 +214,13 @@ WEAK void platform_init_system_clocks( void )
     platform_slow_clock_init( );
 }
 
-/* BCM4390x memory initialisation function
- * - weak attribute is intentional in case a specific platform (board) needs to override this.
- */
+/* Weak attribute is intentional in case a specific platform (board) needs to override this */
 WEAK void platform_init_memory( void )
 {
 }
 
 void platform_init_mcu_infrastructure( void )
 {
-    if ( bcm4390x_platform_inited == 1 )
-    {
-        return;
-    }
-
     /* Initialize platform capabilities */
     platform_capabilities_init( );
 
@@ -227,14 +235,35 @@ void platform_init_mcu_infrastructure( void )
 
     /* Initialise external serial flash */
     platform_sflash_init( );
-
-    bcm4390x_platform_inited = 1;
 }
 
-WEAK void platform_init_complete( void )
+void platform_init_complete( void )
 {
+    /* Platform initialization done */
+    platform_inited = WICED_TRUE;
+
     /* Notify if returned from deep-sleep */
     WICED_DEEP_SLEEP_CALL_EVENT_HANDLERS( WICED_DEEP_SLEEP_IS_WARMBOOT( ), WICED_DEEP_SLEEP_EVENT_LEAVE );
+}
+
+wiced_bool_t platform_is_init_completed( void )
+{
+    return platform_inited;
+}
+
+wiced_bool_t platform_boot_is_reset( void )
+{
+    if ( appscr4_saved_core_status.bits.s_error_log || appscr4_saved_core_status.bits.s_bp_reset_log )
+    {
+        return WICED_TRUE;
+    }
+
+    return WICED_FALSE;
+}
+
+uint32_t platform_ddr_get_size( void )
+{
+    return platform_ddr_size;
 }
 
 /******************************************************

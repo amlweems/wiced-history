@@ -28,14 +28,22 @@
 #include "elf.h"
 #include "platform_peripheral.h"
 #include "platform_resource.h"
+#include "platform.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
+#ifndef PLATFORM_FACTORY_RESET_TIMEOUT
+#define PLATFORM_FACTORY_RESET_TIMEOUT  ( 5000 )
+#endif
 
 /******************************************************
  *                    Constants
  ******************************************************/
+
+#ifndef PLATFORM_FACTORY_RESET_TIMEOUT
+#define PLATFORM_FACTORY_RESET_TIMEOUT  (5000)      // TODO: Put in header!
+#endif
 
 #define PLATFORM_SFLASH_PERIPHERAL_ID  (0)
 
@@ -84,7 +92,7 @@ wiced_result_t wiced_waf_app_set_boot(uint8_t app_id, char load_once)
     {
         return WICED_ERROR;
     }
-    if ( wiced_dct_update( &boot, DCT_INTERNAL_SECTION, OFFSETOF( platform_dct_header_t, boot_detail ), sizeof(boot_detail_t) ) != WICED_SUCCESS )
+    if ( wiced_dct_write( &boot, DCT_INTERNAL_SECTION, OFFSETOF( platform_dct_header_t, boot_detail ), sizeof(boot_detail_t) ) != WICED_SUCCESS )
     {
         return WICED_ERROR;
     }
@@ -205,7 +213,7 @@ wiced_result_t wiced_waf_app_load( const image_location_t* app_header_location, 
     {
         uint32_t i;
         elf_program_header_t prog_header;
-        WFILE f_in;
+        wicedfs_file_t f_in;
 
         /* Read the image header */
         wicedfs_fopen( &resource_fs_handle, &f_in, app_header_location->detail.filesystem_filename );
@@ -279,5 +287,19 @@ void wiced_waf_start_app( uint32_t entry_point )
 
 wiced_result_t wiced_waf_check_factory_reset( void )
 {
-    return (wiced_result_t) platform_check_factory_reset( );
+    uint32_t factory_reset_time;
+
+    factory_reset_time = platform_get_factory_reset_button_time( PLATFORM_FACTORY_RESET_TIMEOUT );
+    if (factory_reset_time >= PLATFORM_FACTORY_RESET_TIMEOUT)
+    {
+        return WICED_TRUE;
+    }
+
+    return WICED_FALSE;
+}
+
+uint32_t wiced_waf_get_button_press_time( void )
+{
+
+    return platform_get_factory_reset_button_time( 2 * PLATFORM_FACTORY_RESET_TIMEOUT );
 }

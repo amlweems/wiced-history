@@ -21,6 +21,7 @@
 #include "wiced_time.h"
 #include "platform_mcu_peripheral.h"
 #include "platform_audio.h"
+#include "platform_init.h"
 
 /******************************************************
  *                      Macros
@@ -46,7 +47,6 @@
  *               Static Function Declarations
  ******************************************************/
 
-extern wiced_result_t wiced_platform_init( void );
 
 /******************************************************
  *               Variable Definitions
@@ -294,7 +294,7 @@ wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi )
     platform_spi_config_t config;
 
     /* Chip select is not a GPIO when NULL. */
-    config.chip_select = ( spi->chip_select != WICED_GPIO_MAX ) ? &platform_gpio_pins[spi->chip_select] : NULL;
+    config.chip_select = ( spi->chip_select != WICED_GPIO_NONE ) ? &platform_gpio_pins[spi->chip_select] : NULL;
     config.speed       = spi->speed;
     config.mode        = spi->mode;
     config.bits        = spi->bits;
@@ -307,12 +307,25 @@ wiced_result_t wiced_spi_deinit( const wiced_spi_device_t* spi )
     return (wiced_result_t) platform_spi_deinit( &platform_spi_peripherals[spi->port] );
 }
 
+wiced_result_t wiced_spi_transmit( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments )
+{
+    platform_spi_config_t config;
+
+    /* Chip select is not a GPIO when NULL. */
+    config.chip_select = ( spi->chip_select != WICED_GPIO_NONE ) ? &platform_gpio_pins[spi->chip_select] : NULL;
+    config.speed       = spi->speed;
+    config.mode        = spi->mode;
+    config.bits        = spi->bits;
+
+    return (wiced_result_t) platform_spi_transmit( &platform_spi_peripherals[spi->port], &config, segments, number_of_segments );
+}
+
 wiced_result_t wiced_spi_transfer( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments )
 {
     platform_spi_config_t config;
 
     /* Chip select is not a GPIO when NULL. */
-    config.chip_select = ( spi->chip_select != WICED_GPIO_MAX ) ? &platform_gpio_pins[spi->chip_select] : NULL;
+    config.chip_select = ( spi->chip_select != WICED_GPIO_NONE ) ? &platform_gpio_pins[spi->chip_select] : NULL;
     config.speed       = spi->speed;
     config.mode        = spi->mode;
     config.bits        = spi->bits;
@@ -417,6 +430,13 @@ wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_na
                                       uint32_t *local_secs, uint32_t *local_nanosecs)
 {
     return platform_time_read_8021as(master_secs, master_nanosecs, local_secs, local_nanosecs);
+}
+
+wiced_result_t wiced_time_read_8021as_with_audio(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                                 uint32_t *local_secs, uint32_t *local_nanosecs,
+                                                 uint32_t *audio_time_hi, uint32_t *audio_time_lo)
+{
+    return platform_time_read_8021as_with_audio(master_secs, master_nanosecs, local_secs, local_nanosecs, audio_time_hi, audio_time_lo);
 }
 
 wiced_result_t wiced_audio_timer_enable( uint32_t audio_frame_count )

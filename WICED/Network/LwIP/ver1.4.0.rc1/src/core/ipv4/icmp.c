@@ -98,6 +98,7 @@ icmp_input(struct pbuf *p, struct netif *inp)
   type = *((u8_t *)p->payload);
 #ifdef LWIP_DEBUG
   code = *(((u8_t *)p->payload)+1);
+  (void) code;  /* Reference logging-only variable */
 #endif /* LWIP_DEBUG */
   switch (type) {
   case ICMP_ER:

@@ -20,6 +20,7 @@
 #include "network/wwd_network_constants.h"
 #include "wwd_assert.h"
 #include "wiced_crypto.h"
+#include "wiced_deep_sleep.h"
 #include "platform_ethernet.h"
 #include "internal/wwd_internal.h"
 
@@ -190,6 +191,7 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
         case NX_LINK_ARP_SEND:
         case NX_LINK_RARP_SEND:
         case NX_LINK_PACKET_BROADCAST:
+        case NX_LINK_PTP_SEND:
             /* These cases require the link to be up, and will be processed below if it is up. */
             break;
 
@@ -260,6 +262,15 @@ static VOID wiced_netx_driver_entry( NX_IP_DRIVER* driver, wwd_interface_t inter
                 wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
                 break;
+
+            case NX_LINK_PTP_SEND:
+                 if (packet_ptr->nx_packet_ip_version == NX_IP_VERSION_V4)
+                 {
+                     nx_wiced_add_ethernet_header( ip, packet_ptr, driver->nx_ip_driver_physical_address_msw, driver->nx_ip_driver_physical_address_lsw, (USHORT) WICED_ETHERTYPE_DOT1AS );
+                 }
+                 wwd_network_send_ethernet_data( (wiced_buffer_t) packet_ptr, interface );
+                 driver->nx_ip_driver_status = (UINT) NX_SUCCESS;
+                 break;
 
             case NX_LINK_INITIALIZE:
             case NX_LINK_ENABLE:
@@ -360,14 +371,9 @@ VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver )
 
         case NX_LINK_ENABLE:
             /* ip->nx_ip_driver_link_up would be set when driver detects link is up */
-            if ( platform_ethernet_init() != PLATFORM_SUCCESS )
-            {
-                driver->nx_ip_driver_status = (UINT) NX_NOT_SUCCESSFUL;
-            }
             break;
 
         case NX_LINK_DISABLE:
-            platform_ethernet_deinit();
             ip->nx_ip_driver_link_up = NX_FALSE;
             break;
 
@@ -464,6 +470,14 @@ void host_network_process_ethernet_data( wiced_buffer_t buffer, wwd_interface_t 
 #endif
     {
         NX_IP* ip;
+
+        if ( WICED_DEEP_SLEEP_IS_ENABLED() && ( WICED_DEEP_SLEEP_SAVE_PACKETS_NUM != 0 ) )
+        {
+            if ( wiced_deep_sleep_save_packet( packet_ptr, interface ) )
+            {
+                return;
+            }
+        }
 
         ip = IF_TO_IP(interface);
 

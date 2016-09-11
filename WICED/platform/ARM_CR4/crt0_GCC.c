@@ -48,7 +48,7 @@ extern void *link_rom_global_bss_end;
 #define ROM_GLOBAL_BSS_SIZE      ((unsigned long)&link_rom_global_bss_end - (unsigned long)&link_rom_global_bss_start)
 #endif /* ifdef WICED_ROM_OFFLOAD */
 
-WEAK void _start( void )
+void _start( void )
 {
     unsigned long ctor_num;
 
@@ -131,7 +131,7 @@ WEAK void _start( void )
 #endif
 }
 
-WEAK void _exit( int status )
+void _exit( int status )
 {
     /* the main loop has returned - there is now nothing to do - reboot. */
 

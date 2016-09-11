@@ -89,6 +89,23 @@
 #define FIRST_APP_HEADER_ADDRESS       ( 0x20000UL )
 #define LAST_APP_HEADER_ADDRESS        ( FIRST_APP_HEADER_ADDRESS + SFLASH_SECTOR_SIZE - sizeof(app_header_t) )
 
+/* OPTIMIZE FOR RAM :
+ * If PLATFORM_SECURESFLASH_ENABLED is set then there is no optimization,
+ * both the secure and non-secure versions of sflash_read/write will be linked into the final executable.
+ * But if PLATFORM_SECURESFLASH_ENABLED is not set, then all secure sflash related functions will be optimized out.
+ *
+ * To optimize for RAM size in case PLATFORM_SECURESFLASH_ENABLED is not set,
+ * sflash_read_secure is not directly referenced like :
+ * sflash_read_func = ( app_header.secure ? sflash_read_secure : &sflash_read );
+ *
+ * ROMmable Code :
+ * Check for PLATFORM_SECURESFLASH_ENABLED is not done here because that makes the ROM
+ * code generated for this function dependent on build time options.
+ * The check for PLATFORM_SECURESFLASH_ENABLED is done in function that is not ROMmed
+ */
+#define SFLASH_SECURE_ACCESS_FUNC( is_secure, secure_function_pointer, nonsecure_function_pointer ) \
+    ( ( is_secure ) ?  ( secure_function_pointer ) : ( nonsecure_function_pointer ) )
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -100,11 +117,6 @@
 /******************************************************
  *                 Type Definitions
  ******************************************************/
-
-typedef int ( *sflash_write_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
-        /*@observer@*/ const void* const data_addr, unsigned int size );
-typedef int ( *sflash_read_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
-        /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size );
 
 /******************************************************
  *                    Structures
@@ -216,7 +228,7 @@ wiced_result_t wiced_apps_set_size( image_location_t* app_header_location, uint3
     uint8_t         index;
     uint32_t        current_size = 0;
     uint16_t        empty_sector;
-    uint32_t        flash_memory_size;
+    unsigned long   flash_memory_size;
     uint32_t        available_sectors;
     uint32_t        sectors_needed;
 
@@ -359,7 +371,8 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     deinit_sflash( &sflash_handle );
 
-    sflash_write_func = ( app_header.secure ? &sflash_write_secure : &sflash_write );
+    sflash_write_func = SFLASH_SECURE_ACCESS_FUNC( ( app_header.secure && ( sflash_handle.securesflash_handle != NULL ) ),
+                sflash_handle.securesflash_handle->sflash_secure_write_function, &sflash_write );
 
     while ( size )
     {
@@ -415,7 +428,8 @@ wiced_result_t wiced_apps_read( const image_location_t* app_header_location, uin
     init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
 
-    sflash_read_func = ( app_header.secure ? &sflash_read_secure : &sflash_read );
+    sflash_read_func = SFLASH_SECURE_ACCESS_FUNC( ( app_header.secure && ( sflash_handle.securesflash_handle != NULL ) ),
+            sflash_handle.securesflash_handle->sflash_secure_read_function, &sflash_read );
 
     while ( ( size ) && ( result ==  WICED_SUCCESS ) )
     {

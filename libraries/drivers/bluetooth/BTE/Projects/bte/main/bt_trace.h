@@ -1060,45 +1060,45 @@ EXPORT_API extern void BTTRC_StackTrace6(tBTTRC_LAYER_ID layer_id,
 #define BIP_TRACE_API6(m,p1,p2,p3,p4,p5,p6)      {if (bip_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_6(TRACE_LAYER_BIP, TRACE_TYPE_API, m,p1,p2,p3,p4,p5,p6);}
 
 /* define traces for HID Host */
-#define HIDH_TRACE_ERROR0(m)                     {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m);}
-#define HIDH_TRACE_ERROR1(m,p1)                  {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m, p1);}
-#define HIDH_TRACE_ERROR2(m,p1,p2)               {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2);}
-#define HIDH_TRACE_ERROR3(m,p1,p2,p3)            {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3);}
-#define HIDH_TRACE_ERROR4(m,p1,p2,p3,p4)         {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4);}
-#define HIDH_TRACE_ERROR5(m,p1,p2,p3,p4,p5)      {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4,p5);}
-#define HIDH_TRACE_ERROR6(m,p1,p2,p3,p4,p5,p6)   {if (hh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4,p5,p6);}
+#define HIDH_TRACE_ERROR0(m)                     {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m);}
+#define HIDH_TRACE_ERROR1(m,p1)                  {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m, p1);}
+#define HIDH_TRACE_ERROR2(m,p1,p2)               {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2);}
+#define HIDH_TRACE_ERROR3(m,p1,p2,p3)            {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3);}
+#define HIDH_TRACE_ERROR4(m,p1,p2,p3,p4)         {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4);}
+#define HIDH_TRACE_ERROR5(m,p1,p2,p3,p4,p5)      {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4,p5);}
+#define HIDH_TRACE_ERROR6(m,p1,p2,p3,p4,p5,p6)   {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m,p1,p2,p3,p4,p5,p6);}
 
-#define HIDH_TRACE_WARNING0(m)                   {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m);}
-#define HIDH_TRACE_WARNING1(m,p1)                {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1);}
-#define HIDH_TRACE_WARNING2(m,p1,p2)             {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2);}
-#define HIDH_TRACE_WARNING3(m,p1,p2,p3)          {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3);}
-#define HIDH_TRACE_WARNING4(m,p1,p2,p3,p4)       {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4);}
-#define HIDH_TRACE_WARNING5(m,p1,p2,p3,p4,p5)    {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4,p5);}
-#define HIDH_TRACE_WARNING6(m,p1,p2,p3,p4,p5,p6) {if (hh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4,p5,p6);}
+#define HIDH_TRACE_WARNING0(m)                   {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m);}
+#define HIDH_TRACE_WARNING1(m,p1)                {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1);}
+#define HIDH_TRACE_WARNING2(m,p1,p2)             {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2);}
+#define HIDH_TRACE_WARNING3(m,p1,p2,p3)          {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3);}
+#define HIDH_TRACE_WARNING4(m,p1,p2,p3,p4)       {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4);}
+#define HIDH_TRACE_WARNING5(m,p1,p2,p3,p4,p5)    {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4,p5);}
+#define HIDH_TRACE_WARNING6(m,p1,p2,p3,p4,p5,p6) {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_WARNING) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_WARNING, m,p1,p2,p3,p4,p5,p6);}
 
-#define HIDH_TRACE_API0(m)                       {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_API, m);}
-#define HIDH_TRACE_API1(m,p1)                    {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_API, m, p1);}
-#define HIDH_TRACE_API2(m,p1,p2)                 {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2);}
-#define HIDH_TRACE_API3(m,p1,p2,p3)              {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3);}
-#define HIDH_TRACE_API4(m,p1,p2,p3,p4)           {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4);}
-#define HIDH_TRACE_API5(m,p1,p2,p3,p4,p5)        {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4,p5);}
-#define HIDH_TRACE_API6(m,p1,p2,p3,p4,p5,p6)     {if (hh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4,p5,p6);}
+#define HIDH_TRACE_API0(m)                       {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_API, m);}
+#define HIDH_TRACE_API1(m,p1)                    {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_API, m, p1);}
+#define HIDH_TRACE_API2(m,p1,p2)                 {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2);}
+#define HIDH_TRACE_API3(m,p1,p2,p3)              {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3);}
+#define HIDH_TRACE_API4(m,p1,p2,p3,p4)           {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4);}
+#define HIDH_TRACE_API5(m,p1,p2,p3,p4,p5)        {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4,p5);}
+#define HIDH_TRACE_API6(m,p1,p2,p3,p4,p5,p6)     {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_API) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_API, m,p1,p2,p3,p4,p5,p6);}
 
-#define HIDH_TRACE_EVENT0(m)                     {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m);}
-#define HIDH_TRACE_EVENT1(m,p1)                  {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m, p1);}
-#define HIDH_TRACE_EVENT2(m,p1,p2)               {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2);}
-#define HIDH_TRACE_EVENT3(m,p1,p2,p3)            {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3);}
-#define HIDH_TRACE_EVENT4(m,p1,p2,p3,p4)         {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4);}
-#define HIDH_TRACE_EVENT5(m,p1,p2,p3,p4,p5)      {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4,p5);}
-#define HIDH_TRACE_EVENT6(m,p1,p2,p3,p4,p5,p6)   {if (hh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4,p5,p6);}
+#define HIDH_TRACE_EVENT0(m)                     {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m);}
+#define HIDH_TRACE_EVENT1(m,p1)                  {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m, p1);}
+#define HIDH_TRACE_EVENT2(m,p1,p2)               {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2);}
+#define HIDH_TRACE_EVENT3(m,p1,p2,p3)            {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3);}
+#define HIDH_TRACE_EVENT4(m,p1,p2,p3,p4)         {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4);}
+#define HIDH_TRACE_EVENT5(m,p1,p2,p3,p4,p5)      {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4,p5);}
+#define HIDH_TRACE_EVENT6(m,p1,p2,p3,p4,p5,p6)   {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_EVENT) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_EVENT, m,p1,p2,p3,p4,p5,p6);}
 
-#define HIDH_TRACE_DEBUG0(m)                     {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m);}
-#define HIDH_TRACE_DEBUG1(m,p1)                  {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1);}
-#define HIDH_TRACE_DEBUG2(m,p1,p2)               {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2);}
-#define HIDH_TRACE_DEBUG3(m,p1,p2,p3)            {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3);}
-#define HIDH_TRACE_DEBUG4(m,p1,p2,p3,p4)         {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4);}
-#define HIDH_TRACE_DEBUG5(m,p1,p2,p3,p4,p5)      {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4,p5);}
-#define HIDH_TRACE_DEBUG6(m,p1,p2,p3,p4,p5,p6)   {if (hh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4,p5,p6);}
+#define HIDH_TRACE_DEBUG0(m)                     {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m);}
+#define HIDH_TRACE_DEBUG1(m,p1)                  {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_1(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1);}
+#define HIDH_TRACE_DEBUG2(m,p1,p2)               {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_2(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2);}
+#define HIDH_TRACE_DEBUG3(m,p1,p2,p3)            {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_3(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3);}
+#define HIDH_TRACE_DEBUG4(m,p1,p2,p3,p4)         {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_4(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4);}
+#define HIDH_TRACE_DEBUG5(m,p1,p2,p3,p4,p5)      {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_5(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4,p5);}
+#define HIDH_TRACE_DEBUG6(m,p1,p2,p3,p4,p5,p6)   {if (hidh_cb.trace_level >= BT_TRACE_LEVEL_DEBUG) BT_TRACE_6(TRACE_LAYER_HID, TRACE_TYPE_DEBUG, m,p1,p2,p3,p4,p5,p6);}
 
 /* define traces for HID Device */
 #define HIDD_TRACE_ERROR0(m)                     {if (hidd_cb.trace_level >= BT_TRACE_LEVEL_ERROR) BT_TRACE_0(TRACE_LAYER_HID, TRACE_TYPE_ERROR, m);}

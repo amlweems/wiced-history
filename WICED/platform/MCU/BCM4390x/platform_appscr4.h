@@ -72,7 +72,7 @@ typedef enum ExtIRQn
 /* Defined in oob_43909_rXX.xls */
   ChipCommon_ExtIRQn             = 0,
   Timer_ExtIRQn                  = 1,
-  Core2_ExtIRQn                  = 2,
+  SDIO_REMAPPED_ExtIRQn          = 2,
   USB_REMAPPED_ExtIRQn           = 3,
   M2M_ExtIRQn                    = 4,
   GMAC_ExtIRQn                   = 5,
@@ -634,6 +634,24 @@ typedef union
     } bits;
 } pmu_slowclkperiod_t;
 
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int rtc:1;            /* 0 */
+        unsigned int gci:1;            /* 1 */
+        unsigned int sdio:1;           /* 2 */
+        unsigned int usb:1;            /* 3 */
+        unsigned int pcie_clk_req:1;   /* 4 */
+        unsigned int pcie_perst_req:1; /* 5 */
+        unsigned int bt:1;             /* 6 */
+        unsigned int hib:1;            /* 7 */
+        unsigned int dev_wake:1;       /* 8 */
+        unsigned int reserved1:23;
+    } bits;
+} pmu_ext_wakeup_t;
+
 typedef struct
 {
     rtc_regs_t          real_time_clock;    /* 0x000 */
@@ -685,7 +703,11 @@ typedef struct
     uint32_t            res_event1;         /* 0x724 */
     uint32_t            reserved9[6];
     pmu_intstatus_t     pmuintstatus;       /* 0x740 */
-    uint32_t            reserved10[15];
+    pmu_ext_wakeup_t    ext_wakeup_status;  /* 0x744 */
+    uint32_t            reserved10[6];
+    pmu_ext_wakeup_t    ext_wake_mask0;     /* 0x760 */
+    pmu_ext_wakeup_t    ext_wake_mask1;     /* 0x764 */
+    uint32_t            reserved11[6];
     pmu_intctrl_t       pmuintctrl0;        /* 0x780 */
     pmu_intctrl_t       pmuintctrl1;        /* 0x784 */
 } pmu_regs_t;
@@ -1174,6 +1196,84 @@ typedef union
     } bits;
 } hib_status_t;
 
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int int_status_rxbreak_int:1;        /* 0 */
+        unsigned int int_status_uart_break:1;         /* 1 */
+        unsigned int int_status_parity_error:1        /* 2 */;
+        unsigned int int_status_framing_error:1;      /* 3 */
+        unsigned int int_status_rxDataUpdated:1;      /* 4 */
+        unsigned int int_status_auxRxValid:1;         /* 5 */
+        unsigned int int_status_updateDone:1;         /* 6 */
+        unsigned int reserved1:2;
+        unsigned int int_status_rx_residue:1;         /* 9 */
+        unsigned int seci2reg_txfifo_full:1;          /* 10 */
+        unsigned int seci2reg_txfifo_almost_empty:1;  /* 11 */
+        unsigned int int_status_rxfifo_almost_full:1; /* 12 */
+        unsigned int int_status_cts_event:1;          /* 13 */
+        unsigned int int_status_rxfifo_empty_n:1;     /* 14 */
+        unsigned int int_status_rxfifo_overflow:1;    /* 15 */
+        unsigned int reserved2:4;
+        unsigned int gci_level_interrupt:1;           /* 20 */
+        unsigned int gci_event_interrupt:1;           /* 21 */
+        unsigned int gci_wake_level:1;                /* 22 */
+        unsigned int gci_wake_event:1;                /* 23 */
+        unsigned int semaphore_interrupt:1;           /* 24 */
+        unsigned int gci_gpio_interrupt:1;            /* 25 */
+        unsigned int gci_gpio_wake:1;                 /* 26 */
+        unsigned int int_status_battery_int:1;        /* 27 */
+        unsigned int reserved3:4;
+    } bits;
+} gci_wake_mask_t;
+
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int stby_mode_val:3;        /* 2:0  */
+        unsigned int stby_override:1;        /* 3 */
+        unsigned int pmu_mem_stby_disable:1; /* 4 */
+        unsigned int enable_mem_clk_gate:1;  /* 5 */
+        unsigned int reserved1:26;           /* 31:6 */
+    } bits;
+} socsram_power_control_t;
+
+#define PLATFORM_POWERCONTROL_REG(core_base)         ((core_base) + 0x1E8)
+#define PLATFORM_SOCSRAM_POWERCONTROL_REG            ((volatile socsram_power_control_t*)PLATFORM_POWERCONTROL_REG(PLATFORM_SOCSRAM_CONTROLLER_REGBASE(0x0)))
+
+/* ChipCommon IntStatus and IntMask register bit */
+#define CHIPCOMMON_GPIO_INT_MASK                     (1 << 0)
+
+/* GCI */
+#define GCI_INDIRECT_ADDR_REG                        ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x040)))
+#define GCI_CHIPCONTROL_REG                          ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x200)))
+#define GCI_CHIPSTATUS_REG                           ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x204)))
+#define GCI_GPIOCONTROL_REG                          ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x044)))
+#define GCI_GPIOSTATUS_REG                           ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x048)))
+#define GCI_GPIOWAKEMASK_REG                         ((volatile uint32_t *)(PLATFORM_GCI_REGBASE(0x05C)))
+
+#define GCI_WAKEMASK_REG                             ((volatile gci_wake_mask_t*)(PLATFORM_GCI_REGBASE(0x1C)))
+
+#define GCI_CHIPCONTROL_REG_0                        (0)
+#define GCI_CHIPCONTROL_REG_1                        (1)
+#define GCI_CHIPCONTROL_REG_2                        (2)
+#define GCI_CHIPCONTROL_REG_3                        (3)
+#define GCI_CHIPCONTROL_REG_4                        (4)
+#define GCI_CHIPCONTROL_REG_5                        (5)
+#define GCI_CHIPCONTROL_REG_6                        (6)
+#define GCI_CHIPCONTROL_REG_7                        (7)
+#define GCI_CHIPCONTROL_REG_8                        (8)
+#define GCI_CHIPCONTROL_REG_9                        (9)
+#define GCI_CHIPCONTROL_REG_10                       (10)
+#define GCI_CHIPCONTROL_REG_11                       (11)
+#define GCI_CHIPCONTROL_REG_INVALID                  (0xFF)
+#define GCI_CHIPCONTROL_MASK_INVALID                 (0x0)
+#define GCI_CHIPCONTROL_POS_INVALID                  (0xFF)
+
 #define GCI_CHIPCONTROL_GMAC_INTERFACE_REG           6
 #define GCI_CHIPCONTROL_GMAC_INTERFACE_SHIFT         23
 #define GCI_CHIPCONTROL_GMAC_INTERFACE_MASK          (0x3 << GCI_CHIPCONTROL_GMAC_INTERFACE_SHIFT)
@@ -1262,6 +1362,30 @@ typedef union
 #define GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_MASK      (1 << GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_SHIFT)
 #define GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_SET       (1 << GCI_CHIPCONTROL_SW_DEEP_SLEEP_FLAG_SHIFT)
 
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_REG       11
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_SHIFT     18
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_MASK      (1 << GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_SHIFT)
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_SET       (1 << GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_SHIFT)
+
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_REG      11
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_SHIFT    21
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_MASK     (1 << GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_SHIFT)
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_HSIC     (0 << GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_SHIFT)
+#define GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_USB      (1 << GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_SHIFT)
+
+#define GCI_CHIPCONTROL_GPIO_CONTROL_REG(gpio_num)                        ((gpio_num) >> 2)
+#define GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SHIFT(gpio_num)    (((gpio_num) & 0x3) * 8 + 7)
+#define GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_MASK(gpio_num)     (1 << GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SET(gpio_num)      (1 << GCI_CHIPCONTROL_GPIO_CONTROL_EXTRA_GPIO_ENABLE_SHIFT(gpio_num))
+
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_REG(gpio_num)                       ((gpio_num) >> 3)
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num)                     (((gpio_num) & 0x7) * 4)
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_MASK(gpio_num)                      (0xF << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_IN(gpio_num)                        (0x1 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_POS_EDGE(gpio_num)                  (0x2 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_NEG_EDGE(gpio_num)                  (0x4 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_FAST_EDGE(gpio_num)                 (0x8 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+
 #define GCI_CHIPSTATUS_BOOT_MODE_REG                 4
 #define GCI_CHIPSTATUS_BOOT_MODE_ACPU_SHIFT          21
 #define GCI_CHIPSTATUS_BOOT_MODE_ACPU_MASK           (1 << GCI_CHIPSTATUS_BOOT_MODE_ACPU_SHIFT)
@@ -1272,6 +1396,7 @@ typedef union
 #define GCI_CHIPSTATUS_HIB_READ_SHIFT                16
 #define GCI_CHIPSTATUS_HIB_READ_MASK                 (0xFF << GCI_CHIPSTATUS_HIB_READ_SHIFT)
 
+/* PMU */
 #define PMU_CHIPCONTROL_PWM_CLK_ASCU_REG             6
 #define PMU_CHIPCONTROL_PWM_CLK_ASCU_SHIFT           21
 #define PMU_CHIPCONTROL_PWM_CLK_ASCU_MASK            (1 << PMU_CHIPCONTROL_PWM_CLK_ASCU_SHIFT)
@@ -1287,11 +1412,27 @@ typedef union
 #define PMU_CHIPCONTROL_APP_VDDM_POWER_FORCE_MASK    (1 << PMU_CHIPCONTROL_APP_VDDM_POWER_FORCE_SHIFT)
 #define PMU_CHIPCONTROL_APP_VDDM_POWER_FORCE_EN      (1 << PMU_CHIPCONTROL_APP_VDDM_POWER_FORCE_SHIFT)
 
+#define PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_REG      8
+#define PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_SHIFT    10
+#define PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_MASK     (1 << PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_SHIFT)
+#define PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_EN       (1 << PMU_CHIPCONTROL_APP_DIGITAL_POWER_FORCE_SHIFT)
+
+#define PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_REG      8
+#define PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_SHIFT    21
+#define PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_MASK     (1 << PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_SHIFT)
+#define PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_EN       (1 << PMU_CHIPCONTROL_APP_SOCSRAM_POWER_FORCE_SHIFT)
+
 #define PMU_REGULATOR_LPLDO1_REG                     4
 #define PMU_REGULATOR_LPLDO1_SHIFT                   15
 #define PMU_REGULATOR_LPLDO1_MASK                    (0x7 << PMU_REGULATOR_LPLDO1_SHIFT)
 #define PMU_REGULATOR_LPLDO1_0_9_V                   (0x4 << PMU_REGULATOR_LPLDO1_SHIFT)
 #define PMU_REGULATOR_LPLDO1_1_0_V                   (0x6 << PMU_REGULATOR_LPLDO1_SHIFT)
+
+#define PMU_REGULATOR_WL_REG_ON_PULLDOWN_REG         1
+#define PMU_REGULATOR_WL_REG_ON_PULLDOWN_SHIFT       2
+#define PMU_REGULATOR_WL_REG_ON_PULLDOWN_MASK        (1 << PMU_REGULATOR_WL_REG_ON_PULLDOWN_SHIFT)
+#define PMU_REGULATOR_WL_REG_ON_PULLDOWN_EN          (0 << PMU_REGULATOR_WL_REG_ON_PULLDOWN_SHIFT)
+#define PMU_REGULATOR_WL_REG_ON_PULLDOWN_DIS         (1 << PMU_REGULATOR_WL_REG_ON_PULLDOWN_SHIFT)
 
 #define PMU_RES_UPDOWN_TIME_UP_SHIFT                 16
 #define PMU_RES_UPDOWN_TIME_UP_MASK                  (0x3FF << PMU_RES_UPDOWN_TIME_UP_SHIFT)
@@ -1311,6 +1452,16 @@ typedef union
 #define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT        22
 #define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_MASK         (0xF << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT)
 #define PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_VAL(v)       (((v) << PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_SHIFT) & PMU_CHIPCONTROL_APP_POWER_UP_DELAY_VDDM_MASK)
+
+#define PMU_CHIPCONTROL_WL_DEV_WAKE_REG              2
+#define PMU_CHIPCONTROL_WL_DEV_WAKE_SHIFT            22
+#define PMU_CHIPCONTROL_WL_DEV_WAKE_MASK             ( 1 << PMU_CHIPCONTROL_WL_DEV_WAKE_SHIFT )
+#define PMU_CHIPCONTROL_WL_DEV_WAKE_EN               ( 1 << PMU_CHIPCONTROL_WL_DEV_WAKE_SHIFT )
+
+#define PMU_CHIPCONTROL_GCI2WL_WAKE_REG              2
+#define PMU_CHIPCONTROL_GCI2WL_WAKE_SHIFT            31
+#define PMU_CHIPCONTROL_GCI2WL_WAKE_MASK             ( 1 << PMU_CHIPCONTROL_GCI2WL_WAKE_SHIFT )
+#define PMU_CHIPCONTROL_GCI2WL_WAKE_EN               ( 1 << PMU_CHIPCONTROL_GCI2WL_WAKE_SHIFT )
 
 #define PMU_RES_MASK(bit)                            ( 1UL << (bit) )
 #define PMU_RES_LPLDO_PU                             0
@@ -1355,20 +1506,6 @@ typedef union
                                                        PMU_RES_MASK( PMU_RES_HT_START )                  | \
                                                        PMU_RES_MASK( PMU_RES_HT_AVAIL ) )
 #define PMU_RES_DEEP_SLEEP_MASK                      ( PMU_RES_MASK( PMU_RES_LPLDO_PU ) )
-#define PMU_RES_SLEEP_MASK                           ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
-                                                       PMU_RES_MASK( PMU_RES_BAND_GAP_PU )               | \
-                                                       PMU_RES_MASK( PMU_RES_SLEEP_REGOFF_PULL_DOWN_EN ) | \
-                                                       PMU_RES_MASK( PMU_RES_CBUCK_LPOM_PU )             | \
-                                                       PMU_RES_MASK( PMU_RES_CBUCK_PFM )                 | \
-                                                       PMU_RES_MASK( PMU_RES_COLD_START_WAIT )           | \
-                                                       PMU_RES_MASK( PMU_RES_APP_VDDM_PWRSW )            | \
-                                                       PMU_RES_MASK( PMU_RES_LNLDO )                     | \
-                                                       PMU_RES_MASK( PMU_RES_XTALLDO )                   | \
-                                                       PMU_RES_MASK( PMU_RES_LDO3P3 )                    | \
-                                                       PMU_RES_MASK( PMU_RES_OTP_PU )                    | \
-                                                       PMU_RES_MASK( PMU_RES_APP_DIGITAL_PWRSW )         | \
-                                                       PMU_RES_MASK( PMU_RES_APP_CORE_READY )            | \
-                                                       PMU_RES_MASK( PMU_RES_APP_CORE_READY_BUF ) )
 #define PMU_RES_APPS_BASE_UP_MASK                    ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
                                                        PMU_RES_MASK( PMU_RES_BAND_GAP_PU )               | \
                                                        PMU_RES_MASK( PMU_RES_SLEEP_REGOFF_PULL_DOWN_EN ) | \
@@ -1426,11 +1563,19 @@ typedef union
 
 #define PMU_SLOWCLKPERIOD_ALP_PERIOD_MASK            0x3FFF
 
+#define PMU_MAX_WRITE_LATENCY_ILP_TICKS              4 /* Value is based on chip RTL reading, ILP ticks till write take effect */
+
+#define OOB_AOUT_SDIO_HOST_INTR                      9
 #define OOB_AOUT_M2M_INTR1                           12
 #define OOB_AOUT_PMU_INTR0                           18
 #define OOB_AOUT_PMU_INTR1                           20
 
 #define OOB_APPSCR4_TIMER_IRQ_NUM                    0
+
+#define PLATFORM_USB20D_PHY_UTMI_CTL1_REG                    PLATFORM_USB20D_REGBASE(0x310)
+#define PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_MASK       0x8007 /* clear phy_iddq_i, pll_pwrdwnb, afe_ldo_pwrdwnb, afe_ldocntlen_1p2 */
+#define PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_DISABLE    PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_MASK
+#define PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_ENABLE     0x0
 
 STRUCTURE_CHECK(  1, chipcommon_regs_t, core_ctrl_status.bist_status, 0x0C );
 STRUCTURE_CHECK(  2, chipcommon_regs_t, otp.otp_ctrl_1, 0xF4 );

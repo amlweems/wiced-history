@@ -22,24 +22,36 @@ extern "C" {
 #include "platform_map.h"
 #endif
 
+/* Constant to be used to define others */
+#ifdef WICED_NO_WIFI
+#define PLATFORM_WLAN_PRESENT             0
+#else
+#define PLATFORM_WLAN_PRESENT             1
+#endif
+
 /* Define which frequency CPU run */
 #ifndef PLATFORM_CPU_CLOCK_FREQUENCY
 #define PLATFORM_CPU_CLOCK_FREQUENCY      PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ
 #endif
 
+/* Common switch to be used to enable/disable various modules powersaving. */
+#ifndef PLATFORM_POWERSAVE_DEFAULT
+#define PLATFORM_POWERSAVE_DEFAULT        0
+#endif
+
 /* Define WLAN powersave feature en/dis */
 #ifndef PLATFORM_WLAN_POWERSAVE
-#define PLATFORM_WLAN_POWERSAVE           0
+#define PLATFORM_WLAN_POWERSAVE           PLATFORM_WLAN_PRESENT
 #endif
 
 /* Define cores powersave feature en/dis */
 #ifndef PLATFORM_CORES_POWERSAVE
-#define PLATFORM_CORES_POWERSAVE          0
+#define PLATFORM_CORES_POWERSAVE          PLATFORM_POWERSAVE_DEFAULT
 #endif
 
 /* Define APPS domain powersave feature en/dis */
 #ifndef PLATFORM_APPS_POWERSAVE
-#define PLATFORM_APPS_POWERSAVE           0
+#define PLATFORM_APPS_POWERSAVE           PLATFORM_POWERSAVE_DEFAULT
 #endif
 
 /* Define ticks powersave feature en/dis */
@@ -47,9 +59,19 @@ extern "C" {
 #define PLATFORM_TICK_POWERSAVE           PLATFORM_APPS_POWERSAVE
 #endif
 
-/* Define initial state of tick power-save */
-#ifndef PLATFORM_TICK_POWERSAVE_DISABLE
-#define PLATFORM_TICK_POWERSAVE_DISABLE   1
+/* Define initial state of MCU power-save enable/disable API */
+#ifndef PLATFORM_MCU_POWERSAVE_INIT_STATE
+#define PLATFORM_MCU_POWERSAVE_INIT_STATE 1
+#endif
+
+/* Define MCU powersave mode set during platform initialization */
+#ifndef PLATFORM_MCU_POWERSAVE_MODE_INIT
+#define PLATFORM_MCU_POWERSAVE_MODE_INIT  PLATFORM_MCU_POWERSAVE_MODE_SLEEP
+#endif
+
+/* Define tick powersave mode set during platform initialization */
+#ifndef PLATFORM_TICK_POWERSAVE_MODE_INIT
+#define PLATFORM_TICK_POWERSAVE_MODE_INIT PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_IF_MCU_POWERSAVE_ENABLED
 #endif
 
 /* Define RTOS timers default configuration */
@@ -149,7 +171,11 @@ extern "C" {
 /* Define SPI flash default configuration */
 #ifndef PLATFORM_NO_SFLASH_WRITE
 #if defined(BOOTLOADER) || defined(TINY_BOOTLOADER)
+#if defined(OTA2_SUPPORT)
+#define PLATFORM_NO_SFLASH_WRITE          0
+#else
 #define PLATFORM_NO_SFLASH_WRITE          1
+#endif /* OTA2_SUPPORT           */
 #else
 #define PLATFORM_NO_SFLASH_WRITE          0
 #endif /* BOOTLODER || TINY_BOOTLOADER */
@@ -167,16 +193,7 @@ extern "C" {
 #endif /* BOOTLODER || TINY_BOOTLOADER */
 #endif /* PLATFORM_NO_BP_INIT */
 
-/* Define AON memory access attributes */
-#ifdef PLATFORM_A0_AON_MEMORY
-#ifdef TINY_BOOTLOADER
-#define PLATFORM_AON_MEMORY_ACCESS        MPU_R_ACCESS_CACHED_WTHR_MEM
-#else
-#define PLATFORM_AON_MEMORY_ACCESS        MPU_R_ACCESS_STR_ORDERED_MEM
-#endif /* TINY_BOOTLOADER */
-#endif /* PLATFORM_A0_AON_MEMORY */
-
-/* TraceX storage buffer in DDR */
+ /* TraceX storage buffer in DDR */
 #if defined(TX_ENABLE_EVENT_TRACE) && (PLATFORM_NO_DDR != 1)
 #ifndef WICED_TRACEX_BUFFER_DDR_OFFSET
 #define WICED_TRACEX_BUFFER_DDR_OFFSET    (0x0)
@@ -186,17 +203,57 @@ extern "C" {
 
 /* Define that platform require some fixup to use ALP clock. No need for chips starting from B1. */
 #ifndef PLATFORM_ALP_CLOCK_RES_FIXUP
-#define PLATFORM_ALP_CLOCK_RES_FIXUP      1
+#define PLATFORM_ALP_CLOCK_RES_FIXUP      PLATFORM_WLAN_PRESENT
 #endif
 
 /* Define that platform need WLAN assistance to wake-up */
 #ifndef PLATFORM_WLAN_ASSISTED_WAKEUP
-#ifdef WICED_NO_WIFI
-#define PLATFORM_WLAN_ASSISTED_WAKEUP     0
-#else
-#define PLATFORM_WLAN_ASSISTED_WAKEUP     1
+#define PLATFORM_WLAN_ASSISTED_WAKEUP     PLATFORM_WLAN_PRESENT
 #endif
-#endif /* PLATFORM_WLAN_ASSISTED_WAKEUP */
+
+#ifndef PLATFORM_LPLDO_VOLTAGE
+#define PLATFORM_LPLDO_VOLTAGE            PMU_REGULATOR_LPLDO1_0_9_V
+#endif
+
+#ifndef PLATFORM_NO_SDIO
+#define PLATFORM_NO_SDIO                  0
+#endif
+
+#ifndef PLATFORM_NO_GMAC
+#define PLATFORM_NO_GMAC                  0
+#endif
+
+#ifndef PLATFORM_NO_USB
+#define PLATFORM_NO_USB                   0
+#endif
+
+#ifndef PLATFORM_NO_HSIC
+#define PLATFORM_NO_HSIC                  0
+#endif
+
+#ifndef PLATFORM_NO_I2S
+#define PLATFORM_NO_I2S                   0
+#endif
+
+#ifndef PLATFORM_NO_I2C
+#define PLATFORM_NO_I2C                   0
+#endif
+
+#ifndef PLATFORM_NO_UART
+#define PLATFORM_NO_UART                  0
+#endif
+
+#ifndef PLATFORM_NO_DDR
+#define PLATFORM_NO_DDR                   0
+#endif
+
+#ifndef PLATFORM_NO_SPI
+#define PLATFORM_NO_SPI                   0
+#endif
+
+#ifndef PLATFORM_NO_JTAG
+#define PLATFORM_NO_JTAG                  0
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

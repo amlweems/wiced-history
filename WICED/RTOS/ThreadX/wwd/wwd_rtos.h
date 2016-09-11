@@ -34,15 +34,15 @@ extern "C" {
 /* The number of system ticks per second */
 #define SYSTICK_FREQUENCY  (1000)
 
-#ifndef WWD_LOGGING_UART_ENABLE
+#ifndef WWD_LOGGING_STDOUT_ENABLE
 #ifdef DEBUG
 #define WWD_THREAD_STACK_SIZE        (1248 + 1400) /*(632)*/   /* Stack checking requires a larger stack */
 #else /* ifdef DEBUG */
 #define WWD_THREAD_STACK_SIZE        (1024 + 1400) /*(544)*/
 #endif /* ifdef DEBUG */
-#else /* if WWD_LOGGING_UART_ENABLE */
+#else /* if WWD_LOGGING_STDOUT_ENABLE */
 #define WWD_THREAD_STACK_SIZE        (544 + 4096 + 1400)   /* WWD_LOG uses printf and requires minimum 4K stack space */
-#endif /* WWD_LOGGING_UART_ENABLE */
+#endif /* WWD_LOGGING_STDOUT_ENABLE */
 
 
 /******************************************************

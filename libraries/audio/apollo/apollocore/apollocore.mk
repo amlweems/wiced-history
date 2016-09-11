@@ -17,6 +17,7 @@ $(info Using PREBUILT:  $(APOLLOCORE_LIBRARY_NAME))
 $(NAME)_PREBUILT_LIBRARY :=$(APOLLOCORE_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
+$(info Building SRC:  $(APOLLOCORE_LIBRARY_NAME))
 include $(CURDIR)apollocore_src.mk
 endif # ifneq ($(wildcard $(CURDIR)$(APOLLOCORE_LIBRARY_NAME)),)
 

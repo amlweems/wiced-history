@@ -218,7 +218,7 @@ platform_result_t platform_hibernation_start( uint32_t ticks_to_wakeup )
 
 wiced_bool_t platform_hibernation_is_returned_from( void )
 {
-    return ( platform_hibernation_get_status( ).bits.boot_from_wake != 0 );
+    return !platform_boot_is_reset( ) && ( platform_hibernation_get_status( ).bits.boot_from_wake != 0 );
 }
 
 uint32_t platform_hibernation_get_ticks_spent( void )

@@ -32,13 +32,21 @@ $(NAME)_SOURCES := vector_table_$(TOOLCHAIN_NAME).S \
                    wwd_bus.c \
                    wwd_platform.c \
                    ../platform_nsclock.c \
-                   ../../$(HOST_ARCH)/exception_handlers.c
+                   ../../$(HOST_ARCH)/exception_handlers.c      \
+                   platform_audio_info.c
 
 ifdef PLATFORM_SUPPORTS_BUTTONS
 $(NAME)_SOURCES += ../platform_button.c
 endif
 
-include $(CURDIR)BCM94390x_common.mk
+#for DCT with crc checking
+$(NAME)_COMPONENTS  += utilities/crc
+
+# include the ota2 specific functions
+ifeq (1, $(OTA2_SUPPORT))
+$(NAME)_SOURCES += ../wiced_dct_external_ota2.c
+endif
+
 
 HOST_ARCH  := ARM_CR4
 
@@ -55,8 +63,10 @@ GLOBAL_INCLUDES +=  . \
                     peripherals/include \
 
 ifneq ($(wildcard WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(APPS_CHIP_REVISION)/$(HOST_MCU_VARIANT)$(APPS_CHIP_REVISION).mk),)
-include WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(APPS_CHIP_REVISION)/$(HOST_MCU_VARIANT)$(APPS_CHIP_REVISION).mk
+include WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(HOST_MCU_VARIANT).mk
 endif # wildcard $(WICED ...)
+
+include $(CURDIR)BCM94390x_common.mk
 
 ifdef BUILD_ROM
 $(NAME)_COMPONENTS += WICED/platform/MCU/BCM4390x/ROM_build
@@ -85,6 +95,12 @@ ifeq ($(WLAN_CHIP_REVISION),B0)
 $(NAME)_DEFINES += BCMCHIPREV=1
 endif
 endef
+
+ifneq ($(APPS_CHIP_REVISION),A0)
+ifneq ($(APPS_CHIP_REVISION),B0)
+GLOBAL_DEFINES += PLATFORM_ALP_CLOCK_RES_FIXUP=0
+endif
+endif
 
 $(eval $(call PLATFORM_LOCAL_DEFINES_INCLUDES_43909, .))
 
@@ -117,6 +133,8 @@ GLOBAL_ASMFLAGS += --defsym SYS_STACK_SIZE=$($(RTOS)_SYS_STACK) \
                    --defsym FIQ_STACK_SIZE=$($(RTOS)_FIQ_STACK) \
                    --defsym IRQ_STACK_SIZE=$($(RTOS)_IRQ_STACK)
 
+# Pick-up MCU variant linker-scripts.
+GLOBAL_LDFLAGS  += -L WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)
 endif # GCC
 
 ifdef NO_WIFI
@@ -157,15 +175,26 @@ GLOBAL_DEFINES += BCM43909
 # make sure you protect them under this global define.
 GLOBAL_DEFINES += ENABLE_ARM_DSP_INSTRUCTIONS
 
+# Use packet release hook to refill DMA
+GLOBAL_DEFINES += PLAT_NOTIFY_FREE
+
 # DCT linker script
 DCT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/dct$(LINK_SCRIPT_SUFFIX)
 
+ifeq ($(APP),ota2_bootloader)
+####################################################################################
+# Building OTA2 bootloader
+####################################################################################
+DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/ota2_bootloader$(LINK_SCRIPT_SUFFIX)
+
+else
 ifeq ($(APP),bootloader)
 ####################################################################################
 # Building bootloader
 ####################################################################################
 DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/bootloader$(LINK_SCRIPT_SUFFIX)
 GLOBAL_DEFINES      += bootloader_ota
+LINK_BOOTLOADER_WITH_ROM_SYMBOLS ?=FALSE
 
 else
 ifeq ($(APP),tiny_bootloader)
@@ -175,8 +204,13 @@ ifeq ($(APP),tiny_bootloader)
 
 $(NAME)_SOURCES := $(filter-out vector_table_$(TOOLCHAIN_NAME).S, $($(NAME)_SOURCES))
 $(NAME)_LINK_FILES := $(filter-out vector_table_$(TOOLCHAIN_NAME).o, $($(NAME)_LINK_FILES))
+ifeq (1, $(OTA2_SUPPORT))
+DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/ota2_tiny_bootloader$(LINK_SCRIPT_SUFFIX)	# temp
+else
 DEFAULT_LINK_SCRIPT += $(TOOLCHAIN_NAME)/tiny_bootloader$(LINK_SCRIPT_SUFFIX)
+endif
 GLOBAL_DEFINES      += TINY_BOOTLOADER
+LINK_BOOTLOADER_WITH_ROM_SYMBOLS ?=FALSE
 
 else
 ifneq ($(filter ota_upgrade sflash_write, $(APP)),)
@@ -199,11 +233,25 @@ else
 # Building a stand-alone application
 ####################################################################################
 ifneq ($(IMAGE_TYPE),rom)
+ifeq (1, $(OTA2_SUPPORT))
+DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/ota2_app_without_rom$(LINK_SCRIPT_SUFFIX)
+else
 DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_without_rom$(LINK_SCRIPT_SUFFIX)
+endif # OTA2_SUPPORT
+else
+ifeq (1, $(OTA2_SUPPORT))
+DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/ota2_app_with_rom$(LINK_SCRIPT_SUFFIX)
 else
 DEFAULT_LINK_SCRIPT := $(TOOLCHAIN_NAME)/app_with_rom$(LINK_SCRIPT_SUFFIX)
-endif
+endif # OTA2_SUPPORT
+endif # IMAGE_TYPE
 
 endif # APP=ota_upgrade OR sflash_write
+endif # APP=tiny_bootloader
 endif # APP=bootloader
+endif # APP=ota2_bootloader
+
+ifeq ($(LINK_BOOTLOADER_WITH_ROM_SYMBOLS),TRUE)
+GLOBAL_LDFLAGS += -L ./WICED/platform/MCU/$(HOST_MCU_FAMILY)/common/$(ROM_OFFLOAD_CHIP)/rom_offload
+DEFAULT_LINK_SCRIPT += common/$(ROM_OFFLOAD_CHIP)/rom_offload/GCC_rom_bootloader_symbols.ld
 endif

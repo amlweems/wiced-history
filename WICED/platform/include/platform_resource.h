@@ -46,7 +46,7 @@ extern "C" {
 #ifdef USES_RESOURCE_FILESYSTEM
 #include "wicedfs.h"
 
-extern wiced_filesystem_t resource_fs_handle;
+extern wicedfs_filesystem_t resource_fs_handle;
 #endif /* ifdef USES_RESOURCE_FILESYSTEM */
 
 /******************************************************

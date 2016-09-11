@@ -10,15 +10,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include "wwd_logging.h"
 
-#ifdef WWD_LOGGING_BUFFER_ENABLE
+#ifdef WWD_LOGGING_STDOUT_ENABLE
+int                  wwd_logging_enabled = 0;
 
-#define LOGGING_BUFFER_SIZE ((unsigned long)4096)
+#elif defined WWD_LOGGING_BUFFER_ENABLE
 
+#ifndef LOGGING_BUFFER_SIZE
+#error LOGGING_BUFFER_SIZE is not defined
+#endif /* LOGGING_BUFFER_SIZE */
 
 static unsigned long logging_buffer_position = 0;
 static char          logging_buffer[LOGGING_BUFFER_SIZE];
-
+int                  wwd_logging_enabled = 0;
 
 int wwd_logging_printf(const char *format, ...)
 {
@@ -33,7 +38,7 @@ int wwd_logging_printf(const char *format, ...)
         logging_buffer_position = 0;
         potential_num_written = vsnprintf (&logging_buffer[logging_buffer_position], (size_t)(LOGGING_BUFFER_SIZE - logging_buffer_position), format, args);
     }
-    logging_buffer_position += potential_num_written;
+    logging_buffer_position += (unsigned)potential_num_written;
     if ( logging_buffer_position >= LOGGING_BUFFER_SIZE )
     {
         logging_buffer_position = 0;

@@ -149,17 +149,18 @@ void aes_crypt_cfb128( aes_context_t *ctx, aes_mode_type_t mode, uint32_t length
 int aes_crypt_ctr( aes_context_t *ctx, uint32_t length, const unsigned char iv[16], const unsigned char *input, unsigned char *output );
 
 /**
- * @brief            AES-CCM MAC calculation
+ * @brief               AES-CCM MAC calculation
  *
- * @param ctx        AES context
- * @param length     length of the input data
- * @param aad_length length of the additional associated data
- * @param nonce      the nonce to use
- * @param aad_input  the buffer containing the additional associated data
- * @param data_input buffer holding the input data
- * @param mac_output buffer which recieves the output MAC
+ * @param ctx           AES context
+ * @param length        length of the input data
+ * @param aad_length    length of the additional associated data
+ * @param nonce         the nonce to use
+ * @param nonce_length  length of nonce.
+ * @param aad_input     the buffer containing the additional associated data
+ * @param data_input    buffer holding the input data
+ * @param mac_output    buffer which recieves the output MAC
  */
-int aes_ccm_mac( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *data_input, unsigned char mac_output[8] );
+int aes_ccm_mac( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char *nonce,int nonce_length, const unsigned char *aad_input, const unsigned char *data_input, unsigned char mac_output[8] );
 
 /**
  * @brief                   AES-CCM encryption
@@ -168,12 +169,13 @@ int aes_ccm_mac( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const
  * @param length            length of the input data
  * @param aad_length        length of the additional associated data
  * @param nonce             the nonce to use
+ * @param nonce_length      length of nonce.
  * @param aad_input         the buffer containing the additional associated data
  * @param plaintext_input   buffer holding the input data
  * @param ciphertext_output buffer which receives the output ciphertext
  * @param mac_output        buffer which recieves the output MAC
  */
-int aes_encrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *plaintext_input, unsigned char *ciphertext_output, unsigned char mac_output[8] );
+int aes_encrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char *nonce, uint8_t nonce_length, const unsigned char *aad_input, const unsigned char *plaintext_input, unsigned char *ciphertext_output, unsigned char mac_output[8] );
 
 /**
  * @brief                   AES-CCM decryption
@@ -182,11 +184,12 @@ int aes_encrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, c
  * @param length            length of the input data
  * @param aad_length        length of the additional associated data
  * @param nonce             the nonce to use
+ * @param nonce_length      length of nonce.
  * @param aad_input         the buffer containing the additional associated data
  * @param ciphertext_input  buffer holding the input data
  * @param plaintext_output  buffer which receives the output plaintext
  */
-int aes_decrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length, const unsigned char nonce[13], const unsigned char *aad_input, const unsigned char *ciphertext_input, unsigned char *plaintext_output );
+int aes_decrypt_ccm( aes_context_t *ctx, uint32_t length, uint32_t aad_length,  const unsigned char *nonce, uint8_t nonce_length, const unsigned char *aad_input, const unsigned char *ciphertext_input, unsigned char *plaintext_output );
 
 
 /** @} */
@@ -937,6 +940,89 @@ int ed25519_sign_open( const unsigned char *message_data, size_t message_len, co
 
 
 /** @} */
+
+/*****************************************************************************/
+/** @addtogroup md4       MD4
+ *  @ingroup crypto
+ *
+ * MD4 functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/**
+ * @brief          MD4 context setup
+ *
+ * @param ctx      context to be initialized
+ */
+void md4_starts( md4_context *ctx );
+
+/**
+ * @brief          MD4 process buffer
+ *
+ * @param ctx      MD4 context
+ * @param input    buffer holding the  data
+ * @param ilen     length of the input data
+ */
+void md4_update( md4_context *ctx, const unsigned char *input, int32_t ilen );
+
+/**
+ * @brief          MD4 final digest
+ *
+ * @param ctx      MD4 context
+ * @param output   MD4 checksum result
+ */
+void md4_finish( md4_context *ctx, unsigned char output[16] );
+
+/**
+ * @brief          Output = MD4( input buffer )
+ *
+ * @param input    buffer holding the  data
+ * @param ilen     length of the input data
+ * @param output   MD4 checksum result
+ */
+void md4( const unsigned char *input, int32_t ilen, unsigned char output[16] );
+
+/**
+ * @brief          MD4 HMAC context setup
+ *
+ * @param ctx      HMAC context to be initialized
+ * @param key      HMAC secret key
+ * @param keylen   length of the HMAC key
+ */
+void md4_hmac_starts( md4_context *ctx, const unsigned char *key, uint32_t keylen );
+
+/**
+ * @brief          MD4 HMAC process buffer
+ *
+ * @param ctx      HMAC context
+ * @param input    buffer holding the  data
+ * @param ilen     length of the input data
+ */
+void md4_hmac_update( md4_context *ctx, const unsigned char *input, uint32_t ilen );
+
+/**
+ * @brief          MD4 HMAC final digest
+ *
+ * @param ctx      HMAC context
+ * @param output   MD4 HMAC checksum result
+ */
+void md4_hmac_finish( md4_context *ctx, unsigned char output[16] );
+
+/**
+ * @brief          Output = HMAC-MD4( hmac key, input buffer )
+ *
+ * @param key      HMAC secret key
+ * @param keylen   length of the HMAC key
+ * @param input    buffer holding the  data
+ * @param ilen     length of the input data
+ * @param output   HMAC-MD4 result
+ */
+void md4_hmac( const unsigned char *key, int32_t keylen, const unsigned char *input, int32_t ilen, unsigned char output[16] );
+
+/** @} */
+
 
 /*****************************************************************************/
 /** @addtogroup md5       MD5

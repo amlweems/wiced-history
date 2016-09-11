@@ -44,6 +44,7 @@ static wiced_result_t button_released_event_handler( void* arg );
 static wiced_result_t deferred_button_timer_handler( void* arg );
 
 static wiced_bool_t button_check_event_mask ( button_manager_button_t* button, uint16_t new_event );
+static void button_check_for_double_click( button_manager_button_t* button,  button_manager_event_t* new_event );
 static button_manager_event_t button_deduce_duration_event( uint32_t current_interval );
 static button_manager_button_t* get_button( platform_button_t id );
 static void timer_handler( void* arg );
@@ -204,6 +205,9 @@ static wiced_result_t button_released_event_handler( void* arg )
     /* deduce the event depending on the duration */
     new_release_event = button_deduce_duration_event( duration );
 
+    /* Check if this Release is from 2nd click of a double-click event */
+    button_check_for_double_click( button, &new_release_event );
+
     /* As the new state is Release and application has asked for this kind of event, send it irrespective of whether timer-hanlder
      * had sent it previously */
     if ( button_check_event_mask( button, new_release_event ) )
@@ -215,6 +219,25 @@ static wiced_result_t button_released_event_handler( void* arg )
     }
 
     return WICED_SUCCESS;
+}
+
+static void button_check_for_double_click( button_manager_button_t* button,  button_manager_event_t* new_event )
+{
+    if( !button_check_event_mask( button, BUTTON_DOUBLE_CLICK_EVENT ) || *new_event != BUTTON_CLICK_EVENT )
+    {
+        return;
+    }
+    /* figure out the time-difference in two-releases */
+    if ( (button->released_timestamp - button->last_released_timestamp) <= button_manager->configuration->double_click_interval  )
+    {
+        /* morph it as DOUBLE_CLICK */
+        *new_event = BUTTON_DOUBLE_CLICK_EVENT;
+    }
+
+    button->last_released_timestamp = button->released_timestamp;
+
+    return;
+
 }
 
 static wiced_bool_t button_check_event_mask ( button_manager_button_t* button, uint16_t new_event )

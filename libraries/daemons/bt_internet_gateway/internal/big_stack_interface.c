@@ -157,11 +157,13 @@ static big_local_keys_callback_t local_keys_callback = NULL;
 
 wiced_result_t big_init_stack_interface( big_local_keys_callback_t callback )
 {
-    uint32_t       request_buffer_size    = BIG_GATT_REQUEST_BUFFER_COUNT * ( sizeof( big_gatt_request_buffer_t ) + wiced_bt_cfg_settings.gatt_cfg.max_attr_len );
+    uint32_t       request_buffer_size    = sizeof( big_gatt_request_buffer_t ) + wiced_bt_cfg_settings.gatt_cfg.max_attr_len;
+    uint32_t       request_pool_size      = BIG_GATT_REQUEST_BUFFER_COUNT * request_buffer_size;
     uint32_t       max_connections        = wiced_bt_cfg_settings.gatt_cfg.client_max_links + wiced_bt_cfg_settings.gatt_cfg.server_max_links;
     uint32_t       connection_buffer_size = max_connections * sizeof( big_gatt_connection_t );
     uint32_t       a;
     wiced_result_t result;
+    big_gatt_request_buffer_t* current_buffer = NULL;
 
     memset( &gatt_server_interface, 0, sizeof( gatt_server_interface ) );
 
@@ -173,17 +175,19 @@ wiced_result_t big_init_stack_interface( big_local_keys_callback_t callback )
     linked_list_init( &free_request_buffer_list );
 
     /* Allocate request buffer */
-    request_buffer_pool = (big_gatt_request_buffer_t*) malloc_named( "BIG request buffer", request_buffer_size );
+    request_buffer_pool = (big_gatt_request_buffer_t*) malloc_named( "BIG request buffer", request_pool_size );
     if ( request_buffer_pool == NULL )
     {
         result = WICED_BT_OUT_OF_HEAP_SPACE;
         goto cleanup;
     }
-    memset( request_buffer_pool, 0, request_buffer_size );
+    memset( request_buffer_pool, 0, request_pool_size );
+    current_buffer = request_buffer_pool;
     for ( a = 0; a < BIG_GATT_REQUEST_BUFFER_COUNT; a++ )
     {
-        request_buffer_pool[a].free_buffer = WICED_TRUE;
-        linked_list_insert_node_at_rear( &free_request_buffer_list, &request_buffer_pool[a].buffer_node );
+        current_buffer->free_buffer = WICED_TRUE;
+        linked_list_insert_node_at_rear( &free_request_buffer_list, &current_buffer->buffer_node );
+        current_buffer = (big_gatt_request_buffer_t*)( (uint8_t*)current_buffer + request_buffer_size );
     }
 
     /* Allocate buffer for connections */
@@ -459,6 +463,7 @@ wiced_result_t big_get_gatt_request_buffer( big_gatt_request_buffer_t** buffer, 
         big_gatt_request_buffer_t* internal_buffer = (big_gatt_request_buffer_t*)(*buffer);
         internal_buffer->free_buffer = WICED_FALSE;
         *request_to_fill             = &internal_buffer->request;
+//        memset( *request_to_fill, 0, ( sizeof( big_gatt_request_t ) + wiced_bt_cfg_settings.gatt_cfg.max_attr_len ) );
         wiced_rtos_unlock_mutex( &big_gatt_mutex );
         return WICED_BT_SUCCESS;
     }

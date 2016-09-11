@@ -15,6 +15,8 @@
 #ifndef _NET_ETHERNET_H_	/* use native BSD ethernet.h when available */
 #define _NET_ETHERNET_H_
 
+#include "wwd_wlioctl.h"
+
 #ifndef _TYPEDEFS_H_
 #include "typedefs.h"
 #endif

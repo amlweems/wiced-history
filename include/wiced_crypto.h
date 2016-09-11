@@ -21,6 +21,27 @@
 extern "C" {
 #endif
 
+/******************************************************
+ *                 Type Definitions
+ ******************************************************/
+
+typedef uint32_t (*wiced_crypto_prng_get_random_t)( void );
+typedef void     (*wiced_crypto_prng_add_entropy_t)( const void* buffer, uint16_t buffer_length );
+
+/******************************************************
+ *                    Structures
+ ******************************************************/
+
+typedef struct
+{
+    wiced_crypto_prng_get_random_t  get_random;
+    wiced_crypto_prng_add_entropy_t add_entropy;
+} wiced_crypto_prng_t;
+
+/******************************************************
+ *               Function Declarations
+ ******************************************************/
+
 /**
  * Gets a 16 bit random numbers.
  *
@@ -43,6 +64,15 @@ extern wiced_result_t wiced_crypto_get_random( void* buffer, uint16_t buffer_len
  * @return WICED_SUCCESS or Error code
  */
 extern wiced_result_t wiced_crypto_add_entropy( const void* buffer, uint16_t buffer_length );
+
+/**
+ * Set new PRNG implementation.
+ *
+ * @param prng : pointer to PRNG implementation, if NULL then default would be used
+ *
+ * @return WICED_SUCCESS or Error code
+ */
+extern wiced_result_t wiced_crypto_set_prng( wiced_crypto_prng_t* prng );
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -28,7 +28,7 @@
 
 /* $OpenBSD: cipher-chachapoly.c,v 1.4 2014/01/31 16:39:19 tedu Exp $ */
 
-#include <sys/types.h>
+
 #include <stdarg.h> /* needed for log.h */
 #include <string.h>
 #include <stdio.h>  /* needed for misc.h */
@@ -38,7 +38,7 @@
 #include "chachapoly.h"
 
 void chachapoly_init(struct chachapoly_ctx *ctx,
-    const u_char *key, u_int keylen)
+    const uint8_t *key, uint32_t keylen)
 {
    // if (keylen != (32 + 32)) /* 2 x 256 bit keys */
    //     fatal("%s: invalid keylen %u", __func__, keylen);
@@ -56,12 +56,12 @@ void chachapoly_init(struct chachapoly_ctx *ctx,
  * tag. This tag is written on encryption and verified on decryption.
  */
 int
-chachapoly_crypt(struct chachapoly_ctx *ctx, u_int seqnr, u_char *dest,
-    const u_char *src, u_int len, u_int aadlen, u_int authlen, int do_encrypt)
+chachapoly_crypt(struct chachapoly_ctx *ctx, uint32_t seqnr, uint8_t *dest,
+    const uint8_t *src, uint32_t len, uint32_t aadlen, uint32_t authlen, int do_encrypt)
 {
-    u_char seqbuf[8];
-    const u_char one[8] = { 1, 0, 0, 0, 0, 0, 0, 0 }; /* NB little-endian */
-    u_char expected_tag[POLY1305_TAGLEN], poly_key[POLY1305_KEYLEN];
+    uint8_t seqbuf[8];
+    const uint8_t one[8] = { 1, 0, 0, 0, 0, 0, 0, 0 }; /* NB little-endian */
+    uint8_t expected_tag[POLY1305_TAGLEN], poly_key[POLY1305_KEYLEN];
     int r = -1;
 
     /*
@@ -78,7 +78,7 @@ chachapoly_crypt(struct chachapoly_ctx *ctx, u_int seqnr, u_char *dest,
 
     /* If decrypting, check tag before anything else */
     if (!do_encrypt) {
-        const u_char *tag = src + aadlen + len;
+        const uint8_t *tag = src + aadlen + len;
 
         poly1305_auth(expected_tag, src, aadlen + len, poly_key);
         if (timingsafe_bcmp(expected_tag, tag, POLY1305_TAGLEN) != 0)
@@ -109,9 +109,9 @@ chachapoly_crypt(struct chachapoly_ctx *ctx, u_int seqnr, u_char *dest,
 /* Decrypt and extract the encrypted packet length */
 int
 chachapoly_get_length(struct chachapoly_ctx *ctx,
-    u_int *plenp, u_int seqnr, const u_char *cp, u_int len)
+    uint32_t *plenp, uint32_t seqnr, const uint8_t *cp, uint32_t len)
 {
-    u_char buf[4], seqbuf[8];
+    uint8_t buf[4], seqbuf[8];
 
     if (len < 4)
         return -1; /* Insufficient length */

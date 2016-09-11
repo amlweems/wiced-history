@@ -75,8 +75,13 @@ wwd_result_t host_platform_bus_init( void )
     RCC_APB2PeriphClockCmd( RCC_APB2Periph_SYSCFG, ENABLE );
 
     /* Setup the interrupt input for WLAN_IRQ */
+#ifndef WWD_SPI_IRQ_FALLING_EDGE
     platform_gpio_init( &wifi_spi_pins[WWD_PIN_SPI_IRQ], INPUT_HIGH_IMPEDANCE );
     platform_gpio_irq_enable( &wifi_spi_pins[WWD_PIN_SPI_IRQ], IRQ_TRIGGER_RISING_EDGE, spi_irq_handler, 0 );
+#else /* WWD_SPI_IRQ_FALLING_EDGE */
+    platform_gpio_init( &wifi_spi_pins[WWD_PIN_SPI_IRQ], INPUT_PULL_UP );
+    platform_gpio_irq_enable( &wifi_spi_pins[WWD_PIN_SPI_IRQ], IRQ_TRIGGER_FALLING_EDGE, spi_irq_handler, 0 );
+#endif /* WWD_SPI_IRQ_FALLING_EDGE */
 
     /* Setup SPI slave select GPIOs */
     platform_gpio_init( &wifi_spi_pins[WWD_PIN_SPI_CS], OUTPUT_PUSH_PULL );

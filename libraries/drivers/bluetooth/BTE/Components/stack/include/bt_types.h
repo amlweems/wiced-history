@@ -1,12 +1,14 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/****************************************************************************
+**
+**  Name        bt_types.h
+**
+**  Function    this file contains definitions that are shared between
+**              units in the Bluetooth system such as events.
+**
+**  Copyright (c) 1999-2015, Broadcom Corp., All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+**
+****************************************************************************/
 
 #ifndef BT_TYPES_H
 #define BT_TYPES_H

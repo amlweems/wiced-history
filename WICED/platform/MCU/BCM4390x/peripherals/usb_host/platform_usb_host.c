@@ -9,7 +9,7 @@
  */
 
 /** @file
- * WICED 4390x USB host driver.
+ * WICED 4390x USB Host driver.
  */
 
 #include "typedefs.h"
@@ -19,12 +19,12 @@
 #include "platform_config.h"
 #include "platform_usb.h"
 #include "platform_appscr4.h"
+#include "platform_pinmux.h"
 #include "hndsoc.h"
 #include "wiced_osl.h"
 #include "wiced_platform.h"
 #include "wwd_rtos_isr.h"
 #include "platform/wwd_platform_interface.h"
-#include "bcm4390x_usb_host.h"
 
 
 /******************************************************
@@ -71,6 +71,23 @@
 #define USB20H_PLL_CONTROL_7_REGISTER               (7)
 #define USB20H_PLL_CONTROL_7_REGISTER_DEFAULT       (0X000AB1F7)
 
+/* BCM4390x USB20 Host HCI (host controller interface) number = 2 (EHCI+OHCI) */
+//#define BCM4390X_USB_HOST_CONTROLLER_INTERFACE_NUM  (2)
+
+/*
+ * The below register defines can be moved to structure-pointer format after
+ * ChipCommon and GCI structure layouts are fully defined in platform_appscr4.h
+ */
+#define CHIPCOMMON_CHIP_STATUS_REG                  *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x02C)))
+
+/* ChipCommon ChipStatus register bits */
+/*
+ * The 4-byte Chip Status register is read-only and has a device-dependent reset value.
+ * This register is used to read HW status information such as strapping options.
+ */
+#define CC_CHIP_STATUS_USB20_DEVICE_SELECTION       (1 << 16)   /* 0: USB Host mode; 1: USB Device mode */
+#define CC_CHIP_STATUS_HOST_IFACE_STRAP_2           (1 << 22)   /* 0: HSIC-PHY; 1: USB-PHY */
+#define CC_CHIP_STATUS_USB_PHY_SELECTION            CC_CHIP_STATUS_HOST_IFACE_STRAP_2
 
 /******************************************************
  *                   Enumerations
@@ -79,14 +96,11 @@
 /******************************************************
  *                 Type Definitions
  ******************************************************/
-/* USB20 Host interrupt handler */
-typedef void (*platform_usb20h_irq_handler_t)( void );
 
 /******************************************************
  *                    Structures
  ******************************************************/
-
-/* USB20 Host register */
+/* BCM4390x USB20 Host register */
 typedef struct
 {
     uint32_t reserved0[0x1e0/sizeof(uint32_t)];
@@ -118,73 +132,87 @@ typedef struct
     uint32_t pll_ctrl;                                  /* 0x52c */
 } platform_4390x_usb_host_registers_t;
 
-STRUCTURE_CHECK(100, platform_4390x_usb_host_registers_t, clk_ctl_st,       0x1e0);
-STRUCTURE_CHECK(101, platform_4390x_usb_host_registers_t, hostcontrol,      0x200);
+STRUCTURE_CHECK(100, platform_4390x_usb_host_registers_t, clk_ctl_st, 0x1e0);
+STRUCTURE_CHECK(101, platform_4390x_usb_host_registers_t, hostcontrol, 0x200);
 STRUCTURE_CHECK(102, platform_4390x_usb_host_registers_t, framlengthadjust, 0x300);
-STRUCTURE_CHECK(104, platform_4390x_usb_host_registers_t, bert_control1,    0x500);
+STRUCTURE_CHECK(104, platform_4390x_usb_host_registers_t, bert_control1, 0x500);
 
-/* USB20 Host config */
+/* BCM4390x USB20 Host config */
 typedef struct
 {
     uint32_t                        usb20h_rev;
-    uint32_t                        rsv1;
-    uint32_t                        rsv2;
-} platform_4390x_usb20h_config_t;
+    uint32_t                        reserve1;
+    uint32_t                        reserve2;
+} platform_4390x_usb_host_config_t;
 
-/* USB20 Host driver */
+/* BCM4390x USB20 Host driver */
 typedef struct
 {
-    volatile platform_4390x_usb_host_registers_t* core_registers;
-    uint32_t                        enhanced_host_controller_interface_registers;
-    uint32_t                        open_host_controller_interface_registers;
-    wiced_gpio_t                    overcurrent_pin;
-    wiced_gpio_t                    power_enable_pin;
-    ExtIRQn_Type                    irq_number;
-    platform_usb20h_irq_handler_t   irq_handler;
-} platform_4390x_bcm4390x_usb_host_driver_t;
+    volatile platform_4390x_usb_host_registers_t*   core_registers;
+    wiced_gpio_t                                    overcurrent_pin;
+    wiced_gpio_t                                    power_enable_pin;
+    ExtIRQn_Type                                    irq_number;
+    platform_usb_host_irq_handler_t                 irq_handler;
+} platform_4390x_usb_host_driver_t;
 
 /******************************************************
  *                 Static Variables
  ******************************************************/
 
-/* USB20 Host config data base */
-//static platform_4390x_usb20h_config_t usb20h_config_db = {0}; //Rsvd
+/* BCM4390x USB20 Host config data base */
+//static platform_4390x_usb_host_config_t bcm4390x_usb_host_config_db = {0}; //Rsvd
 
-/* USB20 Host driver data base */
-static platform_4390x_bcm4390x_usb_host_driver_t bcm4390x_usb_host_default_driver =
+/* BCM4390x USB20 Host driver data base */
+static platform_4390x_usb_host_driver_t bcm4390x_usb_host_default_driver =
 {
-   .core_registers                               = (volatile platform_4390x_usb_host_registers_t*) PLATFORM_EHCI_REGBASE(0),     /* USB20 Host controller register base */
-   .enhanced_host_controller_interface_registers = PLATFORM_EHCI_REGBASE(0),         /* USB20 Host EHCI controller register base */
-   .open_host_controller_interface_registers     = PLATFORM_OHCI_REGBASE(0),         /* USB20 Host OHCI controller register base */
-   .overcurrent_pin                              = WICED_USB_HOST_OVERCURRENT_PIN,   /* Port0 OC: GPIO0 (WICED_GPIO_1) */
-   .power_enable_pin                             = WICED_USB_HOST_POWER_ENABLE_PIN,  /* Port0 Power Control: GPIO11 (WICED_GPIO_12) */
-   .irq_number                                   = USB_REMAPPED_ExtIRQn,             /* USB20 Host remapped IRQ number (EHCI/OHCI share the same IRQ) */
-   .irq_handler                                  = NULL                              /* USB20 Host IRQ handler */
+   .core_registers          = (volatile platform_4390x_usb_host_registers_t*) PLATFORM_EHCI_REGBASE(0),     /* USB20 Host controller register base */
+   .overcurrent_pin         = WICED_USB_HOST_OVERCURRENT,   /* Port0 OC: GPIO0 (WICED_GPIO_1) */
+   .power_enable_pin        = WICED_USB_HOST_POWER_ENABLE,  /* Port0 Power Control: GPIO11 (WICED_GPIO_12) */
+   .irq_number              = USB_REMAPPED_ExtIRQn,         /* USB20 Host remapped IRQ number (EHCI/OHCI share the same IRQ) */
+   .irq_handler             = NULL                          /* USB20 Host IRQ handler */
 };
 
-static platform_4390x_bcm4390x_usb_host_driver_t *bcm4390x_usb_host_driver = &bcm4390x_usb_host_default_driver;
+static platform_4390x_usb_host_driver_t *bcm4390x_usb_host_driver = &bcm4390x_usb_host_default_driver;
+
+/* BCM4390x USB20 Host HCI (host controller interface) resource list for USB stack driver */
+static platform_usb_host_hci_resource_t bcm4390x_usb_host_hci_resource_list[] =
+{
+    /* USB20 Host OHCI controller */
+    {
+        .usb_host_hci_type          = USB_HOST_CONTROLLER_INTERFACE_OHCI,   /* USB20 Host OHCI controller */
+        .usb_host_hci_ioaddress     = PLATFORM_OHCI_REGBASE(0),             /* USB20 Host OHCI controller register base */
+        .usb_host_hci_irq_number    = USB_REMAPPED_ExtIRQn                  /* USB20 Host OHCI IRQ number (EHCI/OHCI share the same IRQ) */
+    },
+    /* USB20 Host EHCI controller */
+    {
+        .usb_host_hci_type          = USB_HOST_CONTROLLER_INTERFACE_EHCI,   /* USB20 Host EHCI controller */
+        .usb_host_hci_ioaddress     = PLATFORM_EHCI_REGBASE(0),             /* USB20 Host EHCI controller register base */
+        .usb_host_hci_irq_number    = USB_REMAPPED_ExtIRQn                  /* USB20 Host EHCI IRQ number (EHCI/OHCI share the same IRQ) */
+    }
+};
 
 /******************************************************
  *               Function Declarations
  ******************************************************/
-
-extern platform_result_t    platform_usb_host_init_irq( platform_usb20h_irq_handler_t irq_handler );
-static void                 bcm4390x_usb_host_enable_irq( void );
-static void                 bcm4390x_usb_host_disable_irq( void );
-static void                 bcm4390x_usb_host_disable( void );
-static void                 bcm4390x_usb_host_enable_irq( void );
-
+static void bcm4390x_usb_host_enable( void );
+static void bcm4390x_usb_host_map_irq( uint8_t target_irq );
+static int bcm4390x_usb_host_power_enable( int port );
+static void bcm4390x_usb_host_disable( void );
+static void bcm4390x_usb_host_enable_irq( void );
+static void bcm4390x_usb_host_disable_irq( void );
+static wiced_bool_t bcm4390x_is_board_in_usb_phy_mode( void );
+static wiced_bool_t bcm4390x_is_board_in_usb_host_mode( void );
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
-static void bcm4390x_usb_host_enable(void)
+static void bcm4390x_usb_host_enable( void )
 {
     volatile platform_4390x_usb_host_registers_t *usb_host_registers = NULL;
 
     if (!bcm4390x_usb_host_driver)
     {
-        WPRINT_PLATFORM_ERROR( ("Null usb20h drv!\n") );
+        WPRINT_PLATFORM_ERROR( ("Null usb host drv!\n") );
         return;
     }
 
@@ -201,7 +229,7 @@ static void bcm4390x_usb_host_enable(void)
 
     /* GCI pad control  */
     /* Port0 OC (input) */
-    platform_pin_function_init(bcm4390x_usb_host_driver->overcurrent_pin, PIN_FUNCTION_USB20H_CTL1, PIN_FUNCTION_CONFIG_UNKNOWN);
+    platform_pinmux_init(bcm4390x_usb_host_driver->overcurrent_pin, PIN_FUNCTION_USB20H_CTL1);
     /* Port0 power control (output) */
     wiced_gpio_init(bcm4390x_usb_host_driver->power_enable_pin, OUTPUT_PUSH_PULL);
     wiced_gpio_output_low(bcm4390x_usb_host_driver->power_enable_pin);
@@ -242,7 +270,7 @@ static void bcm4390x_usb_host_enable(void)
     usb_host_registers->hostcontrol = USB20H_HOSTCTL_VAL_OOR_SEQ3; //1'b8 b9 b10
 }
 
-static void usb20h_map_irq( uint8_t target_irq )
+static void bcm4390x_usb_host_map_irq( uint8_t target_irq )
 {
     /*
      * Route this bus line to target_irq bit
@@ -251,7 +279,7 @@ static void usb20h_map_irq( uint8_t target_irq )
     platform_irq_remap_sink( Core11_ExtIRQn, target_irq );
 }
 
-static int platform_usb_host_power_enable( int port )
+static int bcm4390x_usb_host_power_enable( int port )
 {
     if (port == 0)
     {
@@ -266,40 +294,11 @@ static void bcm4390x_usb_host_disable( void )
     return;
 }
 
-platform_result_t platform_usb_host_init( void )
-{
-    bcm4390x_usb_host_enable();
-    platform_usb_host_power_enable(0);
-    return PLATFORM_SUCCESS;
-}
-
-void platform_usb_host_deinit( void )
-{
-    bcm4390x_usb_host_disable_irq();
-    bcm4390x_usb_host_disable();
-}
-
-platform_result_t platform_usb_host_init_irq( platform_usb20h_irq_handler_t irq_handler )
-{
-    usb20h_map_irq(bcm4390x_usb_host_driver->irq_number);
-
-    if (irq_handler == NULL)
-    {
-        WPRINT_PLATFORM_ERROR( ("Null input!\n") );
-        return PLATFORM_ERROR;
-    }
-    bcm4390x_usb_host_driver->irq_handler = irq_handler;
-
-    bcm4390x_usb_host_enable_irq();
-
-    return PLATFORM_SUCCESS;
-}
-
 static void bcm4390x_usb_host_enable_irq( void )
 {
     if (bcm4390x_usb_host_driver->irq_handler == NULL)
     {
-        WPRINT_PLATFORM_DEBUG( ("No isr set before irq enable!\n") );
+        WPRINT_PLATFORM_DEBUG( ("No ISR set before IRQ enable!\n") );
     }
     platform_irq_enable_irq( bcm4390x_usb_host_driver->irq_number );
 }
@@ -309,23 +308,128 @@ static void bcm4390x_usb_host_disable_irq( void )
     platform_irq_disable_irq( bcm4390x_usb_host_driver->irq_number );
 }
 
+static wiced_bool_t bcm4390x_is_board_in_usb_phy_mode( void )
+{
+    wiced_bool_t is_usb_phy_mode = WICED_FALSE;
+
+    if ( (CHIPCOMMON_CHIP_STATUS_REG & CC_CHIP_STATUS_USB_PHY_SELECTION) )
+    {
+        is_usb_phy_mode = WICED_TRUE;
+    }
+
+    WPRINT_PLATFORM_INFO( ("Detected board strapping is in %s mode!!\n", (is_usb_phy_mode == WICED_TRUE)? "USB-PHY":"HSIC-PHY") );
+    return is_usb_phy_mode;
+}
+
+static wiced_bool_t bcm4390x_is_board_in_usb_host_mode( void )
+{
+    wiced_bool_t is_host_mode = WICED_FALSE;
+
+    if ( (CHIPCOMMON_CHIP_STATUS_REG & CC_CHIP_STATUS_USB20_DEVICE_SELECTION) == 0 )
+    {
+        is_host_mode = WICED_TRUE;
+    }
+
+    WPRINT_PLATFORM_INFO( ("Detected board is in USB %s mode!!\n", (is_host_mode == WICED_TRUE)? "Host":"Device") );
+    return is_host_mode;
+}
+
 WWD_RTOS_DEFINE_ISR( platform_usb_host_isr )
 {
     bcm4390x_usb_host_driver->irq_handler();
 }
 WWD_RTOS_MAP_ISR( platform_usb_host_isr, USB_HOST_ISR )
 
-uint32_t bcm4390x_usb_host_get_irq_number( void )
+platform_result_t platform_usb_host_init( void )
 {
-    return bcm4390x_usb_host_driver->irq_number;
+    if (bcm4390x_is_board_in_usb_phy_mode() == WICED_FALSE)
+    {
+        WPRINT_PLATFORM_INFO( ("Detected board strapping is NOT in USB-PHY mode!!!\n") );
+        return PLATFORM_ERROR;
+    }
+    if (bcm4390x_is_board_in_usb_host_mode() == WICED_FALSE)
+    {
+        WPRINT_PLATFORM_INFO( ("Detected board is NOT in USB Host mode!!!\n") );
+        WPRINT_PLATFORM_INFO( ("Please plug micro-A USB cord on bcm4390x uAB DRD port before board booting!\n") );
+        return PLATFORM_ERROR;
+    }
+
+    bcm4390x_usb_host_enable();
+    bcm4390x_usb_host_power_enable(0);
+    return PLATFORM_SUCCESS;
 }
 
-uint32_t bcm4390x_usb_host_get_enhanced_host_controller_interface_address( void )
+void platform_usb_host_deinit( void )
 {
-    return bcm4390x_usb_host_driver->enhanced_host_controller_interface_registers;
+    bcm4390x_usb_host_disable_irq();
+    bcm4390x_usb_host_disable();
 }
 
-uint32_t bcm4390x_usb_host_get_open_host_controller_interface_address( void )
+platform_result_t platform_usb_host_init_irq( platform_usb_host_irq_handler_t irq_handler )
 {
-    return bcm4390x_usb_host_driver->open_host_controller_interface_registers;
+    bcm4390x_usb_host_map_irq(bcm4390x_usb_host_driver->irq_number);
+
+    if (irq_handler == NULL)
+    {
+        WPRINT_PLATFORM_ERROR( ("Null input!\n") );
+        return PLATFORM_ERROR;
+    }
+    bcm4390x_usb_host_driver->irq_handler = irq_handler;
+
+    //bcm4390x_usb_host_enable_irq();
+
+    return PLATFORM_SUCCESS;
 }
+
+platform_result_t platform_usb_host_enable_irq( void )
+{
+    if (bcm4390x_usb_host_driver->irq_handler == NULL)
+    {
+        WPRINT_PLATFORM_ERROR( ("No irq handler!\n") );
+        return PLATFORM_ERROR;
+    }
+    bcm4390x_usb_host_enable_irq();
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_usb_host_disable_irq( void )
+{
+    bcm4390x_usb_host_disable_irq();
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_usb_host_get_hci_resource( platform_usb_host_hci_resource_t *resource_list_buf, uint32_t buf_size, uint32_t *resource_total_num )
+{
+    uint32_t resource_num = (sizeof(bcm4390x_usb_host_hci_resource_list) / sizeof(bcm4390x_usb_host_hci_resource_list[0]));
+    uint32_t resource_list_size;
+
+    *resource_total_num = 0;
+
+    /* Error checking  */
+    if ((resource_num == 0) || (resource_num > USB_HOST_CONTROLLER_INTERFACE_MAX))
+    {
+        WPRINT_PLATFORM_ERROR( ("Internal error! Check HCI resource list assign\n") );
+        return PLATFORM_ERROR;
+    }
+    if (resource_list_buf == NULL)
+    {
+        WPRINT_PLATFORM_ERROR( ("Null input!\n") );
+        return PLATFORM_ERROR;
+    }
+
+    resource_list_size = (resource_num * sizeof(platform_usb_host_hci_resource_t));
+    if (buf_size < resource_list_size)
+    {
+        WPRINT_PLATFORM_ERROR( ("HCI resource buf size not enough! buf_size=%lu, resource_list_size=%lu\n", buf_size, resource_list_size) );
+        return PLATFORM_ERROR;
+    }
+
+    /* Get HCI resource list and total resource number */
+    memcpy((void *)resource_list_buf, (void *)bcm4390x_usb_host_hci_resource_list, resource_list_size);
+    *resource_total_num = resource_num;
+    WPRINT_PLATFORM_INFO( ("USB Host support %lu HCI resource\n", resource_num) );
+
+    return PLATFORM_SUCCESS;
+}
+

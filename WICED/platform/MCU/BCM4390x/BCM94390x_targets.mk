@@ -8,9 +8,16 @@
 # written permission of Broadcom Corporation.
 #
 
-.PHONY: bootloader download_bootloader no_dct download_dct download
+.PHONY: bootloader download_bootloader no_dct download_dct download ota2_bootloader
 
+# use the ota2 bootloader
+ifeq (1, $(OTA2_SUPPORT))
+NO_TINY_BOOTLOADER_REQUIRED:=1
+BOOTLOADER_TARGET := waf.ota2_bootloader-NoOS-NoNS-$(PLATFORM)-$(BUS)
+else
+#NO_TINY_BOOTLOADER_REQUIRED:=1	#temp
 BOOTLOADER_TARGET := waf.bootloader-NoOS-NoNS-$(PLATFORM)-$(BUS)
+endif # OTA2_SUPPORT
 BOOTLOADER_TARGET_FILE := $(BUILD_DIR)/$(BOOTLOADER_TARGET)/binary/$(BOOTLOADER_TARGET)
 BOOTLOADER_LINK_FILE := $(BUILD_DIR)/$(BOOTLOADER_TARGET)/binary/$(BOOTLOADER_TARGET)$(LINK_OUTPUT_SUFFIX)
 BOOTLOADER_OUT_FILE  := $(BOOTLOADER_LINK_FILE:$(LINK_OUTPUT_SUFFIX)=$(FINAL_OUTPUT_SUFFIX))
@@ -53,7 +60,7 @@ TINY_BOOTLOADER_BIN2C_FILE := $(OUTPUT_DIR)/tiny_bootloader_bin2c.c
 TINY_BOOTLOADER_BIN2C_OBJ  := $(OUTPUT_DIR)/tiny_bootloader_bin2c.o
 TINY_BOOTLOADER_BIN2C_ARRAY_NAME := tinybl_bin
 
-SFLASH_APP_TARGET := waf.sflash_write-NoOS-NoNS-$(PLATFORM)-$(BUS)
+SFLASH_APP_TARGET := waf.sflash_write-NoOS-$(PLATFORM)-$(BUS)
 SFLASH_APP_OUTFILE := $(BUILD_DIR)/$(SFLASH_APP_TARGET)/binary/$(SFLASH_APP_TARGET)
 
 
@@ -72,13 +79,17 @@ endif
 SFLASH_APP_BCM4390 := 43909
 SFLASH_APP_PLATFROM_BUS := $(PLATFORM)-$(BUS)
 
-SFLASH_DCT_LOC:= 0x00008000
-
 # this must be zero as defined in the ROM bootloader
 SFLASH_BOOTLOADER_LOC := 0x00000000
 
+ifeq (1, $(OTA2_SUPPORT))
+include platforms/$(subst .,/,$(PLATFORM))/ota2_image_defines.mk
+SFLASH_DCT_LOC:= $(OTA2_IMAGE_CURR_DCT_1_AREA_BASE)
+SFLASH_FS_LOC := $(OTA2_IMAGE_CURR_FS_AREA_BASE)
+else
+SFLASH_DCT_LOC:= 0x00008000
 SFLASH_FS_LOC := 0x00010000
-
+endif # OTA2_SUPPORT
 
 OPENOCD_LOG_FILE ?= build/openocd_log.txt
 DOWNLOAD_LOG := >> $(OPENOCD_LOG_FILE)
@@ -102,7 +113,11 @@ APPS_LUT_DOWNLOAD_DEP :=
 NO_BOOTLOADER_REQUIRED:=0
 
 # If the current build string is building the bootloader, don't recurse to build another bootloader
-ifneq (,$(findstring waf/bootloader, $(BUILD_STRING)))
+ifneq (,$(findstring waf.bootloader, $(BUILD_STRING)))
+NO_BOOTLOADER_REQUIRED:=1
+endif
+
+ifneq (,$(findstring waf/ota2_bootloader, $(BUILD_STRING)))
 NO_BOOTLOADER_REQUIRED:=1
 endif
 
@@ -112,7 +127,7 @@ NO_BOOTLOADER_REQUIRED:=1
 endif
 
 # Do not include $(TINY_BOOTLOADER_BIN2C_OBJ) if building bootloader/tiny_bootloader/sflash_write
-ifneq (,$(findstring waf/bootloader, $(BUILD_STRING))$(findstring waf/tiny_bootloader, $(BUILD_STRING))$(findstring waf/sflash_write, $(BUILD_STRING)))
+ifneq (,$(findstring waf.bootloader, $(BUILD_STRING))$(findstring waf.tiny_bootloader, $(BUILD_STRING))$(findstring waf.sflash_write, $(BUILD_STRING)))
 NO_TINY_BOOTLOADER_REQUIRED:=1
 endif
 
@@ -159,7 +174,7 @@ copy_bootloader_output_for_eclipse:
 else
 APPS_LUT_DOWNLOAD_DEP += download_bootloader
 bootloader:
-	$(QUIET)$(ECHO) Building Bootloader
+	$(QUIET)$(ECHO) Building Bootloader $(BOOTLOADER_TARGET)
 	$(QUIET)$(MAKE) -r -f $(SOURCE_ROOT)Makefile $(BOOTLOADER_TARGET) -I$(OUTPUT_DIR)  SFLASH= EXTERNAL_WICED_GLOBAL_DEFINES=$(EXTERNAL_WICED_GLOBAL_DEFINES) SUB_BUILD=bootloader $(BOOTLOADER_REDIRECT)
 	$(QUIET)$(PERL) $(TRX_CREATOR) $(BOOTLOADER_LINK_FILE) $(BOOTLOADER_TRX_FILE)
 ifeq (1, $(SECURE_BOOT))
@@ -177,20 +192,20 @@ download_bootloader: bootloader display_map_summary download_dct
 	$(QUIET)$(ECHO) Downloading Bootloader ...
 	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_OPENOCD).cfg -f apps/waf/sflash_write/sflash_write.tcl -c "sflash_write_file $(BOOTLOADER_FINAL_TRX_FILE) $(SFLASH_BOOTLOADER_LOC) $(PLATFORM)-$(BUS) 1 43909" -c shutdown $(DOWNLOAD_LOG) 2>&1
 
-copy_bootloader_output_for_eclipse: build_done
-	$(QUIET)$(call MKDIR, $(BUILD_DIR)/eclipse_debug/)
+copy_bootloader_output_for_eclipse: build_done $(BUILD_DIR)/eclipse_debug
 	$(QUIET)$(CP) $(BOOTLOADER_LINK_FILE) $(BUILD_DIR)/eclipse_debug/last_bootloader.elf
 
 endif
 endif
 
-
+$(BUILD_DIR)/eclipse_debug:
+	$(QUIET)$(call MKDIR, $(BUILD_DIR)/eclipse_debug/)
 
 # DCT Targets
 ifneq (no_dct,$(findstring no_dct,$(MAKECMDGOALS)))
 APPS_LUT_DOWNLOAD_DEP += download_dct
 download_dct: $(FINAL_DCT_FILE) display_map_summary sflash_write_app
-	$(QUIET)$(ECHO) Downloading DCT ...
+	$(QUIET)$(ECHO) Downloading DCT BCM94390x_targets.mk ... $(FINAL_DCT_FILE) @ SFLASH_DCT_LOC=$(SFLASH_DCT_LOC)
 	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_OPENOCD).cfg -f apps/waf/sflash_write/sflash_write.tcl -c "sflash_write_file $(FINAL_DCT_FILE) $(SFLASH_DCT_LOC) $(PLATFORM)-$(BUS) 0 43909" -c shutdown $(DOWNLOAD_LOG) 2>&1
 
 else
@@ -207,8 +222,7 @@ run: $(SHOULD_I_WAIT_FOR_DOWNLOAD)
 	$(QUIET)$(ECHO) Resetting target
 	$(QUIET)$(call CONV_SLASHES,$(OPENOCD_FULL_NAME)) -c "log_output $(OPENOCD_LOG_FILE)" -f $(OPENOCD_PATH)$(JTAG).cfg -f $(OPENOCD_PATH)$(HOST_OPENOCD).cfg  -f $(OPENOCD_PATH)$(HOST_OPENOCD)_gdb_jtag.cfg -c "resume" -c shutdown $(DOWNLOAD_LOG) 2>&1 && $(ECHO) Target running
 
-copy_output_for_eclipse: build_done copy_bootloader_output_for_eclipse
-	$(QUIET)$(call MKDIR, $(BUILD_DIR)/eclipse_debug/)
+copy_output_for_eclipse: build_done $(BUILD_DIR)/eclipse_debug
 	$(QUIET)$(CP) $(LINK_OUTPUT_FILE) $(BUILD_DIR)/eclipse_debug/last_built.elf
 
 
@@ -228,9 +242,15 @@ FS_IMAGE    := $(OUTPUT_DIR)/filesystem.bin
 FILESYSTEM_IMAGE := $(FS_IMAGE)
 
 $(FS_IMAGE): $(STRIPPED_LINK_OUTPUT_FILE) display_map_summary $(STAGING_DIR).d
-	$(QUIET)$(ECHO) Creating Filesystem
+	$(QUIET)$(ECHO) Creating Filesystem BCM94390x_targets.mk ...
+ifeq (1, $(BOOTLOADER_LOAD_MAIN_APP_FROM_FILESYSTEM))
 	$(QUIET)$(CP) $(STRIPPED_LINK_OUTPUT_FILE) $(STAGING_DIR)app.elf
+else
+	$(QUIET)$(RM) $(STAGING_DIR)app.elf
+endif
+	$(QUIET)$(ECHO) $(COMMON_TOOLS_PATH)mk_wicedfs32 $(FS_IMAGE) $(STAGING_DIR)
 	$(QUIET)$(COMMON_TOOLS_PATH)mk_wicedfs32 $(FS_IMAGE) $(STAGING_DIR)
+	$(QUIET)$(ECHO) Creating Filesystem Done
 
 
 ifeq (1, $(SECURE_SFLASH))

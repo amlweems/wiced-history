@@ -199,7 +199,7 @@ uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_le
 {
     uint8_t digits_left;
     char buffer[ 10 ] = "0000000000";
-    max_length = MIN( max_length, sizeof( buffer ) );
+    max_length = (uint8_t) MIN( max_length, sizeof( buffer ) );
     digits_left = max_length;
     while ( ( value != 0 ) && ( digits_left != 0 ) )
     {
@@ -263,7 +263,7 @@ uint8_t unsigned_to_hex_string( uint32_t value, char* output, uint8_t min_length
 {
     uint8_t digits_left;
     char buffer[ 8 ] = "00000000";
-    max_length = MIN( max_length, sizeof( buffer ) );
+    max_length = (uint8_t) MIN( max_length, sizeof( buffer ) );
     digits_left = max_length;
     while ( ( value != 0 ) && ( digits_left != 0 ) )
     {

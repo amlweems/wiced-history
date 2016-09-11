@@ -981,7 +981,7 @@ gmac_enable(ch_t *ch)
 
 	/* WAR to not force ht for 47162 when gmac is in rev mii mode */
 	mode = ((R_REG(ch->osh, &regs->devstatus) & DS_MM_MASK) >> DS_MM_SHIFT);
-	if ((CHIPID(ch->sih->chip) != BCM47162_CHIP_ID) || (mode != 0))
+	if ((CHIPID((ch)->sih->chip) != BCM43909_CHIP_ID) && ((CHIPID(ch->sih->chip) != BCM47162_CHIP_ID) || (mode != 0)))
 		/* request ht clock */
 		OR_REG(ch->osh, &regs->clk_ctl_st, CS_FH);
 

@@ -112,19 +112,25 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
-/* GATT API */
+/* GATT Discover API */
 wiced_result_t restful_smart_discover_all_primary_services              ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node );
 wiced_result_t restful_smart_discover_primary_services_by_uuid          ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const wiced_bt_uuid_t* uuid );
 wiced_result_t restful_smart_discover_characteristics_of_a_service      ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_service_handle_t* service );
 wiced_result_t restful_smart_discover_characteristics_by_uuid           ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const wiced_bt_uuid_t* uuid );
 wiced_result_t restful_smart_discover_characteristic_descriptors        ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
+
+/* GATT Read API */
 wiced_result_t restful_smart_read_characteristic_value                  ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
-wiced_result_t restful_smart_read_characteristic_long_value             ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_read_characteristic_values_by_uuid         ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const wiced_bt_uuid_t* uuid );
-wiced_result_t restful_smart_read_cached_value                          ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
+wiced_result_t restful_smart_read_descriptor_value                      ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, uint16_t descriptor_handle );
+
+/* GATT Write API */
 wiced_result_t restful_smart_write_characteristic_value                 ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const smart_value_handle_t* value );
-wiced_result_t restful_smart_write_long_characteristic_value            ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const smart_value_handle_t* value );
 wiced_result_t restful_smart_write_characteristic_value_without_response( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic, const smart_value_handle_t* value );
+wiced_result_t restful_smart_write_descriptor_value                     ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, uint16_t descriptor_handle, const smart_value_handle_t* value );
+
+/* Notification API */
+wiced_result_t restful_smart_read_cached_value                          ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_enable_notification                        ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_disable_notification                       ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_enable_indication                          ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
@@ -133,13 +139,13 @@ wiced_result_t restful_smart_subscribe_notification                     ( wiced_
 wiced_result_t restful_smart_unsubscribe_notification                   ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_subscribe_indication                       ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
 wiced_result_t restful_smart_unsubscribe_indication                     ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, const smart_characteristic_handle_t* characteristic );
-wiced_result_t restful_smart_write_descriptor_value                     ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, uint16_t descriptor_handle, const smart_value_handle_t* value );
-wiced_result_t restful_smart_read_descriptor_value                      ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node, uint16_t descriptor_handle );
 
 /* GAP API */
 wiced_result_t restful_smart_connect                                    ( wiced_http_response_stream_t* stream, const smart_node_handle_t* node );
 wiced_result_t restful_smart_passive_scan                               ( wiced_http_response_stream_t* stream );
 wiced_result_t restful_smart_active_scan                                ( wiced_http_response_stream_t* stream );
+
+/* Pairing API */
 wiced_result_t restful_smart_start_pairing                              ( wiced_http_response_stream_t* stream, smart_node_handle_t* node_handle, rest_smart_pairing_type_t pairing_type );
 wiced_result_t restful_smart_process_client_pairing_response            ( wiced_http_response_stream_t* stream, smart_node_handle_t* node_handle, rest_smart_client_pairing_response_t* client_response );
 wiced_result_t restful_smart_cancel_pairing                             ( wiced_http_response_stream_t* stream, smart_node_handle_t* node_handle );

@@ -66,9 +66,10 @@ int32_t process_send_actuator( const char* url_path, const char* url_query_strin
 
     wiced_http_response_stream_enable_chunked_transfer( stream );
     data = build_pt_to_multi_act_pkt( reversed_value );
-    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_DATA, data, (tBTM_MESH_VSC_CMPL *) wiced_mesh_vsc_rest_data_cback );
+    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_DATA, data, (wiced_bt_dev_vendor_specific_command_complete_cback_t *) wiced_mesh_vsc_rest_data_cback );
     wiced_http_response_stream_disable_chunked_transfer( stream );
     wiced_http_response_stream_flush( stream );
+    wiced_http_response_stream_disconnect( stream );
     free( value );
     free( reversed_value );
     return 0;
@@ -85,9 +86,10 @@ int32_t process_send_multi_point( const char* url_path, const char* url_query_st
 
     wiced_http_response_stream_enable_chunked_transfer( stream );
     data = build_pt_to_multi_pt_pkt( reversed_value );
-    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_DATA, data, (tBTM_MESH_VSC_CMPL *) wiced_mesh_vsc_rest_data_cback );
+    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_DATA, data, (wiced_bt_dev_vendor_specific_command_complete_cback_t *) wiced_mesh_vsc_rest_data_cback );
     wiced_http_response_stream_disable_chunked_transfer( stream );
     wiced_http_response_stream_flush( stream );
+    wiced_http_response_stream_disconnect( stream );
     free( value );
     free( reversed_value );
     return 0;
@@ -104,9 +106,10 @@ int32_t process_send_p2p( const char* url_path, const char* url_query_string, wi
 
     wiced_http_response_stream_enable_chunked_transfer( stream );
     data = build_pt_to_pt_pkt( reversed_value );
-    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_P2PDATA, data, (tBTM_MESH_VSC_CMPL *) wiced_mesh_vsc_rest_data_cback );
+    send_mesh_command_rest( stream, FLOODMESH_SUB_OCF_SEND_P2PDATA, data, (wiced_bt_dev_vendor_specific_command_complete_cback_t *) wiced_mesh_vsc_rest_data_cback );
     wiced_http_response_stream_disable_chunked_transfer( stream );
     wiced_http_response_stream_flush( stream );
+    wiced_http_response_stream_disconnect( stream );
     free( value );
     free( reversed_value );
     return 0;

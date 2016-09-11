@@ -1,13 +1,14 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
-
+/****************************************************************************
+**
+**  Name        gki_common.h
+**
+**  Function    This file contains GKI private definitions
+**
+**
+**  Copyright (c) 1999-2006, Broadcom Corp., All Rights Reserved.
+**  Proprietary and confidential.
+**
+*****************************************************************************/
 #ifndef GKI_COMMON_H
 #define GKI_COMMON_H
 

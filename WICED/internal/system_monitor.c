@@ -13,8 +13,10 @@
  */
 #include "wiced_platform.h"
 #include "wiced_rtos.h"
+#include "wwd_assert.h"
 #include "RTOS/wwd_rtos_interface.h"
 #include "wiced_framework.h"
+#include "wiced_internal_api.h"
 #include <string.h>
 
 /******************************************************
@@ -58,23 +60,27 @@
  *               Static Function Declarations
  ******************************************************/
 
-void system_monitor_thread_main( void* arg );
-
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
 static wiced_system_monitor_t* system_monitors[MAXIMUM_NUMBER_OF_SYSTEM_MONITORS];
+static wiced_semaphore_t       system_monitor_thread_semaphore;
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-void system_monitor_thread_main( void* arg )
+void system_monitor_thread_main( wiced_thread_arg_t arg )
 {
     UNUSED_PARAMETER(arg);
 
     memset(system_monitors, 0, sizeof(system_monitors));
+
+    if (wiced_rtos_init_semaphore(&system_monitor_thread_semaphore) != WICED_SUCCESS)
+    {
+        wiced_assert("semaphore init failed", 0);
+    }
 
     /* - Can watch threads
      * Each thread can set a counter that is decremented every event.
@@ -105,8 +111,10 @@ void system_monitor_thread_main( void* arg )
             }
         }
         wiced_watchdog_kick();
-        wiced_rtos_delay_milliseconds(DEFAULT_SYSTEM_MONITOR_PERIOD);
+        wiced_rtos_get_semaphore(&system_monitor_thread_semaphore, DEFAULT_SYSTEM_MONITOR_PERIOD);
     }
+
+    wiced_rtos_deinit_semaphore(&system_monitor_thread_semaphore);
 
     WICED_END_OF_CURRENT_THREAD( );
 }
@@ -141,4 +149,9 @@ wiced_result_t wiced_update_system_monitor(wiced_system_monitor_t* system_monito
     }
 
     return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_wakeup_system_monitor_thread(void)
+{
+    return wiced_rtos_set_semaphore(&system_monitor_thread_semaphore);
 }

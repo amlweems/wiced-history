@@ -50,6 +50,32 @@ typedef struct
     void*                       tls_agent_host_workspace;
 } tls_agent_workspace_t;
 
+typedef struct supplicant_peap_state_s
+{
+    eap_type_t              eap_type;
+    besl_result_t           result;
+    supplicant_main_stage_t main_stage;
+    uint8_t                 sub_stage;
+
+    uint8_t                 identity[32];
+    uint8_t                 identity_length;
+
+    uint8_t                 password[32];
+    uint8_t                 password_length;
+} supplicant_peap_state_t;
+
+typedef struct supplicant_mschapv2_identity_s
+{
+    uint8_t*                identity;
+    uint8_t                 identity_length;
+
+    /* in Windows password is UNICODE */
+    uint8_t*                password;
+    uint8_t                 password_length;
+}supplicant_mschapv2_identity_t;
+
+typedef struct supplicant_peap_workspace_s* supplicant_peap_workspace_ptr_t;
+
 typedef struct
 {
     eap_type_t                  eap_type;
@@ -77,6 +103,9 @@ typedef struct
     uint32_t                    buffer_size;
     uint8_t*                    data_start;
     uint8_t*                    data_end;
+
+    /* If type is peap */
+    supplicant_peap_workspace_ptr_t peap;
 } supplicant_workspace_t;
 
 #ifdef __cplusplus

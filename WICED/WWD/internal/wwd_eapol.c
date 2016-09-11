@@ -53,9 +53,16 @@ eapol_packet_handler_t wwd_eapol_packet_handler = NULL;
 
 void wwd_eapol_receive_eapol_packet( /*@only@*/ wiced_buffer_t buffer, wwd_interface_t interface )
 {
-    if ( wwd_eapol_packet_handler != NULL )
+    if ( buffer != NULL )
     {
-        wwd_eapol_packet_handler( buffer, interface );
+        if ( wwd_eapol_packet_handler != NULL )
+        {
+            wwd_eapol_packet_handler( buffer, interface );
+        }
+        else
+        {
+            host_buffer_release( buffer, WWD_NETWORK_RX );
+        }
     }
 }
 

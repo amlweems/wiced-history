@@ -28,6 +28,10 @@ extern uint32_t htobe32(uint32_t v);
 
 #else /* ifdef LINT */
 
+#if defined(WIN32) && !defined(ALWAYS_INLINE)
+#define ALWAYS_INLINE
+#endif
+
 #ifndef htobe16   /* This is defined in POSIX platforms */
 static inline ALWAYS_INLINE uint16_t htobe16(uint16_t v)
 {
@@ -136,6 +140,7 @@ extern void malloc_print_mallocs           ( void );
 #define malloc_transfer_to_curr_thread( block )
 #define malloc_transfer_to_thread( block, thread )
 #define malloc_print_mallocs( void )
+#define malloc_debug_startup_finished( )
 #endif /* ifdef WICED_ENABLE_MALLOC_DEBUG */
 
 /* Define macros to assist operation on host MCUs that require aligned memory access */

@@ -15,11 +15,15 @@
 
 #include "platform_constants.h"
 #include "platform_appscr4.h"
-#include "wwd_constants.h"
-#include "ring_buffer.h"
-#include "RTOS/wwd_rtos_interface.h"
-#include "platform_appscr4.h"
+#include "platform_toolchain.h"
 #include "platform_config.h"
+
+#include "wiced_block_device.h"
+
+#include "wwd_constants.h"
+#include "RTOS/wwd_rtos_interface.h"
+
+#include "ring_buffer.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -43,13 +47,16 @@ extern "C"
 #define PLATFORM_DMA_DESCRIPTORS_SECTION( var )         SECTION( PLATFORM_DMA_DESCRIPTORS_SECTION_NAME( var ) ) var
 
 #define PLATFORM_CAPABILITY_ENAB(capability)            ((platform_capabilities_word & capability) != 0)
+#define PLATFORM_FEATURE_ENAB(_FEATURE_)                (PLATFORM_CAPABILITY_ENAB(PLATFORM_CAPS_##_FEATURE_) && !(PLATFORM_NO_##_FEATURE_))
 
 #if PLATFORM_WLAN_POWERSAVE
 #define PLATFORM_WLAN_POWERSAVE_RES_UP()                       platform_wlan_powersave_res_up()
 #define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force ) platform_wlan_powersave_res_down( check_ready, force )
+#define PLATFORM_WLAN_POWERSAVE_IS_RES_UP()                    platform_wlan_powersave_is_res_up()
 #else
 #define PLATFORM_WLAN_POWERSAVE_RES_UP()
 #define PLATFORM_WLAN_POWERSAVE_RES_DOWN( check_ready, force )
+#define PLATFORM_WLAN_POWERSAVE_IS_RES_UP()                    1
 #endif
 
 #if PLATFORM_WLAN_POWERSAVE && PLATFORM_WLAN_POWERSAVE_STATS
@@ -93,6 +100,10 @@ extern "C"
 /******************************************************
  *                   Enumerations
  ******************************************************/
+
+#define GPIO_TOTAL_PIN_NUMBERS          (32)
+#define PIN_FUNCTION_MAX_COUNT          (12)
+#define PIN_FUNCTION_UNSUPPORTED        (-1)
 
 /*
  * BCM43909 supports pin multiplexing and function selection
@@ -335,16 +346,60 @@ typedef enum
     PIN_FUNCTION_MAX /* Denotes max value. Not a valid pin function */
 } platform_pin_function_t;
 
-/* 43909 pin function configuration values (added as required) */
+/* 43909 pin function index values */
 typedef enum
 {
-    PIN_FUNCTION_CONFIG_GPIO_INPUT_PULL_UP,
-    PIN_FUNCTION_CONFIG_GPIO_INPUT_PULL_DOWN,
-    PIN_FUNCTION_CONFIG_GPIO_INPUT_HIGH_IMPEDANCE,
-    PIN_FUNCTION_CONFIG_GPIO_OUTPUT_PUSH_PULL,
-    PIN_FUNCTION_CONFIG_UNKNOWN,
-    PIN_FUNCTION_CONFIG_MAX /* Denotes max value. Not a valid pin function configuration */
-} platform_pin_function_config_t;
+    PIN_FUNCTION_INDEX_0    = 0,
+    PIN_FUNCTION_INDEX_1    = 1,
+    PIN_FUNCTION_INDEX_2    = 2,
+    PIN_FUNCTION_INDEX_3    = 3,
+    PIN_FUNCTION_INDEX_4    = 4,
+    PIN_FUNCTION_INDEX_5    = 5,
+    PIN_FUNCTION_INDEX_6    = 6,
+    PIN_FUNCTION_INDEX_7    = 7,
+    PIN_FUNCTION_INDEX_8    = 8,
+    PIN_FUNCTION_INDEX_9    = 9,
+    PIN_FUNCTION_INDEX_10   = 10,
+    PIN_FUNCTION_INDEX_11   = 11
+} pin_function_index_t;
+
+/* 43909 pin function selection values (based on PinMux table) */
+typedef enum
+{
+    PIN_FUNCTION_TYPE_GPIO,
+    PIN_FUNCTION_TYPE_GCI_GPIO,
+    PIN_FUNCTION_TYPE_FAST_UART,
+    PIN_FUNCTION_TYPE_UART_DBG,
+    PIN_FUNCTION_TYPE_SECI,
+    PIN_FUNCTION_TYPE_PWM,
+    PIN_FUNCTION_TYPE_RF_SW_CTRL,
+    PIN_FUNCTION_TYPE_SPI0,
+    PIN_FUNCTION_TYPE_SPI1,
+    PIN_FUNCTION_TYPE_I2C0,
+    PIN_FUNCTION_TYPE_I2C1,
+    PIN_FUNCTION_TYPE_I2S,
+    PIN_FUNCTION_TYPE_SDIO,
+    PIN_FUNCTION_TYPE_USB,
+    PIN_FUNCTION_TYPE_JTAG,
+    PIN_FUNCTION_TYPE_MISC,
+    PIN_FUNCTION_TYPE_UNKNOWN,
+    PIN_FUNCTION_TYPE_MAX /* Denotes max value. Not a valid pin function type */
+} platform_pin_function_type_t;
+
+typedef struct
+{
+    platform_pin_function_type_t pin_function_type;
+    platform_pin_function_t      pin_function;
+} platform_pin_function_info_t;
+
+typedef struct
+{
+    platform_pin_t                  pin_pad_name;
+    uint8_t                         gci_chip_ctrl_reg;
+    uint8_t                         gci_chip_ctrl_mask;
+    uint8_t                         gci_chip_ctrl_pos;
+    platform_pin_function_info_t    pin_function_selection[PIN_FUNCTION_MAX_COUNT];
+} platform_pin_internal_config_t;
 
 typedef enum
 {
@@ -363,10 +418,50 @@ typedef enum
 
 typedef enum
 {
-    MCU_POWERSAVE_DEEP_SLEEP,
-    MCU_POWERSAVE_SLEEP,
-    MCU_POWERSAVE_DEFAULT = MCU_POWERSAVE_DEEP_SLEEP
+    PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP,
+    PLATFORM_MCU_POWERSAVE_MODE_SLEEP,
+    PLATFORM_MCU_POWERSAVE_MODE_MAX /* Denotes max value. Not a valid mode */
 } platform_mcu_powersave_mode_t;
+
+typedef enum
+{
+    PLATFORM_MCU_POWERSAVE_CLOCK_ALP_AVAILABLE,    /* ALP clock available to use by backplane and cores. APPS still can go to deep-sleep. */
+    PLATFORM_MCU_POWERSAVE_CLOCK_HT_AVAILABLE,     /* HT clock available to use by backplane and cores. APPS still can go to deep-sleep. */
+    PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ILP, /* At least ILP clock is provided to backplane (if ALP/HT already requested they would be used). APPS remain powered-up. */
+    PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_ALP, /* At least ALP clock is provided to backplane (if HT already requested it would be used). APPS remain powered-up. */
+    PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT,  /* HT clock is provided to backplane. APPS remain powered-up. */
+    PLATFORM_MCU_POWERSAVE_CLOCK_MAX               /* Denotes max value. Not a valid mode */
+} platform_mcu_powersave_clock_t;
+
+typedef enum
+{
+    PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_HIGH_IMPEDANCE,
+    PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_PULL_UP,
+    PLATFORM_MCU_POWERSAVE_GPIO_WAKEUP_CONFIG_PULL_DOWN
+} platform_mcu_powersave_gpio_wakeup_config_t;
+
+typedef enum
+{
+    PLATFORM_GCI_GPIO_IRQ_TRIGGER_FAST_EDGE     = 0x1, /* Please keep elements as power of 2, they can be used to create bit mask */
+    PLATFORM_GCI_GPIO_IRQ_TRIGGER_RISING_EDGE   = 0x2,
+    PLATFORM_GCI_GPIO_IRQ_TRIGGER_FALLING_EDGE  = 0x4,
+    PLATFORM_GCI_GPIO_IRQ_TRIGGER_LEVEL_HIGH    = 0x8
+} platform_gci_gpio_irq_trigger_t;
+
+typedef enum
+{
+    PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_ALWAYS,
+    PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_NEVER,
+    PLATFORM_TICK_POWERSAVE_MODE_TICKLESS_IF_MCU_POWERSAVE_ENABLED,
+    PLATFORM_TICK_POWERSAVE_MODE_MAX /* Denotes max value. Not a valid mode */
+} platform_tick_powersave_mode_t;
+
+typedef enum
+{
+    PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_OFF,
+    PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_WLAN_ON,
+    PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_ON
+} platform_tick_sleep_force_interrupts_mode_t;
 
 /* OTP regions */
 typedef enum
@@ -427,6 +522,7 @@ typedef struct
     host_semaphore_type_t  tx_complete;
     platform_uart_t*       interface;
     wiced_bool_t           hw_flow_control_is_on;
+    uint32_t               rx_overflow;
 } platform_uart_driver_t;
 
 
@@ -470,12 +566,22 @@ typedef struct
     int junk;
 } platform_adc_t;
 
+struct i2c_driver;
+typedef struct i2c_driver i2c_driver_t;
+
+/* GSIO I2C bus driver functions */
+extern const i2c_driver_t i2c_gsio_driver;
+
+/* Bit-Banging I2C bus driver functions */
+extern const i2c_driver_t i2c_bb_driver;
+
 typedef struct
 {
     platform_i2c_port_t                  port;
     uint8_t                              gpio_alternate_function;
     const platform_gpio_t*               pin_scl;
     const platform_gpio_t*               pin_sda;
+    const i2c_driver_t*                  driver;
 } platform_i2c_t;
 
 typedef struct
@@ -572,6 +678,22 @@ typedef enum
     PLATFORM_WLAN_POWERSAVE_STATS_WAIT_UP_TIME
 } platform_wlan_powersave_stats_t;
 
+typedef enum
+{
+    /*
+     * MCU reset implemented as re-setting PMU registers to default state and sequencer to power-on state.
+     * Sequencer means APPS domain is powered-down initially, then powered-up.
+     * Whole state is lost, including SRAM.
+     */
+    PLATFORM_RESET_TYPE_POWERCYCLE,
+
+    /*
+     * MCU reset implemented as backplane reset, and PMU min/max res masks are restored.
+     * Not whole state is lost - SRAM is preserved, some always-on domain state is preserved.
+     */
+    PLATFORM_RESET_TYPE_RESET
+} platform_reset_type_t;
+
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -582,10 +704,6 @@ extern uint32_t platform_capabilities_word;
  *               Function Declarations
  ******************************************************/
 
-
-/* Functions related to platform_pinmux driver */
-platform_result_t platform_pin_function_init    ( platform_pin_t pin, platform_pin_function_t function, platform_pin_function_config_t config );
-platform_result_t platform_pin_function_deinit  ( platform_pin_t pin, platform_pin_function_t function );
 /* Call this from GPIO interrupt handler */
 void              platform_gpio_irq             ( void );
 
@@ -607,6 +725,24 @@ void              platform_chipcommon_enable_irq  ( void );
  * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
 */
 uint32_t          platform_gci_chipcontrol      ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+/*
+ * Set specific GCI gpiocontrol register.
+ * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
+*/
+uint32_t          platform_gci_gpiocontrol      ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+/*
+ * Set specific GCI gpiostatus register.
+ * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
+*/
+uint32_t          platform_gci_gpiostatus       ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
+
+/*
+ * Set specific GCI gpiowakemask register.
+ * Function atomically read register reg_offset, clear all bits found in clear_mask, then set all bits found in set_mask. And finally write back result.
+*/
+uint32_t          platform_gci_gpiowakemask     ( uint8_t reg_offset, uint32_t clear_mask, uint32_t set_mask );
 
 /*
  * Return value of specific GCI chipstatus register.
@@ -666,15 +802,33 @@ void              platform_cores_powersave_init ( void );
 
 platform_result_t platform_mcu_powersave_init         ( void );
 
-void              platform_mcu_powersave_set_mode     ( platform_mcu_powersave_mode_t mode );
-
 void              platform_mcu_powersave_warmboot_init( void );
 
 wiced_bool_t      platform_mcu_powersave_is_warmboot  ( void );
 
+wiced_bool_t      platform_mcu_powersave_is_permitted ( void );
+
+void              platform_mcu_powersave_sleep        ( uint32_t ticks, platform_tick_sleep_force_interrupts_mode_t mode );
+
+void              platform_mcu_powersave_set_mode     ( platform_mcu_powersave_mode_t mode );
+
+void              platform_mcu_powersave_set_tick_mode( platform_tick_powersave_mode_t mode );
+
+void              platform_mcu_powersave_request_clock( platform_mcu_powersave_clock_t clock );
+
+void              platform_mcu_powersave_release_clock( platform_mcu_powersave_clock_t clock );
+
+platform_mcu_powersave_mode_t  platform_mcu_powersave_get_mode                 ( void );
+
+platform_tick_powersave_mode_t platform_mcu_powersave_get_tick_mode            ( void );
+
+uint32_t                       platform_mcu_powersave_get_clock_request_counter( platform_mcu_powersave_clock_t clock );
+
 wiced_bool_t      platform_wlan_powersave_res_up   ( void );
 
 wiced_bool_t      platform_wlan_powersave_res_down ( wiced_bool_t(*check_ready)(void), wiced_bool_t force );
+
+wiced_bool_t      platform_wlan_powersave_is_res_up( void );
 
 void              platform_wlan_powersave_res_event( void );
 
@@ -682,13 +836,32 @@ uint32_t          platform_wlan_powersave_get_stats( platform_wlan_powersave_sta
 
 uint32_t          platform_reference_clock_get_freq( platform_reference_clock_t clock );
 
-uint32_t          platform_tick_sleep           ( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission );
+uint32_t          platform_tick_sleep_rtos      ( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t powersave_permission );
+
+uint32_t          platform_tick_sleep_force     ( platform_tick_sleep_idle_func idle_func, uint32_t ticks, platform_tick_sleep_force_interrupts_mode_t mode );
 
 void              platform_tick_execute_command ( platform_tick_command_t command );
 
 void              platform_sflash_init          ( void );
 
 platform_result_t platform_hibernation_init     ( const platform_hibernation_t* hib );
+
+void              platform_mcu_specific_reset   ( platform_reset_type_t type ) NORETURN;
+
+wiced_bool_t      platform_boot_is_reset        ( void );
+
+wiced_bool_t      platform_is_init_completed    ( void );
+
+uint32_t          platform_ddr_get_size         ( void );
+
+platform_result_t platform_watchdog_kick_seconds( uint32_t seconds );
+
+platform_result_t platform_mcu_powersave_gpio_wakeup_enable     ( platform_mcu_powersave_gpio_wakeup_config_t config );
+void              platform_mcu_powersave_gpio_wakeup_ack        ( void );
+void              platform_mcu_powersave_gpio_wakeup_disable    ( void );
+platform_result_t platform_mcu_powersave_gci_gpio_wakeup_enable ( platform_pin_t gpio_pin, platform_mcu_powersave_gpio_wakeup_config_t config, platform_gci_gpio_irq_trigger_t trigger );
+void              platform_mcu_powersave_gci_gpio_wakeup_disable( platform_pin_t gpio_pin );
+void              platform_mcu_powersave_gci_gpio_wakeup_ack    ( platform_pin_t gpio_pin );
 
 /* Functions related to platform OTP driver */
 platform_result_t platform_otp_init             ( void );
@@ -705,10 +878,18 @@ platform_result_t platform_otp_avsbitslen       ( uint16_t* avsbitslen );
 platform_result_t platform_otp_cis_parse        ( platform_otp_region_t region, platform_otp_cis_parse_callback_func callback, void* context );
 platform_result_t platform_otp_read_tag         ( platform_otp_region_t region, uint8_t tag, void* data, uint16_t* byte_len );
 platform_result_t platform_otp_package_options  ( uint32_t* package_options );
+platform_result_t platform_otp_read_word_unprotected   (uint32_t word_number, uint16_t *read_word);
 #ifdef OTP_DEBUG
 platform_result_t platform_otp_dump             ( void );
 platform_result_t platform_otp_dumpstats        ( void );
 #endif
+
+typedef struct
+{
+    wiced_block_device_write_mode_t write_mode;
+} ddr_block_device_specific_data_t;
+
+extern const wiced_block_device_driver_t ddr_block_device_driver;
 
 #ifdef __cplusplus
 } /* extern "C" */

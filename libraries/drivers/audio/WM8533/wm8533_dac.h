@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "wiced_platform.h"
 #include "platform.h"
+#include "platform_audio.h"
 #include "wwd_constants.h"
 
 #ifdef __cplusplus
@@ -30,6 +31,23 @@ extern "C" {
 
 #define WM8533_FMT_MASTER_MASK      (0x3)
 
+/* standard audio device info */
+
+/* standard audio device information */
+#define WM8533_DAC_NAME         "WM8533_dac"
+#define WM8533_DAC_DIRECTION    PLATFORM_AUDIO_DEVICE_OUTPUT
+#define WM8533_DAC_PORT_TYPE    PLATFORM_AUDIO_LINE
+#define WM8533_DAC_CHANNELS     2
+#define WM8533_DAC_SIZES        (PLATFORM_AUDIO_SAMPLE_SIZE_16_BIT | PLATFORM_AUDIO_SAMPLE_SIZE_24_BIT)
+#define WM8533_DAC_RATES        (PLATFORM_AUDIO_SAMPLE_RATE_8KHZ    | PLATFORM_AUDIO_SAMPLE_RATE_32KHZ |    \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_44_1KHZ | PLATFORM_AUDIO_SAMPLE_RATE_48KHZ |    \
+                                 PLATFORM_AUDIO_SAMPLE_RATE_96KHZ   | PLATFORM_AUDIO_SAMPLE_RATE_192KHZ)
+
+#define AUDIO_DEVICE_ID_WM8533_DAC_LINE_INFO                \
+        { AUDIO_DEVICE_ID_WM8533_DAC_LINE, WM8533_DAC_NAME, \
+          WM8533_DAC_DESCRIPTION, WM8533_DAC_DIRECTION,     \
+          WM8533_DAC_PORT_TYPE, WM8533_DAC_CHANNELS,        \
+          WM8533_DAC_SIZES, WM8533_DAC_RATES }
 
 /******************************************************
  *                 Type Definitions
@@ -239,7 +257,7 @@ typedef struct
  ******************************************************/
 wiced_result_t wm8533_platform_configure( wm8533_device_data_t *device_data, uint32_t mclk, uint32_t fs, uint8_t width );
 
-wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const char* name );
+wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const platform_audio_device_id_t device_id );
 
 #ifdef __cplusplus
 } /* extern "C" */

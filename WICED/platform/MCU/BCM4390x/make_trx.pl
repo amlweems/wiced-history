@@ -149,7 +149,7 @@ if ( ( ( $elf{"entry_point"} - $first_address ) > 255 ) || ( ( $elf{"entry_point
 
 if ( ( $first_address & 0xff ) != 0 )
 {
-    die "The first address of the Bootloader in RAM must be 8 bit aligned to fit in the TRX header";
+    die sprintf( "The first address of the Bootloader in RAM (0x%x) must be 8 bit aligned to fit in the TRX header ", $first_address);
 }
 
 seek $out_file, 0, SEEK_SET;

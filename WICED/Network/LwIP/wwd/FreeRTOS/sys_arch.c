@@ -373,12 +373,11 @@ sys_arch_timeouts(void)
  * thread() function. The id of the new thread is returned. Both the id and
  * the priority are system dependent.
  */
-/*@null@*/ sys_thread_t sys_thread_new( const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio )
+/*@null@*/ int sys_thread_new( const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio, sys_thread_t* thread_out )
 {
-    TaskHandle_t created_task;
     signed portBASE_TYPE result;
     /* The first time this is called we are creating the lwIP handler. */
-    result = xTaskCreate( thread, name, (unsigned short) stacksize, arg, (unsigned portBASE_TYPE) prio, &created_task );
+    result = xTaskCreate( thread, name, (unsigned short) (stacksize / sizeof( portSTACK_TYPE )), arg, (unsigned portBASE_TYPE) prio, thread_out );
 
 #if LWIP_SYS_ARCH_TIMEOUTS
     /* For each task created, store the task handle (pid) in the timers array.
@@ -387,14 +386,7 @@ sys_arch_timeouts(void)
     timeout_list[next_thread++].pid = created_task;
 #endif /* if LWIP_SYS_ARCH_TIMEOUTS */
 
-    if ( result == pdPASS )
-    {
-        return created_task;
-    }
-    else
-    {
-        return NULL;
-    }
+    return ( result == pdPASS )? 0 : -1;
 }
 
 void sys_thread_exit( void )
@@ -403,10 +395,10 @@ void sys_thread_exit( void )
     vTaskDelete(NULL);
 }
 
-void sys_thread_free( sys_thread_t task )
+void sys_thread_free( sys_thread_t* task )
 {
 #if ( configFREE_TASKS_IN_IDLE == 0 )
-    vTaskFreeTerminated( task );
+    vTaskFreeTerminated( *task );
 #endif /* if ( configFREE_TASKS_IN_IDLE == 0 ) */
 }
 

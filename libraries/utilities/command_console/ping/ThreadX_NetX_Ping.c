@@ -38,7 +38,7 @@
  *                    Constants
  ******************************************************/
 
-#define PING_RCV_TIMEO ( 1000 ) /* ping receive timeout - in milliseconds */
+#define PING_RCV_TIMEO        ( 1000 )  /* ping receive timeout - in milliseconds */
 #define PING_MAX_PAYLOAD_SIZE ( 10000 ) /* ping max size */
 #define ENABLE_LONG_PING /* Long ping enabled by default */
 
@@ -55,16 +55,16 @@
  ******************************************************/
 
 /******************************************************
- *               Variable Definitions
- ******************************************************/
-
-static const uint8_t const long_ping_payload[PING_MAX_PAYLOAD_SIZE] = { 0 };
-
-/******************************************************
  *               Static Function Declarations
  ******************************************************/
 
 static UINT  my_nx_icmp_ping(NX_IP *ip_ptr, ULONG ip_address, CHAR *data_ptr, ULONG data_size, NX_PACKET **response_ptr, ULONG wait_option);
+
+/******************************************************
+ *               Variable Definitions
+ ******************************************************/
+
+static const uint8_t const long_ping_payload[PING_MAX_PAYLOAD_SIZE] = { 0 };
 
 /******************************************************
  *               Function Definitions
@@ -73,9 +73,12 @@ static UINT  my_nx_icmp_ping(NX_IP *ip_ptr, ULONG ip_address, CHAR *data_ptr, UL
 int ping( int argc, char *argv[] )
 {
     wiced_ip_address_t ping_target;
-    NX_PACKET* response_ptr;
-    char*      data_ptr      = NULL;
-    uint32_t   data_length   = 0;
+    NX_PACKET*         response_ptr;
+    char*              data_ptr    = NULL;
+    uint32_t           data_length = 0;
+    wiced_interface_t  interface   = WICED_STA_INTERFACE; /* Default interface for this ping function */
+    NX_IP*             ip_handle;
+    NX_INTERFACE*      nx_interface;
 
     if ( argc == 1 )
     {
@@ -96,6 +99,27 @@ int ping( int argc, char *argv[] )
                                              (unsigned char) ( ( ping_target.ip.v4 >>  8 ) & 0xff ),
                                              (unsigned char) ( ( ping_target.ip.v4 >>  0 ) & 0xff ) ));
 
+    /* Try to match the target IP address to an interface by comparing it with the network that is assigned to each interface.
+     * Note that if more than one interface is mapped to the same IP subnet then this will match the first one found.
+     */
+    for ( i = 0; i < WICED_INTERFACE_MAX; i++ )
+    {
+        ip_handle = &IP_HANDLE( i );
+        if ( ip_handle != NULL )
+        {
+            nx_interface = &ip_handle->nx_ip_interface[0];
+            /* Check that the interface has an assigned subnet */
+            if ( ( nx_interface->nx_interface_ip_network_mask != 0 ) && ( nx_interface->nx_interface_ip_network != 0 ) )
+            {
+                /* Match the network portion of the target address */
+                if ( ( ping_target.ip.v4 & (uint32_t)nx_interface->nx_interface_ip_network_mask ) == (uint32_t)nx_interface->nx_interface_ip_network )
+                {
+                    interface = i;
+                    break;
+                }
+            }
+        }
+    }
 
     for (i = 2; i < argc; i++ )
     {
@@ -159,22 +183,9 @@ int ping( int argc, char *argv[] )
         /* Send ping and wait for reply */
         send_time = host_rtos_get_time( );
 
-        // Try STA interface first, then AP interface
-        if ( wwd_wifi_is_ready_to_transceive( WWD_STA_INTERFACE ) == WWD_SUCCESS )
+        if ( wwd_wifi_is_ready_to_transceive( interface ) == WWD_SUCCESS )
         {
-            status = my_nx_icmp_ping( &IP_HANDLE( WICED_STA_INTERFACE ), ping_target.ip.v4, data_ptr, data_length, &response_ptr, PING_RCV_TIMEO * SYSTICK_FREQUENCY / 1000 );
-        }
-        if ( ( wwd_wifi_is_ready_to_transceive( WWD_AP_INTERFACE ) == WWD_SUCCESS ) && ( status != NX_SUCCESS ) )
-        {
-            status = my_nx_icmp_ping( &IP_HANDLE( WICED_AP_INTERFACE ), ping_target.ip.v4, data_ptr, data_length, &response_ptr, PING_RCV_TIMEO * SYSTICK_FREQUENCY / 1000 );
-        }
-        if ( ( wwd_wifi_is_ready_to_transceive( WWD_P2P_INTERFACE ) == WWD_SUCCESS ) && ( status != NX_SUCCESS ) )
-        {
-            status = my_nx_icmp_ping( &IP_HANDLE( WICED_P2P_INTERFACE ), ping_target.ip.v4, data_ptr, data_length, &response_ptr, PING_RCV_TIMEO * SYSTICK_FREQUENCY / 1000 );
-        }
-        if ( ( wwd_wifi_is_ready_to_transceive( WWD_P2P_INTERFACE ) == WWD_SUCCESS ) && ( status != NX_SUCCESS ) )
-        {
-            status = my_nx_icmp_ping( &IP_HANDLE( WICED_P2P_INTERFACE ), ping_target.ip.v4, data_ptr, data_length, &response_ptr, PING_RCV_TIMEO * SYSTICK_FREQUENCY / 1000 );
+            status = my_nx_icmp_ping( &IP_HANDLE( interface ), ping_target.ip.v4, data_ptr, data_length, &response_ptr, PING_RCV_TIMEO * SYSTICK_FREQUENCY / 1000 );
         }
 
         reply_time = host_rtos_get_time( );
@@ -194,9 +205,9 @@ int ping( int argc, char *argv[] )
             WPRINT_APP_INFO(("Ping error\r\n"));
         }
         num--;
-        if ( ( num > 0 ) || ( continuous == WICED_TRUE ) )
+        if ( ( ( num > 0 ) || ( continuous == WICED_TRUE ) ) && ( ( send_time + interval ) > reply_time ) )
         {
-            wiced_rtos_delay_milliseconds( interval ); // This is simple and should probably wait for a residual period
+            wiced_rtos_delay_milliseconds( ( send_time + interval ) - reply_time );
         }
     }
 
@@ -303,7 +314,7 @@ TX_THREAD       *thread_ptr;
     {
 
         /* Release the packet.  */
-        _nx_packet_release(request_ptr);
+        nx_packet_release(request_ptr);
 
         /* Error, the data area is too big for the default packet payload.  */
         return(NX_OVERFLOW);
@@ -321,7 +332,10 @@ TX_THREAD       *thread_ptr;
     /* Was the data copy successful?  */
     if (status)
     {
-        printf("%s: data_append error\n", __FUNCTION__);
+        /* Release the packet.  */
+        nx_packet_release(request_ptr);
+
+        WPRINT_APP_INFO(("%s: data_append error\n", __FUNCTION__));
         return(status);
     }
 #else
@@ -336,6 +350,9 @@ TX_THREAD       *thread_ptr;
     /* Find a suitable interface for sending the ping packet. */
     if(_nx_ip_route_find(ip_ptr, ip_address, &request_ptr -> nx_packet_ip_interface, &request_ptr -> nx_packet_next_hop_address) != NX_SUCCESS)
     {
+        /* Release the packet.  */
+        nx_packet_release(request_ptr);
+
         return(NX_IP_ADDRESS_ERROR);
     }
 

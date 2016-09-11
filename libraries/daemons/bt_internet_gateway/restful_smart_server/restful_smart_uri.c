@@ -273,10 +273,10 @@ int32_t read_characteristic_value( const char* url_path, const char* url_query_s
                 PRINT_REST_API( "Read latest cached value\n" );
                 result = restful_smart_read_cached_value( stream, &node, &characteristic );
             }
-            else if ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_LONG, REST_PARAMETER_VALUE_1 ) )
+            else if ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_LONG, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS )
             {
                 PRINT_REST_API( "Read long characteristic value\n" );
-                result = restful_smart_read_characteristic_long_value( stream, &node, &characteristic );
+                result = restful_smart_read_characteristic_value( stream, &node, &characteristic );
             }
             break;
         case 2:
@@ -388,6 +388,11 @@ int32_t write_characteristic_value( const char* url_path, const char* url_query_
                 PRINT_REST_API( "Write characteristic value without response\n" );
                 result = restful_smart_write_characteristic_value_without_response( stream, &node, &characteristic, value );
             }
+            else if ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_LONG, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS )
+            {
+                PRINT_REST_API( "Write long characteristic value\n" );
+                result = restful_smart_write_characteristic_value( stream, &node, &characteristic, value );
+            }
             break;
         default:
             break;
@@ -473,8 +478,10 @@ int32_t read_descriptor_value( const char* url_path, const char* url_query_strin
     wiced_result_t result = WICED_BADARG;
     smart_node_handle_t node;
     uint16_t descriptor;
+    uint32_t parameter_count;
 
-    VERIFY_PARAMETER_COUNT( 0 );
+    parameter_count = wiced_http_get_query_parameter_count( url_query_string );
+    VERIFY_CONDITION( parameter_count <= 1 );
     VERIFY_METHOD( WICED_HTTP_GET_REQUEST );
 
     parse_node_handle( url_path, &node );
@@ -483,7 +490,8 @@ int32_t read_descriptor_value( const char* url_path, const char* url_query_strin
     PRINT_REST_API( "Read descriptor value\n" );
     result = restful_smart_read_descriptor_value( stream, &node, descriptor );
 
-    exit: if ( result == WICED_BADARG )
+    exit:
+    if ( result == WICED_BADARG )
     {
         send_error_response_header( stream, result );
     }
@@ -497,8 +505,10 @@ int32_t write_descriptor_value( const char* url_path, const char* url_query_stri
     smart_value_handle_t* value = NULL;
     smart_node_handle_t node;
     uint16_t descriptor;
+    uint32_t parameter_count;
 
-    VERIFY_PARAMETER_COUNT( 0 );
+    parameter_count = wiced_http_get_query_parameter_count( url_query_string );
+    VERIFY_CONDITION( parameter_count <= 1 );
     VERIFY_METHOD( WICED_HTTP_PUT_REQUEST );
 
     if ( create_value_handle( url_path, &value ) != WICED_SUCCESS )
@@ -513,7 +523,8 @@ int32_t write_descriptor_value( const char* url_path, const char* url_query_stri
     PRINT_REST_API( "Write descriptor value\n" );
     result = restful_smart_write_descriptor_value( stream, &node, descriptor, value );
 
-    exit: if ( value != NULL )
+    exit:
+    if ( value != NULL )
     {
         delete_value_handle( value );
     }
@@ -841,7 +852,8 @@ static wiced_result_t create_value_handle( const char* url_path, smart_value_han
 
     memset( *value, 0, sizeof(smart_value_handle_t) + temp );
     ( *value )->length = temp;
-    for ( a = 0, b = ( ( *value )->length - 1 ) * 2; a < ( *value )->length; a++, b -= 2 )
+    /* Value is parsed in network byte order */
+    for ( a = 0, b = 0; a < ( *value )->length; a++, b += 2 )
     {
         string_to_unsigned( &current_path[ b ], 2, &temp, 1 );
         ( *value )->value[ a ] = (uint8_t) ( temp & 0xff );

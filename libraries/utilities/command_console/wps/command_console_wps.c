@@ -170,6 +170,13 @@ int join_wps( int argc, char* argv[] )
         {
             return ERR_UNKNOWN;
         }
+
+        if ( result != WICED_SUCCESS )
+        {
+            WPRINT_APP_INFO(("Enrollee PIN mode failure\n"));
+            return ERR_UNKNOWN;
+        }
+
     }
     else if ( strcmp( argv[1], "pbc" ) == 0 )
     {
@@ -361,6 +368,12 @@ int start_registrar( int argc, char* argv[] )
                 }
                 WPRINT_APP_INFO(("Starting Registrar in PIN mode\n"));
                 result = internal_start_registrar(WICED_WPS_PIN_MODE, &registrar_details, pin, &credential, 1);
+
+                if ( result != WICED_SUCCESS )
+                {
+                    WPRINT_APP_INFO(("Registrar PIN mode failure\n"));
+                    return ERR_UNKNOWN;
+                }
             }
             else
             {

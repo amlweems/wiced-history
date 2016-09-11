@@ -76,7 +76,8 @@ extern "C" {
         RESULT_ENUM( prefix, FAILED_ON_SECURITY,        8046 ),   /* security failed                   */                       \
         RESULT_ENUM( prefix, REPEATED_ATTEMPTS,         8047 ),   /* repeated attempts for LE security requests */              \
         RESULT_ENUM( prefix, MODE4_LEVEL4_NOT_SUPPORTED,8048 ),    /* Secure Connections Only Mode can't be supported */        \
-        RESULT_ENUM( prefix, USE_DEFAULT_SECURITY,      8049 ),   /**< Use  default security*/
+        RESULT_ENUM( prefix, USE_DEFAULT_SECURITY,      8049 ),   /**< Use  default security*/                                  \
+        RESULT_ENUM( prefix, KEY_MISSING,               8050 ),   /**< Key Missing */
 
 /******************************************************
  *                   Enumerations

@@ -21,6 +21,9 @@
  ******************************************************/
 
 #define UTC_TIME_TO_TIME( utc_time ) ( utc_time / 1000 )
+#define BASE_UTC_YEAR (1970)
+#define IS_LEAP_YEAR( year ) ( ( ( year ) % 400 == 0 ) || \
+                             ( ( ( year ) % 100 != 0 ) && ( ( year ) % 4 == 0 ) ) )
 
 /******************************************************
  *                    Constants
@@ -30,7 +33,7 @@
 #define SECONDS_IN_A_DAY         (86400)
 #define SECONDS_IN_A_HOUR        (3600)
 #define SECONDS_IN_A_MINUTE      (60)
-static const uint32_t secondsPerMonth[12] =
+static const uint32_t secondsPerMonth[ 12 ] =
 {
     31*SECONDS_IN_A_DAY,
     28*SECONDS_IN_A_DAY,
@@ -109,12 +112,20 @@ wiced_result_t wiced_time_set_utc_time_ms( const wiced_utc_time_ms_t* utc_time_m
     return WICED_SUCCESS;
 }
 
+
 wiced_result_t wiced_time_get_iso8601_time(wiced_iso8601_time_t* iso8601_time)
 {
     wiced_utc_time_ms_t utc_time_ms;
+
+    wiced_time_get_utc_time_ms( &utc_time_ms );
+    return wiced_time_convert_utc_ms_to_iso8601( utc_time_ms, iso8601_time );
+}
+
+wiced_result_t wiced_time_convert_utc_ms_to_iso8601( wiced_utc_time_ms_t utc_time_ms, wiced_iso8601_time_t* iso8601_time )
+{
     uint32_t            a;
     uint16_t            year;
-    uint8_t             number_of_leap_years;
+    uint16_t            number_of_leap_years;
     uint8_t             month;
     uint8_t             day;
     uint8_t             hour;
@@ -123,27 +134,37 @@ wiced_result_t wiced_time_get_iso8601_time(wiced_iso8601_time_t* iso8601_time)
     uint16_t            sub_second;
     wiced_bool_t        is_a_leap_year;
 
-    wiced_time_get_utc_time_ms( &utc_time_ms );
-
     second     = utc_time_ms / 1000;               /* Time is in milliseconds. Convert to seconds */
-    sub_second = (uint16_t) (( utc_time_ms % 1000 ) * 1000 ); /* Sub-second is in microseconds               */
+    sub_second = (uint16_t) ( ( utc_time_ms % 1000 ) * 1000 ); /* Sub-second is in microseconds               */
 
     /* Calculate year */
-    year = (uint16_t)( 1970 + second / SECONDS_IN_365_DAY_YEAR );
-    number_of_leap_years = (uint8_t) (( year - 1968 - 1 ) / 4 );
-    second -= (uint64_t)( (uint64_t)( year - 1970 ) * SECONDS_IN_365_DAY_YEAR );
-    if ( second > ( number_of_leap_years * SECONDS_IN_A_DAY ) )
+    year = (uint16_t)( BASE_UTC_YEAR + second / SECONDS_IN_365_DAY_YEAR );
+    number_of_leap_years = ( uint16_t )( ( ( year - ( BASE_UTC_YEAR - ( BASE_UTC_YEAR % 4 ) + 1 ) ) / 4 ) -
+                           ( ( year - ( BASE_UTC_YEAR - ( BASE_UTC_YEAR % 100 ) + 1 ) ) / 100 ) +
+                           ( ( year - ( BASE_UTC_YEAR - ( BASE_UTC_YEAR % 400 ) + 1 ) ) / 400 ) );
+    second -= (uint64_t)( (uint64_t)( year - BASE_UTC_YEAR ) * SECONDS_IN_365_DAY_YEAR );
+
+    if ( second >= ( uint64_t )( number_of_leap_years * SECONDS_IN_A_DAY ) )
     {
         second -= (uint64_t) ( ( number_of_leap_years * SECONDS_IN_A_DAY ) );
     }
     else
     {
-        second -= (uint64_t) ( ( number_of_leap_years * SECONDS_IN_A_DAY ) + SECONDS_IN_365_DAY_YEAR );
-        --year;
+        do
+        {
+            second += SECONDS_IN_365_DAY_YEAR;
+            year--;
+            if ( IS_LEAP_YEAR( year ) )
+            {
+                second += SECONDS_IN_A_DAY;
+            }
+        } while ( second < ( uint64_t )( number_of_leap_years * SECONDS_IN_A_DAY ) );
+
+        second -= ( uint64_t )( number_of_leap_years * SECONDS_IN_A_DAY );
     }
 
     /* Remember if the current year is a leap year */
-    is_a_leap_year = ( ( year - 1968 ) % 4 == 0 ) ? WICED_TRUE : WICED_FALSE;
+    is_a_leap_year = ( IS_LEAP_YEAR( year ) ) ? WICED_TRUE : WICED_FALSE;
 
     /* Calculate month */
     month = 1;
@@ -156,7 +177,7 @@ wiced_result_t wiced_time_get_iso8601_time(wiced_iso8601_time_t* iso8601_time)
         {
             seconds_per_month += SECONDS_IN_A_DAY;
         }
-        if ( second > seconds_per_month )
+        if ( second >= seconds_per_month )
         {
             second -= seconds_per_month;
             month++;

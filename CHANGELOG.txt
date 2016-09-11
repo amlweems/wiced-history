@@ -2,6 +2,60 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.5.2
+* Applications
+ * Added Bluetooth Handsfree profile support to Airplay-BT Combo application
+   * Seamless switchover between music streaming and voice calls
+ * Bluetooth dual-mode server reference application
+   * Features simultaneous GATT based proximity reporter and RFCOMM server
+ * BIG Mesh Android lighting application (BETA version) to provision and manage BCM20737 lighting mesh tags
+ * Improved stability during Airplay and Bluetooth audio switching
+* Libraries, Protocols, Drivers
+ * Added DTLS library
+ * Added support for Handsfree profile v1.6 to wiced_bt profile library
+   * Features outgoing and incoming call handling
+ * Added wiced_bt_stack_deinit API to shutdown the Bluetooth stack
+ * Low power mode support for BTEWICED_LE stack
+ * General iperf throughput optimizations on WiFi interface 
+ * Added I2C bit banging driver for 4390x
+ * Added support for USB OHCI isochronous transfer
+ * Added secondary OTA and Factory Reset Support (OTA2)
+   * enhanced functionality for updating more system components
+ * Added CRC and Sequence number to system DCT
+* New Platforms
+   * BCM43907AEVAL2F_1
+   * BCM943903PS
+
+Changes for WICED-SDK 3.5.1
+* Applications
+ * Fixed an issue with JTAG single step for 4390X
+ * Updated Eclipse to fix the issue where JTAG step into/step over jumps to external interrupt vector
+* Libraries, Protocols, Drivers
+ * Changed NetX_Duo library to improve TCP throughput. TCP window size can now be specified by application.
+ * Changed WWD driver to improve UDP throughput
+ * Fixed 4390X USB OHCI interrupt transfer issue
+
+Changes for WICED-SDK 3.5.0
+* Applications
+ * Added AWS IOT demo applications
+  * New applications for 4390X
+    * test.apps_sleep
+    * test.diagnostics
+    * test.powersave
+ * New PRNG implementation
+* Platforms
+   * BCM943907AEVAL1F_1
+   * BCM943903WCD1_1
+* Libraries, Protocols, Drivers
+ * Added COAP library
+ * For 4390X
+   * Deep Sleep support
+   * Secure boot support
+   * USB-X and File-X libaries
+   * USB host driver
+   * SDIO host driver   
+   * New WLAN firmware (7.15.168.50) with support for DFS in SoftAP mode, Antenna Diversity and Low Power Mode
+
 Changes for WICED-SDK 3.4.0
 * Applications
   * snip.mqtt_publisher and snip.mqtt_subscriber replaced with new snip.mqtt app

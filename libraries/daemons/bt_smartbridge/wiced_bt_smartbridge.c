@@ -18,13 +18,10 @@
 #include "wiced_bt_ble.h"
 #include "wiced_bt_cfg.h"
 
-#include "bt_smart_gatt.h"
-
-#include "bt_transport_thread.h"
 #include "bt_smartbridge_socket_manager.h"
 #include "bt_smartbridge_att_cache_manager.h"
-#include "smartbridge_helper.h"
-#include "smartbridge_stack_if.h"
+#include "bt_smartbridge_helper.h"
+#include "bt_smartbridge_stack_interface.h"
 
 /******************************************************
  *                      Macros
@@ -34,26 +31,9 @@
  *                    Constants
  ******************************************************/
 
-#define SOCKET_STATE_DISCONNECTED              ( 0 )
-#define SOCKET_STATE_LINK_CONNECTED            ( 1 )
-#define SOCKET_STATE_LINK_ENCRYPTED            ( 2 )
-
-#define SOCKET_ACTION_HOST_CONNECT             ( 1 << 0 )
-#define SOCKET_ACTION_HOST_DISCONNECT          ( 1 << 2 )
-#define SOCKET_ACTION_INITIATE_PAIRING         ( 1 << 3 )
-#define SOCKET_ACTION_ENCRYPT_USING_BOND_INFO  ( 1 << 4 )
-
 #define SOCKET_INVALID_CONNECTION_HANDLE       ( 0xFFFF )
 
 #define MAX_CONNECTION_TIMEOUT                 ( 10000 )
-
-#define NODE_BUFFER_LENGTH           (14)
-#define SERVICE_BUFFER_LENGTH        (9)
-#define CHARACTERISTIC_BUFFER_LENGTH (13)
-#define DESCRIPTOR_BUFFER_LENGTH     (5)
-#define UUID_BUFFER_LENGTH           (33)
-#define BD_ADDR_BUFFER_LENGTH        (13)
-
 
 /******************************************************
  *                   Enumerations
@@ -71,77 +51,27 @@
  *               Static Function Declarations
  ******************************************************/
 
-
-wiced_result_t smartbridge_gatt_indication_notification_handler ( uint16_t connection_handle, uint16_t attribute_handle, uint8_t* data, uint16_t length );
 static wiced_result_t smartbridge_app_notification_handler             ( void* arg );
 static wiced_result_t smartbridge_app_disconnection_handler            ( void* arg );
-//static wiced_result_t smartbridge_app_pairing_handler                  ( void* arg );
+static wiced_result_t smartbridge_app_pairing_handler                  ( void* arg );
 //static wiced_result_t smartbridge_gap_connection_handler               ( bt_smart_gap_connection_event_t event, wiced_bt_device_address_t* address, wiced_bt_smart_address_type_t type, uint16_t connection_handle );
-//static wiced_result_t smartbridge_gap_bonding_handler                  ( uint16_t connection_handle, const wiced_bt_smart_bond_info_t* bond_info );
+static wiced_result_t smartbridge_gap_bonding_handler                  ( uint16_t connection_handle, const wiced_bt_smart_bond_info_t* bond_info );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
-extern volatile uint16_t current_service_handle_end;
-extern gatt_subprocedure_t subprocedure;
-static wiced_bt_smartbridge_socket_t* connecting_socket = NULL;
-static wiced_bool_t                   initialised       = WICED_FALSE;
-extern wiced_bool_t bt_initialised;
-
-
-wiced_timer_t scan_complete_timer;
+extern gatt_subprocedure_t              subprocedure;
+wiced_bt_smartbridge_socket_t*          connecting_socket = NULL;
+static wiced_bool_t                     initialised       = WICED_FALSE;
+extern wiced_bool_t                     bt_initialised;
+extern wiced_bt_dev_ble_io_caps_req_t   local_io_caps_ble;
 
 wiced_bt_gatt_char_declaration_t        current_characteristic;
-wiced_bt_gatt_char_declaration_t        previous_characteristic;
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
-
-void device_address_to_string( wiced_bt_device_address_t* device_address, char* string )
-{
-    uint8_t a;
-
-    for ( a = 0; a < 6; a++ )
-    {
-        unsigned_to_hex_string( (uint32_t)device_address[a], string, 2, 2 );
-        string += 2;
-    }
-}
-
-void uuid_to_string( const wiced_bt_uuid_t* uuid, char* string )
-{
-    int8_t   i;
-    uint8_t  j;
-    uint8_t* uuid_iter = (uint8_t*)&uuid->uu;
-
-    for ( i = uuid->len - 1, j = 0; i >= 0; i--, j += 2 )
-    {
-        unsigned_to_hex_string( (uint32_t)uuid_iter[i], &string[j], 2, 2 );
-    }
-}
-
-void format_node_string( char* output, wiced_bt_device_address_t* address, wiced_bt_ble_address_type_t type )
-{
-    device_address_to_string( address, output );
-    unsigned_to_hex_string( (uint32_t)type, output + 12, 1, 1 );
-}
-
-void format_service_string( char* output, uint16_t start_handle, uint16_t end_handle )
-{
-    unsigned_to_hex_string( (uint32_t)end_handle,   &output[0], 4 , 4 );
-    unsigned_to_hex_string( (uint32_t)start_handle, &output[4], 4 , 4 );
-}
-
-void format_characteristic_string( char* output, uint16_t start_handle, uint16_t end_handle, uint16_t value_handle )
-{
-    unsigned_to_hex_string( (uint32_t)end_handle,   &output[0], 4, 4 );
-    unsigned_to_hex_string( (uint32_t)value_handle, &output[4], 4, 4 );
-    unsigned_to_hex_string( (uint32_t)start_handle, &output[8], 4, 4 );
-}
-
-static volatile uint32_t                current_procedure_count = 0;
 
 static void smartbridge_gatt_connection_handler( uint16_t connection_handle )
 {
@@ -212,7 +142,7 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
 {
     wiced_bt_smart_attribute_t* attr;
     uint8_t *data = NULL;
-        uint32_t i;
+    uint32_t i;
     /* Create a new attribute */
     wiced_bt_smart_attribute_create( &attr, WICED_ATTRIBUTE_TYPE_CHARACTERISTIC_VALUE, response_data->len );
 
@@ -221,7 +151,6 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
         attr->next         = NULL;
         attr->handle       = subprocedure.start_handle;
         attr->type.len     = subprocedure.uuid.len;
-        attr->type.uu.uuid16 = subprocedure.uuid.uu.uuid16;
         data               = response_data->p_data;
         attr->value_length = response_data->len;
 
@@ -234,7 +163,14 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
             memcpy( attr->type.uu.uuid128, subprocedure.uuid.uu.uuid128,  UUID_128BIT );
         }
 
-        memcpy( attr->value.characteristic_value.value, data, attr->value_length );
+        if( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_VALUE )
+        {
+            memcpy( attr->value.characteristic_value.value, data, attr->value_length );
+        }
+        else if ( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_DESCRIPTORS)
+        {
+            memcpy( &attr->value, data, attr->value_length );
+        }
 
         //memcpy( &attr->type, &subprocedure.uuid, sizeof(wiced_bt_uuid_t));
 
@@ -246,13 +182,23 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
         subprocedure.result = WICED_BT_SUCCESS;
 
         WPRINT_LIB_INFO( ( "[Smartbridge] Read value: UUID:%x length:%d\n", attr->type.uu.uuid16, attr->type.len ) );
-        for ( i = 0; i < attr->value_length; i ++ )
+
+        if( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_VALUE )
         {
-            WPRINT_LIB_INFO( ( "%02x ", (int)attr->value.characteristic_value.value[i] ) );
+            for ( i = 0; i < attr->value_length; i ++ )
+            {
+                WPRINT_LIB_INFO( ( "%02x ", (int)attr->value.characteristic_value.value[i] ) );
+            }
+        }
+        else if ( subprocedure.subprocedure == GATT_READ_CHARACTERISTIC_DESCRIPTORS)
+        {
+            for ( i = 0; i < attr->value_length; i ++ )
+            {
+                WPRINT_LIB_INFO( ( "%02x ", (int)attr->value.value[i] ) );
+            }
         }
         WPRINT_LIB_INFO( ( "\n" ) );
     }
-
     else
     {
         subprocedure.result = WICED_BT_OUT_OF_HEAP_SPACE;
@@ -260,26 +206,122 @@ static void smartbridge_gatt_read_operation_complete_handler( wiced_bt_gatt_data
 
 }
 
-void smartbridge_gatt_discover_characteristic_descriptor_result(  wiced_bt_gatt_event_data_t *p_event_data )
+static wiced_result_t smartbridge_gatt_notification_indication_handler( wiced_bt_gatt_operation_complete_t* operation_complete )
 {
-    char  descriptor[DESCRIPTOR_BUFFER_LENGTH];
-    char  uuid      [UUID_BUFFER_LENGTH];
+    wiced_bt_smartbridge_socket_t* socket;
+    uint16_t connection_handle  = operation_complete->conn_id;
+    uint16_t attribute_handle   = operation_complete->response_data.att_value.handle;
+    uint8_t* data               = operation_complete->response_data.att_value.p_data;
+    uint8_t  length             = operation_complete->response_data.att_value.len;
 
-    if ( current_procedure_count == 0 )
+    /* Search for socket with indicated connection handle in the connected list */
+    if ( bt_smartbridge_socket_manager_find_socket_by_handle( connection_handle, &socket ) == WICED_BT_SUCCESS )
     {
-        //restful_gateway_write_status_code( current_stream, BT_REST_GATEWAY_STATUS_200 );
-        //restful_gateway_write_descriptor_array_start( current_stream );
+        if ( bt_smartbridge_att_cache_is_enabled() == WICED_TRUE && socket->att_cache != NULL )
+        {
+
+            bt_smartbridge_att_cache_t*      cache          = (bt_smartbridge_att_cache_t*)socket->att_cache;
+            wiced_bt_smart_attribute_list_t* att_cache_list = NULL;
+            wiced_bt_smart_attribute_t*      att            = NULL;
+
+            bt_smartbridge_att_cache_get_list( cache, &att_cache_list );
+
+            /* Socket found. lock mutex for protected access */
+            bt_smartbridge_att_cache_lock( cache );
+
+            /* Search for att in the socket's att list */
+            if ( wiced_bt_smart_attribute_search_list_by_handle( att_cache_list, attribute_handle, &att ) == WICED_BT_SUCCESS )
+            {
+                wiced_bt_uuid_t uuid       = att->type;
+                wiced_bool_t    is_new_att = WICED_FALSE;
+
+                /* Check if existing att memory length is sufficient */
+                if ( length > att->value_length )
+                {
+                    /* length isn't sufficient. Remove existing from the list */
+                    wiced_bt_smart_attribute_remove_from_list( att_cache_list, attribute_handle );
+                    att = NULL;
+
+                    /* Create a new one and marked as new */
+                    wiced_bt_smart_attribute_create( &att, WICED_ATTRIBUTE_TYPE_CHARACTERISTIC_VALUE, length );
+                    is_new_att = WICED_TRUE;
+                }
+
+                /* Copy new value to the att */
+                att->handle       = attribute_handle;
+                att->type         = uuid;
+                att->value_length = length;
+                memcpy( att->value.value, data, length );
+
+                if ( is_new_att == WICED_TRUE )
+                {
+                    /* Add newly created att to the list */
+                    wiced_bt_smart_attribute_add_to_list( att_cache_list, att );
+                }
+            }
+
+            /* Socket found. lock mutex for protected access */
+            bt_smartbridge_att_cache_unlock( cache );
+        }
+
+        socket->last_notified_attribute_handle = attribute_handle;
+
+        /* Notification callback is called regardless of att cache is enabled or not */
+        if ( socket->notification_callback != NULL )
+        {
+            wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, smartbridge_app_notification_handler, (void*)socket );
+        }
+
+        return WICED_BT_SUCCESS;
     }
 
-    unsigned_to_hex_string( (uint32_t)p_event_data->discovery_result.discovery_data.char_descr_info.handle, descriptor, 4, 4 );
-    WPRINT_LIB_INFO(("Descriptor +++ %s\n", descriptor ));
-    uuid_to_string( &p_event_data->discovery_result.discovery_data.char_descr_info.type, uuid );
-    WPRINT_LIB_INFO(("UUID +++ %s\n", uuid ));
-    //restful_gateway_write_descriptor( current_stream, node, descriptor, data->discovery_result.discovery_data.char_descr_info.handle, uuid );
-    current_procedure_count++;
+    return WICED_BT_ERROR;
 }
 
-void smartbrige_gatt_discover_services_result(  wiced_bt_gatt_event_data_t *p_event_data )
+static void smartbridge_gatt_discover_characteristic_descriptor_result(  wiced_bt_gatt_event_data_t *p_event_data )
+{
+    /* Create attribute(s) based on information included in the response PDU */
+    wiced_bt_smart_attribute_t* attr;
+
+    wiced_bt_smart_attribute_create( &attr, WICED_ATTRIBUTE_TYPE_NO_VALUE, 0 );
+
+    if ( attr != NULL )
+    {
+        attr->next = NULL;
+        attr->handle = GATT_DISCOVERY_RESULT_CHARACTERISTIC_DESCRIPTOR_VALUE_HANDLE(p_event_data);
+        attr->type.len = GATT_DISCOVERY_RESULT_CHARACTERISTIC_DESCRIPTOR_UUID_LEN(p_event_data);
+
+        if( attr->type.len == UUID_16BIT )
+        {
+            attr->type.uu.uuid16 = GATT_DISCOVERY_RESULT_CHARACTERISTIC_DESCRIPTOR_UUID16(p_event_data);
+        }
+        else if ( attr->type.len == UUID_32BIT )
+        {
+            attr->type.uu.uuid32 = GATT_DISCOVERY_RESULT_CHARACTERISTIC_DESCRIPTOR_UUID32(p_event_data);
+        }
+        else if ( attr->type.len == UUID_128BIT )
+        {
+            memcpy( attr->type.uu.uuid128, &(GATT_DISCOVERY_RESULT_CHARACTERISTIC_DESCRIPTOR_UUID32(p_event_data)),  UUID_128BIT );
+        }
+
+        if ( subprocedure.attr_head == NULL )
+        {
+            subprocedure.attr_head = attr;
+        }
+
+        if ( subprocedure.attr_tail != NULL )
+        {
+            subprocedure.attr_tail->next = attr;
+        }
+
+        subprocedure.attr_tail = attr;
+        subprocedure.attr_count++;
+
+        WPRINT_LIB_INFO(("[SmartBridge] Characteristic Descriptor handle:%x uuid:%x list-count:%u\n", attr->handle, attr->value.service.uuid.uu.uuid16, (unsigned int)subprocedure.attr_count));
+    }
+}
+
+static void smartbrige_gatt_discover_services_result(  wiced_bt_gatt_event_data_t *p_event_data )
 {
     /* Create attribute(s) based on information included in the response PDU */
     wiced_bt_smart_attribute_t* attr;
@@ -293,7 +335,6 @@ void smartbrige_gatt_discover_services_result(  wiced_bt_gatt_event_data_t *p_ev
         attr->type.uu.uuid16                = GATT_UUID_PRI_SERVICE;
         attr->value_length                  = 2;
         attr->handle                        = p_event_data->discovery_result.discovery_data.group_value.s_handle;
-
         attr->value.service.start_handle    = attr->handle;
         attr->value.service.end_handle      = p_event_data->discovery_result.discovery_data.group_value.e_handle;
 
@@ -312,11 +353,49 @@ void smartbrige_gatt_discover_services_result(  wiced_bt_gatt_event_data_t *p_ev
         subprocedure.attr_tail = attr;
 
         subprocedure.attr_count++;
-        WPRINT_LIB_INFO(("[SmartBridge] Service s_handle:%x end_handle:%x uuid:%x list-count:%u\n", attr->handle, attr->value.service.end_handle, attr->value.service.uuid.uu.uuid16, (unsigned int)subprocedure.attr_count));
+        WPRINT_LIB_INFO(("[SmartBridge] Service [Start %x - End %x] uuid:%x list-count:%u\n", attr->handle, attr->value.service.end_handle, attr->value.service.uuid.uu.uuid16, (unsigned int)subprocedure.attr_count));
     }
 }
 
-void smartbridge_gatt_discover_characteristic_result(  wiced_bt_gatt_event_data_t *p_event_data )
+static void smartbridge_gatt_discover_included_services_result( wiced_bt_gatt_event_data_t *p_event_data )
+{
+    /* Create attribute(s) based on information included in the response PDU */
+    wiced_bt_smart_attribute_t* attr;
+    uint16_t start_handle = 0x0;
+
+    wiced_bt_smart_attribute_create( &attr, WICED_ATTRIBUTE_TYPE_INCLUDE, 0 );
+
+    if ( attr != NULL )
+    {
+        attr->next                                      = NULL;
+        attr->type.len                                  = UUID_16BIT;
+        attr->type.uu.uuid16                            = GATT_UUID_INCLUDE_SERVICE;
+        attr->value_length                              = 2;
+        attr->handle                                    = p_event_data->discovery_result.discovery_data.included_service.handle;
+        attr->value.include.included_service_handle     = p_event_data->discovery_result.discovery_data.included_service.handle;
+        attr->value.include.end_group_handle            = p_event_data->discovery_result.discovery_data.included_service.e_handle;
+        start_handle                                    = p_event_data->discovery_result.discovery_data.included_service.s_handle;
+
+        memcpy( &attr->value.include.uuid, &p_event_data->discovery_result.discovery_data.included_service.service_type, sizeof(wiced_bt_uuid_t) );
+
+        if ( subprocedure.attr_head == NULL )
+        {
+            subprocedure.attr_head = attr;
+        }
+
+        if ( subprocedure.attr_tail != NULL )
+        {
+            subprocedure.attr_tail->next = attr;
+        }
+
+        subprocedure.attr_tail = attr;
+
+        subprocedure.attr_count++;
+        WPRINT_LIB_INFO( ("[SmartBridge] Included Service handle:%x [Start %x - End %x] uuid:%x\n", attr->handle, start_handle, attr->value.include.end_group_handle, attr->value.service.uuid.uu.uuid16 ) );
+    }
+}
+
+static void smartbridge_gatt_discover_characteristic_result(  wiced_bt_gatt_event_data_t *p_event_data )
 {
     /* Create attribute(s) based on information included in the response PDU */
     wiced_bt_smart_attribute_t* attr;
@@ -335,6 +414,9 @@ void smartbridge_gatt_discover_characteristic_result(  wiced_bt_gatt_event_data_
         attr->value.characteristic.properties = current_characteristic.characteristic_properties;
 
         attr->value.characteristic.value_handle = current_characteristic.val_handle;
+        attr->value.characteristic.descriptor_start_handle = attr->value.characteristic.value_handle + 1;
+        /* FIXME: descriptor_end_handle need to be calculated correclty */
+        attr->value.characteristic.descriptor_end_handle = attr->value.characteristic.descriptor_start_handle;
 
         memcpy( &attr->value.characteristic.uuid, &current_characteristic.char_uuid, sizeof(wiced_bt_uuid_t) );
 
@@ -354,55 +436,40 @@ void smartbridge_gatt_discover_characteristic_result(  wiced_bt_gatt_event_data_
     }
 }
 
-void smartbridge_gatt_discovery_complete_handler( wiced_bt_gatt_event_data_t *p_event_data )
+static void smartbridge_gatt_discovery_complete_handler( wiced_bt_gatt_event_data_t *p_event_data )
 {
-    if ( ( p_event_data->discovery_complete.disc_type == GATT_DISCOVER_SERVICES_ALL || p_event_data->discovery_complete.disc_type == GATT_DISCOVER_SERVICES_BY_UUID ) )
-    {
-        if ( subprocedure.attr_count != 0 )
-        {
-            subprocedure.result = WICED_BT_SUCCESS;
-        }
-        else
-        {
-            subprocedure.result = WICED_BT_ITEM_NOT_IN_LIST;
-        }
-        WPRINT_LIB_INFO(("[SmartBridge] Discovery Complete for Services %d type:%d\n", subprocedure.result, p_event_data->discovery_complete.disc_type));
-        subprocedure_notify_complete( );
-    }
-    else if ( ( p_event_data->discovery_complete.disc_type == GATT_DISCOVER_CHARACTERISTICS ) )
-    {
-        if ( subprocedure.attr_count != 0 )
-        {
-            subprocedure.result = WICED_BT_SUCCESS;
-        }
-        else
-        {
-            subprocedure.result = WICED_BT_ITEM_NOT_IN_LIST;
-        }
+    uint16_t discovery_complete_type = p_event_data->discovery_complete.disc_type;
 
-        WPRINT_LIB_INFO( ("[SmartBridge] Discovery Complete for Characteristics[result: %d]\n", subprocedure.result ) );
-        subprocedure_notify_complete( );
-    }
-    else if ( ( p_event_data->discovery_complete.disc_type == GATT_DISCOVER_CHARACTERISTIC_DESCRIPTORS ) )
+    switch( discovery_complete_type )
     {
-        if ( subprocedure.attr_count != 0 )
-        {
-            subprocedure.result = WICED_BT_SUCCESS;
-        }
-        else
-        {
-            subprocedure.result = WICED_BT_ITEM_NOT_IN_LIST;
-        }
+        case GATT_DISCOVER_SERVICES_ALL:
+        case GATT_DISCOVER_SERVICES_BY_UUID:
+        case GATT_DISCOVER_INCLUDED_SERVICES:
+        case GATT_DISCOVER_CHARACTERISTICS:
+        case GATT_DISCOVER_CHARACTERISTIC_DESCRIPTORS:
+            if ( subprocedure.attr_count != 0 )
+            {
+                subprocedure.result = WICED_BT_SUCCESS;
+            }
+            else
+            {
+                subprocedure.result = WICED_BT_ITEM_NOT_IN_LIST;
+            }
+            subprocedure_notify_complete( );
 
-        WPRINT_LIB_INFO( ("[SmartBridge] Discovery Complete for Characteristic-Descriptors [result: %d]\n", subprocedure.result ) );
-        subprocedure_notify_complete( );
+            WPRINT_LIB_INFO( ( "[SmartBridge] Discovery Completed ( result:%d type:%d )\n", subprocedure.result, discovery_complete_type ) );
+            break;
+
+        default:
+            WPRINT_LIB_INFO( ( "[SmartBridge] Unhandled Discovery Completed ( type:%d )\n", discovery_complete_type ) );
+            break;
     }
 }
-
 
 wiced_bt_gatt_status_t smartbridge_gatt_callback( wiced_bt_gatt_evt_t event, wiced_bt_gatt_event_data_t *p_event_data )
 {
     wiced_bt_gatt_status_t status = WICED_BT_GATT_SUCCESS;
+
     switch(event)
     {
         case GATT_CONNECTION_STATUS_EVT:
@@ -436,11 +503,15 @@ wiced_bt_gatt_status_t smartbridge_gatt_callback( wiced_bt_gatt_evt_t event, wic
 
                 else if ( p_event_data->operation_complete.op == GATTC_OPTYPE_WRITE )
                 {
-                    WPRINT_LIB_INFO(("[SmartBridge] Gatt attribute Write-Callback event\n"));
+                    WPRINT_LIB_INFO( ("[SmartBridge] Write-Callback event for handle:%x status:%d\n",
+                                p_event_data->operation_complete.response_data.handle, (unsigned int)p_event_data->operation_complete.status ) );
                 }
-                else if ( p_event_data->operation_complete.op == GATTC_OPTYPE_NOTIFICATION)
+                else if ( p_event_data->operation_complete.op == GATTC_OPTYPE_NOTIFICATION || p_event_data->operation_complete.op == GATTC_OPTYPE_INDICATION )
                 {
+                    WPRINT_LIB_INFO( ( "[SmartBridge] Notification/Indication Event\n" ) );
+                    smartbridge_gatt_notification_indication_handler( &p_event_data->operation_complete );
                 }
+
                 subprocedure_notify_complete( );
             }
             break;
@@ -452,7 +523,11 @@ wiced_bt_gatt_status_t smartbridge_gatt_callback( wiced_bt_gatt_evt_t event, wic
             {
                 if ( p_event_data->discovery_result.discovery_type == GATT_DISCOVER_SERVICES_ALL || p_event_data->discovery_result.discovery_type == GATT_DISCOVER_SERVICES_BY_UUID )
                 {
-                    smartbrige_gatt_discover_services_result(p_event_data);
+                    smartbrige_gatt_discover_services_result( p_event_data );
+                }
+                else if ( p_event_data->discovery_result.discovery_type == GATT_DISCOVER_INCLUDED_SERVICES )
+                {
+                    smartbridge_gatt_discover_included_services_result( p_event_data );
                 }
                 else if ( p_event_data->discovery_result.discovery_type == GATT_DISCOVER_CHARACTERISTICS )
                 {
@@ -462,6 +537,7 @@ wiced_bt_gatt_status_t smartbridge_gatt_callback( wiced_bt_gatt_evt_t event, wic
                 {
                     smartbridge_gatt_discover_characteristic_descriptor_result( p_event_data );
                 }
+
             }
             break;
         }
@@ -496,7 +572,7 @@ wiced_result_t wiced_bt_smartbridge_init( void )
 
     WPRINT_LIB_INFO( ("[SmartBridge] Initialising WICED SmartBridge ...\n" ) );
 
-    bt_smart_gatt_init();
+    smartbridge_bt_interface_initialize();
 
     /* Initialise SmartBridge Socket Manager */
     result = bt_smartbridge_socket_manager_init();
@@ -505,7 +581,6 @@ wiced_result_t wiced_bt_smartbridge_init( void )
         WPRINT_LIB_INFO( ( "Error initialising SmartBridge Socket Manager\n" ) );
         return result;
     }
-
 
     initialised = WICED_TRUE;
     return WICED_BT_SUCCESS;
@@ -524,9 +599,7 @@ wiced_result_t wiced_bt_smartbridge_deinit( void )
     bt_smartbridge_socket_manager_deinit();
 
     /* Deinitialise GATT */
-    bt_smart_gatt_deinit();
-
-    bt_smart_gatt_register_notification_indication_handler( NULL );
+    smartbridge_bt_interface_deinitialize();
 
     initialised = WICED_FALSE;
 
@@ -696,6 +769,7 @@ wiced_result_t wiced_bt_smartbridge_get_socket_status( wiced_bt_smartbridge_sock
 wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t* socket, const wiced_bt_smart_device_t* remote_device, const wiced_bt_smart_connection_settings_t* settings, wiced_bt_smartbridge_disconnection_callback_t disconnection_callback, wiced_bt_smartbridge_notification_callback_t notification_callback )
 {
     wiced_bt_smartbridge_socket_t* found_socket;
+    wiced_result_t result = WICED_BT_SUCCESS;
 
     if ( initialised == WICED_FALSE )
     {
@@ -745,35 +819,16 @@ wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t* sock
     /* Reset state */
     socket->state = SOCKET_STATE_DISCONNECTED;
 
-#if 0
-    if ( smartbridge_socket_check_actions_enabled( socket, SOCKET_ACTION_INITIATE_PAIRING ) == WICED_TRUE )
+    if ( smartbridge_helper_socket_check_actions_enabled( socket, SOCKET_ACTION_INITIATE_PAIRING ) == WICED_TRUE )
     {
-        /* Register callback to let GAP notify SmartBridge if bond is successfully created */
-        bt_smart_gap_register_bonding_callback( smartbridge_gap_bonding_handler );
-
         /* Tell GAP to initiate pairing on the next connection attempt */
-        bt_smart_gap_enable_pairing( &socket->security_settings, socket->passkey );
+        smartbridge_bt_interface_enable_pairing( socket->remote_device.address, socket->remote_device.address_type, &socket->security_settings, socket->passkey );
     }
     else
     {
-        /* Reset GAP bonding callback */
-        bt_smart_gap_register_bonding_callback( NULL );
-
         /* Tell GAP to not send pairing request on the next connection attempt */
-        bt_smart_gap_disable_pairing();
+        smartbridge_bt_interface_disable_pairing();
     }
-
-    if ( smartbridge_socket_check_actions_enabled( socket, SOCKET_ACTION_ENCRYPT_USING_BOND_INFO ) == WICED_TRUE )
-    {
-        /* Tell GAP to enable encryption using bond info and security settings provided */
-        bt_smart_gap_set_bond_info( &socket->security_settings, &socket->bond_info );
-    }
-    else
-    {
-        /* Tell GAP to clear bond info and disable encryption */
-        bt_smart_gap_clear_bond_info();
-    }
-#endif
 
     /* Set socket action to connecting */
     smartbridge_helper_socket_set_actions( socket, SOCKET_ACTION_HOST_CONNECT );
@@ -786,14 +841,21 @@ wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t* sock
     /* Wait for connection */
     wiced_rtos_get_semaphore( &socket->semaphore, WICED_NEVER_TIMEOUT );
 
-#if 0
     /* Check if link is connected. Otherwise, return error */
     if ( socket->state == SOCKET_STATE_LINK_CONNECTED )
     {
-        /* Check if encryption is required */
-        if ( smartbridge_socket_check_actions_enabled( socket, SOCKET_ACTION_INITIATE_PAIRING ) == WICED_TRUE ||
-             smartbridge_socket_check_actions_enabled( socket, SOCKET_ACTION_ENCRYPT_USING_BOND_INFO ) == WICED_TRUE )
+        if ( smartbridge_helper_socket_check_actions_enabled( socket, SOCKET_ACTION_INITIATE_PAIRING ) == WICED_TRUE )
         {
+            /* Wait until pairing is complete */
+            wiced_rtos_get_semaphore( &socket->semaphore, WICED_NEVER_TIMEOUT );
+        }
+
+        /* Check if encryption is required */
+        if ( smartbridge_helper_socket_check_actions_enabled( socket, SOCKET_ACTION_INITIATE_PAIRING ) == WICED_TRUE ||
+             smartbridge_helper_socket_check_actions_enabled( socket, SOCKET_ACTION_ENCRYPT_USING_BOND_INFO ) == WICED_TRUE )
+        {
+            smartbridge_bt_interface_start_encryption( &socket->remote_device.address );
+
             /* Wait until link is encrypted */
             wiced_rtos_get_semaphore( &socket->semaphore, WICED_NEVER_TIMEOUT );
 
@@ -809,9 +871,6 @@ wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t* sock
         result = WICED_BT_SOCKET_NOT_CONNECTED;
         goto error;
     }
-
-
-#endif
 
     /* Successful */
     if ( bt_smartbridge_att_cache_is_enabled() == WICED_TRUE )
@@ -850,7 +909,7 @@ wiced_result_t wiced_bt_smartbridge_connect( wiced_bt_smartbridge_socket_t* sock
     /* Link is connected. Return success */
     return WICED_BT_SUCCESS;
 
-#if 0
+#if 1
     error:
     /* Link is not connected nor encrypted. Issue disconnection attempt to clean-up */
     wiced_bt_smartbridge_disconnect( socket );
@@ -1083,7 +1142,7 @@ wiced_result_t wiced_bt_smartbridge_enable_attribute_cache_notification( wiced_b
 
             bt_smartbridge_att_cache_unlock( cache );
 
-            result = bt_smart_gatt_write_characteristic_descriptor( socket->connection_handle, iterator );
+            result = smartbridge_bt_interface_write_characteristic_descriptor( socket->connection_handle, iterator );
         }
 
         iterator = iterator->next;
@@ -1144,7 +1203,7 @@ wiced_result_t wiced_bt_smartbridge_disable_attribute_cache_notification( wiced_
 
             bt_smartbridge_att_cache_unlock( cache );
 
-            result = bt_smart_gatt_write_characteristic_descriptor( socket->connection_handle, iterator );
+            result = smartbridge_bt_interface_write_characteristic_descriptor( socket->connection_handle, iterator );
         }
 
         iterator = iterator->next;
@@ -1326,7 +1385,7 @@ wiced_result_t wiced_bt_smartbridge_refresh_attribute_cache_characteristic_value
         }
         else
         {
-            result = bt_smart_gatt_read_long_characteristic_value( socket->connection_handle, current_att->handle, &current_att->type, &refreshed_att );
+            result = smartbridge_bt_interface_read_long_characteristic_value( socket->connection_handle, current_att->handle, &current_att->type, &refreshed_att );
         }
 
         /* If read is successful, replace attribute with the refreshed one
@@ -1384,7 +1443,7 @@ wiced_result_t wiced_bt_smartbridge_write_attribute_cache_characteristic_value( 
     }
     else
     {
-        result = bt_smart_gatt_write_long_characteristic_value( socket->connection_handle, (wiced_bt_smart_attribute_t*)char_value );
+        result = smartbridge_bt_interface_write_long_characteristic_value( socket->connection_handle, (wiced_bt_smart_attribute_t*)char_value );
     }
 
     if ( result != WICED_BT_SUCCESS )
@@ -1470,170 +1529,6 @@ wiced_result_t wiced_bt_smartbridge_write_attribute_cache_characteristic_value( 
 /******************************************************
  *               Callback Definitions
  ******************************************************/
-#if 0
-static wiced_result_t smartbridge_gap_connection_handler( bt_smart_gap_connection_event_t event, wiced_bt_device_address_t* address, wiced_bt_smart_address_type_t type, uint16_t connection_handle )
-{
-    switch ( event )
-    {
-        case GAP_CONNECTED:
-        {
-            /* Update connection handle and state of the socket */
-            connecting_socket->state = SOCKET_STATE_LINK_CONNECTED;
-            connecting_socket->connection_handle = connection_handle;
-
-            /* Add socket to the connected list */
-            bt_smartbridge_socket_manager_insert_socket( connecting_socket );
-
-            /* Notify app thread that link is connected */
-            wiced_rtos_set_semaphore( &connecting_socket->semaphore );
-            break;
-        }
-        case GAP_ENCRYPTION_ENABLED:
-        {
-            /* Update state of the socket to encrypted */
-            connecting_socket->state = SOCKET_STATE_LINK_ENCRYPTED;
-
-            /* Notify app thread that link is already encrypted */
-            wiced_rtos_set_semaphore( &connecting_socket->semaphore );
-            break;
-        }
-        case GAP_CONNECTION_TIMEOUT:
-        case GAP_ENCRYPTION_FAILED:
-        case GAP_ENCRYPTION_TIMEOUT:
-        {
-            /* Notify app thread that link is already encrypted */
-            wiced_rtos_set_semaphore( &connecting_socket->semaphore );
-            break;
-        }
-        case GAP_DISCONNECTED:
-        {
-            wiced_bt_smartbridge_socket_t* removed_socket = NULL;
-
-            /* Remove socket from the connected list */
-            if ( bt_smartbridge_socket_manager_remove_socket( connection_handle, &removed_socket ) == WICED_BT_SUCCESS )
-            {
-                /* Reset connection handle to invalid value */
-                removed_socket->connection_handle = SOCKET_INVALID_CONNECTION_HANDLE;
-
-                /* Reset socket state */
-                removed_socket->state = SOCKET_STATE_DISCONNECTED;
-
-                /* Mark att cache as inactive and reset reference to cache */
-                bt_smartbridge_att_cache_set_active_state( (bt_smartbridge_att_cache_t*)removed_socket->att_cache, WICED_FALSE );
-                removed_socket->att_cache = NULL;
-
-                /* Check if disconnection is from host or remote device */
-
-                if ( smartbridge_helper_socket_check_actions_enabled( removed_socket, SOCKET_ACTION_HOST_DISCONNECT ) == WICED_TRUE )
-                {
-                    /* Disconnection is originated from the host. Notify app thread that disconnection is complete */
-                    wiced_rtos_set_semaphore( &removed_socket->semaphore );
-                }
-                else
-                {
-                    /* Notify app that connection is disconnected by the remote device */
-                    if ( removed_socket->disconnection_callback != NULL )
-                    {
-                        wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, smartbridge_app_disconnection_handler, (void*)removed_socket );
-                    }
-
-                    /* If disconnection happens when connection is still being established. Notify app */
-                    if ( connecting_socket == removed_socket )
-                    {
-                        wiced_rtos_set_semaphore( &connecting_socket->semaphore );
-                    }
-                }
-            }
-            else
-            {
-                /* If disconnection happens when connection is still being established. Notify app */
-                if ( connecting_socket != NULL )
-                {
-                    wiced_rtos_set_semaphore( &connecting_socket->semaphore );
-                }
-            }
-
-
-            break;
-        }
-        default:
-        {
-            return WICED_BT_UNKNOWN_EVENT;
-        }
-    }
-
-    return WICED_BT_SUCCESS;
-}
-
-#endif
-
-wiced_result_t smartbridge_gatt_indication_notification_handler( uint16_t connection_handle, uint16_t attribute_handle, uint8_t* data, uint16_t length )
-{
-    wiced_bt_smartbridge_socket_t* socket;
-
-    /* Search for socket with indicated connection handle in the connected list */
-    if ( bt_smartbridge_socket_manager_find_socket_by_handle( connection_handle, &socket ) == WICED_BT_SUCCESS )
-    {
-        if ( bt_smartbridge_att_cache_is_enabled() == WICED_TRUE && socket->att_cache != NULL )
-        {
-
-            bt_smartbridge_att_cache_t*      cache          = (bt_smartbridge_att_cache_t*)socket->att_cache;
-            wiced_bt_smart_attribute_list_t* att_cache_list = NULL;
-            wiced_bt_smart_attribute_t*      att            = NULL;
-
-            bt_smartbridge_att_cache_get_list( cache, &att_cache_list );
-
-            /* Socket found. lock mutex for protected access */
-            bt_smartbridge_att_cache_lock( cache );
-
-            /* Search for att in the socket's att list */
-            if ( wiced_bt_smart_attribute_search_list_by_handle( att_cache_list, attribute_handle, &att ) == WICED_BT_SUCCESS )
-            {
-                wiced_bt_uuid_t uuid       = att->type;
-                wiced_bool_t    is_new_att = WICED_FALSE;
-
-                /* Check if existing att memory length is sufficient */
-                if ( length > att->value_length )
-                {
-                    /* length isn't sufficient. Remove existing from the list */
-                    wiced_bt_smart_attribute_remove_from_list( att_cache_list, attribute_handle );
-                    att = NULL;
-
-                    /* Create a new one and marked as new */
-                    wiced_bt_smart_attribute_create( &att, WICED_ATTRIBUTE_TYPE_CHARACTERISTIC_VALUE, length );
-                    is_new_att = WICED_TRUE;
-                }
-
-                /* Copy new value to the att */
-                att->handle       = attribute_handle;
-                att->type         = uuid;
-                att->value_length = length;
-                memcpy( att->value.value, data, length );
-
-                if ( is_new_att == WICED_TRUE )
-                {
-                    /* Add newly created att to the list */
-                    wiced_bt_smart_attribute_add_to_list( att_cache_list, att );
-                }
-            }
-
-            /* Socket found. lock mutex for protected access */
-            bt_smartbridge_att_cache_unlock( cache );
-        }
-
-        socket->last_notified_attribute_handle = attribute_handle;
-
-        /* Notification callback is called regardless of att cache is enabled or not */
-        if ( socket->notification_callback != NULL )
-        {
-            wiced_rtos_send_asynchronous_event( WICED_NETWORKING_WORKER_THREAD, smartbridge_app_notification_handler, (void*)socket );
-        }
-
-        return WICED_BT_SUCCESS;
-    }
-
-    return WICED_BT_ERROR;
-}
 
 static wiced_result_t smartbridge_app_notification_handler( void* arg )
 {
@@ -1661,7 +1556,49 @@ static wiced_result_t smartbridge_app_disconnection_handler( void* arg )
     return WICED_BT_ERROR;
 }
 
-#if 0
+wiced_result_t wiced_bt_smartbridge_bond_info_update( wiced_bt_device_link_keys_t paired_device_keys )
+{
+    wiced_bt_smart_bond_info_t          bond_info;
+    wiced_bt_ble_keys_t                 *le_security_keys;
+    wiced_bt_device_sec_keys_t          *security_keys;
+
+    wiced_result_t result = WICED_BT_ERROR;
+
+    memcpy(bond_info.peer_address, paired_device_keys.bd_addr, BD_ADDR_LEN );
+
+    security_keys       = (wiced_bt_device_sec_keys_t*)&paired_device_keys.key_data;
+
+    if( security_keys == NULL )
+    {
+        WPRINT_LIB_ERROR( ("[SmartBridge] Security Keys is NULL\n"));
+        return WICED_BT_ERROR;
+    }
+
+    le_security_keys    = ( wiced_bt_ble_keys_t* )&security_keys->le_keys;
+
+    if ( le_security_keys == NULL )
+    {
+        WPRINT_LIB_ERROR( ("[SmartBridge] Security LE-Keys is NULL\n"));
+        return WICED_BT_ERROR;
+    }
+
+    bond_info.address_type  = security_keys->ble_addr_type;
+
+    bond_info.ediv          = le_security_keys->ediv;
+
+    /* fill bond_info structure as expected by the application */
+    memcpy( bond_info.irk,  le_security_keys->irk,    16 );
+    memcpy( bond_info.csrk, le_security_keys->pcsrk,  16 );
+    memcpy( bond_info.ltk,  le_security_keys->pltk,   16 );
+    memcpy( bond_info.rand, le_security_keys->rand,   8  );
+
+    result = smartbridge_gap_bonding_handler( connecting_socket->connection_handle, &bond_info );
+
+    WPRINT_LIB_INFO( ( "[SmartBridge] Bond-Info updated result: %u\n", (unsigned int) result ) );
+
+    return result;
+}
+
 static wiced_result_t smartbridge_gap_bonding_handler( uint16_t connection_handle, const wiced_bt_smart_bond_info_t* bond_info )
 {
     wiced_bt_smartbridge_socket_t* socket;
@@ -1694,6 +1631,3 @@ static wiced_result_t smartbridge_app_pairing_handler( void* arg )
 
     return WICED_BT_ERROR;
 }
-
-#endif
-

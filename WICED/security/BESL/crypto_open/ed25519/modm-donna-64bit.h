@@ -294,6 +294,8 @@ contract256_slidingwindow_modm(signed char r[256], const bignum256modm s, int wi
     }
 }
 
+#if 0
+
 /*
     helpers for batch verifcation, are allowed to be vartime
 */
@@ -374,6 +376,8 @@ isatmost128bits256_modm_batch(const bignum256modm a) {
 
     return (mask == 0);
 }
+
+#endif /* if 0 */
 
 #ifdef __cplusplus
 } /*extern "C" */

@@ -569,7 +569,7 @@ and USER_HW_DISABLE_API macros */
 #define BTM_INTERNAL_LINKKEY_STORAGE_INCLUDED FALSE
 #endif
 
-/* TRUE to use controller-based private address resolution, otherwise use host-based resolution */
+/* TRUE to use controller-based private address resolution for 4.2 compliant controller, otherwise use host-based resolution */
 #ifndef BTM_USE_CONTROLLER_PRIVATE_ADDRESS
 #define BTM_USE_CONTROLLER_PRIVATE_ADDRESS  FALSE
 #endif
@@ -1070,10 +1070,10 @@ and USER_HW_DISABLE_API macros */
 #define L2CAP_MAX_UCD_CLIENTS               5
 #endif
 
-/* Used for features using fixed channels; set to zero if no fixed channels supported (AMP, BLE, etc.) */
+/* Used for features using fixed channels; set to zero if no fixed channels supported (ATT, BLE, SMP, SMP BR/EDR, etc.) */
 /* Excluding L2CAP signaling channel and UCD */
 #ifndef L2CAP_NUM_FIXED_CHNLS
-#define L2CAP_NUM_FIXED_CHNLS               3
+#define L2CAP_NUM_FIXED_CHNLS               4
 #endif
 
 /* First fixed channel supported; 3 if AMP supported */
@@ -2289,8 +2289,12 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 /*************************************************************************
 ** Definitions for HID-Host
 */
-#ifndef  HID_HOST_INCLUDED
+#ifndef HID_HOST_INCLUDED
 #define HID_HOST_INCLUDED           FALSE
+#endif
+
+#ifndef HIDH_HOGP_BATTERY_SUPPORTED
+#define HIDH_HOGP_BATTERY_SUPPORTED     TRUE
 #endif
 
 #ifndef HID_HOST_MAX_DEVICES
@@ -2313,6 +2317,17 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 #define HID_HOST_REPAGE_WIN          (2)
 #endif
 
+#ifndef BR_HIDH_INCLUDED
+#define BR_HIDH_INCLUDED                    TRUE
+#endif
+
+#ifndef BLE_HIDH_INCLUDED
+#define BLE_HIDH_INCLUDED                   TRUE
+#endif
+
+#ifndef HIDH_LE_CONFORMANCE_TEST
+#define HIDH_LE_CONFORMANCE_TEST            FALSE
+#endif
 
 /******************************************************************************
 **
@@ -3121,7 +3136,7 @@ The H5 work around sequence will be:
     9: H5 with in band signal of SLIP without Host/BT wake
 */
 #ifndef HCILP_SLEEP_MODE
-#define HCILP_SLEEP_MODE                (0)
+#define HCILP_SLEEP_MODE                (1)
 #endif
 
 /* Host Stack Idle Threshold in 300ms or 25ms, it depends on controller
@@ -3135,7 +3150,7 @@ The H5 work around sequence will be:
   Not applicable for sleep mode 4(H4IBSS) and 9(H5)
 */
 #ifndef HCILP_IDLE_THRESHOLD
-#define HCILP_IDLE_THRESHOLD             (1)
+#define HCILP_IDLE_THRESHOLD             (0)
 #endif
 
 /* Host Controller Idle Threshold in 300ms or 25ms, it depends on controller
@@ -3148,19 +3163,19 @@ The H5 work around sequence will be:
   Not applicable for sleep mode 4(H4IBSS)
 */
 #ifndef HCILP_HC_IDLE_THRESHOLD
-#define HCILP_HC_IDLE_THRESHOLD          (1)
+#define HCILP_HC_IDLE_THRESHOLD          (0)
 #endif
 
 /* GPIO for BT_WAKE signal */
 /* Not applicable for sleep mode 4(H4IBSS) and 9(H5) */
 #ifndef HCILP_BT_WAKE_GPIO
-#define HCILP_BT_WAKE_GPIO              UPIO_GENERAL1
+#define HCILP_BT_WAKE_GPIO              WICED_BT_PIN_DEVICE_WAKE
 #endif
 
 /* GPIO for HOST_WAKE signal */
 /* Not applicable for sleep mode 4(H4IBSS) and 9(H5) */
 #ifndef HCILP_HOST_WAKE_GPIO
-#define HCILP_HOST_WAKE_GPIO            UPIO_GENERAL2
+#define HCILP_HOST_WAKE_GPIO            WICED_BT_PIN_HOST_WAKE
 #endif
 
 /* BT_WAKE Polarity - 0=Active Low, 1= Active High */

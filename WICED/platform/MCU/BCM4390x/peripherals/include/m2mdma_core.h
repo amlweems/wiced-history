@@ -38,15 +38,15 @@ typedef struct dmaintregs {
 	uint32 intmask;
 } dmaintregs_t;
 
-#define I_PC		(1 << 10)
-#define I_PD		(1 << 11)
-#define I_DE		(1 << 12)
-#define I_RU		(1 << 13)
-#define I_RI		(1 << 16)
-#define I_XI		(1 << 24)
+#define I_DE            (1 << 10) /* descriptor read error */
+#define I_DA            (1 << 11) /* errors while transferring data to or from memory */
+#define I_DP            (1 << 12) /* descriptor programming errors */
+#define I_RU            (1 << 13) /* channel cannot process an incoming frame because no descriptors are available */
+#define I_RI            (1 << 16) /* interrupt from the RX channel */
+#define I_XI            (1 << 24) /* interrupt from the TX error */
 
-#define I_ERRORS	(I_PC | I_PD | I_DE | I_RU)
-#define I_DMA		(I_ERRORS | I_RI | I_XI)
+#define I_ERRORS        (I_DE | I_DA | I_DP)
+#define I_DMA           (I_ERRORS | I_RI)
 
 /* SB side: M2M DMA core registers */
 typedef struct sbpm2mregs {

@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 #include "wwd_structures.h"
 #include "wiced_constants.h"
 
@@ -63,7 +64,7 @@ extern "C" {
 
 #define DCT_MAX_APP_COUNT      ( 8 )
 
-#define DCT_APP_LOCATION_OF(APP_INDEX) (uint32_t )((uint8_t *)&((platform_dct_header_t *)0)->apps_locations + sizeof(image_location_t) * ( APP_INDEX ))
+#define DCT_APP_LOCATION_OF(APP_INDEX) (uint32_t)(ptrdiff_t)((uint8_t *)&((platform_dct_header_t *)0)->apps_locations + sizeof(image_location_t) * ( APP_INDEX ))
 //#define DCT_APP_LOCATION_OF(APP_INDEX) (uint32_t )(OFFSETOF(platform_dct_header_t, apps_locations) + sizeof(image_location_t) * ( APP_INDEX ))
 
 /******************************************************
@@ -128,11 +129,13 @@ struct platform_dct_header_s
 {
         unsigned long full_size;
         unsigned long used_size;
+        unsigned long magic_number;
         char write_incomplete;
-        char is_current_dct;
         char app_valid;
         char mfg_info_programmed;
-        unsigned long magic_number;
+        char initial_write;         /* first time DCT is written at manufacture */
+        unsigned long sequence;
+        unsigned long crc32;
         boot_detail_t boot_detail;
         image_location_t apps_locations[ DCT_MAX_APP_COUNT ];
         void (*load_app_func)( void ); /* WARNING: TEMPORARY */
@@ -142,11 +145,13 @@ typedef struct
 {
         unsigned long full_size;
         unsigned long used_size;
+        unsigned long magic_number;
         char write_incomplete;
-        char is_current_dct;
         char app_valid;
         char mfg_info_programmed;
-        unsigned long magic_number;
+        char initial_write;         /* first time DCT is written at manufacture */
+        unsigned long sequence;
+        unsigned long crc32;
         boot_detail_t boot_detail;
         image_location_t apps_locations[ DCT_MAX_APP_COUNT ];
         void (*load_app_func)( void ); /* WARNING: TEMPORARY */
@@ -226,6 +231,23 @@ typedef struct
 } platform_dct_bt_config_t;
 #endif
 
+#ifdef WICED_DCT_INCLUDE_P2P_CONFIG
+typedef struct
+{
+    wiced_config_soft_ap_t    p2p_group_owner_settings;
+    uint8_t padding[2];   /* to ensure 32-bit aligned size */
+} platform_dct_p2p_config_t;
+#endif
+
+#if defined(OTA2_SUPPORT)
+typedef struct
+{
+        uint16_t        update_count;     /* 0x00 when first programmed, incremented when updated -or- factory reset */
+        uint8_t         boot_type;        /* value = ota2_boot_type_t */
+        uint8_t         padding[1];       /* to ensure 32-bit aligned size */
+} platform_dct_ota2_config_t;
+#endif
+
 typedef struct
 {
     platform_dct_header_t          dct_header;
@@ -237,7 +259,14 @@ typedef struct
 #ifdef WICED_DCT_INCLUDE_BT_CONFIG
     platform_dct_bt_config_t       bt_config;
 #endif
+#ifdef WICED_DCT_INCLUDE_P2P_CONFIG
+    platform_dct_p2p_config_t      p2p_config;
+#endif
+#if defined(OTA2_SUPPORT)
+    platform_dct_ota2_config_t     ota2_config;
+#endif
 } platform_dct_data_t;
+
 
 /******************************************************
  *                 Global Variables

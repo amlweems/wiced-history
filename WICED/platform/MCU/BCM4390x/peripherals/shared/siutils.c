@@ -43,6 +43,7 @@
 #define CRYPTO_CORE_REV         0
 #define GCI_CORE_REV            4
 #define USB20H_CORE_REV         5
+#define SDIOH_CORE_REV          3
 
 typedef struct si_private
 {
@@ -131,6 +132,12 @@ static si_private_t core_info[] =
         .curwrap = (void*)PLATFORM_USB20H_MASTER_WRAPPER_REGBASE(0x0),
         .coreid  = USB20H_CORE_ID,
         .corerev = USB20H_CORE_REV,
+    },
+    {
+        .curmap  = (void*)PLATFORM_SDIOH_REGBASE(0x0),
+        .curwrap = (void*)PLATFORM_SDIOH_MASTER_WRAPPER_REGBASE(0x0),
+        .coreid  = SDIOH_CORE_ID,
+        .corerev = SDIOH_CORE_REV,
     },
     {
         .curmap  = NULL,

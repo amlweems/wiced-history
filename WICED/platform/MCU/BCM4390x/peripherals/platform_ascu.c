@@ -74,9 +74,17 @@ static ascu_register_t* const ascu_base = ( ascu_register_t* )( ASCU_REGBASE );
  *               Function Definitions
  ******************************************************/
 
-static inline void platform_ascu_force_ntimer(void)
+static inline void platform_ascu_force_fw_timer_sample(void)
 {
-     ascu_base->ascu_control |= 0x80;
+     ascu_base->ascu_control |= ASCU_CONTROL_FW_TIMER_SAMPLE;
+}
+
+
+static inline void platform_ascu_enable_offset_update(void)
+{
+    /* bit[0], enable_update, write a 0->1 transition to enable the offset adjustment (not self-clearing) */
+    ascu_base->ascu_control &= (~ASCU_CONTROL_ENABLE_UPDATE_MASK);
+    ascu_base->ascu_control |=   ASCU_CONTROL_ENABLE_UPDATE_MASK;
 }
 
 
@@ -103,10 +111,46 @@ platform_result_t platform_ascu_set_frame_sync_period( uint32_t frame_count )
 }
 
 
+platform_result_t platform_ascu_set_frame_sync_offset( uint32_t offset_hi, uint32_t offset_lo )
+{
+    ascu_base->master_clk_offset_hi = offset_hi;
+    ascu_base->master_clk_offset_lo = offset_lo;
+    platform_ascu_enable_offset_update();
+    return PLATFORM_SUCCESS;
+}
+
+
 platform_result_t platform_ascu_get_audio_timer_resolution( uint32_t audio_sample_rate, uint32_t *ticks_per_sec )
 {
-    *ticks_per_sec = audio_sample_rate << ASCU_FSYNC_POWER_OF_TWO_FACTOR;
-    return PLATFORM_SUCCESS;
+    platform_result_t result = PLATFORM_SUCCESS;
+
+    switch(audio_sample_rate)
+    {
+        case 8000:
+        case 12000:
+        case 16000:
+        case 24000:
+        case 32000:
+        case 48000:
+        case 64000:
+        case 96000:
+        case 192000:
+            *ticks_per_sec = AUDIO_TIMER_TICKS_PER_SEC_8000_HZ;
+            break;
+
+        case 11025:
+        case 22050:
+        case 44100:
+        case 88200:
+            *ticks_per_sec = AUDIO_TIMER_TICKS_PER_SEC_11025_HZ;
+            break;
+
+        default:
+            result = PLATFORM_ERROR;
+            break;
+    }
+
+    return result;
 }
 
 
@@ -120,6 +164,7 @@ platform_result_t platform_ascu_read_frame_sync_audio_timer( uint32_t *time_hi, 
 
 platform_result_t platform_ascu_read_fw_audio_timer( uint32_t *time_hi, uint32_t *time_lo )
 {
+    platform_ascu_force_fw_timer_sample();
     *time_hi = ascu_base->audio_timer_fw_hi;
     *time_lo = ascu_base->audio_timer_fw_lo;
     return PLATFORM_SUCCESS;
@@ -128,6 +173,7 @@ platform_result_t platform_ascu_read_fw_audio_timer( uint32_t *time_hi, uint32_t
 
 platform_result_t platform_ascu_read_fw_audio_talker_timer( uint32_t *time_hi, uint32_t *time_lo )
 {
+    platform_ascu_force_fw_timer_sample();
     *time_hi = ascu_base->audio_talker_timer_fw_hi;
     *time_lo = ascu_base->audio_talker_timer_fw_lo;
     return PLATFORM_SUCCESS;
@@ -159,18 +205,26 @@ static wlc_avb_timestamp_t* get_avb_timestamp_addr(void)
     return (wlc_avb_timestamp_t *)*data;
 }
 
-
-static inline int platform_ascu_convert_ntimer(uint32_t ntimer_hi, uint32_t ntimer_lo, uint32_t *secs, uint32_t *nanosecs)
+platform_result_t platform_ascu_convert_ntimer(uint32_t ntimer_hi, uint32_t ntimer_lo, uint32_t *secs, uint32_t *nanosecs)
 {
-    uint32_t remainder;
+    uint64_t remainder;
     uint64_t rx_hi  = ntimer_hi;
-    uint64_t ntimer = (rx_hi << 32) | ntimer_lo;
+    uint64_t ntimer = (rx_hi << 32) | (uint64_t)ntimer_lo;
 
     if (ntimer != 0)
     {
-        *secs     = ntimer / NET_TIMER_TICKS_PER_SEC;
-        remainder = ntimer - (*secs * NET_TIMER_TICKS_PER_SEC);
-        *nanosecs = remainder * NET_TIMER_NANOSECS_PER_TICK;
+        /* The vast majority of correction calculations will be < second */
+        if (ntimer > NET_TIMER_TICKS_PER_SEC)
+        {
+            *secs = (uint32_t)((double)ntimer / NET_TIMER_TICKS_PER_SEC);
+            remainder = ntimer - ((uint64_t)*secs * NET_TIMER_TICKS_PER_SEC);
+        }
+        else
+        {
+            *secs = 0;
+            remainder = ntimer;
+        }
+        *nanosecs = (uint32_t)((double)remainder * NET_TIMER_NANOSECS_PER_TICK);
     }
     else
     {
@@ -236,6 +290,14 @@ void platform_ascu_enable_interrupts(uint32_t int_mask)
     ascu_chipcommon_interrupt_mask( 0x0, cc_int_mask );
 }
 
+platform_result_t platform_ascu_read_raw_ntimer(uint32_t *timer_hi, uint32_t *timer_lo)
+{
+
+    *timer_hi = ascu_base->network_timer_rx_hi;
+    *timer_lo = ascu_base->network_timer_rx_lo;
+
+    return PLATFORM_SUCCESS;
+}
 
 int platform_ascu_read_ntimer(uint32_t *secs, uint32_t *nanosecs)
 {
@@ -245,10 +307,19 @@ int platform_ascu_read_ntimer(uint32_t *secs, uint32_t *nanosecs)
                                         secs, nanosecs);
 }
 
+platform_result_t platform_ascu_read_raw_fw_ntimer(uint32_t *timer_hi, uint32_t *timer_lo)
+{
+    platform_ascu_force_fw_timer_sample();
+    *timer_hi = ascu_base->network_timer_fw_hi;
+    *timer_lo = ascu_base->network_timer_fw_lo;
+
+    return PLATFORM_SUCCESS;
+}
+
 int platform_ascu_read_fw_ntimer(uint32_t *secs, uint32_t *nanosecs)
 {
 
-    platform_ascu_force_ntimer();
+    platform_ascu_force_fw_timer_sample();
     return platform_ascu_convert_ntimer(ascu_base->network_timer_fw_hi,
                                         ascu_base->network_timer_fw_lo,
                                         secs, nanosecs);
@@ -292,8 +363,7 @@ void platform_ascu_irq(uint32_t intr_status)
 
         if (g_avb_timestamp)
         {
-            g_avb_timestamp->net_timer_rxlo     = ascu_base->network_timer_rx_lo;
-            g_avb_timestamp->net_timer_rxhi     = ascu_base->network_timer_rx_hi;
+            /* WLAN driver sets net_timer_rxlo/rxhi fields*/
             g_avb_timestamp->as_net_timer_rx_lo = ascu_base->network_timer_rx_lo;
             g_avb_timestamp->as_net_timer_rx_hi = ascu_base->network_timer_rx_hi;
         }

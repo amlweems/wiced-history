@@ -1,0 +1,21 @@
+/*
+ * Copyright 2015, Broadcom Corporation
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+BOOTLOADER_SRAM = 0x697000;
+
+MEMORY
+{
+    ROM              (rx)   : ORIGIN = 0x00400000, LENGTH = 640K
+    FLOPS            (rwx)  : ORIGIN = 0x00000000, LENGTH = 32
+    SRAM             (rwx)  : ORIGIN = 0x004A0000, LENGTH = 2008K /* Till the start of ROM_GLOBALS_SRAM memory */
+    ROM_GLOBALS_SRAM (rw)   : ORIGIN = 0x00696000, LENGTH = 36K
+    ROM_JUMPS        (rwx)  : ORIGIN = 0x0069F000, LENGTH = 4K
+    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 8K
+}

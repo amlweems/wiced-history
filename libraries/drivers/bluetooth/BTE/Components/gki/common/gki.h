@@ -95,6 +95,12 @@
 
 #define EVENT_MASK(evt)       ((UINT16)(0x0001 << (evt)))
 
+#ifndef MPAF_CUSTOM_STACK
+#ifndef BT_TASK_EVT_GKI_TIMER_UPDATE
+#define BT_TASK_EVT_GKI_TIMER_UPDATE     (EVENT_MASK(APPL_EVT_1))
+#endif
+#endif
+
 /************************************************************************
 **  Max Time Queue
 **/

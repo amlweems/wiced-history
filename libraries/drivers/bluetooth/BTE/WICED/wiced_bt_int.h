@@ -1,12 +1,13 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/*****************************************************************************
+**
+**  Name:          wiced_bt_int.h
+**
+**  Description:   Internal definitions for wiced bt wrapper
+**
+**
+**  Copyright (c) 2014, Broadcom Corp, All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+******************************************************************************/
 #pragma once
 
 /* WICED -> BTE Conversion  */
@@ -16,7 +17,14 @@
 #define uint8_t         UINT8
 #define uint16_t        UINT16
 #define uint32_t        UINT32
-#define wiced_bool_t    BOOLEAN
+
+/*
+ * TODO: wiced_bool_t(enum) should not be redefined to BOOLEAN(uint8).
+ * It will lead to certain data-type mismatch errors and wrong calculations in DCT if wiced_bt_int.h
+ * overrides the Wiced-SDK's definition of wiced_bool_t.
+ * This change might possibly break BTEWICED build and need further discussion.
+ */
+//#define wiced_bool_t    BOOLEAN
 
 #define wiced_bt_dev_status_t                                   tBTM_STATUS
 #define wiced_bt_management_evt_t                               tBTM_EVENT
@@ -31,6 +39,7 @@
 #define wiced_bt_device_type_t                                  tBT_DEVICE_TYPE
 #define wiced_bt_dev_bonded_device_info_t                       tBT_BONDED_DEVICE_INFO_TYPE
 #define wiced_bt_transport_t                                    tBT_TRANSPORT
+#define wiced_bt_ble_address_t                                  tBLE_BD_ADDR
 #define wiced_bt_ble_address_type_t                             tBLE_ADDR_TYPE
 #define wiced_bt_ble_conn_mode_t                                tBLE_CONN_MODE
 #define wiced_bt_dev_passkey_entry_type_t                       tBTM_SP_KEY_TYPE
@@ -42,8 +51,9 @@
 #ifndef wiced_bt_dev_vendor_specific_command_complete_params_t
 #define wiced_bt_dev_vendor_specific_command_complete_params_t  tBTM_VSC_CMPL
 #endif
-#define wiced_bt_ble_advert_mask_t                              tBTM_BLE_AD_MASK
-#define wiced_bt_ble_advert_data_t                              tBTM_BLE_ADV_DATA
+#define wiced_bt_dev_vendor_specific_event_callback_t           tBTM_VS_EVT_CB
+
+#define wiced_bt_ble_advert_elem_t                              tBTM_BLE_ADV_ELEM
 #define wiced_bt_ble_conn_type_t                                tBTM_BLE_CONN_TYPE
 #define wiced_bt_ble_selective_conn_cback_t                     tBTM_BLE_SEL_CBACK
 #define wiced_bt_ble_scan_type_t                                tBTM_BLE_SCAN_TYPE          /* new */
@@ -72,9 +82,22 @@
 #define wiced_bt_gatt_status_t                                  tGATT_STATUS
 #define wiced_bt_gatt_write_t                                   tGATT_WRITE_REQ
 #define wiced_bt_gatt_read_t                                    tGATT_READ_REQ
+#define wiced_bt_gatt_exec_flag_t                               tGATT_EXEC_FLAG
+#define wiced_gattdb_entry_t                                    LEGATTDB_ENTRY_HDR
 
 #define wiced_bt_hidd_status_t                                  tHID_STATUS
 #define wiced_bt_hidd_reg_info_t                                tHID_DEV_REG_INFO
 #define wiced_bt_hidd_callback_t                                tHID_DEV_CBACK_DATA
 
 #define wiced_bt_sco_enh_esco_params_t                          tBTM_ENH_ESCO_PARAMS
+
+#define wiced_bt_gap_ble_attr_value_t                           tGAP_BLE_ATTR_VALUE
+#ifdef MPAF_CUSTOM_STACK
+/* HCI trace call back */
+#define wiced_bt_hci_trace_cback_t                              BTU_HCI_TRACE_CALLBACK
+#define wiced_bt_hci_trace_type_t                               bte_glue_hci_trace_type_t
+#endif
+
+#define wiced_bt_link_key_t                                     LINK_KEY
+#define wiced_bt_ble_keys_t                                     tBTM_SEC_BLE_KEYS
+#define wiced_bt_device_sec_keys_t                              tBTM_SEC_KEYS

@@ -62,12 +62,8 @@
  *             Constants
  ******************************************************/
 
-#define IRL_FC_SHIFT    24        /* frame count */
-#define DEF_IRL                   (1 << IRL_FC_SHIFT)
-#define DEF_INTMASK               (I_SMB_SW_MASK | I_RI | I_XI | I_ERRORS | I_WR_OOSYNC | I_RD_OOSYNC | I_RF_TERM | I_WF_TERM)
-#define DEF_SDIO_INTMASK          (DEF_INTMASK | I_SRESET | I_IOE2)
-#define DEF_SB_INTMASK            (I_SB_SERR | I_SB_RESPERR | I_SB_SPROMERR)
-#define BT_INTMASK                (I_RI | I_XI | I_ERRORS | I_WR_OOSYNC | I_RD_OOSYNC)
+#define IRL_FC_SHIFT                    24 /* frame count */
+#define DEF_IRL                         (1 << IRL_FC_SHIFT)
 
 #define ACPU_DMA_TX_CHANNEL             (1)
 #define ACPU_DMA_RX_CHANNEL             (0)
@@ -101,7 +97,7 @@
 
 #define ARMCR4_SW_INT0           (0x1 << 0)
 #define ARMCR4_SW_INT0_STATUS    (0x1 << SW0_ExtIRQn)
-#define PLATFORM_WLANCR4         ( (volatile wlancr4_regs_t*    ) PLATFORM_WLANCR4_REGBASE(0x0))
+#define PLATFORM_WLANCR4         ((volatile wlancr4_regs_t*)PLATFORM_WLANCR4_REGBASE(0x0))
 
 #define M2M_WLAN_WAIT_ASSERT_SEC 3
 
@@ -109,15 +105,10 @@
  *                   Enumerations
  ******************************************************/
 
-typedef enum
-{
-    M2M_DMA_INTERRUPTS_OFF,
-    M2M_DMA_INTERRUPTS_ON,
-} m2m_dma_interrupt_state_t;
-
 /******************************************************
  *             Structures
  ******************************************************/
+
 typedef appscr4_regs_t wlancr4_regs_t;
 
 /******************************************************
@@ -134,25 +125,24 @@ static int                   initing    = 0;
  *             Function declarations
  ******************************************************/
 
-static void m2m_dma_set_interrupt_state( m2m_dma_interrupt_state_t state );
-
 /******************************************************
- *             Global Function definitions
+ *             Function definitions
  ******************************************************/
-/* Device data transfer functions */
-
-/*
- * From internal documentation: hwnbu-twiki/SdioMessageEncapsulation
- * When data is available on the device, the device will issue an interrupt:
- * - the device should signal the interrupt as a hint that one or more data frames may be available on the device for reading
- * - the host may issue reads of the 4 byte length tag at any time -- that is, whether an interupt has been issued or not
- * - if a frame is available, the tag read should return a nonzero length (>= 4) and the host can then read the remainder of the frame by issuing one or more CMD53 reads
- * - if a frame is not available, the 4byte tag read should return zero
- */
 
 static void m2m_core_enable( void )
 {
     osl_wrapper_enable( (void*)PLATFORM_M2M_MASTER_WRAPPER_REGBASE(0x0) );
+}
+
+static void m2m_dma_enable_interrupts( wiced_bool_t enable )
+{
+    uint32_t rx_mask = enable ? I_DMA : 0x0;
+    W_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intmask, rx_mask );
+}
+
+void m2m_signal_txdone( void )
+{
+    PLATFORM_WLANCR4->sw_int = ARMCR4_SW_INT0; /* Signal WLAN core there is a TX done by setting wlancr4 SW interrupt 0 */
 }
 
 #if PLATFORM_WLAN_POWERSAVE
@@ -197,30 +187,30 @@ void m2m_powersave_comm_begin( void )
     M2M_INIT_DMA_ASYNC();
 }
 
-wiced_bool_t m2m_powersave_comm_end( wiced_bool_t tx, wiced_bool_t force )
+wiced_bool_t m2m_powersave_comm_end( wiced_bool_t tx )
 {
-    wiced_bool_t result = force || !tx || m2m_tx_is_idle( );
+    wiced_bool_t result = !tx || m2m_tx_is_idle( );
 
     if ( result )
     {
-        PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, force );
+        PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_FALSE );
     }
 
     return result;
 }
 
-static void m2m_signal_txdone( void )
+static void m2m_powersave_comm_signal_txdone( void )
 {
     m2m_powersave_comm_begin();
-    PLATFORM_WLANCR4->sw_int = ARMCR4_SW_INT0; /* Signal WLAN core there is a TX done by setting wlancr4 SW interrupt 0 */
-    m2m_powersave_comm_end( WICED_FALSE, WICED_FALSE );
+    m2m_signal_txdone();
+    m2m_powersave_comm_end( WICED_FALSE );
 }
 
 static void m2m_powersave_comm_init_begin( void )
 {
     if ( !m2m_wlan_is_ready() )
     {
-        m2m_signal_txdone();
+        m2m_powersave_comm_signal_txdone();
     }
 }
 
@@ -235,7 +225,7 @@ static void m2m_powersave_comm_init_done( void )
 
         if ( ( current_stamp - last_stamp ) / 1024 > 0 )
         {
-            m2m_signal_txdone();
+            m2m_powersave_comm_signal_txdone();
             last_stamp = current_stamp;
         }
 
@@ -249,10 +239,9 @@ static inline void m2m_powersave_comm_begin( void )
 {
 }
 
-static inline wiced_bool_t m2m_powersave_comm_end( wiced_bool_t tx, wiced_bool_t force )
+static inline wiced_bool_t m2m_powersave_comm_end( wiced_bool_t tx )
 {
     UNUSED_PARAMETER( tx );
-    UNUSED_PARAMETER( force );
     return WICED_TRUE;
 }
 
@@ -264,38 +253,33 @@ static inline void m2m_powersave_comm_init_done( void )
 {
 }
 
-static inline void m2m_signal_txdone( void )
-{
-    PLATFORM_WLANCR4->sw_int = ARMCR4_SW_INT0; /* Signal WLAN core there is a TX done by setting wlancr4 SW interrupt 0 */
-}
-
 #endif /* PLATFORM_WLAN_POWERSAVE */
 
-uint32_t m2m_read_intstatus(void)
+uint32_t m2m_read_intstatus( wiced_bool_t* signal_txdone )
 {
-    uint32_t intstatus;
-    uint32_t wlan_txstatus;
+    uint32_t intstatus = 0;
     uint32_t txint;
     uint32_t rxint;
 
     txint = R_REG( osh, &m2mreg->intregs[ ACPU_DMA_TX_CHANNEL ].intstatus );
-    if ( txint & ( I_XI | I_ERRORS ) )
+    wiced_assert( "TX intstatus error", ( txint & I_ERRORS ) == 0 );
+    if ( txint & I_XI )
     {
-        W_REG( osh, &m2mreg->intregs[ ACPU_DMA_TX_CHANNEL ].intstatus, (txint & I_XI));
+        W_REG( osh, &m2mreg->intregs[ ACPU_DMA_TX_CHANNEL ].intstatus, I_XI );
+        intstatus |= I_XI;
     }
 
     rxint = R_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intstatus );
-    if ( rxint & ( I_RI | I_ERRORS ) )
+    wiced_assert( "RX intstatus error", ( rxint & I_ERRORS ) == 0 );
+    if ( rxint & I_RI )
     {
-        W_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intstatus, (rxint & I_RI) );
+        W_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intstatus, I_RI );
+        intstatus |= I_RI;
     }
 
-    intstatus = ( txint & I_XI ) | ( rxint & I_RI );
-    wlan_txstatus = ( rxint & I_XI );
-
-    if ( wlan_txstatus != 0 )
+    if ( signal_txdone )
     {
-        m2m_signal_txdone();
+        *signal_txdone = ( rxint & I_XI ) ? WICED_TRUE : WICED_FALSE;
     }
 
     return intstatus;
@@ -336,8 +320,9 @@ void m2m_init_dma( void )
 
     /* Need to reserve 4 bytes header room so that the manipulation in wwd_bus_read_frame
      * which moves the data offset back 12 bytes would not break the data pointer */
-    osh->pktget_add_remove  = sizeof(wwd_buffer_header_t) - sizeof( wwd_bus_header_t );
-    osh->pktfree_add_remove = sizeof(wwd_buffer_header_t) - sizeof( wwd_bus_header_t );
+    osh->rx_pktget_add_remove  = sizeof(wwd_buffer_header_t) - sizeof( wwd_bus_header_t );
+    /* No need to do anything during freeing, host_buffer_release() works fine */
+    osh->tx_pktfree_add_remove = 0;
 
     dma_handle = m2m_dma_attach( osh, "M2MDEV", NULL,
                                  (volatile void *)&(m2mreg->dmaregs[ACPU_DMA_TX_CHANNEL].tx),
@@ -359,16 +344,16 @@ void m2m_init_dma( void )
 #ifndef M2M_RX_POLL_MODE
     m2m_dma_set_irq_line_number( ACPU_DMA_RX_CHANNEL, ACPU_DMA_RX_CHANNEL_IRQ_NUM );
     platform_irq_remap_sink    ( OOB_AOUT_M2M_INTR1, M2M_ExtIRQn );
-    m2m_dma_set_interrupt_state( M2M_DMA_INTERRUPTS_ON );
+    m2m_dma_enable_interrupts  ( WICED_TRUE );
 #else
-    m2m_dma_set_interrupt_state( M2M_DMA_INTERRUPTS_OFF );
+    m2m_dma_enable_interrupts  ( WICED_FALSE );
 #endif /* M2M_RX_POLL_MODE */
 
     m2m_dma_txinit( dma_handle ); /* Last step of initialization. Register settings inside tells WLAN that RX is ready. */
 
     m2m_powersave_comm_init_done();
 
-    m2m_powersave_comm_end( WICED_FALSE, WICED_FALSE );
+    m2m_powersave_comm_end( WICED_FALSE );
 
     initing = 0;
 }
@@ -384,7 +369,7 @@ void m2m_dma_tx_reclaim( void )
 
     while ( ( txd = m2m_dma_getnexttxp( dma_handle, FALSE ) ) != NULL )
     {
-        PKTFREE( NULL, txd, TRUE );
+        PKTFREE( osh, txd, TRUE );
     }
 }
 
@@ -443,24 +428,24 @@ int m2m_rxactive_dma( void )
     return m2m_dma_rxactive( dma_handle );
 }
 
-void m2m_dma_tx_data( void* buffer, uint32_t unused_data_size )
+void m2m_dma_tx_data( void* buffer )
 {
-    (void)m2m_dma_txfast( dma_handle, buffer, 0, TRUE ); /* function release packet inside if failed */
+    (void)m2m_dma_txfast( dma_handle, buffer, TRUE ); /* function release packet inside if failed */
 }
 
 void m2m_deinit_dma( void )
 {
     deiniting = 1;
-    m2m_dma_set_interrupt_state( M2M_DMA_INTERRUPTS_OFF );
+    m2m_dma_enable_interrupts( WICED_FALSE );
     m2m_dma_txreset  ( dma_handle );
     m2m_dma_rxreset  ( dma_handle );
     m2m_dma_rxreclaim( dma_handle );
     m2m_dma_txreclaim( dma_handle, HNDDMA_RANGE_ALL );
     m2m_dma_detach   ( dma_handle );
     MFREE(NULL, osh, sizeof(osl_t));
+    osh = NULL;
     dma_handle = NULL;
     deiniting = 0;
-    m2m_powersave_comm_end( WICED_FALSE, WICED_TRUE );
 }
 
 void m2m_switch_off_dma_post_completion( void )
@@ -578,12 +563,14 @@ int m2m_unprotected_dma_memcpy( void* destination, const void* source, uint32_t 
     wiced_assert( "nonblocking m2m dma memcpy supports max payload of D64_CTRL2_BC_USABLE_MASK",
      ( ( blocking != WICED_FALSE ) ||  ( byte_count <=  D64_CTRL2_BC_USABLE_MASK ) ) );
 
+    uint32_t dma_source = platform_addr_cpu_to_dma( source );
+    uint32_t dma_destination = platform_addr_cpu_to_dma( destination );
     while ( byte_count > 0 )
     {
         uint32_t write_size = MIN( byte_count, D64_CTRL2_BC_USABLE_MASK );
 
-        m2m_descriptors[0].addrlow = (uint32_t)source;
-        m2m_descriptors[1].addrlow = (uint32_t)destination;
+        m2m_descriptors[0].addrlow = dma_source;
+        m2m_descriptors[1].addrlow = dma_destination;
         m2m_descriptors[0].ctrl2   = D64_CTRL2_BC_USABLE_MASK & write_size;
         m2m_descriptors[1].ctrl2   = D64_CTRL2_BC_USABLE_MASK & write_size;
 
@@ -595,9 +582,9 @@ int m2m_unprotected_dma_memcpy( void* destination, const void* source, uint32_t 
         m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.control |= D64_XC_XE;
 
         /* Update variables */
-        byte_count  -= write_size;
-        destination += write_size;
-        source      += write_size;
+        byte_count      -= write_size;
+        dma_destination += write_size;
+        dma_source      += write_size;
 
         if ( blocking == WICED_TRUE )
         {
@@ -627,26 +614,6 @@ void m2m_wlan_dma_deinit( void )
     W_REG(osh, &m2mreg->intregs[ACPU_DMA_TX_CHANNEL].intmask, 0);
     W_REG(osh, &m2mreg->intregs[ACPU_DMA_RX_CHANNEL].intstatus, 0xffffffff);
     W_REG(osh, &m2mreg->intregs[ACPU_DMA_TX_CHANNEL].intstatus, 0xffffffff);
-}
-
-/******************************************************
- *             Static  Function definitions
- ******************************************************/
-
-static void m2m_dma_set_interrupt_state( m2m_dma_interrupt_state_t state )
-{
-    uint32_t rx_mask;
-
-    rx_mask = R_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intmask );
-    if ( state == M2M_DMA_INTERRUPTS_ON )
-    {
-        rx_mask |= I_RI | I_ERRORS;
-    }
-    else
-    {
-        rx_mask &= ~( I_RI | I_ERRORS );
-    }
-    W_REG( osh, &m2mreg->intregs[ ACPU_DMA_RX_CHANNEL ].intmask, rx_mask );
 }
 
 #ifndef M2M_RX_POLL_MODE

@@ -19,9 +19,10 @@
 #include "platform_dct.h"
 #include "wiced_framework.h"
 
-#define MAX_PASSPHRASE_LENGTH 64
-#define MAX_SSID_LENGTH 32
-#define DOT11_PMK_LENGTH 32
+#define MAX_PASSPHRASE_LENGTH                 64
+#define MAX_SSID_LENGTH                       32
+#define DOT11_PMK_LENGTH                      32
+#define MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT  0x02
 
 /******************************************************
  *                      Macros
@@ -100,7 +101,6 @@ static char           test_pin_string[9];
 
 extern char           last_started_ssid[32];
 
-extern wiced_result_t deauth_all_associated_client_stas(wwd_dot11_reason_code_t inReason, wwd_interface_t interface );
 void                  p2p_connection_request_callback( p2p_discovered_device_t* device );
 void                  p2p_legacy_device_connection_request_callback( p2p_legacy_device_t* device );
 void                  p2p_wpa2_client_association_callback( besl_mac_t* );
@@ -118,6 +118,7 @@ static wiced_result_t p2p_group_formation_result_handler( void* not_used );
 static wiced_result_t p2p_wps_result_handler( void* result );
 static wiced_result_t p2p_device_disassociation_handler( void* mac );
 static wiced_result_t p2p_legacy_device_disassociation_handler( void* mac );
+static int            check_mac_locally_administered_bit( void );
 extern void           dehyphenate_pin(char* str );
 
 static uint8_t        connecting_device_index = 255;
@@ -148,7 +149,10 @@ int p2p_connect( int argc, char* argv[] )
 
     if ( p2p_workspace.p2p_initialised != 1 )
     {
-        p2p_discovery_enable( 0, NULL );
+        if ( p2p_discovery_enable( 0, NULL ) != 0 )
+        {
+            return -1;
+        }
     }
     else if ( wwd_wifi_is_ready_to_transceive(WWD_P2P_INTERFACE) == WWD_SUCCESS )
     {
@@ -660,6 +664,11 @@ int p2p_discovery_enable( int argc, char* argv[] )
 {
     besl_result_t result;
 
+    if ( check_mac_locally_administered_bit( ) != 0 )
+    {
+        return -1;
+    }
+
     if ( p2p_workspace.p2p_initialised == 1 )
     {
         if ( wwd_wifi_is_ready_to_transceive(WICED_P2P_INTERFACE) == WWD_SUCCESS )
@@ -685,6 +694,12 @@ int p2p_discovery_enable( int argc, char* argv[] )
             if ( ( result = besl_p2p_init( &p2p_workspace, &device_details ) ) != BESL_SUCCESS )
             {
                 WPRINT_APP_INFO(( "besl_p2p_init failed %u\n", (unsigned int)result ));
+                if ( p2p_worker_thread_running == 1 )
+                {
+                    wiced_rtos_delete_worker_thread( &p2p_worker_thread );
+                    p2p_worker_thread_running = 0;
+                }
+                return -1;
             }
             besl_p2p_register_p2p_device_connection_callback( &p2p_workspace, p2p_connection_request_callback);
             besl_p2p_register_legacy_device_connection_callback( &p2p_workspace, p2p_legacy_device_connection_request_callback );
@@ -769,8 +784,13 @@ int p2p_go_start( int argc, char* argv[] )
 {
     int                         ssid_suffix_length = 0;
     int                         offset = 0;
-    platform_dct_wifi_config_t* dct_wifi_config;
+    platform_dct_p2p_config_t*  dct_p2p_group_owner_config;
     besl_result_t               result;
+
+    if ( check_mac_locally_administered_bit( ) != 0 )
+    {
+        return -1;
+    }
 
     if ( wwd_wifi_is_ready_to_transceive( WICED_P2P_INTERFACE ) == WWD_SUCCESS )
     {
@@ -834,9 +854,9 @@ int p2p_go_start( int argc, char* argv[] )
     else if ( p2p_workspace.form_persistent_group == 1 )
     {
         p2p_workspace.reinvoking_group = 1;
-        wiced_dct_read_lock( (void**) &dct_wifi_config, WICED_TRUE, DCT_WIFI_CONFIG_SECTION, 0, sizeof(platform_dct_wifi_config_t) );
-        memcpy( &p2p_workspace.persistent_group, &dct_wifi_config->soft_ap_settings, sizeof( wiced_config_soft_ap_t ) );
-        wiced_dct_read_unlock( (void*) dct_wifi_config, WICED_TRUE );
+        wiced_dct_read_lock( (void**) &dct_p2p_group_owner_config, WICED_TRUE, DCT_P2P_CONFIG_SECTION, 0, sizeof(platform_dct_p2p_config_t) );
+        memcpy( &p2p_workspace.persistent_group, &dct_p2p_group_owner_config->p2p_group_owner_settings, sizeof( wiced_config_soft_ap_t ) );
+        wiced_dct_read_unlock( (void*) dct_p2p_group_owner_config, WICED_TRUE );
         p2p_workspace.group_candidate.ssid_length = p2p_workspace.persistent_group.SSID.length;
         memcpy( &p2p_workspace.group_candidate.ssid, p2p_workspace.persistent_group.SSID.value, p2p_workspace.group_candidate.ssid_length );
         p2p_workspace.p2p_passphrase_length = p2p_workspace.persistent_group.security_key_length;
@@ -850,6 +870,7 @@ int p2p_go_start( int argc, char* argv[] )
 
     create_p2p_worker_thread();
     besl_p2p_register_wps_result_callback( &p2p_workspace, p2p_wps_result_callback );
+    besl_p2p_register_group_formation_result_callback( &p2p_workspace, p2p_group_formation_result_callback );
 
     if ( ( result = besl_p2p_group_owner_start(&p2p_workspace) ) != BESL_SUCCESS )
     {
@@ -885,7 +906,7 @@ int p2p_go_stop( int argc, char* argv[] )
     }
 
     p2p_registrar_stop( 0, NULL );
-    deauth_all_associated_client_stas( WWD_DOT11_RC_UNSPECIFIED, WICED_P2P_INTERFACE );
+    wwd_wifi_deauth_all_associated_client_stas( WWD_DOT11_RC_UNSPECIFIED, WICED_P2P_INTERFACE );
     host_rtos_delay_milliseconds( 100 ); /* Delay to allow the deauthentication frames to be sent */
 
     if ( p2p_worker_thread_running == 1 )
@@ -964,8 +985,11 @@ int p2p_peer_list( int argc, char* argv[] )
     if ( p2p_workspace.p2p_initialised != 1 )
     {
         WPRINT_APP_INFO( ("Enabling P2P discovery and scanning for peers, please wait\n") );
-        p2p_discovery_enable( 0, NULL );
-        host_rtos_delay_milliseconds( 2000 ); // Delay so that the peer list has a chance to fill
+        if ( p2p_discovery_enable( 0, NULL ) != 0 )
+        {
+            return -1;
+        }
+        host_rtos_delay_milliseconds( 3000 ); // Delay so that the peer list has a chance to fill
     }
 
     besl_p2p_get_discovered_peers(&p2p_workspace, &devices, &device_count);
@@ -1777,7 +1801,7 @@ int p2p_set_go_pbc_mode_support( int argc, char* argv[] )
 
 static wiced_result_t p2p_group_formation_result_handler( void* not_used )
 {
-    platform_dct_wifi_config_t* dct_wifi_config;
+    platform_dct_p2p_config_t*  dct_p2p_group_owner_config;
 
     if ( wiced_network_is_ip_up( WICED_P2P_INTERFACE ) == WICED_TRUE )
     {
@@ -1790,12 +1814,12 @@ static wiced_result_t p2p_group_formation_result_handler( void* not_used )
             if ( p2p_workspace.form_persistent_group == 1 )
             {
                 p2p_workspace.persistent_group.details_valid = CONFIG_VALIDITY_VALUE;
-                wiced_dct_read_lock( (void**) &dct_wifi_config, WICED_TRUE, DCT_WIFI_CONFIG_SECTION, 0, sizeof(platform_dct_wifi_config_t) );
-                memcpy( &dct_wifi_config->soft_ap_settings, &p2p_workspace.persistent_group, sizeof( wiced_config_soft_ap_t ) );
-                wiced_dct_write( (const void*)dct_wifi_config, DCT_WIFI_CONFIG_SECTION, 0, sizeof( platform_dct_wifi_config_t));
-                wiced_dct_read_unlock( (void*) dct_wifi_config, WICED_TRUE );
+                wiced_dct_read_lock( (void**) &dct_p2p_group_owner_config, WICED_TRUE, DCT_P2P_CONFIG_SECTION, 0, sizeof(platform_dct_p2p_config_t) );
+                memcpy( &dct_p2p_group_owner_config->p2p_group_owner_settings, &p2p_workspace.persistent_group, sizeof(wiced_config_soft_ap_t) );
+                wiced_dct_write( (const void*) dct_p2p_group_owner_config, DCT_P2P_CONFIG_SECTION, 0, sizeof(platform_dct_p2p_config_t) );
+                wiced_dct_read_unlock( (void*) dct_p2p_group_owner_config, WICED_TRUE );
             }
-            WPRINT_APP_INFO( ( "P2P result: group owner\n") );
+            //WPRINT_APP_INFO( ( "P2P result: group owner\n") );
         }
     }
     else
@@ -1805,3 +1829,20 @@ static wiced_result_t p2p_group_formation_result_handler( void* not_used )
 
     return WICED_SUCCESS;
 }
+
+
+static int check_mac_locally_administered_bit( void )
+{
+    wiced_mac_t   mac;
+
+    wiced_wifi_get_mac_address( &mac );
+    if ( mac.octet[0] & MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT )
+    {
+        WPRINT_APP_INFO(( "Error: MAC address is locally administered. Modify MAC address in generated_mac_address.txt file to be globally\n" ));
+        WPRINT_APP_INFO(( "administered, e.g. if first byte of MAC address is 0x02 change it to 0x00. If testing multiple Wiced p2p devices\n" ));
+        WPRINT_APP_INFO(( "ensure that they have unique MAC addresses.\n" ));
+        return -1;
+    }
+    return 0;
+}
+

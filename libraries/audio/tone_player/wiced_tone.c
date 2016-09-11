@@ -14,6 +14,7 @@
 
 #include "wiced.h"
 #include "wiced_audio.h"
+#include "platform_audio.h"
 
 typedef struct
 {
@@ -106,8 +107,9 @@ wiced_result_t wiced_tone_play(uint8_t* data, uint32_t length, wiced_audio_confi
     else
     {
         args->audio_info.bits_per_sample = 16;
-        args->audio_info.channels = 2;
-        args->audio_info.sample_rate = 44100;
+        args->audio_info.channels        = 2;
+        args->audio_info.sample_rate     = 44100;
+        args->audio_info.frame_size      = 4;
     }
     args->repeat = repeat;
 
@@ -134,7 +136,7 @@ wiced_result_t wiced_tone_stop( void )
 }
 
 
-static wiced_result_t initialize_audio_device(const char *dev, wiced_audio_config_t *config, wiced_audio_session_ref *shout)
+static wiced_result_t initialize_audio_device(const platform_audio_device_id_t dev_id, wiced_audio_config_t *config, wiced_audio_session_ref *shout)
 {
     wiced_result_t          result;
     wiced_audio_session_ref sh;
@@ -144,7 +146,7 @@ static wiced_result_t initialize_audio_device(const char *dev, wiced_audio_confi
     /* Initialize device. */
     if (result == WICED_SUCCESS)
     {
-        result = wiced_audio_init(dev, &sh, AUDIO_PERIOD_SIZE);
+        result = wiced_audio_init(dev_id, &sh, AUDIO_PERIOD_SIZE);
         wiced_assert("wiced_audio_init", WICED_SUCCESS == result);
     }
 
@@ -318,7 +320,7 @@ static void wiced_tone_player_task(uint32_t context)
     }
 
     wiced_rtos_lock_mutex(p_session_init_mutex);
-    result = initialize_audio_device(WICED_AUDIO_1, &args->audio_info, &session);
+    result = initialize_audio_device( PLATFORM_DEFAULT_AUDIO_OUTPUT, &args->audio_info, &session);
     is_session_initialized = 1;
     wiced_rtos_unlock_mutex(p_session_init_mutex);
 

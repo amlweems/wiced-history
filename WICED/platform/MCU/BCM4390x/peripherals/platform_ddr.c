@@ -21,6 +21,9 @@
  *                      Macros
  ******************************************************/
 
+#define PLATFORM_DDR_SIZE_1_MBYTE    ( 1024 * 1024 )
+#define PLATFORM_DDR_SIZE_1_GBYTE    ( 1024 * PLATFORM_DDR_SIZE_1_MBYTE )
+
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -57,6 +60,7 @@ typedef struct
 /******************************************************
  *               Variables Definitions
  ******************************************************/
+
 const static ddr_seq_config_t ctl_0_nanya_nt5cb64m16dp_cf =
 {
     .offset = 0x400,
@@ -255,7 +259,6 @@ const static ddr_seq_config_t phy_1_nanya_nt5cb64m16dp_cf =
         0x00000000
     }
 };
-
 
 const static ddr_seq_config_t ctl_0_hynix_bp162_cl5_bl8_320 =
 {
@@ -507,6 +510,8 @@ PLATFORM_DDR_FUNCDECL(nanya_nt5cb64m16dp_cf)
     ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
     ddr_mask_reg(0x400, 0xffffffff, 0x1);
 
+    platform_ddr_size = MIN( PLATFORM_DDR_MAX_SIZE, 128 * PLATFORM_DDR_SIZE_1_MBYTE /* chip size */ );
+
     return PLATFORM_SUCCESS;
 }
 
@@ -528,5 +533,8 @@ PLATFORM_DDR_FUNCDECL(hynix_bp162_cl5_bl8_320)
     ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
     ddr_mask_reg(0x400, 0xffffffff, 0x1);
 
+    platform_ddr_size = MIN( PLATFORM_DDR_MAX_SIZE, 1 * PLATFORM_DDR_SIZE_1_GBYTE /* chip size */ );
+
     return PLATFORM_SUCCESS;
 }
+

@@ -8,6 +8,36 @@
  * written permission of Broadcom Corporation.
  */
 
+/*
+ * License for FreeBSD I2C Bit-Banging Driver (sys/dev/iicbus/iicbb.c)
+ * -
+ * Copyright (c) 1998, 2001 Nicolas Souchu
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * $FreeBSD: head/sys/dev/iicbus/iicbb.c 261844 2014-02-13 18:22:49Z loos $
+ */
+
 /** @file
  *
  */
@@ -57,6 +87,7 @@
 
 #define GSIO_VERIFY(x)  {platform_result_t res = (x); if (res != PLATFORM_SUCCESS){return res;}}
 
+#define I2C_DRIVER(i2c) ( i2c->driver )
 
 /******************************************************
  *                    Constants
@@ -95,6 +126,12 @@ typedef uint32_t (gsio_divider_function_t)(uint32_t clk_rate, uint32_t target_sp
 
 typedef platform_result_t (i2c_io_fn_t)( const platform_i2c_t*, const platform_i2c_config_t*, uint8_t flags, uint8_t* buffer, uint16_t buffer_length);
 
+typedef platform_result_t (*i2c_init_func_t)        ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+typedef platform_result_t (*i2c_deinit_func_t)      ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+typedef platform_result_t (*i2c_read_func_t)        ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
+typedef platform_result_t (*i2c_write_func_t)       ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
+typedef platform_result_t (*i2c_transfer_func_t)    ( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn );
+
 /******************************************************
  *                    Structures
  ******************************************************/
@@ -113,9 +150,37 @@ struct gsio_43909_regs
     volatile uint32_t                       *clkdiv;
 };
 
+struct i2c_driver
+{
+    i2c_init_func_t init;
+    i2c_deinit_func_t deinit;
+    i2c_read_func_t read;
+    i2c_write_func_t write;
+    i2c_transfer_func_t transfer;
+};
+
 /******************************************************
  *               Function Declarations
  ******************************************************/
+
+static void                 gsio_set_clock      ( int port, uint32_t target_speed_hz, gsio_divider_function_t * );
+static platform_result_t    gsio_wait_for_xfer_to_complete( int port );
+static platform_result_t    i2c_xfer            ( const platform_i2c_t *i2c, uint32_t regval );
+static void                 i2c_stop            ( const platform_i2c_t *i2c );
+
+/* GSIO I2C bus interface */
+static platform_result_t    i2c_init            ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+static platform_result_t    i2c_deinit          ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+static platform_result_t    i2c_read            ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
+static platform_result_t    i2c_write           ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
+static platform_result_t    i2c_transfer        ( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn );
+
+/* Bit-Banging I2C bus interface */
+static platform_result_t    i2c_bb_init        ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+static platform_result_t    i2c_bb_deinit      ( const platform_i2c_t* i2c, const platform_i2c_config_t* config );
+static platform_result_t    i2c_bb_read        ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
+static platform_result_t    i2c_bb_write       ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
+static platform_result_t    i2c_bb_transfer    ( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn );
 
 /******************************************************
  *               Variables Definitions
@@ -148,21 +213,56 @@ static const gsio_43909_regs_t gsio_regs[BCM4390X_GSIO_MAX] =
     },
 };
 
-/******************************************************
- *               Function Declarations
- ******************************************************/
+/* GSIO I2C bus driver functions */
+const i2c_driver_t i2c_gsio_driver =
+{
+    .init = i2c_init,
+    .deinit = i2c_deinit,
+    .read = i2c_read,
+    .write = i2c_write,
+    .transfer = i2c_transfer
+};
 
-static void                 gsio_set_clock      ( int port, uint32_t target_speed_hz, gsio_divider_function_t * );
-static platform_result_t    gsio_wait_for_xfer_to_complete( int port );
-static platform_result_t    i2c_xfer            ( const platform_i2c_t *i2c, uint32_t regval );
-static void                 i2c_stop            ( const platform_i2c_t *i2c );
-static platform_result_t    i2c_read            ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length );
-static platform_result_t    i2c_write           ( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length );
+/* Bit-Banging I2C bus driver functions */
+const i2c_driver_t i2c_bb_driver =
+{
+        .init = i2c_bb_init,
+        .deinit = i2c_bb_deinit,
+        .read = i2c_bb_read,
+        .write = i2c_bb_write,
+        .transfer = i2c_bb_transfer
+};
 
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
+/*
+ * Resets I2C pins (if GPIO-muxing enabled) to HW/Power-On default function,
+ * thereby clearing any previous initialization of GPIO alternate function.
+ */
+static inline void gsio_i2c_reset_pins( const platform_i2c_t* i2c )
+{
+    if ( i2c->pin_sda != NULL )
+    {
+        platform_gpio_deinit( i2c->pin_sda );
+    }
+
+    if ( i2c->pin_scl != NULL )
+    {
+        platform_gpio_deinit( i2c->pin_scl );
+    }
+}
+
+static void gsio_clock_request( void )
+{
+    platform_mcu_powersave_request_clock( PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT );
+}
+
+static void gsio_clock_release( void )
+{
+    platform_mcu_powersave_release_clock( PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT );
+}
 
 static void gsio_set_clock( int port, uint32_t target_speed_hz, gsio_divider_function_t *divider_func )
 {
@@ -196,11 +296,9 @@ static uint32_t gsio_i2c_divider( uint32_t clk_rate, uint32_t target_speed_hz )
     return divider;
 }
 
-platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+static platform_result_t i2c_init( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
 {
     uint32_t target_speed_hz;
-
-    wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) && ( config->flags & I2C_DEVICE_USE_DMA ) == 0);
 
     if ( ( config->flags & I2C_DEVICE_USE_DMA ) || (config->address_width != I2C_ADDRESS_WIDTH_7BIT && config->address_width != I2C_ADDRESS_WIDTH_10BIT) )
     {
@@ -224,6 +322,8 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
         return PLATFORM_BADOPTION;
     }
 
+    gsio_i2c_reset_pins( i2c );
+
     gsio_set_clock(i2c->port, target_speed_hz, gsio_i2c_divider);
 
     /* XXX Is it appropriate to set the address here? */
@@ -238,14 +338,34 @@ platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t platform_i2c_deinit( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+static platform_result_t i2c_deinit( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
 {
-    wiced_assert( "bad argument", ( i2c != NULL ) && ( config != NULL ) );
-
     UNUSED_PARAMETER( i2c );
     UNUSED_PARAMETER( config );
 
     return PLATFORM_SUCCESS;
+}
+
+platform_result_t platform_i2c_init( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+{
+    platform_result_t result;
+
+    wiced_assert( "bad argument", ( i2c != NULL ) && ( i2c->driver != NULL ) && ( config != NULL ) && ( config->flags & I2C_DEVICE_USE_DMA ) == 0);
+
+    result = I2C_DRIVER(i2c)->init(i2c, config);
+
+    return result;
+}
+
+platform_result_t platform_i2c_deinit( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+{
+    platform_result_t result;
+
+    wiced_assert( "bad argument", ( i2c != NULL ) && ( i2c->driver != NULL ) && ( config != NULL ) );
+
+    result = I2C_DRIVER(i2c)->deinit(i2c, config);
+
+    return result;
 }
 
 static platform_result_t gsio_wait_for_xfer_to_complete( int port )
@@ -455,6 +575,7 @@ wiced_bool_t platform_i2c_probe_device( const platform_i2c_t *i2c, const platfor
 {
     uint32_t    i;
     uint8_t     dummy[2];
+    platform_result_t result;
 
     /* Read two bytes from the addressed-slave.  The slave-address won't be
      * acknowledged if it isn't on the I2C bus.  The read won't trigger
@@ -468,7 +589,9 @@ wiced_bool_t platform_i2c_probe_device( const platform_i2c_t *i2c, const platfor
      */
     for ( i = 0; i < retries; i++ )
     {
-        if ( i2c_read( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, dummy, sizeof dummy ) == PLATFORM_SUCCESS )
+        result = I2C_DRIVER(i2c)->read(i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, dummy, sizeof dummy);
+
+        if (  result == PLATFORM_SUCCESS )
         {
             return WICED_TRUE;
         }
@@ -505,13 +628,16 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
         }
     }
 
+    gsio_clock_request();
+
     for ( message_count = 0; message_count < number_of_messages; message_count++ )
     {
         for ( retries = 0; retries < messages[message_count].retries; retries++ )
         {
             if ( messages[message_count].tx_length != 0 )
             {
-                result = i2c_write( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].tx_buffer, messages[message_count].tx_length );
+                result = I2C_DRIVER(i2c)->write(i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].tx_buffer, messages[message_count].tx_length);
+
                 if ( result == PLATFORM_SUCCESS )
                 {
                     /* Transaction successful. Break from the inner loop and continue with the next message */
@@ -520,7 +646,8 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
             }
             else if ( messages[message_count].rx_length != 0 )
             {
-                result = i2c_read( i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].rx_buffer, messages[message_count].rx_length );
+                result = I2C_DRIVER(i2c)->read(i2c, config, I2C_START_FLAG | I2C_STOP_FLAG, (uint8_t*) messages[message_count].rx_buffer, messages[message_count].rx_length);
+
                 if ( result == PLATFORM_SUCCESS )
                 {
                     /* Transaction successful. Break from the inner loop and continue with the next message */
@@ -532,11 +659,13 @@ platform_result_t platform_i2c_transfer( const platform_i2c_t* i2c, const platfo
         /* Check if retry is maxed out. If yes, return immediately */
         if ( retries == messages[message_count].retries && result != PLATFORM_SUCCESS )
         {
-            return result;
+            break;
         }
     }
 
-    return PLATFORM_SUCCESS;
+    gsio_clock_release();
+
+    return result;
 }
 
 platform_result_t platform_i2c_init_tx_message( platform_i2c_message_t* message, const void* tx_buffer, uint16_t tx_buffer_length, uint16_t retries, wiced_bool_t disable_dma )
@@ -615,6 +744,9 @@ static platform_result_t i2c_setup_repeated_start( const platform_i2c_t* i2c, co
 static platform_result_t i2c_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn )
 {
     uint8_t i2c_flags = 0;
+    platform_result_t result;
+
+    gsio_clock_request();
 
     if ( (flags & WICED_I2C_REPEATED_START_FLAG) != 0 )
     {
@@ -642,19 +774,31 @@ static platform_result_t i2c_transfer( const platform_i2c_t* i2c, const platform
         i2c_flags |= I2C_STOP_FLAG;
     }
 
-    return (*fn)( i2c, config, i2c_flags, buffer, buffer_length );
+    result = (*fn)( i2c, config, i2c_flags, buffer, buffer_length );
+
+    gsio_clock_release();
+
+    return result;
 }
 
 
 platform_result_t platform_i2c_write( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, const void* buffer, uint16_t buffer_length )
 {
-    return i2c_transfer( i2c, config, flags, (void *) buffer, buffer_length, i2c_write );
+    platform_result_t result;
+
+    result = I2C_DRIVER(i2c)->transfer(i2c, config, flags, (void *) buffer, buffer_length, I2C_DRIVER(i2c)->write);
+
+    return result;
 }
 
 
 platform_result_t platform_i2c_read( const platform_i2c_t* i2c, const platform_i2c_config_t* config, uint16_t flags, void* buffer, uint16_t buffer_length )
 {
-    return i2c_transfer( i2c, config, flags, (void *) buffer, buffer_length, i2c_read );
+    platform_result_t result;
+
+    result = I2C_DRIVER(i2c)->transfer(i2c, config, flags, (void *) buffer, buffer_length, I2C_DRIVER(i2c)->read);
+
+    return result;
 }
 
 #if 0
@@ -682,9 +826,492 @@ platform_result_t platform_i2c_init_combined_message( platform_i2c_message_t* me
 }
 #endif
 
+/*****************************************************************************
+ * 4390x I2C Bit-Banging Driver Implementation. WICED port based on FreeBSD. *
+ * (Refer to the comment header at the top of this file for FreeBSD license) *
+ *****************************************************************************/
 
+/* signal toggle delay (default is low speed) */
+static int i2c_bb_signal_toggle_delay_us = 100;
 
+/* signal toggle timeout factor (default is 100) */
+#define I2C_BB_SIGNAL_TOGGLE_TIMEOUT 100
 
+/* Read/Write bit */
+#define I2C_BB_RW_BIT 0x1
+
+/* Ack not received until timeout */
+#define I2C_BB_ENOACK 0x2
+
+#define I2C_BB_SETDIR_INPUT( pin )     ( platform_gpio_init( pin, INPUT_PULL_UP ) )
+#define I2C_BB_SETDIR_OUTPUT( pin )    ( platform_gpio_init( pin, OUTPUT_PUSH_PULL ) )
+
+#define I2C_BB_GETPIN( pin )    ( platform_gpio_input_get( pin ) )
+
+/* Gets the value on the SCL line */
+#define I2C_BB_GETSCL( i2c )    I2C_BB_GETPIN( i2c->pin_scl )
+/* Gets the value on the SDA line */
+#define I2C_BB_GETSDA( i2c )    I2C_BB_GETPIN( i2c->pin_sda )
+
+#define I2C_BB_SETPIN( pin, val, udelay )                                               \
+    do                                                                                  \
+    {                                                                                   \
+        if ( val )                                                                      \
+        {                                                                               \
+            platform_gpio_output_high( pin );                                           \
+        }                                                                               \
+        else                                                                            \
+        {                                                                               \
+            platform_gpio_output_low( pin );                                            \
+        }                                                                               \
+        OSL_DELAY( udelay );                                                            \
+    }                                                                                   \
+    while ( 0 )
+
+/* Sets the value on the SCL line. Implements clock stretching to handle wait states. */
+#define I2C_BB_SETSCL( i2c, val )                                                       \
+    do                                                                                  \
+    {                                                                                   \
+        int k = 0;                                                                      \
+                                                                                        \
+        if ( val )                                                                      \
+        {                                                                               \
+            I2C_BB_SETPIN( i2c->pin_scl, val, 0 );                                      \
+                                                                                        \
+            I2C_BB_SETDIR_INPUT( i2c->pin_scl );                                        \
+                                                                                        \
+            while ( !I2C_BB_GETSCL( i2c ) && k++ < I2C_BB_SIGNAL_TOGGLE_TIMEOUT )       \
+            {                                                                           \
+                OSL_DELAY( i2c_bb_signal_toggle_delay_us );                             \
+                I2C_BB_SETDIR_OUTPUT( i2c->pin_scl );                                   \
+                I2C_BB_SETPIN( i2c->pin_scl, val, 0 );                                  \
+                I2C_BB_SETDIR_INPUT( i2c->pin_scl );                                    \
+            }                                                                           \
+                                                                                        \
+            I2C_BB_SETDIR_OUTPUT( i2c->pin_scl );                                       \
+        }                                                                               \
+                                                                                        \
+        I2C_BB_SETPIN( i2c->pin_scl, val, i2c_bb_signal_toggle_delay_us );              \
+    }                                                                                   \
+    while ( 0 )
+
+/* Sets the value on the SDA line */
+#define I2C_BB_SETSDA( i2c, val )    I2C_BB_SETPIN( i2c->pin_sda, val, i2c_bb_signal_toggle_delay_us )
+
+/* Sets the values on SCL and SDA lines */
+#define I2C_BB_SET( i2c, ctrl, data )                                                   \
+    do                                                                                  \
+    {                                                                                   \
+        I2C_BB_SETSCL( i2c, ctrl );                                                     \
+        I2C_BB_SETSDA( i2c, data );                                                     \
+    }                                                                                   \
+    while ( 0 )
+
+static int i2c_bb_debug = 0;
+
+#define I2C_BB_DEBUG( x )                                                               \
+    do                                                                                  \
+    {                                                                                   \
+        if ( i2c_bb_debug )                                                             \
+        {                                                                               \
+            ( x );                                                                      \
+        }                                                                               \
+    }                                                                                   \
+    while ( 0 )
+
+/*
+ * Resets the GPIO-muxed bit-banging I2C pins to HW/Power-On default function,
+ * thereby clearing any previous initialization of GPIO alternate function.
+ */
+static inline void
+i2c_bb_reset_pins( const platform_i2c_t* i2c )
+{
+    if ( i2c->pin_sda != NULL )
+    {
+        platform_gpio_deinit( i2c->pin_sda );
+    }
+
+    if ( i2c->pin_scl != NULL )
+    {
+        platform_gpio_deinit( i2c->pin_scl );
+    }
+}
+
+/* Transmits a high bit over the I2C bus */
+static void
+i2c_bb_one( const platform_i2c_t* i2c, int timeout )
+{
+    I2C_BB_SETSCL( i2c, 0);
+    I2C_BB_SETSDA( i2c, 1);
+    I2C_BB_SETSCL( i2c, 1);
+    I2C_BB_SETSCL( i2c, 0);
+
+    return;
+}
+
+/* Transmits a low bit over the I2C bus */
+static void
+i2c_bb_zero( const platform_i2c_t* i2c, int timeout )
+{
+    I2C_BB_SETSCL( i2c, 0);
+    I2C_BB_SETSDA( i2c, 0);
+    I2C_BB_SETSCL( i2c, 1);
+    I2C_BB_SETSCL( i2c, 0);
+
+    return;
+}
+
+/*
+ * Waiting for ACKNOWLEDGE.
+ *
+ * When a chip is being addressed or has received data it will issue an
+ * ACKNOWLEDGE pulse. Therefore the MASTER must release the DATA line
+ * (set it to high level) and then release the CLOCK line.
+ * Now it must wait for the SLAVE to pull the DATA line low.
+ * Actually on the bus this looks like a START condition so nothing happens
+ * because of the fact that the IC's that have not been addressed are doing
+ * nothing.
+ *
+ * When the SLAVE has pulled this line low the MASTER will take the CLOCK
+ * line low and then the SLAVE will release the SDA (data) line.
+ */
+static int
+i2c_bb_ack( const platform_i2c_t* i2c, int timeout )
+{
+    int noack;
+    int k = 0;
+
+    I2C_BB_SET( i2c, 0, 1 );
+
+    I2C_BB_SETDIR_INPUT( i2c->pin_sda );
+    I2C_BB_SETSCL( i2c, 1 );
+
+    do
+    {
+        noack = I2C_BB_GETSDA( i2c );
+        if ( !noack )
+        {
+            break;
+        }
+        OSL_DELAY( 1 );
+        k++;
+    }
+    while ( k < timeout );
+
+    I2C_BB_SETSCL( i2c, 0 );
+    I2C_BB_SETDIR_OUTPUT( i2c->pin_sda );
+
+    I2C_BB_DEBUG( printf("%c ", noack ? '-' : '+') );
+
+    return ( noack );
+}
+
+/* Transmits a single byte over the I2C bus */
+static void
+i2c_bb_sendbyte( const platform_i2c_t* i2c, uint8_t data, int timeout )
+{
+    int i;
+
+    for ( i = 7 ; i >= 0 ; i-- )
+    {
+        if ( data & (1 << i) )
+        {
+            i2c_bb_one(i2c, timeout);
+        }
+        else
+        {
+            i2c_bb_zero(i2c, timeout);
+        }
+    }
+
+    I2C_BB_DEBUG( printf("w%02x", (int)data) );
+
+    return;
+}
+
+/* Receives a single byte over the I2C bus. NACK if last byte, ACK otherwise. */
+static uint8_t
+i2c_bb_readbyte( const platform_i2c_t* i2c, int last, int timeout )
+{
+    int i;
+    uint8_t data = 0;
+
+    I2C_BB_SET( i2c, 0, 1 );
+
+    I2C_BB_SETDIR_INPUT( i2c->pin_sda );
+
+    for ( i = 7 ; i >= 0 ; i-- )
+    {
+        I2C_BB_SETSCL( i2c, 1 );
+        if ( I2C_BB_GETSDA( i2c ) )
+        {
+            data |= (1 << i);
+        }
+        I2C_BB_SETSCL( i2c, 0 );
+    }
+
+    I2C_BB_SETDIR_OUTPUT( i2c->pin_sda );
+
+    if ( last )
+    {
+        i2c_bb_one( i2c, timeout );
+    }
+    else
+    {
+        i2c_bb_zero( i2c, timeout );
+    }
+
+    I2C_BB_DEBUG( printf("r%02x%c ", (int)data, last ? '-' : '+') );
+
+    return data;
+}
+
+/* Transmits a STOP condition over the I2C bus */
+static int
+i2c_bb_stop( const platform_i2c_t* i2c )
+{
+    I2C_BB_SETSCL( i2c, 0 );
+    I2C_BB_SETSDA( i2c, 0 );
+    I2C_BB_SETSCL( i2c, 1 );
+    I2C_BB_SETSDA( i2c, 1 );
+
+    I2C_BB_DEBUG( printf(">") );
+    I2C_BB_DEBUG( printf("\n") );
+
+    return ( 0 );
+}
+
+/* Transmits a START condition over the I2C bus, followed by address byte */
+static int
+i2c_bb_start( const platform_i2c_t* i2c, uint8_t slave, int timeout )
+{
+    int error;
+
+    I2C_BB_DEBUG( printf("<") );
+
+    I2C_BB_SETSDA( i2c, 1 );
+    I2C_BB_SETSCL( i2c, 1 );
+    I2C_BB_SETSDA( i2c, 0 );
+    I2C_BB_SETSCL( i2c, 0 );
+
+    /* send address */
+    i2c_bb_sendbyte( i2c, slave, timeout);
+
+    /* check for ack */
+    if ( i2c_bb_ack( i2c, timeout ) )
+    {
+        error = I2C_BB_ENOACK;
+        goto error;
+    }
+
+    return ( 0 );
+
+error:
+    i2c_bb_stop( i2c );
+    return ( error );
+}
+
+/* Transmits a sequence of bytes over the I2C bus, checking ACK for each byte sent */
+static int
+i2c_bb_writebytes( const platform_i2c_t* i2c, const uint8_t* buf, uint16_t len, int* sent, int timeout )
+{
+    int bytes, error = 0;
+
+    bytes = 0;
+    while ( len )
+    {
+        /* send byte */
+        i2c_bb_sendbyte( i2c, *buf++, timeout );
+
+        /* check for ack */
+        if ( i2c_bb_ack( i2c, timeout ) )
+        {
+            error = I2C_BB_ENOACK;
+            goto error;
+        }
+        bytes++;
+        len--;
+    }
+
+error:
+    *sent = bytes;
+    return ( error );
+}
+
+/* Receives a sequence of bytes over the I2C bus */
+static int
+i2c_bb_readbytes( const platform_i2c_t* i2c, uint8_t* buf, uint16_t len, int* read, int last, int timeout )
+{
+    int bytes;
+
+    bytes = 0;
+    while ( len )
+    {
+        *buf++ = i2c_bb_readbyte( i2c, (len == 1) ? last : 0, timeout );
+
+        bytes++;
+        len--;
+    }
+
+    *read = bytes;
+    return ( 0 );
+}
+
+static platform_result_t
+i2c_bb_init( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+{
+    if ( ( config->flags & I2C_DEVICE_USE_DMA ) || ( config->address_width != I2C_ADDRESS_WIDTH_7BIT ) )
+    {
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    if ( i2c->pin_sda == NULL || i2c->pin_scl == NULL )
+    {
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    if ( config->speed_mode == I2C_LOW_SPEED_MODE )
+    {
+        i2c_bb_signal_toggle_delay_us = 100;
+    }
+    else if ( config->speed_mode == I2C_STANDARD_SPEED_MODE )
+    {
+        i2c_bb_signal_toggle_delay_us = 10;
+    }
+    else if ( config->speed_mode == I2C_HIGH_SPEED_MODE )
+    {
+        i2c_bb_signal_toggle_delay_us = 5;
+    }
+    else
+    {
+        return PLATFORM_BADOPTION;
+    }
+
+    i2c_bb_reset_pins( i2c );
+
+    I2C_BB_SETDIR_OUTPUT( i2c->pin_sda );
+    I2C_BB_SETDIR_OUTPUT( i2c->pin_scl );
+
+    OSL_DELAY( i2c_bb_signal_toggle_delay_us );
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t
+i2c_bb_deinit( const platform_i2c_t* i2c, const platform_i2c_config_t* config )
+{
+    UNUSED_PARAMETER( config );
+
+    platform_gpio_deinit( i2c->pin_sda );
+    platform_gpio_deinit( i2c->pin_scl );
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t
+i2c_bb_read( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_in, uint16_t length )
+{
+    int error;
+    int read;
+    uint8_t address;
+
+    if ( data_in == NULL || length == 0 )
+    {
+        return PLATFORM_BADARG;
+    }
+
+    /* Slave address and R/W bit */
+    address = config->address << 1;
+    address |= I2C_BB_RW_BIT;
+
+    /* Start Condition */
+    if ( (flags & I2C_START_FLAG) != 0 )
+    {
+        error = i2c_bb_start( i2c, address, I2C_BB_SIGNAL_TOGGLE_TIMEOUT );
+        if ( error != 0 )
+        {
+            return PLATFORM_ERROR;
+        }
+    }
+
+    /* Read the data */
+    error = i2c_bb_readbytes( i2c, data_in, length, &read, ((flags & I2C_STOP_FLAG) != 0) ? 1 : 0, I2C_BB_SIGNAL_TOGGLE_TIMEOUT );
+
+    /* Stop Condition */
+    if ( (error != 0) || ((flags & I2C_STOP_FLAG) != 0) )
+    {
+        i2c_bb_stop( i2c );
+    }
+
+    if ( error != 0 )
+    {
+        return PLATFORM_ERROR;
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t
+i2c_bb_write( const platform_i2c_t *i2c, const platform_i2c_config_t *config, uint8_t flags, uint8_t *data_out, uint16_t length )
+{
+    int error;
+    int sent;
+    uint8_t address;
+
+    if ( data_out == NULL || length == 0 )
+    {
+        return PLATFORM_BADARG;
+    }
+
+    /* Slave address and R/W bit */
+    address = config->address << 1;
+    address &= ~I2C_BB_RW_BIT;
+
+    /* Start Condition */
+    if ( (flags & I2C_START_FLAG) != 0 )
+    {
+        error = i2c_bb_start( i2c, address, I2C_BB_SIGNAL_TOGGLE_TIMEOUT );
+        if ( error != 0 )
+        {
+            return PLATFORM_ERROR;
+        }
+    }
+
+    /* Write the data */
+    error = i2c_bb_writebytes( i2c, data_out, length, &sent, I2C_BB_SIGNAL_TOGGLE_TIMEOUT );
+
+    /* Stop Condition */
+    if ( (error != 0) || ((flags & I2C_STOP_FLAG) != 0) )
+    {
+        i2c_bb_stop( i2c );
+    }
+
+    if ( error != 0 )
+    {
+        return PLATFORM_ERROR;
+    }
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t
+i2c_bb_transfer( const platform_i2c_t* i2c, const platform_i2c_config_t *config, uint16_t flags, void *buffer, uint16_t buffer_length, i2c_io_fn_t* fn )
+{
+    uint8_t i2c_flags = 0;
+
+    if ( ( flags & (WICED_I2C_START_FLAG | WICED_I2C_REPEATED_START_FLAG) ) != 0 )
+    {
+        i2c_flags |= I2C_START_FLAG;
+    }
+    if ( ( flags & WICED_I2C_STOP_FLAG ) != 0 )
+    {
+        i2c_flags |= I2C_STOP_FLAG;
+    }
+
+    return (*fn)( i2c, config, i2c_flags, buffer, buffer_length );
+}
+
+/*****************************************************************************/
 
 static uint32_t gsio_spi_divider( uint32_t clk_rate, uint32_t target_speed_hz )
 {
@@ -737,11 +1364,12 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
 
     wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) && ( segments != NULL ) && ( number_of_segments != 0 ) && ( config->bits == 8 ) );
 
-    platform_mcu_powersave_disable();
+    gsio_clock_request();
 
     result = platform_spi_init( spi, config );
     if ( result != PLATFORM_SUCCESS )
     {
+        gsio_clock_release();
         return result;
     }
 
@@ -793,7 +1421,7 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
         gsio_regs[spi->port].interface->ctrl &= (~GSIO_GG_SPI_CHIP_SELECT);
     }
 
-    platform_mcu_powersave_enable( );
+    gsio_clock_release();
 
     return result;
 }

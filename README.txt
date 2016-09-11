@@ -1,5 +1,5 @@
 =====================================================================
-Broadcom WICED Software Development Kit 3.4.0 - README
+Broadcom WICED Software Development Kit 3.5.2 - README
 =====================================================================
 
 The WICED SDK provides a full compliment of application level APIs, 
@@ -13,7 +13,7 @@ Major features of the WICED SDK include ...
     - ThreadX/NetX (IPv4), ThreadX/NetX Duo (IPv6), FreeRTOS/LwIP (IPv4)
   - Support for various Broadcom Wi-Fi & combo chips
     - BCM4390 Integrated Apps + Wi-Fi SoC
-    - BCM43909 Integrated Apps + Wi-Fi SoC
+    - BCM4390X (43909, 43907 and 43903) Integrated Apps + Wi-Fi SoC
     - BCM43362 Wi-Fi SoC
     - BCM43364 Wi-Fi SoC
     - BCM43341 Wi-Fi SoC
@@ -27,6 +27,7 @@ Major features of the WICED SDK include ...
   - RTOS & Network abstraction layer with a simple API for UDP, TCP, HTTP, HTTPS communications
   - SSL/TLS Security Library integrated with an HTTPS library for secure web transactions
   - WICED Application Framework including Bootloader, OTA Upgrade and Factory Reset
+    - Second flavor of OTA and Factory Reset (called OTA2) 
   - Automated Wi-Fi Easy Setup using one of several methods
     - SoftAP & Secure HTTP server
     - Wi-Fi Protected Setup
@@ -115,26 +116,22 @@ Wi-Fi & Bluetooth SmartBridge Features
  * Host <-> Wi-Fi via Memory to Memory DMA engine
 
 Bluetooth Features
+ * Bluetooth Dual-mode stack support - classic BR/EDR and BLE modes
+   - Also available BLE-only stack library with reduced memory footprint
+ * Generic Attribute (GATT) profile
+   - Sample BLE applications - Hello sensor and Proximity reporter
  * A2DP v1.2 (Advanced Audio Distribution Profile)
    - A2DP Sink Functionality
    - SBC Decoder
  * AVRCP (Audio/Video Remote Control Profile)
-   - AVRCP Controller v1.0
-   - AVRCP Target v1.4 (Absolute Volume)
- *  Handsfree profile (Handsfree role)
-   - HFP v1.6
-   - Accept/Reject/End incoming call
-   - Outgoing call – Last number dial
-   - Support for inband ringtone
-   - Two-way calling
-   - Caller-ID support
+   - AVRCP Controller v1.3
+   - AVRCP Target v1.5 (Absolute Volume)
  * Man-Machine-Interface via buttons
    - AVRCP play/pause/Skip-forward/Skip-backward
    - A2DP Volume Up/Down
-   - Connect to previously connected device
-   - HFP Accept/Reject/End incoming call and Last number dial
  * SDAP (Service Discovery Application Profile)
  * GAP (Generic Access Profile)
+
 
 RTOS & Network Stack Support
  * FreeRTOS / LwIP    (full source)
@@ -168,6 +165,8 @@ Application Features
    * I2C
    * RTC (Real Time Clock)
  * Xively "Internet of Things" protocol
+ * COAP (Constrained Application Protocol)
+ * MQTT (MQ Telemetry Transport) with AWS sample application
 
 * WICED Application Framework
    * Bootloader
@@ -197,14 +196,53 @@ Hardware Platforms
  BCM4390
    * BCM94390WCD2   : Broadcom BCM4390 SiP-based WICED Module on BCM9WCD3EVAL1
  BCM43909
-   * BCM943909WCD1  : Broadcom BCM43909 SiP-based WICED Module on BCM943909WCDEVAL_1
-
-
+   * BCM943909WCD1_3     : Broadcom BCM43909 SiP-based WICED Module on BCM943909WCDEVAL_1
+   * BCM943907AEVAL1F_1  : Broadcom BCM43907WLCSPR SiP-based WICED Module on BCM943907AEVAL1F_1
+   * BCM943907WAE_1      : Broadcom BCM43907WCD2 SiP-based WICED Module on BCM943907WAE_1
+   * BCM943903WCD1_1     : Broadcom BCM43903 SiP-based WICED Module on BCM9WCD8EVAL1
+   
 Known Limitations & Notes
 ---------------------------------------------------------------------
 
- * Features not yet supported in WICED-SDK-3.3.1
+ * Description - WICED_Audio: DUT resets if incoming call received/outgoing call initiated during Airplay streaming.
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - WICED_Audio: Play/Pause/FWD/BCKWD does not work with Mac Book Air and BTW.
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - snip.email: Email is not being send shows error
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - snip.https_server: Showing error in console while opening the webpage
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - snip.ping_webserver" is not working properly in debug mode, giving exceptional error also for snip.https client and demo.appliance apps
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - demo.temp_control: App stuck at the initial phase of booting up 
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - snip.thread_monitor not working properly in both release mode and debug mode
+   Workaround  - No work around
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Description - Switching from Airplay to Bluetooth may result in silence if Bluetooth connection is established after the Airplay streaming has commenced.
+   Workaround  - Switching back a second time should resolve the issue.
+   Resolution  - Targeting to be fixed in the next SDK release
+ 
+ * Description - Switching between Bluetooth music and Handsfree voice may fail after a few iterations
+   Workaround  - None
+   Resolution  - Targeting to be fixed in the next SDK release
+
+ * Features not yet supported in WICED-SDK-3.5.2
    - IAR Embedded Workspace native support
+
+   - WAC procedure is not supported for AP mode with WEP security
 
    * Platform Restrictions:
        BCM943341WCD1
@@ -219,6 +257,7 @@ Known Limitations & Notes
        Platforms that do not support Wi-Fi powersave (per the table above) are
        not capable of driving the WLAN sleep clock. An external 32kHz clock is 
        required for these platforms.
+  
 
  * libc does not include support for printing uint64_t (long long)
    

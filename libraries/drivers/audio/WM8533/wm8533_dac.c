@@ -253,23 +253,23 @@ static wiced_result_t wm8533_init ( void* driver_data )
     WICED_VERIFY( wiced_i2c_init( wm8533->i2c_data ) );
 
     /* Initialize GPIOs. */
-//    if( wm8533->cifmode != WICED_GPIO_MAX )
+//    if( wm8533->cifmode != WICED_GPIO_NONE )
 //    {
 //        WICED_VERIFY( wiced_gpio_init( wm8533->cifmode, OUTPUT_PUSH_PULL ) );
 //    }
-//    if( wm8533->addr0 != WICED_GPIO_MAX )
+//    if( wm8533->addr0 != WICED_GPIO_NONE )
 //    {
 //        WICED_VERIFY( wiced_gpio_init( wm8533->addr0, OUTPUT_PUSH_PULL ) );
 //    }
 
     /* Configure DAC's control interface to I2C. */
-//    if( wm8533->cifmode != WICED_GPIO_MAX )
+//    if( wm8533->cifmode != WICED_GPIO_NONE )
 //    {
 //        WICED_VERIFY( wiced_gpio_output_low( wm8533->cifmode ) );
 //    }
 
     /* Configure DAC's I2C address to 0x1A (0011010b) */
-//    if( wm8533->addr0 != WICED_GPIO_MAX )
+//    if( wm8533->addr0 != WICED_GPIO_NONE )
 //    {
 //        WICED_VERIFY( wiced_gpio_output_low( wm8533->addr0 ) );
 //    }
@@ -322,17 +322,17 @@ static wiced_result_t wm8533_init ( void* driver_data )
 }
 
 /* This function can only be called from the platform initialization routine */
-wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const char* name )
+wiced_result_t wm8533_device_register( wm8533_device_data_t* device_data, const platform_audio_device_id_t device_id )
 {
     if( device_data == NULL )
     {
         return WICED_BADARG;
     }
     wm8533_interface.audio_device_driver_specific = device_data;
-    wm8533_interface.name = name;
+    wm8533_interface.device_id = device_id;
 
     /* Register a device to the audio device list and keep device data internally from this point */
-    return wiced_register_audio_device(name, &wm8533_interface);
+    return wiced_register_audio_device(device_id, &wm8533_interface);
 }
 
 wiced_result_t wm8533_configure( void *driver_data, wiced_audio_config_t *config, uint32_t* mclk)
@@ -399,6 +399,7 @@ wiced_result_t wm8533_configure( void *driver_data, wiced_audio_config_t *config
                 break;
             }
         }
+        WICED_VERIFY( result );
     }
 
     /*

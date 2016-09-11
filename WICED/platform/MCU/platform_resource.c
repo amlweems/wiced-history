@@ -70,7 +70,7 @@ resource_result_t resource_read ( const resource_hnd_t* resource, uint32_t offse
 #ifdef USES_RESOURCE_FILESYSTEM
     else
     {
-        WFILE file_hnd;
+        wicedfs_file_t file_hnd;
 
         if ( 0 != wicedfs_fopen( &resource_fs_handle, &file_hnd, resource->val.fs.filename ) )
         {

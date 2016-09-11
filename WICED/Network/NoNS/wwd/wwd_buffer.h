@@ -34,6 +34,8 @@ typedef struct
     uint16_t buff_size;
 } nons_buffer_init_t;
 
+typedef void wiced_buffer_fifo_t;
+
 /******************************************************
  *             Function declarations
  ******************************************************/

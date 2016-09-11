@@ -418,7 +418,7 @@ uint8_t wiced_bt_avrc_set_trace_level (uint8_t new_level);
 
 /**
  *
- * Function         wiced_bt_avrc_pars_command
+ * Function         wiced_bt_avrc_parse_command
  *
  *                  Parse incoming AVRCP command message.
  *
@@ -432,11 +432,11 @@ uint8_t wiced_bt_avrc_set_trace_level (uint8_t new_level);
  *                  Otherwise, the error code defined by AVRCP 1.4
  *
  */
-wiced_bt_avrc_sts_t wiced_bt_avrc_pars_command (wiced_bt_avrc_msg_t *p_msg, wiced_bt_avrc_command_t *p_result, uint8_t *p_buf, uint16_t buf_len);
+wiced_bt_avrc_sts_t wiced_bt_avrc_parse_command (wiced_bt_avrc_msg_t *p_msg, wiced_bt_avrc_command_t *p_result, uint8_t *p_buf, uint16_t buf_len);
 
 /**
  *
- * Function         wiced_bt_avrc_pars_response
+ * Function         wiced_bt_avrc_parse_response
  *
  *                  Parse incoming AVRCP response message.
  *
@@ -450,7 +450,7 @@ wiced_bt_avrc_sts_t wiced_bt_avrc_pars_command (wiced_bt_avrc_msg_t *p_msg, wice
  *                  Otherwise, the error code defined by AVRCP 1.4
  *
  */
-wiced_bt_avrc_sts_t wiced_bt_avrc_pars_response (wiced_bt_avrc_msg_t *p_msg, wiced_bt_avrc_response_t *p_result, uint8_t *p_buf, uint16_t buf_len);
+wiced_bt_avrc_sts_t wiced_bt_avrc_parse_response (wiced_bt_avrc_msg_t *p_msg, wiced_bt_avrc_response_t *p_result, uint8_t *p_buf, uint16_t buf_len);
 
 /**
  *
@@ -512,6 +512,24 @@ wiced_bool_t wiced_bt_avrc_is_valid_avc_type(uint8_t pdu_id, uint8_t ctype);
  *
  */
 wiced_bool_t wiced_bt_avrc_is_valid_player_attr(uint8_t attr);
+
+/*
+ *
+ * Function         wiced_bt_avrc_get_ctrl_mtu
+ *
+ * Returns          returns AVRC Control MTU
+ *
+ */
+uint16_t wiced_bt_avrc_get_ctrl_mtu(void);
+
+/*
+ *
+ * Function         wiced_bt_avrc_get_ctrl_mtu
+ *
+ * Returns          returns AVRC DATA MTU
+ *
+ */
+uint16_t wiced_bt_avrc_get_data_mtu(void);
 
 #ifdef __cplusplus
 }

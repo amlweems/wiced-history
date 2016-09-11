@@ -180,11 +180,14 @@ extern wiced_result_t wiced_dct_read_unlock( void* info_ptr, wiced_bool_t ptr_is
  * @param info_ptr [in] : a pointer to the pointer that will be filled on return
  * @param section [in]: the section of the DCT which should be read
  * @param offset [in]: the offset in bytes within the section
- * @param size [in] : the length of data that should be read
+ * @param size [in] : the length of data that should be written
  *
  * @return    Wiced Result
  */
-static inline  wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size );
+wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size );
+
+wiced_result_t wiced_dct_write_boot_details( const boot_detail_t* new_boot_details );
+wiced_result_t wiced_dct_write_app_location( image_location_t* new_app_location_info, uint32_t dct_app_index );
 
 /** @} */
 
@@ -359,6 +362,12 @@ extern wiced_result_t wiced_register_system_monitor(wiced_system_monitor_t* syst
  */
 extern wiced_result_t wiced_update_system_monitor(wiced_system_monitor_t* system_monitor, uint32_t permitted_delay);
 
+/** Wakeup system monitor thread
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_wakeup_system_monitor_thread(void);
+
 /** @} */
 
 /*****************************************************************************/
@@ -492,11 +501,11 @@ extern wiced_result_t DEPRECATE( wiced_dct_write_app_section( const void* app_dc
 /*****************************************************************************/
 /**  Implementations of inline functions                                    **/
 /*****************************************************************************/
-
-static inline ALWAYS_INLINE wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
-{
-    return wiced_dct_update( info_ptr, section, offset, size );
-}
+//
+//static inline ALWAYS_INLINE wiced_result_t wiced_dct_write( const void* info_ptr, dct_section_t section, uint32_t offset, uint32_t size )
+//{
+//    return wiced_dct_update( info_ptr, section, offset, size );
+//}
 
 static inline ALWAYS_INLINE wiced_result_t wiced_framework_set_boot( uint8_t app_id, char load_once)
 {

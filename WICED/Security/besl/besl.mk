@@ -29,9 +29,13 @@ $(NAME)_SOURCES += host/WICED/besl_host.c \
                    host/WICED/wiced_wps.c \
                    host/WICED/wiced_p2p.c \
                    host/WICED/cipher_suites.c \
+                   host/WICED/tls_cipher_suites.c \
+                   host/WICED/dtls_cipher_suites.c \
                    host/WICED/p2p_internal.c \
-                   host/WICED/wiced_supplicant.c
-
+                   host/WICED/wiced_supplicant.c \
+                   P2P/p2p_events.c \
+                   P2P/p2p_frame_writer.c \
+                   host/WICED/wiced_dtls.c
 
 GLOBAL_INCLUDES := host/WICED \
                    TLS \
@@ -41,7 +45,8 @@ GLOBAL_INCLUDES := host/WICED \
                    P2P \
                    crypto/homekit_srp \
                    crypto/ed25519 \
-                   supplicant
+                   supplicant \
+                   DTLS
 
 GLOBAL_DEFINES  := ADD_LWIP_EAPOL_SUPPORT  NXD_EXTENDED_BSD_SOCKET_SUPPORT OPENSSL STDC_HEADERS
 
@@ -50,3 +55,5 @@ $(NAME)_COMPONENTS += utilities/TLV
 
 $(NAME)_COMPONENTS += BESL/crypto_open \
                       crypto/micro-ecc
+
+$(NAME)_CFLAGS =  -fno-strict-aliasing

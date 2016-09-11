@@ -22,14 +22,12 @@
  *                      Macros
  ******************************************************/
 
-#ifdef DEBUG
 #ifdef UNIT_TESTER
 #define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )  { if (expr) { return; }}
 #define DHCP_CHECK_PARAMS( expr, retval )        { if (expr) { return retval; }}
-#else /* ifdef UNIT_TESTER */
+#elif defined( DEBUG )
 #define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )  { if (expr) { wiced_assert( "", 0==1 ); return; }}
 #define DHCP_CHECK_PARAMS( expr, retval )        { if (expr) { wiced_assert( "", 0==1 ); return retval; }}
-#endif /* ifdef UNIT_TESTER */
 #else /* ifdef DEBUG */
 #define DHCP_CHECK_PARAMS_NO_RETURN_VAL( expr )
 #define DHCP_CHECK_PARAMS( expr, retval )
@@ -110,7 +108,7 @@ typedef struct
  *               Static Function Declarations
  ******************************************************/
 
-static void           dhcp_thread                      ( uint32_t thread_input );
+static void           dhcp_thread                      ( wiced_thread_arg_t thread_input );
 static const uint8_t* find_option                      ( const dhcp_header_t* request, uint8_t option_num );
 static wiced_result_t get_client_ip_address_from_cache ( const wiced_mac_t* client_mac_address, wiced_ip_address_t* client_ip_address );
 static wiced_result_t add_client_to_cache              ( const wiced_mac_t* client_mac_address, const wiced_ip_address_t* client_ip_address );
@@ -133,12 +131,15 @@ wiced_result_t wiced_start_dhcp_server(wiced_dhcp_server_t* server, wiced_interf
 
     server->interface = interface;
 
+    /* Create DHCP socket */
+    WICED_VERIFY(wiced_udp_create_socket(&server->socket, IPPORT_DHCPS, interface));
+
     /* Clear cache */
     memset( cached_mac_addresses, 0, sizeof( cached_mac_addresses ) );
     memset( cached_ip_addresses,  0, sizeof( cached_ip_addresses  ) );
 
-    /* Create DHCP socket */
-    WICED_VERIFY(wiced_udp_create_socket(&server->socket, IPPORT_DHCPS, interface));
+    /* Initialise the server quit flag - done here in case quit is requested before thread runs */
+    server->quit = WICED_FALSE;
 
     /* Start DHCP server */
     wiced_rtos_create_thread(&server->thread, DHCP_THREAD_PRIORITY, "DHCPserver", dhcp_thread, DHCP_STACK_SIZE, server);
@@ -156,6 +157,9 @@ wiced_result_t wiced_stop_dhcp_server(wiced_dhcp_server_t* server)
         wiced_rtos_thread_join( &server->thread );
         wiced_rtos_delete_thread( &server->thread );
     }
+    /* Delete DHCP socket */
+    wiced_udp_delete_socket( &server->socket );
+
     return WICED_SUCCESS;
 }
 
@@ -168,7 +172,7 @@ wiced_result_t wiced_stop_dhcp_server(wiced_dhcp_server_t* server)
  *
  * @param my_addr : local IP address for binding of server port.
  */
-static void dhcp_thread( uint32_t thread_input )
+static void dhcp_thread( wiced_thread_arg_t thread_input )
 {
     wiced_packet_t*      received_packet;
     wiced_packet_t*      transmit_packet;
@@ -202,9 +206,6 @@ static void dhcp_thread( uint32_t thread_input )
     /* Prepare the Web proxy auto discovery URL */
     memcpy(&wpad_option_buff[2], WPAD_SAMPLE_URL, sizeof(WPAD_SAMPLE_URL)-1);
     ipv4_to_string( (char*)&wpad_option_buff[2 + 7], *server_ip_addr_ptr);
-
-    /* Initialise the server quit flag */
-    server->quit = WICED_FALSE;
 
     /* Loop endlessly */
     while ( server->quit == WICED_FALSE )
@@ -424,8 +425,6 @@ static void dhcp_thread( uint32_t thread_input )
 
     /* Server loop has exited due to quit flag */
 
-    /* Delete DHCP socket */
-    wiced_udp_delete_socket( &server->socket );
     WICED_END_OF_CURRENT_THREAD( );
 }
 

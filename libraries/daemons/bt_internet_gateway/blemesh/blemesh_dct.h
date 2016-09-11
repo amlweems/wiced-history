@@ -20,7 +20,7 @@ extern "C" {
  * @cond                Macros
  ******************************************************/
 
-#define MESH_NODE_INFO_LENGTH      80
+#define MESH_NODE_INFO_LENGTH      96
 #define FLOOD_MESH_PKT_CNTR_LEN    5
 /******************************************************
  *                    Constants

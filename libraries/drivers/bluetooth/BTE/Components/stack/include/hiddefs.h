@@ -1,12 +1,14 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/****************************************************************************/
+/*                                                                          */
+/*  Name:       hiddefs.h                                                   */
+/*                                                                          */
+/*  Function:   this file contains HID protocol definitions                 */
+/*                                                                          */
+/*                                                                          */
+/*  Copyright (c) 2002-2004, WIDCOMM Inc., All Rights Reserved.             */
+/*  WIDCOMM Bluetooth Core. Proprietary and confidential.                   */
+/*                                                                          */
+/****************************************************************************/
 
 #ifndef HIDDEFS_H
 #define HIDDEFS_H
@@ -63,7 +65,9 @@ typedef UINT8 tHID_STATUS;
 
 #define HID_GET_TRANS_FROM_HDR(x) ((x >> 4) & 0x0f)
 #define HID_GET_PARAM_FROM_HDR(x) (x & 0x0f)
+#ifndef HID_BUILD_HDR
 #define HID_BUILD_HDR(t,p)  (UINT8)((t << 4) | (p & 0x0f))
+#endif
 #define HID_HDR_LEN (1)
 
 /* Parameters for Handshake
@@ -115,7 +119,7 @@ typedef UINT8 tHID_STATUS;
 #define HID_SDP_DESCRIPTOR_REPORT                   (0x22)
 #define HID_SDP_DESCRIPTOR_PHYSICAL                 (0x23)
 
-typedef struct desc_info
+typedef PACKED struct desc_info
 {
     UINT16 dl_len;
     UINT8 *dsc_list;
@@ -135,6 +139,13 @@ typedef struct sdp_info
     UINT8     sub_class;    /*Device Subclass.*/
     UINT8     ctry_code;     /*Country Code.*/
     UINT16    sup_timeout;/* Supervisory Timeout */
+
+    /* DIS information */
+    UINT8     vendor_id_src;
+    UINT16    vendor_id;            /* vendor ID */
+    UINT16    product_id;           /* product ID */
+    UINT16    product_version;       /* version */
+    UINT64    system_id;         /* system ID */
 
     tHID_DEV_DSCP_INFO  dscp_info;   /* Descriptor list and Report list to be set in the SDP record.
                                        This parameter is used if HID_DEV_USE_GLB_SDP_REC is set to FALSE.*/

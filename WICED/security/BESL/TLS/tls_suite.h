@@ -17,6 +17,7 @@
 #include "des.h"
 #include "aes.h"
 #include "chacha.h"
+#include "cipher_suites.h"
 
 #ifdef __cplusplus
 extern "C"

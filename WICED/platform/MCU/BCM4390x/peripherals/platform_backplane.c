@@ -226,6 +226,10 @@ platform_wrapper_debug( volatile aidmp_t* dmp, void* ptr )
         UNUSED_VARIABLE( error_log_addr_low );
         UNUSED_VARIABLE( error_log_addr_high );
 
+        /* Intentional self assignment :
+         * This register (errlogdone) uses "write back 1 to clear",
+         * So reading from it and writing the same value back to clear those bits set by hardware.
+         */
         dmp->errlogdone = dmp->errlogdone;
 
         WICED_TRIGGER_BREAKPOINT(); /* It may be more then one errors detected. Make sense to continue debugging from next line. */

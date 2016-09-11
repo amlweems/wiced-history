@@ -687,13 +687,13 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
                 break;
 
             case ESCAPE_TOKEN:
-
-                escape_token = WICED_TRUE;
-
+                /* Clear escape token flag, if the previous token is an escape token. Else set it */
+                escape_token = (escape_token == WICED_TRUE)?  WICED_FALSE : WICED_TRUE;
                 break;
 
             default:
-
+                /* Reset escape token flag */
+                escape_token = WICED_FALSE;
                 break;
 
         }//switch
@@ -702,7 +702,7 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
         current_input_token++;
     }//while
 
-        /* This means that a closing brace has not been found for an object. This data is split across packets */
+    /* This means that a closing brace has not been found for an object. This data is split across packets */
     if ( object_counter )
     {
         memset( packet_backup,0x0,sizeof( packet_backup ) );
@@ -733,7 +733,9 @@ wiced_result_t wiced_JSON_parser( const char* json_input, uint32_t input_length 
 
     type                = UNKNOWN_JSON_TYPE;
 
-    previous_token = NULL;
+    escape_token        = WICED_FALSE;
+
+    previous_token      = NULL;
 
     return WICED_SUCCESS;
 }

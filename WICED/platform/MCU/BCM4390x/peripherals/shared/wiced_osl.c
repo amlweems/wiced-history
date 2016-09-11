@@ -21,6 +21,7 @@
 #include "bcmdevs.h"
 #include "wiced_osl.h"
 #include "wiced_deep_sleep.h"
+#include "wwd_wlioctl.h"
 
 #include "platform_map.h"
 #include "platform_cache.h"
@@ -101,17 +102,17 @@ osl_dma_map(void *p, uint size, int direction)
     if (direction == DMA_TX)
     {
         platform_dcache_clean_and_inv_range(p, size);
-        return (dmaaddr_t)p;
     }
     else if (direction == DMA_RX)
     {
         platform_dcache_inv_range(p, size);
-        return (dmaaddr_t)p;
     }
     else
     {
-        return 0;
+        p = 0;
     }
+
+    return platform_addr_cpu_to_dma(p);
 }
 
 void*
@@ -127,9 +128,9 @@ osl_pktget(void *osh, uint len, bool send)
         return NULL;
     }
 
-    if (wiced_osh && wiced_osh->pktget_add_remove)
+    if (wiced_osh && wiced_osh->rx_pktget_add_remove && !send)
     {
-        host_buffer_add_remove_at_front(&buffer, wiced_osh->pktget_add_remove);
+        host_buffer_add_remove_at_front(&buffer, wiced_osh->rx_pktget_add_remove);
     }
 
     return (void *)buffer;
@@ -141,9 +142,9 @@ osl_pktfree(void *osh, void *p, bool send)
     wiced_buffer_t buffer = p;
     wiced_osh_t *wiced_osh = osh;
 
-    if (wiced_osh && wiced_osh->pktfree_add_remove)
+    if (wiced_osh && wiced_osh->tx_pktfree_add_remove && send)
     {
-        host_buffer_add_remove_at_front(&buffer, wiced_osh->pktfree_add_remove);
+        host_buffer_add_remove_at_front(&buffer, wiced_osh->tx_pktfree_add_remove);
     }
     host_buffer_release(buffer, send ? WWD_NETWORK_TX : WWD_NETWORK_RX);
 }

@@ -19,6 +19,9 @@ extern "C"
  *             Constants
  ******************************************************/
 
+#define HOST_BUFFER_RELEASE_REMOVE_AT_FRONT_BUS_HEADER_SIZE    (sizeof(wwd_buffer_header_t) + MAX_SDPCM_HEADER_LENGTH)
+#define HOST_BUFFER_RELEASE_REMOVE_AT_FRONT_FULL_SIZE          (HOST_BUFFER_RELEASE_REMOVE_AT_FRONT_BUS_HEADER_SIZE + WICED_ETHERNET_SIZE)
+
 /******************************************************
  *             Structures
  ******************************************************/
@@ -26,6 +29,12 @@ extern "C"
 struct NX_PACKET_STRUCT;
 
 typedef struct NX_PACKET_STRUCT* wiced_buffer_t;
+
+typedef struct
+{
+    wiced_buffer_t first;
+    wiced_buffer_t last;
+} wiced_buffer_fifo_t;
 
 /******************************************************
  *             Function declarations

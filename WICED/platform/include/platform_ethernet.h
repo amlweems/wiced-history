@@ -51,6 +51,13 @@ typedef enum
     PLATFORM_ETHERNET_SPEED_1000HALF,
 } platform_ethernet_speed_mode_t;
 
+typedef enum
+{
+    PLATFORM_ETHERNET_LOOPBACK_DISABLE,
+    PLATFORM_ETHERNET_LOOPBACK_DMA,
+    PLATFORM_ETHERNET_LOOPBACK_PHY
+} platform_ethernet_loopback_mode_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -78,10 +85,14 @@ typedef struct
  ******************************************************/
 
 platform_result_t platform_ethernet_init                  ( void );
-void              platform_ethernet_deinit                ( void );
+platform_result_t platform_ethernet_deinit                ( void );
+wiced_bool_t      platform_ethernet_is_inited             ( void );
+platform_result_t platform_ethernet_start                 ( void );
+platform_result_t platform_ethernet_stop                  ( void );
 platform_result_t platform_ethernet_send_data             ( wiced_buffer_t buffer );
 platform_result_t platform_ethernet_get_config            ( platform_ethernet_config_t** config );
 wiced_bool_t      platform_ethernet_is_ready_to_transceive( void );
+platform_result_t platform_ethernet_set_loopback_mode     ( platform_ethernet_loopback_mode_t loopback_mode );
 
 #ifdef __cplusplus
 } /*extern "C" */

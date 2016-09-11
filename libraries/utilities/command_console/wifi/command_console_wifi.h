@@ -11,6 +11,18 @@
 
 #include "wiced_network.h"
 #include "wwd_structures.h"
+#include "wwd_wifi.h"
+#include "wwd_debug.h"
+#include "wwd_constants.h"
+
+#include "wwd_wifi.h"
+#include "wwd_debug.h"
+#include "wwd_constants.h"
+#include "internal/wwd_bcmendian.h"
+#include "internal/bus_protocols/wwd_bus_protocol_interface.h"
+
+#include "platform_mcu_peripheral.h"
+#include "wiced_deep_sleep.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +52,7 @@ extern "C" {
     { (char*) "get_soft_ap_credentials",            get_soft_ap_credentials,            0, NULL, NULL, (char*) "",                                           (char*) "Get SoftAP credentials"},\
     { (char*) "get_tx_power",                       get_tx_power,                       0, NULL, NULL, (char*) "",                                           (char*) "Gets the tx power in dBm."},\
     { (char*) "join",                               join,                               2, NULL, NULL, (char*) "<ssid> <open|wep|wpa_aes|wpa_tkip|wpa2|wpa2_tkip> [key] [ip netmask gateway]\n\t--Encapsulate SSID in quotes in order to include spaces", (char*) "Join an AP. DHCP assumed if no IP address provided"}, \
-    { (char*) "join_ent",                           join_ent,                           0, NULL, NULL, (char*) "<ssid> <wpa2|wpa2_tkip|wpa|wpa_tkip>",       (char*) "Join an AP using an enterprise EAP method. DHCP assumed."}, \
+    { (char*) "join_ent",                           join_ent,                           0, NULL, NULL, (char*) "<ssid> <eap_tls|peap> [username] [password] <wpa2|wpa2_tkip|wpa|wpa_tkip>",       (char*) "Join an AP using an enterprise EAP method. DHCP assumed."}, \
     { (char*) "join_specific",                      join_specific,                      2, NULL, NULL, (char*) "<ssid> <bssid> <channel> <open|wep|wpa_aes|wpa_tkip|wpa2|wpa2_tkip> [key] [ip netmask gateway]", (char*) "Join specified AP. DHCP assumed if no IP address provided"}, \
     { (char*) "leave",                              leave,                              0, NULL, NULL, (char*) "",                                           (char*) "Leave an AP."}, \
     { (char*) "scan",                               scan,                               0, NULL, NULL, (char*) "",                                           (char*) "Scan all enabled channels and print a list of APs found."}, \
@@ -59,7 +71,11 @@ extern "C" {
     { (char*) "test_join_specific",                 test_join_specific,                 2, NULL, NULL, (char*) "<ssid> <bssid> <channel> <open|wep|wpa_aes|wpa_tkip|wpa2|wpa2_tkip> [key] [ip netmask gateway] <iterations>", (char*) "Test joining an AP. DHCP assumed if no IP address provided"}, \
     { (char*) "test_cred",                          test_credentials,                   2, NULL, NULL, (char*) "<ssid> <bssid> <channel> <open|wep|wpa_aes|wpa_tkip|wpa2|wpa2_tkip> [key]\n\t--Encapsulate SSID in quotes in order to include spaces", (char*) "Test joining an AP"}, \
     { (char*) "wifi_powersave",                     wifi_powersave,                     1, NULL, NULL, (char*) "<mode> [delay]",                             (char*) "Enable/disable Wi-Fi powersave mode. 0 = disable. 1 = PS Poll. 2 = Wait [delay] ms before entering powersave"}, \
+    { (char*) "wifi_resume",                        wifi_resume,                        0, NULL, NULL, (char*) "[<ip> <netmask> <gateway>]",                 (char*) "Resume networking after deep-sleep"}, \
     { (char*) "wlan_chip_log",                      read_wlan_chip_console_log,         0, NULL, NULL, (char*) "",                                           (char*) "Dump WLAN chip console log"}, \
+    { (char*) "wlog",                               read_wlan_chip_console_log,         0, NULL, NULL, (char*) "",                                           (char*) "Dump WLAN chip console log"}, \
+    { (char*) "peek",                               peek,                               1, NULL, NULL, (char*) " peek [address]",                            (char*) "Dump memory"}, \
+    { (char*) "poke",                               poke,                               2, NULL, NULL, (char*) " poke [address] [value]",                    (char*) "Write memory"}, \
 
 /******************************************************
  *                    Constants
@@ -125,10 +141,12 @@ int test_join                         ( int argc, char* argv[] );
 int test_credentials                  ( int argc, char* argv[] );
 int test_join_specific                ( int argc, char* argv[] );
 int wifi_powersave                    ( int argc, char* argv[] );
+int wifi_resume                       ( int argc, char* argv[] );
+int peek                              ( int argc, char* argv[] );
+int poke                              ( int argc, char* argv[] );
 
 /* Functions potentially used by other modules */
 int              wifi_join                        ( char* ssid, wiced_security_t auth_type, uint8_t* key, uint16_t key_length, char* ip, char* netmask, char* gateway );
-wiced_result_t   deauth_all_associated_client_stas( wwd_dot11_reason_code_t inReason, wwd_interface_t interface );
 wiced_security_t str_to_authtype                  ( char* arg );
 wiced_security_t str_to_enterprise_authtype       ( char* arg );
 void             str_to_mac                       ( char* arg, wiced_mac_t* mac );

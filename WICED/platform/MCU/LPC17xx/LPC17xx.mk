@@ -72,6 +72,9 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    WWD/wwd_$(BUS).c	\
                    WAF/waf_platform.c
 
+#for DCT with crc checking
+$(NAME)_COMPONENTS  += utilities/crc
+
 # These need to be forced into the final ELF since they are not referenced otherwise
 $(NAME)_LINK_FILES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).o \
                       ../../$(HOST_ARCH)/hardfault_handler.o \

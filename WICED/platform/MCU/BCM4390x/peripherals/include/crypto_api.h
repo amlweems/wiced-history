@@ -13,6 +13,8 @@
 #include "typedefs.h"
 #include <sbhnddma.h>
 #include <platform_cache_def.h>
+#include "platform_constants.h"
+#include "wiced_utilities.h"
 
 /******************************************************
  *                      Macros

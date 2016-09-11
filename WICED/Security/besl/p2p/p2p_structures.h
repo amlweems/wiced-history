@@ -43,29 +43,6 @@ extern "C" {
  ******************************************************/
 
 /* i/f request */
-typedef struct
-{
-    besl_mac_t  mac_address;
-    uint8_t     interface_type;
-    uint16_t    chan_spec;
-} wl_p2p_if_t;
-
-typedef struct
-{
-    uint8_t  state; /* see p2p_discovery_state_t */
-    uint16_t chanspec; /* valid in listen state */
-    uint16_t dwell_time_ms; /* valid in listen state, in ms */
-} wl_p2p_disc_st_t;
-
-/* scan request */
-typedef struct
-{
-    uint8_t type; /* 'S' for WLC_SCAN, 'E' for "escan" */
-    uint8_t reserved[3];
-
-    /* escan params */
-    wl_escan_params_t escan;
-} wl_p2p_scan_t;
 
 //typedef struct
 //{

@@ -206,7 +206,7 @@ extern "C" {
  * The stack size value itself is platform-dependent, but is passed to
  * sys_thread_new() when the thread is created.
  */
-#define TCPIP_THREAD_STACKSIZE         ((900) / sizeof( portSTACK_TYPE ))
+#define TCPIP_THREAD_STACKSIZE         (900)
 
 
 /**

@@ -18,6 +18,8 @@
 #include "linked_list.h"
 #include "wwd_network_constants.h"
 
+#include "dtls_types.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -57,13 +59,6 @@ extern "C"
  *                   Enumerations
  ******************************************************/
 
-typedef enum
-{
-    WICED_TCP_DISCONNECT_CALLBACK_INDEX = 0,
-    WICED_TCP_RECEIVE_CALLBACK_INDEX    = 1,
-    WICED_TCP_CONNECT_CALLBACK_INDEX    = 2,
-} wiced_tcp_callback_index_t;
-
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -80,32 +75,52 @@ typedef enum
     WICED_SOCKET_LISTEN,
     WICED_SOCKET_ERROR
 } wiced_socket_state_t;
+
+typedef struct wiced_packet_pool_s
+{
+    NX_PACKET_POOL pool;
+} wiced_packet_pool_t;
+
 /******************************************************
  *                    Structures
  ******************************************************/
+/* These should be in wiced_tcpip.h but are needed by wiced_tcp_socket_t, which would cause a circular include chain */
+typedef struct wiced_tcp_socket_struct wiced_tcp_socket_t;
+typedef struct wiced_udp_socket_struct wiced_udp_socket_t;
+
+typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
+typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
+
 
 /* NOTE: Don't change the order or the fields within this wiced_tcp_socket_t and wiced_udp_socket_t.
  * Socket must always be the first field.
  * WICED TCP/IP layer uses socket magic number to differentiate between a native NX socket or a WICED socket.
  * This allows access to WICED socket object from a NX callback without having to store its pointer globally.
  */
-typedef struct
+
+struct wiced_tcp_socket_struct
 {
     NX_TCP_SOCKET        socket;
     uint32_t             socket_magic_number;
     wiced_tls_context_t* tls_context;
     wiced_bool_t         context_malloced;
-    uint32_t             callbacks[3];
-    void*                arg;
-} wiced_tcp_socket_t;
+    struct
+    {
+        wiced_tcp_socket_callback_t disconnect;
+        wiced_tcp_socket_callback_t receive;
+        wiced_tcp_socket_callback_t connect;
+    } callbacks;
+    void*                callback_arg;
+};
 
-typedef struct
+struct wiced_udp_socket_struct
 {
-    NX_UDP_SOCKET socket;
-    uint32_t      socket_magic_number;
-    uint32_t      receive_callback;
-    void*         arg;
-} wiced_udp_socket_t;
+    NX_UDP_SOCKET               socket;
+    uint32_t                    socket_magic_number;
+    wiced_dtls_context_t*       dtls_context;
+    wiced_udp_socket_callback_t receive_callback;
+    void*                       callback_arg;
+};
 
 typedef struct
 {
@@ -121,9 +136,6 @@ typedef struct
     wiced_tcp_socket_t socket;
 } wiced_tcp_server_socket_t;
 
-typedef wiced_result_t (*wiced_tcp_socket_callback_t)( wiced_tcp_socket_t* socket, void* arg );
-typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socket, void* arg );
-
 /******************************************************
  *                 Global Variables
  ******************************************************/
@@ -131,7 +143,7 @@ typedef wiced_result_t (*wiced_udp_socket_callback_t)( wiced_udp_socket_t* socke
 /*
  * Note: These objects are for internal use only!
  */
-extern NX_IP*         wiced_ip_handle   [4];    /* Set magic number for validating wiced_udp_socket_t object and differentiating with a native NX_UDP_SOCKET object */
+extern NX_IP*         wiced_ip_handle   [4];
 extern NX_PACKET_POOL wiced_packet_pools[2]; /* 0=TX, 1=RX */
 
 /******************************************************

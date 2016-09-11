@@ -16,18 +16,19 @@
 #include "wiced_utilities.h"
 #include "tls_host_api.h"
 #include "wiced_crypto.h"
-#include "wwd_buffer_interface.h"
 #include "crypto_constants.h"
 #include "crypto_structures.h"
 #include "wiced_time.h"
 #include "wwd_assert.h"
-#include "wwd_buffer_interface.h"
+#include "network/wwd_buffer_interface.h"
 #include "besl_host_interface.h"
 #include "wiced_security.h"
 #include "internal/wiced_internal_api.h"
 #include "wiced_tcpip_tls_api.h"
+#include "wiced_tcpip.h"
 #include "x509.h"
 #include <string.h>
+#include "tls_cipher_suites.h"
 
 #ifndef DISABLE_EAP_TLS
 #include "wiced_supplicant.h"
@@ -73,7 +74,11 @@
 
 static int32_t tls_get_session( ssl_context *ssl );
 static int32_t tls_set_session( ssl_context *ssl );
-static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* context, wiced_packet_t** packet );
+static wiced_result_t tls_packetize_buffered_data ( wiced_tls_workspace_t* context, wiced_packet_t** packet );
+#ifndef DISABLE_EAP_TLS
+static wiced_result_t tls_eap_buffered_data       ( wiced_tls_workspace_t* context, besl_packet_t* packet );
+#endif /* DISABLE_EAP_TLS */
+
 
 static besl_result_t wiced_tls_load_certificate( wiced_tls_certificate_t* certificate, const uint8_t* certificate_data, uint32_t certificate_length, wiced_tls_certificate_format_t certificate_format );
 static besl_result_t wiced_tls_load_key( wiced_tls_key_t* key, const char* key_string );
@@ -178,26 +183,46 @@ static const cipher_suite_t* my_ciphers[] =
 
 x509_cert* root_ca_certificates = NULL;
 
-/* DH prime */
+/* Diffie-Hellman Prime: 1024-bit MODP Group with 160-bit Prime Order Subgroup from RFC 5114 */
 static const unsigned char diffie_hellman_prime_P[] =
 {
-        0x9C, 0xE8, 0x56, 0x40, 0x90, 0x3B, 0xF1, 0x23,
-        0x90, 0x69, 0x47, 0xFE, 0xDE, 0x76, 0x72, 0x61,
-        0xD9, 0xB4, 0xA9, 0x73, 0xEB, 0x8F, 0x7D, 0x98,
-        0x4A, 0x8C, 0x65, 0x6E, 0x2B, 0xCC, 0x16, 0x1C,
-        0x18, 0x3D, 0x4C, 0xA4, 0x71, 0xBA, 0x78, 0x22,
-        0x5F, 0x94, 0x0F, 0x16, 0xD1, 0xD9, 0x9C, 0xA3,
-        0xE6, 0x61, 0x52, 0xCC, 0x68, 0xED, 0xCE, 0x13,
-        0x11, 0xA3, 0x90, 0xF3, 0x07, 0x74, 0x18, 0x35,
-        0x44, 0xFF, 0x6A, 0xB5, 0x53, 0xEC, 0x70, 0x73,
-        0xAD, 0x0C, 0xB6, 0x08, 0xF2, 0xA3, 0xB4, 0x80,
-        0x19, 0xE6, 0xC0, 0x2B, 0xCE, 0xD4, 0x0B, 0xD3,
-        0x0E, 0x91, 0xBB, 0x24, 0x69, 0x08, 0x96, 0x70,
-        0xDE, 0xF4, 0x09, 0xC0, 0x8E, 0x8A, 0xC2, 0x4D,
-        0x17, 0x32, 0xA6, 0x12, 0x8D, 0x22, 0x20, 0xDC,
-        0x53,
+        0xB1, 0x0B, 0x8F, 0x96, 0xA0, 0x80, 0xE0, 0x1D,
+        0xDE, 0x92, 0xDE, 0x5E, 0xAE, 0x5D, 0x54, 0xEC,
+        0x52, 0xC9, 0x9F, 0xBC, 0xFB, 0x06, 0xA3, 0xC6,
+        0x9A, 0x6A, 0x9D, 0xCA, 0x52, 0xD2, 0x3B, 0x61,
+        0x60, 0x73, 0xE2, 0x86, 0x75, 0xA2, 0x3D, 0x18,
+        0x98, 0x38, 0xEF, 0x1E, 0x2E, 0xE6, 0x52, 0xC0,
+        0x13, 0xEC, 0xB4, 0xAE, 0xA9, 0x06, 0x11, 0x23,
+        0x24, 0x97, 0x5C, 0x3C, 0xD4, 0x9B, 0x83, 0xBF,
+        0xAC, 0xCB, 0xDD, 0x7D, 0x90, 0xC4, 0xBD, 0x70,
+        0x98, 0x48, 0x8E, 0x9C, 0x21, 0x9A, 0x73, 0x72,
+        0x4E, 0xFF, 0xD6, 0xFA, 0xE5, 0x64, 0x47, 0x38,
+        0xFA, 0xA3, 0x1A, 0x4F, 0xF5, 0x5B, 0xCC, 0xC0,
+        0xA1, 0x51, 0xAF, 0x5F, 0x0D, 0xC8, 0xB4, 0xBD,
+        0x45, 0xBF, 0x37, 0xDF, 0x36, 0x5C, 0x1A, 0x65,
+        0xE6, 0x8C, 0xFD, 0xA7, 0x6D, 0x4D, 0xA7, 0x08,
+        0xDF, 0x1F, 0xB2, 0xBC, 0x2E, 0x4A, 0x43, 0x71,
 };
-static const unsigned char diffie_hellman_prime_G[] = { 4 };
+
+static const unsigned char diffie_hellman_prime_G[] =
+{
+        0xA4, 0xD1, 0xCB, 0xD5, 0xC3, 0xFD, 0x34, 0x12,
+        0x67, 0x65, 0xA4, 0x42, 0xEF, 0xB9, 0x99, 0x05,
+        0xF8, 0x10, 0x4D, 0xD2, 0x58, 0xAC, 0x50, 0x7F,
+        0xD6, 0x40, 0x6C, 0xFF, 0x14, 0x26, 0x6D, 0x31,
+        0x26, 0x6F, 0xEA, 0x1E, 0x5C, 0x41, 0x56, 0x4B,
+        0x77, 0x7E, 0x69, 0x0F, 0x55, 0x04, 0xF2, 0x13,
+        0x16, 0x02, 0x17, 0xB4, 0xB0, 0x1B, 0x88, 0x6A,
+        0x5E, 0x91, 0x54, 0x7F, 0x9E, 0x27, 0x49, 0xF4,
+        0xD7, 0xFB, 0xD7, 0xD3, 0xB9, 0xA9, 0x2E, 0xE1,
+        0x90, 0x9D, 0x0D, 0x22, 0x63, 0xF8, 0x0A, 0x76,
+        0xA6, 0xA2, 0x4C, 0x08, 0x7A, 0x09, 0x1F, 0x53,
+        0x1D, 0xBF, 0x0A, 0x01, 0x69, 0xB6, 0xA2, 0x8A,
+        0xD6, 0x62, 0xA4, 0xD1, 0x8E, 0x73, 0xAF, 0xA3,
+        0x2D, 0x77, 0x9D, 0x59, 0x18, 0xD0, 0x8B, 0xC8,
+        0x85, 0x8F, 0x4D, 0xCE, 0xF9, 0x7C, 0x2A, 0x24,
+        0x85, 0x5E, 0x6E, 0xEB, 0x22, 0xB3, 0xB2, 0xE5,
+};
 
 /******************************************************
  *               Function Definitions
@@ -247,6 +272,11 @@ tls_result_t tls_host_get_packet_data( ssl_context* ssl, tls_packet_t* packet, u
     uint16_t temp_length;
     uint16_t temp_available_length;
 
+    if ( packet == NULL )
+    {
+        return TLS_ERROR_BAD_INPUT_DATA;
+    }
+
     if ( ssl->transport_protocol == TLS_TCP_TRANSPORT )
     {
         wiced_result_t result = wiced_packet_get_data((wiced_packet_t*)packet, (uint16_t)offset, data, &temp_length, &temp_available_length);
@@ -281,6 +311,12 @@ void* tls_host_malloc( const char* name, uint32_t size)
     return malloc_named( name, size );
 }
 
+extern void* tls_host_calloc( const char* name, size_t nelem, size_t elsize )
+{
+    (void) name;
+    return calloc_named( name, nelem, elsize );
+}
+
 void tls_host_free(void* p)
 {
     free( p );
@@ -294,6 +330,7 @@ void* tls_host_get_defragmentation_buffer ( uint16_t size )
 void  tls_host_free_defragmentation_buffer( void* buffer )
 {
     tls_host_free( buffer );
+    buffer = NULL;
 }
 
 /*
@@ -323,6 +360,7 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
                 if ( wiced_packet_create_tcp( ssl->send_context, (uint16_t)length, (wiced_packet_t**) &temp_packet, &packet_buffer, &actual_packet_size ) != WICED_SUCCESS )
                 {
                     tls_host_free(buffer);
+                    buffer = NULL;
                     return 1;
                 }
                 if ( ssl->state == SSL_HANDSHAKE_OVER )
@@ -340,6 +378,7 @@ tls_result_t ssl_flush_output( ssl_context *ssl, uint8_t* buffer, uint32_t lengt
             }
 
             tls_host_free(buffer);
+            buffer = NULL;
         }
     }
 #ifndef DISABLE_EAP_TLS
@@ -556,6 +595,7 @@ end:
     if ( certificate->certificate_data_malloced == WICED_TRUE )
     {
         tls_host_free( (void*)certificate->certificate_data );
+        certificate->certificate_data = NULL;
     }
 
     return result;
@@ -619,12 +659,32 @@ wiced_result_t wiced_tls_deinit_identity( wiced_tls_identity_t* tls_identity)
         x509_free( tls_identity->certificate.processed_certificate_data );
         tls_identity->certificate.processed_certificate_data = NULL;
     }
-    rsa_free( (rsa_context*)&tls_identity->private_key.rsa );
-    tls_host_free( (void*)tls_identity->certificate.common_name );
+
+    if ( tls_identity->private_key.common.type == TLS_RSA_KEY )
+    {
+        rsa_free( (rsa_context*)&tls_identity->private_key.rsa );
+    }
+
+    if ( tls_identity->certificate.public_key != NULL )
+    {
+        if ( tls_identity->certificate.public_key->type == TLS_RSA_KEY )
+        {
+            rsa_free( (rsa_context*)tls_identity->certificate.public_key );
+        }
+        tls_host_free( tls_identity->certificate.public_key );
+        tls_identity->certificate.public_key = NULL;
+    }
+
+    if ( tls_identity->certificate.common_name != NULL )
+    {
+        tls_host_free( (void*)tls_identity->certificate.common_name );
+        tls_identity->certificate.common_name = NULL;
+    }
 
     if ( tls_identity->certificate.certificate_data_malloced == WICED_TRUE )
     {
         tls_host_free( (void*)tls_identity->certificate.certificate_data );
+        tls_identity->certificate.certificate_data = NULL;
     }
     return WICED_SUCCESS;
 }
@@ -673,7 +733,6 @@ wiced_result_t wiced_tls_deinit_root_ca_certificates( void )
 {
     if ( root_ca_certificates != NULL )
     {
-        tls_host_free( (void*)root_ca_certificates->raw.p );
         x509_free( root_ca_certificates );
         tls_host_free( root_ca_certificates );
         root_ca_certificates = NULL;
@@ -825,6 +884,9 @@ exit_with_inited_context:
     return (wiced_result_t) result;
 }
 
+/*
+ * Calculates the maximium amount of payload that can fit in a given sized buffer
+ */
 wiced_result_t wiced_tls_calculate_overhead( wiced_tls_workspace_t* context, uint16_t available_space, uint16_t* header, uint16_t* footer )
 {
     *header = 0;
@@ -861,7 +923,14 @@ wiced_result_t wiced_tls_encrypt_packet( wiced_tls_workspace_t* workspace, wiced
     wiced_result_t result;
     tls_record_t* record;
 
-    wiced_packet_get_data(packet, 0, &data, &length, &available);
+    if ( ( workspace == NULL ) || ( packet == NULL ) )
+    {
+        return WICED_ERROR;
+    }
+    if ( wiced_packet_get_data(packet, 0, &data, &length, &available) != WICED_SUCCESS )
+    {
+        return WICED_ERROR;
+    }
     data -= sizeof(tls_record_header_t);
     result = (wiced_result_t) tls_host_set_packet_start((tls_packet_t*)packet, data);
     if ( result != WICED_SUCCESS)
@@ -946,6 +1015,10 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
             }
 
             /* Set the packet start and end */
+            if ( context->received_packet == NULL )
+            {
+                return WICED_ERROR;
+            }
             wiced_packet_get_data( (wiced_packet_t*)context->received_packet, 0, &packet_data, &length, &available );
             tls_host_set_packet_start( context->received_packet, record->message );
             wiced_packet_set_data_end( (wiced_packet_t*)context->received_packet, end_of_data );
@@ -959,6 +1032,64 @@ wiced_result_t wiced_tls_receive_packet( wiced_tcp_socket_t* socket, wiced_packe
     return WICED_SUCCESS;
 }
 
+#ifndef DISABLE_EAP_TLS
+wiced_result_t wiced_tls_receive_eap_packet( supplicant_workspace_t* supplicant, besl_packet_t* packet, uint32_t timeout )
+{
+    wiced_result_t result;
+    wiced_tls_workspace_t* context = &supplicant->tls_context->context;
+
+    wiced_assert( "Bad args", (packet != NULL) );
+
+
+    /* Check if we already have a record which should only happen if it was larger than a packet which means it's stored in the defragmentation buffer */
+    if ( context->current_record != NULL )
+    {
+        wiced_assert( "Something wrong", (void*)context->current_record == context->defragmentation_buffer );
+        return tls_eap_buffered_data( context, packet );
+    }
+    else
+    {
+        tls_record_t* record;
+        result = (wiced_result_t) tls_get_next_record( context, &record, timeout, TLS_RECEIVE_PACKET_IF_NEEDED );
+        if ( result != WICED_SUCCESS )
+        {
+            return result;
+        }
+        /* Check if this record has been defragmented */
+        if ( (void*)record == context->defragmentation_buffer )
+        {
+            return tls_eap_buffered_data( context, packet );
+        }
+        else
+        {
+            tls_record_t* temp_record;
+            uint8_t* end_of_data;
+
+            /* We have a pointer to the current record so we can move on */
+            tls_skip_current_record(context);
+
+            /* Make sure we process every record in this packet */
+            end_of_data = besl_host_get_data( (besl_packet_t)context->received_packet );
+            end_of_data = MEMCAT( end_of_data, record->message, htobe16(record->length) );
+            while ( tls_get_next_record( context, &temp_record, timeout, TLS_AVOID_NEW_RECORD_PACKET_RECEIVE ) == TLS_SUCCESS )
+            {
+                /* Make the record data contiguous with the previous record */
+                uint16_t temp_record_length = htobe16( temp_record->length );
+                end_of_data = MEMCAT( end_of_data, temp_record->message, temp_record_length );
+                tls_skip_current_record( context );
+            }
+
+            (*packet) = (besl_packet_t)context->received_packet;
+            context->received_packet        = NULL;
+            context->received_packet_length = 0;
+        }
+    }
+
+    return WICED_SUCCESS;
+}
+#endif /* DISABLE_EAP_TLS */
+
+
 wiced_result_t wiced_tls_close_notify( wiced_tcp_socket_t* socket )
 {
     if ( socket->tls_context != NULL )
@@ -971,12 +1102,12 @@ wiced_result_t wiced_tls_close_notify( wiced_tcp_socket_t* socket )
 
 static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* context, wiced_packet_t** packet )
 {
-    uint8_t* data;
-    uint16_t length;
-    uint16_t available_length;
-    uint16_t record_length;
+    uint8_t*       data;
+    uint16_t       length;
+    uint16_t       available_length;
+    uint16_t       record_length;
     wiced_result_t result;
-    uint32_t amount_to_copy;
+    uint32_t       amount_to_copy;
 
     (void)available_length;
 
@@ -1006,12 +1137,55 @@ static wiced_result_t tls_packetize_buffered_data( wiced_tls_workspace_t* contex
     if ( context->defragmentation_buffer_bytes_processed >= record_length )
     {
         tls_host_free_defragmentation_buffer(context->defragmentation_buffer);
+        context->defragmentation_buffer                 = NULL;
+        context->defragmentation_buffer_bytes_processed = 0;
+        context->defragmentation_buffer_bytes_received  = 0;
+        context->defragmentation_buffer_length          = 0;
+        context->current_record                         = NULL;
+    }
+
+    return WICED_SUCCESS;
+}
+
+#ifndef DISABLE_EAP_TLS
+static wiced_result_t tls_eap_buffered_data( wiced_tls_workspace_t* context, besl_packet_t* packet )
+{
+    uint16_t       length;
+    uint16_t       available_length;
+    uint16_t       record_length;
+    besl_result_t  result;
+    uint32_t       amount_to_copy;
+    eap_packet_t*  header;
+
+    (void)available_length;
+
+    record_length = (uint16_t)( htobe16(context->current_record->length) + sizeof(tls_record_header_t) );
+
+    result = besl_host_create_packet( packet, (uint16_t) MIN(1024, record_length - context->defragmentation_buffer_bytes_processed) );
+    if ( result != BESL_SUCCESS )
+    {
+        return result;
+    }
+    header = ( eap_packet_t* ) besl_host_get_data( *packet );
+    length = besl_host_get_packet_size( *packet );
+
+    amount_to_copy = (uint32_t) MIN( length, record_length - context->defragmentation_buffer_bytes_processed );
+    memcpy( header, &context->defragmentation_buffer[context->defragmentation_buffer_bytes_processed], amount_to_copy );
+
+    context->defragmentation_buffer_bytes_processed = (uint16_t) ( context->defragmentation_buffer_bytes_processed + amount_to_copy );
+
+    /* Check if we've returned all the data to the user */
+    if ( context->defragmentation_buffer_bytes_processed >= record_length )
+    {
+        tls_host_free_defragmentation_buffer(context->defragmentation_buffer);
         context->defragmentation_buffer = 0;
         context->current_record = NULL;
     }
 
     return WICED_SUCCESS;
 }
+#endif /* DISABLE_EAP_TLS */
+
 
 wiced_bool_t wiced_tls_is_encryption_enabled( wiced_tcp_socket_t* socket )
 {

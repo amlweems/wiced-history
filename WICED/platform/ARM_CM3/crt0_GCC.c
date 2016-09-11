@@ -15,6 +15,7 @@
 #include <string.h>
 #include "platform_init.h"
 #include "platform_cmsis.h"
+#include "platform_toolchain.h"
 
 #define SCB_AIRCR_VECTKEY        ( (unsigned long)( 0x5FA << SCB_AIRCR_VECTKEY_Pos ))
 
@@ -44,8 +45,8 @@ typedef void  (*constructor_ptr_t)( void );
 extern constructor_ptr_t link_constructors_location[];
 extern constructor_ptr_t link_constructors_end;
 
-void _start( void ) __attribute__ (( naked )); /* Must be naked to avoid overwriting a program which is in RAM during function prologue when stack pointer is invalid */
-void _exit( int status );
+WEAK void _start( void ) __attribute__ (( naked )); /* Must be naked to avoid overwriting a program which is in RAM during function prologue when stack pointer is invalid */
+WEAK void _exit( int status );
 
 #define link_constructors_size   ((unsigned long)&link_constructors_end  -  (unsigned long)&link_constructors_location )
 

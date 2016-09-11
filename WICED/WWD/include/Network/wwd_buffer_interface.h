@@ -95,6 +95,29 @@ extern wwd_result_t wwd_buffer_init( /*@null@*/ void* native_arg );
  * @param direction : Indicates transmit/receive direction that the packet buffer is
  *                    used for. This may be needed if tx/rx pools are separate.
  * @param size      : The number of bytes to allocate.
+ * @param timeout_ms : Maximum period to block for. Can be passed NEVER_TIMEOUT to request no timeout
+ *
+ * @return WWD_SUCCESS = Success, Error code = Failure
+ *
+ */
+
+extern wwd_result_t internal_host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, wwd_buffer_dir_t direction, unsigned short size, unsigned long timeout_ms ) /*@allocates *buffer@*/  /*@defines **buffer@*/;
+
+/**
+ * @brief Allocates a packet buffer
+ *
+ * Implemented in the WICED buffer interface which is specific to the
+ * buffering scheme in use.
+ * Attempts to allocate a packet buffer of the size requested. It can do this
+ * by allocating a pre-existing packet from a pool, using a static buffer,
+ * or by dynamically allocating memory. The method of allocation does not
+ * concern WICED, however it must match the way the network stack expects packet
+ * buffers to be allocated.
+ *
+ * @param buffer     A pointer which receives the allocated packet buffer handle
+ * @param direction : Indicates transmit/receive direction that the packet buffer is
+ *                    used for. This may be needed if tx/rx pools are separate.
+ * @param size      : The number of bytes to allocate.
  * @param wait      : Whether to wait for a packet buffer to be available
  *
  * @return WWD_SUCCESS = Success, Error code = Failure
@@ -219,6 +242,34 @@ extern wwd_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, int
  * @return WWD_SUCCESS = Success, Error code = Failure
  */
 extern wwd_result_t host_buffer_check_leaked( void );
+
+/**
+ * Push buffer to tail of fifo
+ *
+ * @param fifo : pointer to fifo structure
+ * @param buffer : buffer to push
+ * @param interface : which interface buffer belong
+ */
+extern void host_buffer_push_to_fifo( wiced_buffer_fifo_t* fifo, wiced_buffer_t buffer, wwd_interface_t interface );
+
+/**
+ * Pop packet from head of fifo.
+ *
+ * @param fifo - pointer to fifo structure
+ * @param interface - out parameter which filled with interface buffer belong
+ *
+ * @return NULL if fifo empty, otherwise return buffer and store interface in 'interface' out parameter.
+ */
+extern wiced_buffer_t host_buffer_pop_from_fifo( wiced_buffer_fifo_t* fifo, wwd_interface_t* interface );
+
+/**
+ * Check whether pools are full or not (whether all packets are freed).
+ *
+ * @param direction - TX or RX pools to check
+ *
+ * @return WICED_TRUE if polls are full, otherwise WICED_FALSE.
+ */
+wiced_bool_t host_buffer_pool_is_full( wwd_buffer_dir_t direction );
 
 wwd_result_t host_buffer_add_application_defined_pool( void* pool_in, wwd_buffer_dir_t direction );
 

@@ -124,6 +124,11 @@
 #define TICKS_PER_SEC               100
 #endif
 
+/* The number of ticks to increase on BT_TASK_EVT_GKI_TIMER_UPDATE  */
+#ifndef GKI_TICKS_PER_TIMER_UPDATE_EVT
+#define GKI_TICKS_PER_TIMER_UPDATE_EVT  100
+#endif
+
 /************************************************************************
 **  Utility macros converting ticks to time with user define OS ticks per sec
 **/

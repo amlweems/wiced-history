@@ -427,9 +427,11 @@ __attribute__(( naked )) uint32_t ulPortSetInterruptMask( void )
 		:: "i" ( configMAX_SYSCALL_INTERRUPT_PRIORITY ) : "r0", "r1"	\
 	);
 
+#ifndef __clang__
 	/* This return will not be reached but is necessary to prevent compiler
 	warnings. */
 	return 0;
+#endif /* ifndef __clang__ */
 }
 /*-----------------------------------------------------------*/
 
@@ -442,8 +444,10 @@ __attribute__(( naked )) void vPortClearInterruptMask( uint32_t ulNewMaskValue )
 		:::"r0"														\
 	);
 
+#ifndef __clang__
 	/* Just to avoid compiler warnings. */
 	( void ) ulNewMaskValue;
+#endif /* ifndef __clang__ */
 }
 /*-----------------------------------------------------------*/
 

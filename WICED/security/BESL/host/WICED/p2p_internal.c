@@ -57,17 +57,11 @@
  *                    Structures
  ******************************************************/
 
-typedef struct
-{
-    uint32_t bsscfgidx;
-    char     ifname[16];
-} wl_p2p_ifq_t;
-
 /******************************************************
  *               Function Declarations
  ******************************************************/
 
-static void           p2p_thread_main                 ( uint32_t arg );
+static void           p2p_thread_main                 ( wwd_thread_arg_t arg );
 static besl_result_t  p2p_scan                        ( p2p_workspace_t* workspace, uint16_t scan_action, wiced_bool_t all_channels );
 static besl_result_t  p2p_set_discovery_state         ( p2p_discovery_state_t state, uint32_t channel );
 static void           p2p_discover                    ( p2p_workspace_t* workspace );
@@ -91,10 +85,10 @@ static uint8_t            p2p_thread_stack                [ P2P_THREAD_STACK_SIZ
 #else
 #define p2p_thread_stack (NULL)
 #endif /* ifdef RTOS_USE_STATIC_THREAD_STACK */
-static const wwd_event_num_t p2p_group_client_events[] = { WLC_E_ESCAN_RESULT, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_NONE };
 
-const wwd_event_num_t p2p_discovery_events[]    = { WLC_E_ESCAN_RESULT, WLC_E_P2P_DISC_LISTEN_COMPLETE, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_NONE };
-const wwd_event_num_t p2p_group_owner_events[]  = { WLC_E_ACTION_FRAME, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_PROBREQ_MSG, WLC_E_NONE };
+static const wwd_event_num_t p2p_group_client_events[] = { WLC_E_ESCAN_RESULT, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_NONE };
+const        wwd_event_num_t p2p_discovery_events[]    = { WLC_E_ESCAN_RESULT, WLC_E_P2P_DISC_LISTEN_COMPLETE, WLC_E_PROBREQ_MSG, WLC_E_ACTION_FRAME, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_NONE };
+const        wwd_event_num_t p2p_group_owner_events[]  = { WLC_E_ACTION_FRAME, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_ACTION_FRAME_COMPLETE, WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_PROBREQ_MSG, WLC_E_NONE };
 
 /******************************************************
  *               Function Definitions
@@ -111,10 +105,10 @@ void p2p_thread_start( p2p_workspace_t* workspace )
 #ifdef RTOS_USE_STATIC_THREAD_STACK
     memset( p2p_thread_stack, 0, P2P_THREAD_STACK_SIZE );
 #endif /* ifdef RTOS_USE_STATIC_THREAD_STACK */
-    host_rtos_create_thread_with_arg( &p2p_thread, p2p_thread_main, "p2p_thread", p2p_thread_stack, P2P_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (uint32_t)workspace );
+    host_rtos_create_thread_with_arg( &p2p_thread, p2p_thread_main, "p2p_thread", p2p_thread_stack, P2P_THREAD_STACK_SIZE, RTOS_HIGHER_PRIORTIY_THAN(RTOS_DEFAULT_THREAD_PRIORITY), (wwd_thread_arg_t)workspace );
 }
 
-static void p2p_thread_main( uint32_t arg )
+static void p2p_thread_main( wwd_thread_arg_t arg )
 {
     p2p_workspace_t*              workspace = (p2p_workspace_t*)arg;
     wwd_result_t                  result;
@@ -319,14 +313,14 @@ static void p2p_thread_main( uint32_t arg )
                 uint32_t* data;
 
                 p2p_set_discovery_state( P2P_DISCOVERY_STATE_SCAN, 0 );
-                data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, "p2p_disc");
+                data = wwd_sdpcm_get_iovar_buffer(&buffer, 4, IOVAR_STR_P2P_DISC);
                 if ( data == NULL )
                 {
                     wiced_assert("Allocation failed\n", 0 == 1);
                     return;
                 }
                 *data = 0;
-                result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
+                result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE); /* This IOVAR must be sent on STA interface */
                 if (result != WWD_SUCCESS)
                 {
                     BESL_DEBUG(("Unable to disable discovery\r\n"));
@@ -600,7 +594,6 @@ static void p2p_thread_main( uint32_t arg )
         result = wwd_management_set_event_handler( p2p_group_owner_events, NULL, workspace, WWD_P2P_INTERFACE );
         wiced_assert("set handler failed", result == WWD_SUCCESS);
         REFERENCE_DEBUG_ONLY_VARIABLE( result );
-
         p2p_group_owner_stop( workspace );
     }
     else if ( workspace->group_client_is_up == 1 )
@@ -628,17 +621,17 @@ static void p2p_thread_main( uint32_t arg )
         wwd_wifi_abort_scan();
 
         p2p_set_discovery_state( P2P_DISCOVERY_STATE_SCAN, 0 );
-        data = wwd_sdpcm_get_iovar_buffer( &buffer, 4, "p2p_disc" );
+        data = wwd_sdpcm_get_iovar_buffer( &buffer, 4, IOVAR_STR_P2P_DISC );
         if ( data == NULL )
         {
             wiced_assert("Allocation failed\n", 0 == 1);
             return;
         }
         *data = 0;
-        result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE);
+        result = wwd_sdpcm_send_iovar(SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE); /* This IOVAR must be sent on STA interface */
         if (result != WWD_SUCCESS)
         {
-            BESL_DEBUG(("P2P client: Unable to disable discovery\r\n"));
+            BESL_DEBUG(("P2P: Unable to disable discovery\r\n"));
         }
         wiced_assert("", result == WWD_SUCCESS);
         if ( workspace->p2p_group_formation_result_callback != NULL )
@@ -649,12 +642,21 @@ static void p2p_thread_main( uint32_t arg )
         result = wwd_management_set_event_handler( p2p_discovery_events, NULL, workspace, WWD_STA_INTERFACE );
         wiced_assert("set handler failed", result == WWD_SUCCESS);
         REFERENCE_DEBUG_ONLY_VARIABLE( result );
+
+        /* Turn on MPC */
+        data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_MPC );
+        if ( data != NULL )
+        {
+            *data = 1;
+            if ( wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+            {
+                BESL_DEBUG(("P2P: Unable to enable MPC\r\n"));
+            }
+        }
     }
     wiced_assert("", result == WWD_SUCCESS);
     p2p_clear_event_queue();
-    workspace->p2p_thread_running = 0;
 
-    host_rtos_finish_thread( &p2p_thread );
     WICED_END_OF_CURRENT_THREAD( );
 }
 
@@ -888,13 +890,16 @@ besl_result_t p2p_host_send_message( p2p_message_t* message, uint32_t timeout_ms
 
 static besl_result_t p2p_scan( p2p_workspace_t* workspace, uint16_t scan_action, wiced_bool_t scan_all_channels )
 {
-    wiced_buffer_t buffer;
-    wl_p2p_scan_t* p2p_scan;
-    besl_mac_t     bcast = {{255, 255, 255, 255, 255, 255}};
-    uint32_t       number_of_channels = 3; /* Default number of channels to cover the three social channels (1, 6, 11) */
-    uint16_t       social_channels[3] = { 1, 6, 11 };
-    uint16_t       all_channels[11]   = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
-    uint16_t*      channel_list_ptr   = social_channels;
+    wiced_buffer_t  buffer;
+    wl_p2p_escan_t* p2p_scan;
+    besl_mac_t      bcast = {{255, 255, 255, 255, 255, 255}};
+    uint32_t        number_of_channels = 3; /* Default number of channels to cover the three social channels (1, 6, 11) */
+    uint16_t        social_channels[3] = { 1, 6, 11 };
+    uint16_t        all_channels[11]   = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
+    uint16_t*       channel_list_ptr   = social_channels;
+    uint32_t        bss_index          = wwd_get_bss_index( WWD_P2P_INTERFACE );
+    uint32_t*       data;
+    uint32_t        data_size;
 
     if ( workspace->scan_in_progress == 1 )
     {
@@ -908,9 +913,12 @@ static besl_result_t p2p_scan( p2p_workspace_t* workspace, uint16_t scan_action,
         number_of_channels = 11;
         channel_list_ptr   = all_channels;
     }
-    p2p_scan = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wl_p2p_scan_t) + ( sizeof( uint16_t ) * number_of_channels ), "p2p_scan" );
-    CHECK_IOCTL_BUFFER( p2p_scan );
-    memset( p2p_scan, 0, sizeof(wl_p2p_scan_t) );
+    data_size = 4 + sizeof(wl_p2p_escan_t) + ( sizeof( uint16_t ) * number_of_channels );
+    data = wwd_sdpcm_get_iovar_buffer( &buffer, data_size, "bsscfg:p2p_scan" );
+    CHECK_IOCTL_BUFFER( data );
+    memset( data, 0, data_size );
+    *data = bss_index;
+    p2p_scan = (wl_p2p_escan_t*)&data[1];
 
     /* Fill in the appropriate details of the scan parameters structure */
     p2p_scan->type                      = 'E';
@@ -1010,6 +1018,12 @@ static besl_result_t p2p_group_owner_stop( p2p_workspace_t* workspace )
 
     host_buffer_release( response, WWD_NETWORK_RX );
 
+    /* Turn on MPC or the radio chip keeps beaconing */
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_MPC );
+    CHECK_IOCTL_BUFFER( data );
+    *data = 1;
+    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
+
     data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_mac_t), "p2p_ifdel" );
     CHECK_IOCTL_BUFFER( data );
     memcpy( data, &workspace->p2p_interface_address, sizeof(wiced_mac_t) );
@@ -1018,7 +1032,7 @@ static besl_result_t p2p_group_owner_stop( p2p_workspace_t* workspace )
 
     if ( result != WWD_SUCCESS )
     {
-        BESL_DEBUG(("couldn't delete p2p i/f\r\n"));
+        BESL_DEBUG( ("Couldn't delete p2p i/f\r\n") );
     }
 
     return BESL_SUCCESS;
@@ -1037,6 +1051,12 @@ static besl_result_t p2p_group_client_stop( p2p_workspace_t* workspace )
 
     /* Restore original MAC address */
     besl_host_set_mac_address(&workspace->original_mac_address, WICED_STA_INTERFACE );
+
+    /* Turn on MPC */
+    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_MPC );
+    CHECK_IOCTL_BUFFER( data );
+    *data = 1;
+    CHECK_RETURN( (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE ) );
 
     /* Delete the P2P interface */
     data = wwd_sdpcm_get_iovar_buffer(&buffer, sizeof(wiced_mac_t), "p2p_ifdel" );
@@ -1101,6 +1121,7 @@ besl_result_t p2p_deinit( p2p_workspace_t* workspace )
     {
         BESL_DEBUG(("besl_p2p_deinit: stopping p2p thread\r\n"));
         /* Stop and delete the P2P thread */
+        workspace->p2p_thread_running = 0;
         p2p_stop(workspace);
         host_rtos_delay_milliseconds( 10 ); // Delay to allow the P2P thread to complete
 

@@ -96,6 +96,24 @@ Usage: make <target> [download] [run | debug] [JTAG=xxx] [no_dct]
                             ota      : Add the OTA application to the image
                             download : Download the image after creation
 
+	Working with OTA2 Support - This is an alternate to OTA support - do not mix them
+	  $> make snip.over_the_air_2_example-BCM934907AWE_1.B0 download [ota2_image run | ota2_download] [ota2_factory | ota2_factory_download]
+
+		where:	ota2_image             : Build an OTA2 Upgrade Image, save in build/<application_dir>/OTA2_image_file.bin
+										 This is an OTA2 Image file suitable for storage on an update server for downloading.
+                ota2_download          : Build an OTA2 Upgrade Image + write to FLASH
+										 This uses the sflash_write utility to write the OTA2_image_file.bin to the Staging Area
+										 - This is used to test the OTA2 image file by putting the file in the area it would be during
+										   an update sequence. In the example code, use the command line ">update_reboot" and reboot the
+										   system to see the bootloader extract the image.
+                ota2_factory_image     : Build an OTA2 Factory Reset Image
+										 This is an OTA2 Image file suitable for storage in FLASH at manufacturing as the Factory Reset Image
+										 - This is the OTA2 Image used when you hold the "factory reset" button for 5 seconds during boot.
+                ota2_factory_download  : Build an OTA2 Factory Reset Image + write to FLASH
+										 - This is used to test the OTA2 Factory Reset Imagefile by putting the file in the area it would
+										   be during manufacture. In the example code, hold teh "factory reset" button during reboot and the
+										   bootloader will extract the Image.
+
 endef
 
 ############################
@@ -113,6 +131,18 @@ export VERBOSE
 export SUB_BUILD
 export OPENOCD_LOG_FILE
 export EXTERNAL_WICED_GLOBAL_DEFINES
+
+# We look for a command goal of ota2_image or ota2_download or ota2_factory_iamge or ota2_factory_download
+# So that we include the ota_bootloader in *any* Application build
+# and so we build to correct FLASH positioning
+override OTA2_SUPPORT := $(if $(findstring ota2_, $(MAKECMDGOALS)),1)
+export OTA2_SUPPORT
+ifeq (1, $(OTA2_SUPPORT))
+$(info MAKEFILE MAKECMDGOALS=$(MAKECMDGOALS) OTA2_SUPPORT is enabled)
+else
+$(info MAKEFILE MAKECMDGOALS=$(MAKECMDGOALS) OTA2_SUPPORT is disabled)
+endif
+
 
 .PHONY: $(BUILD_STRING) main_app bootloader download_only test testlist clean iar_project Help download no_dct download_dct download_work copy_elf_for_eclipse run debug download_bootloader sflash_image .gdbinit factory_reset_dct sflash
 

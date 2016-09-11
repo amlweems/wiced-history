@@ -88,6 +88,7 @@
 #define AK4961_REG_MCLK1_SRC_SEL            (0x0048)
 
 #define AK4961_REG_CODEC_CLK_SRC_SEL        (0x0064)
+#define AK4961_REG_CODEC_CLK_DIV            (0x0065)
 #define AK4961_REG_DSP_MCLK_SRC_SEL         (0x0066)
 #define AK4961_REG_BUS_CLK_DIV              (0x0067)
 #define AK4961_REG_AIN12_SYNC_DOMAIN_SET    (0x0068)
@@ -348,6 +349,11 @@
 
 /* 64H Codec clock Source Select */
 #define AK4961_CODEC_CLK_SRC_SEL_MCKS2_MASK (0x1F)
+
+/* 65H Codec clock divider */
+#define AK4961_CODEC_CLK_DIV_MDIV2_MASK     (0xFF)
+#define AK4961_CODEC_CLK_DIV_MDIV2_SHIFT    (0)
+#define AK4961_CODEC_CLK_DIV_MDIV2_BITS     (8)
 
 /* 68H AIN1/2 sync domain setting */
 #define AK4961_AIN12_SYNC_SET_SDAIF1_MASK   (0x70)
@@ -1057,7 +1063,7 @@ static uint8_t ak4961_double_range_to_index( ak4961_device_cmn_data_t *ak4961, d
 
 wiced_result_t ak4961_chip_reset(ak4961_device_cmn_data_t *ak4961)
 {
-    if (ak4961->pdn != WICED_GPIO_MAX)
+    if (ak4961->pdn != WICED_GPIO_NONE)
     {
         /* Pulse PDN line. */
         AK4961_VERIFY( wiced_gpio_output_low( ak4961->pdn ) );
@@ -1095,35 +1101,33 @@ wiced_result_t ak4961_init(void *driver_data)
     }
 
     /* Initialize GPIOs. */
-    if ( ak4961->pdn != WICED_GPIO_MAX )
+    if ( ak4961->pdn != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_init( ak4961->pdn, OUTPUT_PUSH_PULL ), result, ak4961_init_unlock );
     }
-    if ( ak4961->switcher_3v3_ps_enable != WICED_GPIO_MAX )
+    if ( ak4961->switcher_3v3_ps_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_init( ak4961->switcher_3v3_ps_enable, OUTPUT_PUSH_PULL ), result, ak4961_init_unlock );
     }
-    if ( ak4961->switcher_2v_enable != WICED_GPIO_MAX )
+    if ( ak4961->switcher_2v_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_init( ak4961->switcher_2v_enable, OUTPUT_PUSH_PULL ), result, ak4961_init_unlock );
     }
-    if ( ak4961->ldo_1v8_enable != WICED_GPIO_MAX )
+    if ( ak4961->ldo_1v8_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_init( ak4961->ldo_1v8_enable, OUTPUT_PUSH_PULL ), result, ak4961_init_unlock );
     }
-    // XXX
-    //AK4961_VERIFY_GOTO( platform_pin_function_init(PIN_I2S_MCLK1, PIN_FUNCTION_GPIO_30, PIN_FUNCTION_CONFIG_GPIO_INPUT_HIGH_IMPEDANCE), result, ak4961_init_unlock );
 
     /* Power chip. */
-    if ( ak4961->switcher_3v3_ps_enable != WICED_GPIO_MAX )
+    if ( ak4961->switcher_3v3_ps_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_output_low( ak4961->switcher_3v3_ps_enable ), result, ak4961_init_unlock );
     }
-    if ( ak4961->switcher_2v_enable != WICED_GPIO_MAX )
+    if ( ak4961->switcher_2v_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_output_high( ak4961->switcher_2v_enable ), result, ak4961_init_unlock );
     }
-    if ( ak4961->ldo_1v8_enable != WICED_GPIO_MAX )
+    if ( ak4961->ldo_1v8_enable != WICED_GPIO_NONE )
     {
         AK4961_VERIFY_GOTO( wiced_gpio_output_high( ak4961->ldo_1v8_enable ), result, ak4961_init_unlock );
     }
@@ -1167,9 +1171,16 @@ wiced_result_t ak4961_deinit(void *driver_data)
     ak4961_device_runtime_data_t    *rtd        = ak4961->rtd;
     const ak4961_route_data_t       *route_data = ( const ak4961_route_data_t *) dd->route;
     const ak4961_route_id_t         route_id    = route_data->id;
+    ak4961_rfn_t * const            rfn         = route_data->device_route->fn;
     wiced_result_t                  result      = WICED_SUCCESS;
 
     LOCK_RTD(rtd);
+
+    /* Power-down audio route. */
+    if ( rfn != NULL )
+    {
+        AK4961_VERIFY_GOTO( (*rfn)( dd, WICED_FALSE ), result, ak4961_deinit_unlock );
+    }
 
     /* This audio route is no longer configured. */
     /* Remove in-use flags. */
@@ -1189,15 +1200,15 @@ wiced_result_t ak4961_deinit(void *driver_data)
         AK4961_VERIFY_GOTO( ak4961_upd_bits( ak4961, AK4961_REG_PM2, AK4961_PM2_PMAIF, 0 ), result, ak4961_deinit_unlock );
 
         /* Power-down chip. */
-        if (ak4961->pdn != WICED_GPIO_MAX)
+        if (ak4961->pdn != WICED_GPIO_NONE)
         {
             AK4961_VERIFY_GOTO( wiced_gpio_output_low( ak4961->pdn ), result, ak4961_deinit_unlock );
         }
-        if ( ak4961->ldo_1v8_enable != WICED_GPIO_MAX )
+        if ( ak4961->ldo_1v8_enable != WICED_GPIO_NONE )
         {
             AK4961_VERIFY_GOTO( wiced_gpio_output_low( ak4961->ldo_1v8_enable ), result, ak4961_deinit_unlock );
         }
-        if ( ak4961->switcher_2v_enable != WICED_GPIO_MAX )
+        if ( ak4961->switcher_2v_enable != WICED_GPIO_NONE )
         {
             AK4961_VERIFY_GOTO( wiced_gpio_output_low( ak4961->switcher_2v_enable ), result, ak4961_deinit_unlock );
         }
@@ -1216,8 +1227,9 @@ ak4961_deinit_unlock:
 /* PLL Slave Mode. */
 wiced_result_t ak4961_spll(ak4961_device_data_t *dd, wiced_audio_config_t *config, uint32_t mclk)
 {
-    ak4961_device_cmn_data_t    *ak4961     = dd->cmn;
+    ak4961_device_cmn_data_t    *ak4961         = dd->cmn;
     size_t                      i;
+    ak4961_fs_mcki_map_t        *fs_mcki_entry  = NULL;
 
     for ( i = 0; i < ARRAYSIZE( ak4961_fs2mcki_map ); i++ )
     {
@@ -1225,7 +1237,9 @@ wiced_result_t ak4961_spll(ak4961_device_data_t *dd, wiced_audio_config_t *confi
         if ( config->sample_rate == ak4961_fs2mcki_map[i].fs )
         {
             if ( mclk == ak4961_fs2mcki_map[i].mcki )
+            {
                 break;
+            }
         }
     }
     if ( i == ARRAYSIZE( ak4961_fs2mcki_map ) )
@@ -1233,22 +1247,36 @@ wiced_result_t ak4961_spll(ak4961_device_data_t *dd, wiced_audio_config_t *confi
         return WICED_UNSUPPORTED;
     }
 
+    fs_mcki_entry = &ak4961_fs2mcki_map[i];
+
     /* MCKI->PLLCLK1. */
     AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_CLK_SRC_SEL, AK4961_PLL1_CLK_SRC_SEL_PLS1_MASK, AK4961_CLK_SRC_ADDR_MCKI1) );
 
     /* Set PLL1 ref clock divider MSByte and LSByte, respectively. */
-    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_REF_CLK_DIV1, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (ak4961_fs2mcki_map[i].pll1_ref_div >> 8) ) );
-    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_REF_CLK_DIV2, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (ak4961_fs2mcki_map[i].pll1_ref_div) ) );
+    {
+        uint32_t pll_ref_clk = fs_mcki_entry->mcki / (fs_mcki_entry->pll1_ref_div + 1);
+        wiced_assert( "pll ref clock not in range", pll_ref_clk >= 256000 && pll_ref_clk <= 3072000);
+        AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_REF_CLK_DIV1, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (fs_mcki_entry->pll1_ref_div >> 8) ) );
+        AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_REF_CLK_DIV2, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (fs_mcki_entry->pll1_ref_div) ) );
+    }
 
     /* Set PLL1 feedback clock divider MSByte and LSByte, respectively. */
-    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_FB_CLK_DIV1, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (ak4961_fs2mcki_map[i].pll1_fb_div >> 8) ) );
-    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_FB_CLK_DIV2, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (ak4961_fs2mcki_map[i].pll1_fb_div) ) );
+    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_FB_CLK_DIV1, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (fs_mcki_entry->pll1_fb_div >> 8) ) );
+    AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_PLL1_FB_CLK_DIV2, AK4961_PLL1_CLK_DIV_PL1_MASK, (uint8_t) (fs_mcki_entry->pll1_fb_div) ) );
 
     /* PLLCLK1->CODECCLK. */
     AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_CODEC_CLK_SRC_SEL, AK4961_CODEC_CLK_SRC_SEL_MCKS2_MASK, AK4961_CLK_SRC_ADDR_PLLCLK1) );
 
     /* PLLCLK1->DSPCLK. */
     AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_DSP_MCLK_SRC_SEL, AK4961_DSP_MCLK_SRC_SEL_CKSD_MASK, AK4961_CLK_SRC_ADDR_PLLCLK1) );
+    if ( ( fs_mcki_entry->mcki >= (fs_mcki_entry->fs * 128) ) && ( fs_mcki_entry->mcki <= 24576000 ) )
+    {
+        AK4961_VERIFY( ak4961_upd_bits(ak4961, AK4961_REG_BUS_CLK_DIV, AK4961_BUS_CLK_DIV_MDIVD_MASK, 0) );
+    }
+    else
+    {
+        wiced_assert( "busclk frequency not in range", 0==1 );
+    }
 
     /* Set codec master clock frequency. */
     for (i = 0; i < ARRAYSIZE( ak4961_fs_cm_dsmlp_map ); i++ )
@@ -1421,7 +1449,7 @@ wiced_result_t ak4961_dac_route(ak4961_device_data_t *driver_data, wiced_bool_t 
 {
     ak4961_device_cmn_data_t        *ak4961     = driver_data->cmn;
     ak4961_device_runtime_data_t    *rtd        = ak4961->rtd;
-    const ak4961_dac_route_data_t   *data       = (const ak4961_dac_route_data_t *) driver_data->route;
+    ak4961_dac_route_data_t         *data       = (ak4961_dac_route_data_t *) driver_data->route;
     const ak4961_dac_route_t        *dac_route  = (const ak4961_dac_route_t *) data->base.device_route->instance;
     const ak4961_dac_t              *dac        = dac_route->dac;
     const ak4961_amp_t              *amp        = dac_route->amp;
@@ -1444,7 +1472,8 @@ wiced_result_t ak4961_dac_route(ak4961_device_data_t *driver_data, wiced_bool_t 
         AK4961_VERIFY( ak4961_upd_bits( ak4961, dac->reg_dac_mono_mix, AK4961_DAC_MIX_RIGHT_MASK | AK4961_DAC_MIX_LEFT_MASK, mix ) );
 
         /* Reset AMP gain (volume) to supplied default. */
-        AK4961_VERIFY( ak4961_upd_bits( ak4961, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, data->amp_gain ) );
+        AK4961_VERIFY( ak4961_upd_bits( ak4961, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, data->amp_gain_mute ) );
+        data->amp_gain_current = data->amp_gain_default;
 
         /* Reset Digital Volume to supplied default. */
         /* Left volume tied to right by default. */
@@ -1771,26 +1800,37 @@ wiced_result_t ak4961_spkr(ak4961_device_data_t *driver_data, wiced_bool_t is_pw
 
 wiced_result_t ak4961_start_play ( void* driver_data )
 {
-    return WICED_SUCCESS;
+    ak4961_device_data_t            *dd         = ( ak4961_device_data_t *) driver_data;
+    const ak4961_route_data_t       *route_data = (const ak4961_route_data_t *) dd->route;
+    wiced_result_t                  result      = WICED_SUCCESS;
+
+    if (route_data->device_type == AK4961_DEVICE_TYPE_PLAYBACK)
+    {
+        ak4961_dac_route_data_t         *dac_data   = (ak4961_dac_route_data_t *) route_data;
+        const ak4961_dac_route_t        *dac_route  = (const ak4961_dac_route_t *) dac_data->base.device_route->instance;
+        const ak4961_amp_t              *amp        = dac_route->amp;
+
+        result = ak4961_upd_bits(dd->cmn, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, dac_data->amp_gain_current << amp->vol_ctrl_gain_shift);
+    }
+
+    return result;
 }
 
 
 wiced_result_t ak4961_stop_play ( void* driver_data )
 {
     ak4961_device_data_t            *dd         = ( ak4961_device_data_t* ) driver_data;
-    ak4961_device_runtime_data_t    *rtd        = dd->cmn->rtd;
     const ak4961_route_data_t       *route_data = ( const ak4961_route_data_t *) dd->route;
-    ak4961_rfn_t * const            rfn         = route_data->device_route->fn;
     wiced_result_t                  result      = WICED_SUCCESS;
 
-    LOCK_RTD(rtd);
-
-    /* Power-down audio route. */
-    if ( rfn != NULL )
+    if (route_data->device_type == AK4961_DEVICE_TYPE_PLAYBACK)
     {
-        result = (*rfn)( dd, WICED_FALSE );
+        ak4961_dac_route_data_t         *dac_data   = (ak4961_dac_route_data_t *) route_data;
+        const ak4961_dac_route_t        *dac_route  = (const ak4961_dac_route_t *) dac_data->base.device_route->instance;
+        const ak4961_amp_t              *amp        = dac_route->amp;
+
+        result = ak4961_upd_bits(dd->cmn, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, dac_data->amp_gain_mute << amp->vol_ctrl_gain_shift);
     }
-    UNLOCK_RTD(rtd);
 
     return result;
 }
@@ -1812,11 +1852,14 @@ static wiced_result_t ak4961_set_volume(void *driver_data, double decibels, cons
 wiced_result_t ak4961_set_playback_volume(void *driver_data, double decibels)
 {
     ak4961_device_data_t            *dd         = (ak4961_device_data_t *) driver_data;
-    const ak4961_adc_route_data_t   *data       = (const ak4961_adc_route_data_t *) dd->route;
-    const ak4961_dac_route_t        *dac_route  = data->base.device_route->instance;
+    ak4961_dac_route_data_t         *data       = (ak4961_dac_route_data_t *) dd->route;
+    const ak4961_dac_route_t        *dac_route  = (const ak4961_dac_route_t *) data->base.device_route->instance;
     const ak4961_amp_t              *amp        = dac_route->amp;
 
-    return ak4961_set_volume(driver_data, decibels, amp->gain_range, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, amp->vol_ctrl_gain_shift);
+    data->amp_gain_current = ak4961_double_range_to_index(dd->cmn, decibels, amp->gain_range);
+
+    /* Set Volume */
+    return ak4961_upd_bits(dd->cmn, amp->reg_vol_ctrl, amp->vol_ctrl_gain_mask, data->amp_gain_current << amp->vol_ctrl_gain_shift);
 }
 
 wiced_result_t ak4961_set_capture_volume(void *driver_data, double decibels)
@@ -1907,7 +1950,7 @@ static wiced_result_t ak4961_init_device_runtime_data( ak4961_device_runtime_dat
 
 
 /* This function can only be called from the platform initialization routine */
-wiced_result_t ak4961_device_register( ak4961_device_data_t *device_data, const char *name )
+wiced_result_t ak4961_device_register( ak4961_device_data_t *device_data, const platform_audio_device_id_t device_id )
 {
     if ( device_data == NULL )
     {
@@ -1918,11 +1961,11 @@ wiced_result_t ak4961_device_register( ak4961_device_data_t *device_data, const 
     const ak4961_route_data_t       *data = (const ak4961_route_data_t *) device_data->route;
     wiced_audio_device_interface_t  *adi  = data->device_route->adi;
     adi->audio_device_driver_specific = device_data;
-    adi->name = name;
+    adi->device_id = device_id;
 
     /* Initialize runtime data. */
     AK4961_VERIFY( ak4961_init_device_runtime_data( device_data->cmn->rtd ) );
 
     /* Register a device to the audio device list and keep device data internally from this point */
-    return wiced_register_audio_device( name, adi );
+    return wiced_register_audio_device( device_id, adi );
 }

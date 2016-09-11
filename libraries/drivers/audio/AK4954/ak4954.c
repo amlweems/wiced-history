@@ -352,6 +352,7 @@ wiced_result_t wm8533_platform_configure( void* device_data, uint32_t mclk, uint
 /* 0x0C is 0dB. */
 #define AK4954_DVL_DEFAULT                  (0x0C)
 //#define AK4954_DVL_DEFAULT                  (0x0C + 30)
+#define AK4954_DVL_MUTE                     (0xFF)
 
 /* From AK4954_Configuration_4_21_14.doc, AK4954 Full-duplex Audio Configuration. */
 #define AK4954_MGAIN_DEFAULT                (AK4954_MGAIN_20DB)
@@ -648,7 +649,7 @@ static uint8_t ak4954_double_range_to_index( ak4954_device_cmn_data_t *ak4954, d
 /* System reset from datasheet. */
 static wiced_result_t ak4954_reset(ak4954_device_cmn_data_t *ak4954)
 {
-    if (ak4954->pdn != WICED_GPIO_MAX)
+    if (ak4954->pdn != WICED_GPIO_NONE)
     {
         /* Pulse PDN line. */
         WICED_VERIFY( wiced_gpio_output_low( ak4954->pdn ) );
@@ -666,6 +667,7 @@ static wiced_result_t ak4954_init(void *driver_data)
     ak4954_device_data_t *dd = ( ak4954_device_data_t* )driver_data;
     ak4954_device_cmn_data_t *ak4954 = dd->cmn;
     ak4954_device_runtime_data_t *rtd = &device_runtime_table[ak4954->id];
+    uint8_t pm2 = 0;
     wiced_result_t result;
 
     result = WICED_SUCCESS;
@@ -678,6 +680,7 @@ static wiced_result_t ak4954_init(void *driver_data)
         /* This device type is already initialized! */
         wiced_assert("already initialized", !(rtd->init & 1<<ak4954_type(dd)));
         result = WICED_ERROR;
+        goto ak4954_init_unlock;
     }
     else if ( rtd->init != 0 )
     {
@@ -686,7 +689,7 @@ static wiced_result_t ak4954_init(void *driver_data)
     }
 
     /* Initialize GPIOs. */
-    if (ak4954->pdn != WICED_GPIO_MAX)
+    if (ak4954->pdn != WICED_GPIO_NONE)
     {
         WICED_VERIFY_GOTO( wiced_gpio_init( ak4954->pdn, OUTPUT_PUSH_PULL ), result, ak4954_init_unlock );
     }
@@ -700,9 +703,6 @@ static wiced_result_t ak4954_init(void *driver_data)
     /* Power-up. */
     WICED_VERIFY_GOTO( ak4954_reg_write( ak4954, AK4954_REG_PM1, AK4954_PMVCM ), result, ak4954_init_unlock );
 
-    /* Enable PLL and M/S mode. */
-    uint8_t pm2 = 0;
-
     wiced_rtos_delay_milliseconds( AK4954_PMVCM_RISE_UP_TIME_IN_MILLIS );
 
     if ( ak4954->ck.pll_enab )
@@ -714,6 +714,7 @@ static wiced_result_t ak4954_init(void *driver_data)
         pm2 |= AK4954_MS;
     }
 
+    /* Enable PLL and M/S mode. */
     WICED_VERIFY_GOTO( ak4954_reg_write( ak4954, AK4954_REG_PM2, pm2 ), result, ak4954_init_unlock );
 
 already_initialized:
@@ -736,6 +737,12 @@ static wiced_result_t ak4954_deinit(void *driver_data)
 
     LOCK_RTD(rtd);
 
+    /* Power-down audio route. */
+    if ( dd->route->fn != NULL )
+    {
+        WICED_VERIFY_GOTO( (*dd->route->fn)( ak4954, WICED_FALSE ), result, ak4954_deinit_unlock );
+    }
+
     /* This audio route is no longer configured. */
     /* Remove in-use flags. */
     rtd->cfg  &= ~( 1 << ak4954_type( dd ) );
@@ -754,7 +761,7 @@ static wiced_result_t ak4954_deinit(void *driver_data)
         WICED_VERIFY_GOTO( ak4954_upd_bits( ak4954, AK4954_REG_PM1, AK4954_PMVCM_MASK, 0 ), result, ak4954_deinit_unlock );
 
         /* Power-down chip. */
-        if (ak4954->pdn != WICED_GPIO_MAX)
+        if (ak4954->pdn != WICED_GPIO_NONE)
         {
             WICED_VERIFY_GOTO( wiced_gpio_output_low( ak4954->pdn ), result, ak4954_deinit_unlock );
         }
@@ -981,7 +988,8 @@ wiced_result_t ak4954_hp(ak4954_device_cmn_data_t *ak4954, wiced_bool_t is_pwr_u
     if (is_pwr_up == WICED_TRUE)
     {
         /* Reset l/r volume to default. */
-        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_DEFAULT) );
+        WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_DVL_CTRL, AK4954_DVL_MASK, AK4954_DVL_MUTE) );
+        ak4954->playback_volume = AK4954_DVL_DEFAULT;
 
         /* Power-up DAC. */
         WICED_VERIFY( ak4954_upd_bits(ak4954, AK4954_REG_PM1, AK4954_PMDAC_MASK, AK4954_PMDAC) );
@@ -1047,8 +1055,6 @@ static wiced_result_t ak4954_configure( void *driver_data, wiced_audio_config_t 
     ak4954_device_runtime_data_t *rtd = &device_runtime_table[ak4954->id];
     wiced_result_t result;
 
-    result = WICED_SUCCESS;
-
     LOCK_RTD(rtd);
 
     /* Must be initialized first! */
@@ -1089,6 +1095,7 @@ static wiced_result_t ak4954_configure( void *driver_data, wiced_audio_config_t 
 
     if ( dd->route->fn != NULL )
     {
+        /* Power-up audio route. */
         WICED_VERIFY_GOTO( (*dd->route->fn)( ak4954, WICED_TRUE ), result, ak4954_configure_unlock );
     }
 
@@ -1104,7 +1111,22 @@ ak4954_configure_unlock:
 
 wiced_result_t ak4954_start_play ( void* driver_data )
 {
-    return WICED_SUCCESS;
+    ak4954_device_data_t *dd = ( ak4954_device_data_t* )driver_data;
+    ak4954_device_cmn_data_t *ak4954 = dd->cmn;
+    ak4954_device_runtime_data_t *rtd = &device_runtime_table[ak4954->id];
+    wiced_result_t result = WICED_SUCCESS;
+
+    LOCK_RTD(rtd);
+
+    if (dd->route->intf->type ==  AK4954_DEVICE_TYPE_PLAYBACK)
+    {
+        /* Power-up hp amp. */
+        ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, AK4954_PMHPR | AK4954_PMHPL);
+    }
+
+    UNLOCK_RTD(rtd);
+
+    return result;
 }
 
 
@@ -1116,42 +1138,45 @@ wiced_result_t ak4954_stop_play ( void* driver_data )
     wiced_result_t result = WICED_SUCCESS;
 
     LOCK_RTD(rtd);
-    /* Power-down audio route. */
-    if (result == WICED_SUCCESS)
+
+    if (dd->route->intf->type ==  AK4954_DEVICE_TYPE_PLAYBACK)
     {
-        if (dd->route->fn)
-            result = (*dd->route->fn)(ak4954, WICED_FALSE);
+        /* Power-down HP amp. */
+        ak4954_upd_bits(ak4954, AK4954_REG_PM2, AK4954_PMHPR_MASK | AK4954_PMHPL_MASK, 0);
     }
+
     UNLOCK_RTD(rtd);
 
     return result;
 }
 
 
-static wiced_result_t ak4954_set_volume(void *driver_data, double decibels, const ak4954_dbl_range_t *r, uint8_t reg)
+static wiced_result_t ak4954_set_playback_volume(void *driver_data, double decibels)
 {
     ak4954_device_data_t *dd = (ak4954_device_data_t *)driver_data;
     ak4954_device_cmn_data_t *ak4954 = dd->cmn;
     uint8_t val;
 
-    val = ak4954_double_range_to_index(ak4954, decibels, r);
+    val = ak4954_double_range_to_index(ak4954, decibels, &ak4954_dbl_range_dvl);
+    ak4954->playback_volume = val;
 
     /* Volume is full width of register. */
-    /* Set it. */
-    return ak4954_reg_write(ak4954, reg, val);
-}
-
-
-static wiced_result_t ak4954_set_playback_volume(void *driver_data, double decibels)
-{
     /* Setting left volume also sets right as long as defaults are maintained. */
-    return ak4954_set_volume(driver_data, decibels, &ak4954_dbl_range_dvl, AK4954_REG_DVL_CTRL);
+    return ak4954_reg_write(ak4954, AK4954_REG_DVL_CTRL, val);
 }
+
 
 static wiced_result_t ak4954_set_capture_volume(void *driver_data, double decibels)
 {
+    ak4954_device_data_t *dd = (ak4954_device_data_t *)driver_data;
+    ak4954_device_cmn_data_t *ak4954 = dd->cmn;
+    uint8_t val;
+
+    val = ak4954_double_range_to_index(ak4954, decibels, &ak4954_dbl_range_ivl);
+
+    /* Volume is full width of register. */
     /* Setting left volume also sets right as long as defaults are maintained. */
-    return ak4954_set_volume(driver_data, decibels, &ak4954_dbl_range_ivl, AK4954_REG_IVL_CTRL);
+    return ak4954_reg_write(ak4954, AK4954_REG_IVL_CTRL, val);
 }
 
 
@@ -1194,7 +1219,7 @@ static wiced_result_t ak4954_init_device_runtime_data( ak4954_device_runtime_dat
 
 
 /* This function can only be called from the platform initialization routine */
-wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const char *name )
+wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const platform_audio_device_id_t device_id )
 {
     if ( device_data == NULL )
     {
@@ -1203,13 +1228,13 @@ wiced_result_t ak4954_device_register( ak4954_device_data_t *device_data, const 
 
     /* Initialize private portion of device interface. */
     device_data->route->intf->adi.audio_device_driver_specific = device_data;
-    device_data->route->intf->adi.name = name;
+    device_data->route->intf->adi.device_id = device_id;
 
     /* Initialize runtime data. */
     WICED_VERIFY( ak4954_init_device_runtime_data( &device_runtime_table[ device_data->cmn->id ] ) );
 
     /* Register a device to the audio device list and keep device data internally from this point */
-    return wiced_register_audio_device( name, &device_data->route->intf->adi );
+    return wiced_register_audio_device( device_id, &device_data->route->intf->adi );
 }
 
 

@@ -34,6 +34,7 @@
 #ifdef CONS_LOG_BUFFER_SUPPORT
 #include "platform_cache.h"
 #endif  /* CONS_LOG_BUFFER_SUPPORT */
+#include "platform_pinmux.h"
 
 /******************************************************
  *                      Macros
@@ -62,13 +63,19 @@
 /* Some of the bits in slow UART Modem Control Register */
 #define UART_SLOW_MCR_OUT2          (0x08)
 
+/* Define maximum attempts to clean pending data kept from before driver initialized */
+#define UART_SLOW_CLEAN_ATTEMPTS    (64)
+
 /* Parity bits in slow UART LCR register */
 #define UART_EPS_BIT    (4)
 #define UART_PEN_BIT    (3)
 
 #define UART_SLOW_REGBASE               (PLATFORM_CHIPCOMMON_REGBASE(0x300))
 #define UART_FAST_REGBASE               (PLATFORM_CHIPCOMMON_REGBASE(0x1C0))
+#define UART_GCI_REGBASE                (PLATFORM_GCI_REGBASE(0x1DC))
 
+/* The below register defines can be moved to structure-pointer format after
+ * ChipCommon and GCI structure layouts are fully defined in platform_appscr4.h */
 #define CHIPCOMMON_CORE_CAP_REG         *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x004)))
 #define CHIPCOMMON_CORE_CTRL_REG        *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x008)))
 #define CHIPCOMMON_INT_STATUS_REG       *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x020)))
@@ -80,6 +87,19 @@
 #define CHIPCOMMON_SECI_STATUS_MASK_REG *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x138)))
 #define CHIPCOMMON_SECI_FIFO_LEVEL_REG  *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x18C)))
 #define CHIPCOMMON_CLK_CTL_STATUS_REG   *((volatile uint32_t*)(PLATFORM_CHIPCOMMON_REGBASE(0x1E0)))
+
+#define GCI_CORE_CTRL_REG                *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x00C)))
+#define GCI_CORE_STATUS_REG              *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x010)))
+#define GCI_INT_STATUS_REG               *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x014)))
+#define GCI_INT_MASK_REG                 *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x018)))
+#define GCI_INDIRECT_ADDRESS_REG         *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x040)))
+#define GCI_GPIO_CTRL_REG                *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x044)))
+#define GCI_GCI_RX_FIFO_PER_IP_CTRL_REG  *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x1C8)))
+#define GCI_SECI_FIFO_LEVEL_REG          *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x1D8)))
+#define GCI_SECI_IN_CTRL_REG             *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x218)))
+#define GCI_SECI_OUT_CTRL_REG            *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x21C)))
+#define GCI_SECI_IN_AUX_FIFO_RX_ENAB_REG *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x220)))
+#define GCI_SECI_OUT_TX_ENAB_TX_BRK_REG  *((volatile uint32_t*)(PLATFORM_GCI_REGBASE(0x224)))
 
 /* ChipCommon Capabilities Extension */
 #define CC_CAP_EXT_SECI_PRESENT                  (0x00000001)    /* SECI present */
@@ -97,6 +117,9 @@
 /* ChipCommon FAST UART IntStatus and IntMask register bit */
 #define UART_FAST_CC_INT_STATUS_MASK                (1 << 4)
 
+/* ChipCommon GCI UART IntStatus and IntMask register bit */
+#define UART_GCI_CC_INT_STATUS_MASK                 (1 << 4)
+
 /* ChipCommon SECI Config register bits */
 #define CC_SECI_CONFIG_HT_CLOCK                     (1 << 13)
 
@@ -106,12 +129,82 @@
 #define CC_SECI_STATUS_RX_FIFO_EMPTY                (1 << 11)
 #define CC_SECI_STATUS_RX_FIFO_ALMOST_FULL          (1 << 12)
 
+/* GCI CoreCtrl register bits */
+#define GCI_CORE_CTRL_SECI_RESET                    (1 << 0)
+#define GCI_CORE_CTRL_RESET_SECI_LOGIC              (1 << 1)
+#define GCI_CORE_CTRL_ENABLE_SECI                   (1 << 2)
+#define GCI_CORE_CTRL_FORCE_SECI_OUT_LOW            (1 << 3)
+#define GCI_CORE_CTRL_UPDATE_SECI                   (1 << 7)
+#define GCI_CORE_CTRL_BREAK_ON_SLEEP                (1 << 8)
+#define GCI_CORE_CTRL_SECI_IN_LOW_TIMEOUT_SHIFT     (9)
+#define GCI_CORE_CTRL_SECI_IN_LOW_TIMEOUT_MASK      (0x3)
+#define GCI_CORE_CTRL_RESET_OFF_CHIP_COEX           (1 << 11)
+#define GCI_CORE_CTRL_AUTO_BT_SIG_RESEND            (1 << 12)
+#define GCI_CORE_CTRL_FORCE_GCI_CLK_REQ             (1 << 16)
+#define GCI_CORE_CTRL_FORCE_HW_CLK_REQ_OFF          (1 << 17)
+#define GCI_CORE_CTRL_FORCE_REG_CLK                 (1 << 18)
+#define GCI_CORE_CTRL_FORCE_SECI_CLK                (1 << 19)
+#define GCI_CORE_CTRL_FORCE_GCI_CLK_AVAIL           (1 << 20)
+#define GCI_CORE_CTRL_FORCE_GCI_CLK_AVAIL_VALUE     (1 << 21)
+#define GCI_CORE_CTRL_SECI_CLK_STRETCH_SHIFT        (24)
+#define GCI_CORE_CTRL_SECI_CLK_STRETCH_MASK         (0xFF)
+
+/* GCI CoreStatus register bits */
+#define GCI_CORE_STATUS_BREAK_IN                    (1 << 0)
+#define GCI_CORE_STATUS_BREAK_OUT                   (1 << 1)
+#define GCI_CORE_STATUS_GCI_CLK_AVAIL               (1 << 16)
+#define GCI_CORE_STATUS_GCI_CLK_AVAIL_PRE           (1 << 17)
+
+/* GCI IntStatus and IntMask register bits */
+#define GCI_INT_ST_MASK_RX_BREAK_EVENT_INT          (1 << 0)
+#define GCI_INT_ST_MASK_UART_BREAK_INT              (1 << 1)
+#define GCI_INT_ST_MASK_SECI_PARITY_ERROR           (1 << 2)
+#define GCI_INT_ST_MASK_SECI_FRAMING_ERROR          (1 << 3)
+#define GCI_INT_ST_MASK_SECI_DATA_UPDATED           (1 << 4)
+#define GCI_INT_ST_MASK_SECI_AUX_DATA_UPDATED       (1 << 5)
+#define GCI_INT_ST_MASK_SECI_TX_UPDATED_DONE        (1 << 6)
+#define GCI_INT_ST_MASK_SECI_RX_IDLE_TIMER_INT      (1 << 9)
+#define GCI_INT_ST_MASK_SECI_TX_FIFO_FULL           (1 << 10)
+#define GCI_INT_ST_MASK_SECI_TX_FIFO_ALMOST_EMPTY   (1 << 11)
+#define GCI_INT_ST_MASK_SECI_RX_FIFO_ALMOST_FULL    (1 << 12)
+#define GCI_INT_ST_MASK_SECI_FLOW_CONTROL_EVENT     (1 << 13)
+#define GCI_INT_ST_MASK_SECI_RX_FIFO_NOT_EMPTY      (1 << 14)
+#define GCI_INT_ST_MASK_SECI_RX_FIFO_OVERFLOW       (1 << 15)
+#define GCI_INT_ST_MASK_GCI_LEVEL_INT               (1 << 20)
+#define GCI_INT_ST_MASK_GCI_EVENT_INT               (1 << 21)
+#define GCI_INT_ST_MASK_GCI_WAKE_LEVEL_INT          (1 << 22)
+#define GCI_INT_ST_MASK_GCI_WAKE_EVENT_INT          (1 << 23)
+#define GCI_INT_ST_MASK_SEMAPHORE_INT               (1 << 24)
+#define GCI_INT_ST_MASK_GCI_GPIO_INT                (1 << 25)
+#define GCI_INT_ST_MASK_GCI_GPIO_WAKE               (1 << 26)
+#define GCI_INT_ST_MASK_BATTERY_INT                 (1 << 27)
+
+/* GCI GPIO Control register bits */
+#define GCI_GPIO_CTRL_BITS_PER_GPIO                     (8)
+#define GCI_GPIO_CTRL_REG_INDEX(gpio_num)               ((gpio_num * GCI_GPIO_CTRL_BITS_PER_GPIO) / 32)
+#define GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num)             ((gpio_num * GCI_GPIO_CTRL_BITS_PER_GPIO) % 32)
+#define GCI_GPIO_CTRL_GPIO_MASK(gpio_num)               (0xFF << GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num))
+#define GCI_GPIO_CTRL_INPUT_ENAB(gpio_num)              (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 0))
+#define GCI_GPIO_CTRL_OUTPUT_ENAB(gpio_num)             (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 1))
+#define GCI_GPIO_CTRL_INVERT(gpio_num)                  (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 2))
+#define GCI_GPIO_CTRL_PUP(gpio_num)                     (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 3))
+#define GCI_GPIO_CTRL_PDN(gpio_num)                     (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 4))
+#define GCI_GPIO_CTRL_BT_SIG_ENAB(gpio_num)             (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 5))
+#define GCI_GPIO_CTRL_OPEN_DRAIN_OUTPUT_ENAB(gpio_num)  (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 6))
+#define GCI_GPIO_CTRL_EXTRA_GPIO_ENAB(gpio_num)         (1 << (GCI_GPIO_CTRL_GPIO_OFFSET(gpio_num) + 7))
+
+/* Default maximum wait times in ms for Slow UART TX and RX */
 #define UART_SLOW_MAX_TRANSMIT_WAIT_TIME         (10)
 #define UART_SLOW_MAX_READ_WAIT_TIME             (200)
 #define UART_SLOW_CLKDIV_MASK                    (0x000000FF)
 
+/* Default maximum wait times in ms for Fast UART TX and RX */
 #define UART_FAST_MAX_TRANSMIT_WAIT_TIME         (10)
 #define UART_FAST_MAX_READ_WAIT_TIME             (200)
+
+/* Default maximum wait times in ms for GCI UART TX and RX */
+#define UART_GCI_MAX_TRANSMIT_WAIT_TIME          (10)
+#define UART_GCI_MAX_READ_WAIT_TIME              (200)
 
 /* SECI configuration */
 #define SECI_MODE_UART                           (0x0)
@@ -120,13 +213,13 @@
 #define SECI_MODE_LEGACY_3WIRE_WLAN              (0x3)
 #define SECI_MODE_HALF_SECI                      (0x4)
 
-#define SECI_RESET                               (1 << 0)
-#define SECI_RESET_BAR_UART                      (1 << 1)
-#define SECI_ENAB_SECI_ECI                       (1 << 2)
-#define SECI_ENAB_SECIOUT_DIS                    (1 << 3)
-#define SECI_MODE_MASK                           (0x7)
-#define SECI_MODE_SHIFT                          (4)
-#define SECI_UPD_SECI                            (1 << 7)
+#define CC_SECI_RESET                            (1 << 0)
+#define CC_SECI_RESET_BAR_UART                   (1 << 1)
+#define CC_SECI_ENAB_SECI_ECI                    (1 << 2)
+#define CC_SECI_ENAB_SECIOUT_DIS                 (1 << 3)
+#define CC_SECI_MODE_MASK                        (0x7)
+#define CC_SECI_MODE_SHIFT                       (4)
+#define CC_SECI_UPD_SECI                         (1 << 7)
 
 #define SECI_SLIP_ESC_CHAR                       (0xDB)
 #define SECI_SIGNOFF_0                           SECI_SLIP_ESC_CHAR
@@ -138,13 +231,47 @@
 #define UART_SECI_SECI_IN_STATE                  (1 << 2)
 #define UART_SECI_SECI_IN2_STATE                 (1 << 3)
 
-/* SECI FIFO Level Register */
-#define SECI_RX_FIFO_LVL_MASK                    (0x3F)
-#define SECI_RX_FIFO_LVL_SHIFT                   (0)
-#define SECI_TX_FIFO_LVL_MASK                    (0x3F)
-#define SECI_TX_FIFO_LVL_SHIFT                   (8)
-#define SECI_RX_FIFO_LVL_FLOW_CTL_MASK           (0x3F)
-#define SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT          (16)
+/* ChipCommon SECI FIFO Level Register Offsets */
+#define CC_SECI_RX_FIFO_LVL_MASK                 (0x3F)
+#define CC_SECI_RX_FIFO_LVL_SHIFT                (0)
+#define CC_SECI_TX_FIFO_LVL_MASK                 (0x3F)
+#define CC_SECI_TX_FIFO_LVL_SHIFT                (8)
+#define CC_SECI_RX_FIFO_LVL_FLOW_CTL_MASK        (0x3F)
+#define CC_SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT       (16)
+
+/* GCI SECI RX FIFO Level Register Offsets */
+#define GCI_SECI_RX_FIFO_LVL_MASK                (0x3F)
+#define GCI_SECI_RX_FIFO_LVL_SHIFT               (0)
+
+/* GCI SECI TX FIFO Level Register Offsets */
+#define GCI_SECI_TX_FIFO_LVL_MASK                (0x3F)
+#define GCI_SECI_TX_FIFO_LVL_SHIFT               (8)
+
+/* GCI UART SECI_IN port operating mode */
+#define GCI_SECI_IN_OP_MODE_MASK                 (0x7)
+#define GCI_SECI_IN_OP_MODE_SHIFT                (0)
+
+/* GCI UART SECI_OUT port operating mode */
+#define GCI_SECI_OUT_OP_MODE_MASK                (0x7)
+#define GCI_SECI_OUT_OP_MODE_SHIFT               (0)
+
+/* GCI UART SECI_IN GCI_GPIO mapping */
+#define GCI_SECI_IN_GPIO_NUM_MASK                (0xF)
+#define GCI_SECI_IN_GPIO_NUM_SHIFT               (4)
+
+/* GCI UART SECI_OUT GCI_GPIO mapping */
+#define GCI_SECI_OUT_GPIO_NUM_MASK               (0xF)
+#define GCI_SECI_OUT_GPIO_NUM_SHIFT              (4)
+
+/* Default GCI_GPIO mappings for SECI_IN and SECI_OUT */
+#define GCI_SECI_IN_GPIO_NUM_DEFAULT             (6)
+#define GCI_SECI_OUT_GPIO_NUM_DEFAULT            (7)
+
+/* GCI UART SECI RX FIFO Enable bit */
+#define GCI_SECI_FIFO_RX_ENAB                    (1 << 16)
+
+/* GCI UART SECI TX Enable bit */
+#define GCI_SECI_TX_ENAB                         (1 << 0)
 
 /* Default FIFO levels for RX, TX and host flow control */
 #define SECI_RX_FIFO_LVL_DEFAULT                 (0x1)
@@ -226,6 +353,9 @@
 /* Fast UART RX ring buffer size */
 #define UART_FAST_RX_BUFFER_SIZE  64
 
+/* GCI UART RX ring buffer size */
+#define UART_GCI_RX_BUFFER_SIZE  64
+
 #ifdef CONS_LOG_BUFFER_SUPPORT
 #define CONS_LOG_BUFFER_SIZE      (16*1024)
 #endif
@@ -263,7 +393,7 @@ typedef struct
     volatile uint32_t lsr;
     volatile uint32_t msr;
     volatile uint32_t baudadj;
-} uart_fast_t;
+} uart_seci_t;
 
 #ifdef CONS_LOG_BUFFER_SUPPORT
 typedef struct
@@ -291,9 +421,14 @@ typedef struct
  *               Variables Definitions
  ******************************************************/
 
-/* Slow and Fast UART reside in ChipCommon core and accessed from Apps core via AXI backplane */
+/*
+ * Slow and Fast UART reside in ChipCommon core,
+ * GCI UART resides in GCI core (Always On domain),
+ * and accessed from Apps core via AXI backplane.
+ */
 uart_slow_t* const uart_slow_base = ( uart_slow_t* )( UART_SLOW_REGBASE );
-uart_fast_t* const uart_fast_base = ( uart_fast_t* )( UART_FAST_REGBASE );
+uart_seci_t* const uart_fast_base = ( uart_seci_t* )( UART_FAST_REGBASE );
+uart_seci_t* const uart_gci_base  = ( uart_seci_t* )( UART_GCI_REGBASE );
 
 /* Slow UART RX ring buffer */
 wiced_ring_buffer_t uart_slow_rx_buffer;
@@ -302,6 +437,10 @@ uint8_t             uart_slow_rx_data[UART_SLOW_RX_BUFFER_SIZE];
 /* Fast UART RX ring buffer */
 wiced_ring_buffer_t uart_fast_rx_buffer;
 uint8_t             uart_fast_rx_data[UART_FAST_RX_BUFFER_SIZE];
+
+/* GCI UART RX ring buffer */
+wiced_ring_buffer_t uart_gci_rx_buffer;
+uint8_t             uart_gci_rx_data[UART_GCI_RX_BUFFER_SIZE];
 
 #ifdef CONS_LOG_BUFFER_SUPPORT
 #define CONS_BUFFER_SIZE        (sizeof(hndrte_cons_t) + CONS_LOG_BUFFER_SIZE)
@@ -395,9 +534,12 @@ static void uart_fast_disable_interrupts( void )
 {
     /* Disable fast UART interrupts */
     CHIPCOMMON_SECI_STATUS_MASK_REG = 0x0;
+}
 
-    /* Disable fast UART interrupt in ChipCommon interrupt mask */
-    uart_chipcommon_interrupt_mask(UART_FAST_CC_INT_STATUS_MASK, 0x0);
+static void uart_gci_disable_interrupts( void )
+{
+    /* Disable GCI UART interrupts */
+    GCI_INT_MASK_REG = 0x0;
 }
 
 static void platform_uart_disable_interrupts( platform_uart_port_t uart_port )
@@ -406,13 +548,17 @@ static void platform_uart_disable_interrupts( platform_uart_port_t uart_port )
     {
         uart_slow_disable_interrupts();
     }
-    else if(uart_port == UART_FAST)
+    else if (uart_port == UART_FAST)
     {
         uart_fast_disable_interrupts();
     }
+    else if (uart_port == UART_GCI)
+    {
+        uart_gci_disable_interrupts();
+    }
 }
 
-#if !defined(BCM4390X_UART_SLOW_POLL_MODE) || !defined(BCM4390X_UART_FAST_POLL_MODE)
+#if !defined(BCM4390X_UART_SLOW_POLL_MODE) || !defined(BCM4390X_UART_FAST_POLL_MODE) || !defined(BCM4390X_UART_GCI_POLL_MODE)
 static void uart_slow_enable_interrupts( void )
 {
 #ifndef BCM4390X_UART_SLOW_POLL_MODE
@@ -438,26 +584,174 @@ static void uart_fast_enable_interrupts( void )
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
 }
 
+static void uart_gci_enable_interrupts( void )
+{
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+    /* Enable GCI UART interrupt in ChipCommon interrupt mask */
+    uart_chipcommon_interrupt_mask(0x0, UART_GCI_CC_INT_STATUS_MASK);
+
+    /* Enable SRFNE (SECI RX FIFO Not Empty) RX interrupt in GCI UART interrupt mask */
+    GCI_INT_MASK_REG = GCI_INT_ST_MASK_SECI_RX_FIFO_NOT_EMPTY;
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
+}
+
 static void platform_uart_enable_interrupts( platform_uart_port_t uart_port )
 {
     if (uart_port == UART_SLOW)
     {
         uart_slow_enable_interrupts();
     }
-    else if(uart_port == UART_FAST)
+    else if (uart_port == UART_FAST)
     {
         uart_fast_enable_interrupts();
     }
+    else if (uart_port == UART_GCI)
+    {
+        uart_gci_enable_interrupts();
+    }
 }
-#endif /* !BCM4390X_UART_SLOW_POLL_MODE || !BCM4390X_UART_FAST_POLL_MODE */
+#endif /* !BCM4390X_UART_SLOW_POLL_MODE || !BCM4390X_UART_FAST_POLL_MODE || !BCM4390X_UART_GCI_POLL_MODE */
+
+static platform_result_t uart_seci_setup_internal( uart_seci_t* uart_seci_base, uint32_t clock, const platform_uart_config_t* config )
+{
+    uint32_t baud_rate_div_high_rate  = 0;
+    uint32_t baud_rate_div_low_rate   = 0;
+    uint32_t baud_rate_temp_value     = 0;
+    uint32_t baud_rate_adjustment     = 0;
+    uint32_t baud_rate_adjust_low     = 0;
+    uint32_t baud_rate_adjust_high    = 0;
+    uint32_t uart_high_rate_mode      = 0;
+
+    /* Setup SECI UART baud rate */
+    baud_rate_temp_value = clock/config->baud_rate;
+    if ( baud_rate_temp_value > 256 )
+    {
+        uart_high_rate_mode = 0;
+    }
+    else
+    {
+        baud_rate_div_high_rate = 256 - baud_rate_temp_value;
+        if ( (baud_rate_div_high_rate < UART_SECI_HIGH_RATE_THRESHOLD_LOW) || (baud_rate_div_high_rate > UART_SECI_HIGH_RATE_THRESHOLD_HIGH) )
+        {
+            uart_high_rate_mode = 0;
+        }
+        else
+        {
+            uart_high_rate_mode = 1;
+        }
+    }
+
+    if ( uart_high_rate_mode == 1 )
+    {
+        /* Setup in high rate mode, disable baudrate adjustment */
+        baud_rate_div_high_rate  = 256 - (clock/config->baud_rate);
+        baud_rate_adjustment = 0x0;
+
+        uart_seci_base->bauddiv = baud_rate_div_high_rate;
+        uart_seci_base->baudadj = baud_rate_adjustment;
+        uart_seci_base->mcr |= UART_SECI_MCR_HIGHRATE_EN;
+        uart_seci_base->mcr &= ~(UART_SECI_MCR_BAUD_ADJ_EN);
+    }
+    else
+    {
+        /* Setup in low rate mode, enable baudrate adjustment */
+        baud_rate_div_low_rate  = 256 - (clock/(16 * config->baud_rate));
+        baud_rate_adjust_low  = ((clock/config->baud_rate) % 16) / 2;
+        baud_rate_adjust_high = ((clock/config->baud_rate) % 16) - baud_rate_adjust_low;
+        baud_rate_adjustment  = (baud_rate_adjust_high << 4) | baud_rate_adjust_low;
+
+        uart_seci_base->bauddiv = baud_rate_div_low_rate;
+        uart_seci_base->baudadj = baud_rate_adjustment;
+        uart_seci_base->mcr &= ~(UART_SECI_MCR_HIGHRATE_EN);
+        uart_seci_base->mcr |= UART_SECI_MCR_BAUD_ADJ_EN;
+    }
+
+    wiced_assert(" Currently supported data width is 8bits ", config->data_width == DATA_WIDTH_8BIT );
+
+    /* Configure parity */
+    if ( config->parity == ODD_PARITY )
+    {
+        uart_seci_base->lcr |= UART_SECI_LCR_PARITY_EN;
+        uart_seci_base->lcr &= ~(UART_SECI_LCR_PARITY);
+    }
+    else if ( config->parity == EVEN_PARITY )
+    {
+        uart_seci_base->lcr |= UART_SECI_LCR_PARITY_EN;
+        uart_seci_base->lcr |= UART_SECI_LCR_PARITY;
+    }
+    else
+    {
+        /* Default NO_PARITY */
+        uart_seci_base->lcr &= ~(UART_SECI_LCR_PARITY_EN);
+    }
+
+    /* Configure stop bits */
+    if ( config->stop_bits == STOP_BITS_1 )
+    {
+        uart_seci_base->lcr &= ~(UART_SECI_LCR_STOP_BITS);
+    }
+    else if ( config->stop_bits == STOP_BITS_2 )
+    {
+        uart_seci_base->lcr |= UART_SECI_LCR_STOP_BITS;
+    }
+    else
+    {
+        /* Default STOP_BITS_1 */
+        uart_seci_base->lcr &= ~(UART_SECI_LCR_STOP_BITS);
+    }
+
+    /* Configure Flow Control */
+    if ( config->flow_control == FLOW_CONTROL_DISABLED )
+    {
+        /* No Flow Control */
+        uart_seci_base->mcr &= ~(UART_SECI_MCR_AUTO_RTS);
+        uart_seci_base->mcr &= ~(UART_SECI_MCR_AUTO_TX_DIS);
+    }
+    else
+    {
+        /* RTS+CTS Flow Control */
+        uart_seci_base->mcr |= UART_SECI_MCR_AUTO_RTS;
+        uart_seci_base->mcr |= UART_SECI_MCR_AUTO_TX_DIS;
+    }
+
+    /* Setup LCR and MCR registers for TX, RX and HW flow control */
+    uart_seci_base->lcr |= UART_SECI_LCR_RX_EN;
+    uart_seci_base->lcr |= UART_SECI_LCR_TXO_EN;
+    uart_seci_base->mcr |= UART_SECI_MCR_TX_EN;
+
+    return PLATFORM_SUCCESS;
+}
 
 static platform_result_t uart_slow_init_internal( platform_uart_driver_t* driver, const platform_uart_config_t* config )
 {
     uint32_t            alp_clock_value = 0;
     uint16_t            baud_divider;
+    int                 i;
 
     /* Disable interrupts from slow UART during initialization */
     platform_uart_disable_interrupts(driver->interface->port);
+
+    /* Slow UART is driven by ALP clock */
+    if ( driver->interface->src_clk != CLOCK_ALP )
+    {
+        wiced_assert(" Slow UART is driven by ALP clock ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    /* Currently supported data width is 8 bits */
+    if ( config->data_width != DATA_WIDTH_8BIT )
+    {
+        wiced_assert(" Currently supported data width is 8 bits ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    /* Slow UART does not have HW flow control */
+    if ( config->flow_control != FLOW_CONTROL_DISABLED )
+    {
+        wiced_assert(" Slow UART does not have HW flow control ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+    driver->hw_flow_control_is_on = WICED_FALSE;
 
     /* Make sure ChipCommon core is enabled */
     osl_core_enable(CC_CORE_ID);
@@ -503,18 +797,18 @@ static platform_result_t uart_slow_init_internal( platform_uart_driver_t* driver
         uart_slow_base->lcr |= ( 1 << UART_EPS_BIT );
     }
 
-    /* Slow UART does not have HW flow control */
-    driver->hw_flow_control_is_on = WICED_FALSE;
-
     /* Strap the appropriate platform pins for Slow UART RX/TX functions */
-    platform_pin_function_init(driver->interface->rx_pin->pin, PIN_FUNCTION_UART_DBG_RX, PIN_FUNCTION_CONFIG_UNKNOWN);
-    platform_pin_function_init(driver->interface->tx_pin->pin, PIN_FUNCTION_UART_DBG_TX, PIN_FUNCTION_CONFIG_UNKNOWN);
+    platform_pinmux_init(driver->interface->rx_pin->pin, PIN_FUNCTION_UART_DBG_RX);
+    platform_pinmux_init(driver->interface->tx_pin->pin, PIN_FUNCTION_UART_DBG_TX);
 
     /* Setup ring buffer and related parameters */
     ring_buffer_init(&uart_slow_rx_buffer, uart_slow_rx_data, UART_SLOW_RX_BUFFER_SIZE);
     driver->rx_buffer = &uart_slow_rx_buffer;
     host_rtos_init_semaphore(&driver->rx_complete);
     host_rtos_init_semaphore(&driver->tx_complete);
+
+    /* Reset any error counters */
+    driver->rx_overflow = 0;
 
 #ifndef BCM4390X_UART_SLOW_POLL_MODE
     /* Initialization complete, enable interrupts from slow UART */
@@ -524,33 +818,46 @@ static platform_result_t uart_slow_init_internal( platform_uart_driver_t* driver
     platform_chipcommon_enable_irq();
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE */
 
+    /* Clean pending data. */
+    for ( i = 0; i < UART_SLOW_CLEAN_ATTEMPTS; ++i )
+    {
+        if ( ( uart_slow_base->lsr & UART_SLOW_LSR_RXRDY ) == 0 )
+        {
+            break;
+        }
+        (void)uart_slow_base->rx_tx_dll; /* read and discard */
+    }
+
     return PLATFORM_SUCCESS;
 }
 
 static platform_result_t uart_fast_init_internal( platform_uart_driver_t* driver, const platform_uart_config_t* config )
 {
-    uint32_t seci_mode  = SECI_MODE_UART;
     uint32_t cc_cap_ext = 0;
     uint32_t clk_value  = 0;
     uint32_t clk_timeout = 100000000;
     uint32_t cc_seci_fifo_level = 0;
     uint32_t flags;
 
-    uint32_t baud_rate_div_high_rate  = 0;
-    uint32_t baud_rate_div_low_rate   = 0;
-    uint32_t baud_rate_temp_value     = 0;
-    uint32_t baud_rate_adjustment     = 0;
-    uint32_t baud_rate_adjust_low     = 0;
-    uint32_t baud_rate_adjust_high    = 0;
-    uint32_t uart_high_rate_mode      = 0;
-
     /* Disable interrupts from fast UART during initialization */
     platform_uart_disable_interrupts(driver->interface->port);
 
-    /* SECI mode of legacy 3-wire WLAN/BT currently not supported */
-    if ( (seci_mode == SECI_MODE_LEGACY_3WIRE_WLAN) || (seci_mode == SECI_MODE_LEGACY_3WIRE_BT) )
+    /* Currently supported data width is 8 bits */
+    if ( config->data_width != DATA_WIDTH_8BIT )
     {
+        wiced_assert(" Currently supported data width is 8 bits ", 0 );
         return PLATFORM_UNSUPPORTED;
+    }
+
+    if ( config->flow_control == FLOW_CONTROL_DISABLED )
+    {
+        /* No Flow Control */
+        driver->hw_flow_control_is_on = WICED_FALSE;
+    }
+    else
+    {
+        /* RTS+CTS Flow Control */
+        driver->hw_flow_control_is_on = WICED_TRUE;
     }
 
     /* Make sure ChipCommon core is enabled */
@@ -596,142 +903,53 @@ static platform_result_t uart_fast_init_internal( platform_uart_driver_t* driver
     }
 
     /* Put SECI block into reset */
-    CHIPCOMMON_SECI_CONFIG_REG &= ~(SECI_ENAB_SECI_ECI);
-    CHIPCOMMON_SECI_CONFIG_REG |= SECI_RESET;
+    CHIPCOMMON_SECI_CONFIG_REG &= ~(CC_SECI_ENAB_SECI_ECI);
+    CHIPCOMMON_SECI_CONFIG_REG |= CC_SECI_RESET;
 
     /* set force-low, and set EN_SECI for all non-legacy modes */
-    CHIPCOMMON_SECI_CONFIG_REG |= SECI_ENAB_SECIOUT_DIS;
-    CHIPCOMMON_SECI_CONFIG_REG |= SECI_ENAB_SECI_ECI;
+    CHIPCOMMON_SECI_CONFIG_REG |= CC_SECI_ENAB_SECIOUT_DIS;
+    CHIPCOMMON_SECI_CONFIG_REG |= CC_SECI_ENAB_SECI_ECI;
 
     /* Take SECI block out of reset */
-    CHIPCOMMON_SECI_CONFIG_REG &= ~(SECI_RESET);
+    CHIPCOMMON_SECI_CONFIG_REG &= ~(CC_SECI_RESET);
 
-    /* Setup SECI UART baud rate (refer ChipCommon and GCI programming guides for explanation) */
-    baud_rate_temp_value = clk_value/config->baud_rate;
-    if ( baud_rate_temp_value > 256 )
-    {
-        uart_high_rate_mode = 0;
-    }
-    else
-    {
-        baud_rate_div_high_rate = 256 - baud_rate_temp_value;
-        if ( (baud_rate_div_high_rate < UART_SECI_HIGH_RATE_THRESHOLD_LOW) || (baud_rate_div_high_rate > UART_SECI_HIGH_RATE_THRESHOLD_HIGH) )
-        {
-            uart_high_rate_mode = 0;
-        }
-        else
-        {
-            uart_high_rate_mode = 1;
-        }
-    }
-
-    if ( uart_high_rate_mode == 1 )
-    {
-        /* Setup in high rate mode, disable baudrate adjustment */
-        baud_rate_div_high_rate  = 256 - (clk_value/config->baud_rate);
-        baud_rate_adjustment = 0x0;
-
-        uart_fast_base->bauddiv = baud_rate_div_high_rate;
-        uart_fast_base->baudadj = baud_rate_adjustment;
-        uart_fast_base->mcr |= UART_SECI_MCR_HIGHRATE_EN;
-        uart_fast_base->mcr &= ~(UART_SECI_MCR_BAUD_ADJ_EN);
-    }
-    else
-    {
-        /* Setup in low rate mode, enable baudrate adjustment */
-        baud_rate_div_low_rate  = 256 - (clk_value/(16 * config->baud_rate));
-        baud_rate_adjust_low  = ((clk_value/config->baud_rate) % 16) / 2;
-        baud_rate_adjust_high = ((clk_value/config->baud_rate) % 16) - baud_rate_adjust_low;
-        baud_rate_adjustment  = (baud_rate_adjust_high << 4) | baud_rate_adjust_low;
-
-        uart_fast_base->bauddiv = baud_rate_div_low_rate;
-        uart_fast_base->baudadj = baud_rate_adjustment;
-        uart_fast_base->mcr &= ~(UART_SECI_MCR_HIGHRATE_EN);
-        uart_fast_base->mcr |= UART_SECI_MCR_BAUD_ADJ_EN;
-    }
-
-    wiced_assert(" Currently supported data width is 8bits ", config->data_width == DATA_WIDTH_8BIT );
-
-    /* Configure parity */
-    if ( config->parity == ODD_PARITY )
-    {
-        uart_fast_base->lcr |= UART_SECI_LCR_PARITY_EN;
-        uart_fast_base->lcr &= ~(UART_SECI_LCR_PARITY);
-    }
-    else if ( config->parity == EVEN_PARITY )
-    {
-        uart_fast_base->lcr |= UART_SECI_LCR_PARITY_EN;
-        uart_fast_base->lcr |= UART_SECI_LCR_PARITY;
-    }
-    else
-    {
-        /* Default NO_PARITY */
-        uart_fast_base->lcr &= ~(UART_SECI_LCR_PARITY_EN);
-    }
-
-    /* Configure stop bits */
-    if ( config->stop_bits == STOP_BITS_1 )
-    {
-        uart_fast_base->lcr &= ~(UART_SECI_LCR_STOP_BITS);
-    }
-    else if ( config->stop_bits == STOP_BITS_2 )
-    {
-        uart_fast_base->lcr |= UART_SECI_LCR_STOP_BITS;
-    }
-    else
-    {
-        /* Default STOP_BITS_1 */
-        uart_fast_base->lcr &= ~(UART_SECI_LCR_STOP_BITS);
-    }
-
-    /* Configure Flow Control */
-    if ( config->flow_control == FLOW_CONTROL_DISABLED )
-    {
-        /* No Flow Control */
-        uart_fast_base->mcr &= ~(UART_SECI_MCR_AUTO_RTS);
-        uart_fast_base->mcr &= ~(UART_SECI_MCR_AUTO_TX_DIS);
-
-        driver->hw_flow_control_is_on = WICED_FALSE;
-    }
-    else
-    {
-        /* RTS+CTS Flow Control */
-        uart_fast_base->mcr |= UART_SECI_MCR_AUTO_RTS;
-        uart_fast_base->mcr |= UART_SECI_MCR_AUTO_TX_DIS;
-
-        driver->hw_flow_control_is_on = WICED_TRUE;
-    }
-
-    /* Setup LCR and MCR registers for TX, RX and HW flow control */
-    uart_fast_base->lcr |= UART_SECI_LCR_RX_EN;
-    uart_fast_base->lcr |= UART_SECI_LCR_TXO_EN;
-    uart_fast_base->mcr |= UART_SECI_MCR_TX_EN;
+    /* Setup and configure SECI UART */
+    uart_seci_setup_internal(uart_fast_base, clk_value, config);
 
     /* Setup SECI block operation mode */
-    CHIPCOMMON_SECI_CONFIG_REG &= ~(SECI_MODE_MASK << SECI_MODE_SHIFT);
-    CHIPCOMMON_SECI_CONFIG_REG |= (seci_mode << SECI_MODE_SHIFT);
+    CHIPCOMMON_SECI_CONFIG_REG &= ~(CC_SECI_MODE_MASK << CC_SECI_MODE_SHIFT);
+    CHIPCOMMON_SECI_CONFIG_REG |= (SECI_MODE_UART << CC_SECI_MODE_SHIFT);
 
     /* Setup default FIFO levels for TX, RX and flow control */
     cc_seci_fifo_level = CHIPCOMMON_SECI_FIFO_LEVEL_REG;
-    cc_seci_fifo_level &= ~(SECI_RX_FIFO_LVL_MASK << SECI_RX_FIFO_LVL_SHIFT);
-    cc_seci_fifo_level |= (SECI_RX_FIFO_LVL_DEFAULT << SECI_RX_FIFO_LVL_SHIFT);
-    cc_seci_fifo_level &= ~(SECI_TX_FIFO_LVL_MASK << SECI_TX_FIFO_LVL_SHIFT);
-    cc_seci_fifo_level |= (SECI_TX_FIFO_LVL_DEFAULT << SECI_TX_FIFO_LVL_SHIFT);
-    cc_seci_fifo_level &= ~(SECI_RX_FIFO_LVL_FLOW_CTL_MASK << SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT);
-    cc_seci_fifo_level |= (SECI_RX_FIFO_LVL_FLOW_CTL_DEFAULT << SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT);
+    cc_seci_fifo_level &= ~(CC_SECI_RX_FIFO_LVL_MASK << CC_SECI_RX_FIFO_LVL_SHIFT);
+    cc_seci_fifo_level |= (SECI_RX_FIFO_LVL_DEFAULT << CC_SECI_RX_FIFO_LVL_SHIFT);
+    cc_seci_fifo_level &= ~(CC_SECI_TX_FIFO_LVL_MASK << CC_SECI_TX_FIFO_LVL_SHIFT);
+    cc_seci_fifo_level |= (SECI_TX_FIFO_LVL_DEFAULT << CC_SECI_TX_FIFO_LVL_SHIFT);
+    cc_seci_fifo_level &= ~(CC_SECI_RX_FIFO_LVL_FLOW_CTL_MASK << CC_SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT);
+    cc_seci_fifo_level |= (SECI_RX_FIFO_LVL_FLOW_CTL_DEFAULT << CC_SECI_RX_FIFO_LVL_FLOW_CTL_SHIFT);
     CHIPCOMMON_SECI_FIFO_LEVEL_REG = cc_seci_fifo_level;
 
-    /* Clear force-low bit */
-    CHIPCOMMON_SECI_CONFIG_REG &= ~SECI_ENAB_SECIOUT_DIS;
-
-    /* Wait 10us for enabled SECI block serial output to stabilize */
-    OSL_DELAY(10);
+    /* Strap the appropriate platform pins for Fast UART RX/TX/CTS/RTS functions */
+    platform_pinmux_init(driver->interface->rx_pin->pin,  PIN_FUNCTION_FAST_UART_RX);
+    platform_pinmux_init(driver->interface->tx_pin->pin,  PIN_FUNCTION_FAST_UART_TX);
+    platform_pinmux_init(driver->interface->cts_pin->pin, PIN_FUNCTION_FAST_UART_CTS_IN);
+    platform_pinmux_init(driver->interface->rts_pin->pin, PIN_FUNCTION_FAST_UART_RTS_OUT);
 
     /* Setup ring buffer and related parameters */
     ring_buffer_init(&uart_fast_rx_buffer, uart_fast_rx_data, UART_FAST_RX_BUFFER_SIZE);
     driver->rx_buffer = &uart_fast_rx_buffer;
     host_rtos_init_semaphore(&driver->rx_complete);
     host_rtos_init_semaphore(&driver->tx_complete);
+
+    /* Reset any error counters */
+    driver->rx_overflow = 0;
+
+    /* Clear force-low bit */
+    CHIPCOMMON_SECI_CONFIG_REG &= ~CC_SECI_ENAB_SECIOUT_DIS;
+
+    /* Wait 10us for enabled SECI block serial output to stabilize */
+    OSL_DELAY(10);
 
 #ifndef BCM4390X_UART_FAST_POLL_MODE
     /* Initialization complete, enable interrupts from fast UART */
@@ -740,6 +958,160 @@ static platform_result_t uart_fast_init_internal( platform_uart_driver_t* driver
     /* Make sure ChipCommon Core external IRQ to APPS core is enabled */
     platform_chipcommon_enable_irq();
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
+
+    return PLATFORM_SUCCESS;
+}
+
+static platform_result_t uart_gci_init_internal( platform_uart_driver_t* driver, const platform_uart_config_t* config )
+{
+    uint32_t clk_value  = 0;
+    uint32_t clk_timeout = 100000000;
+    uint32_t reg_val;
+    uint32_t gci_seci_fifo_level = 0;
+    uint32_t flags;
+
+    /* Disable interrupts from GCI UART during initialization */
+    platform_uart_disable_interrupts(driver->interface->port);
+
+    /* GCI UART is driven by ALP clock */
+    if ( driver->interface->src_clk != CLOCK_ALP )
+    {
+        wiced_assert(" GCI UART is driven by ALP clock ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    /* Currently supported data width is 8 bits */
+    if ( config->data_width != DATA_WIDTH_8BIT )
+    {
+        wiced_assert(" Currently supported data width is 8 bits ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+
+    /* GCI UART does not have HW flow control */
+    if ( config->flow_control != FLOW_CONTROL_DISABLED )
+    {
+        wiced_assert(" GCI UART does not have HW flow control ", 0 );
+        return PLATFORM_UNSUPPORTED;
+    }
+    driver->hw_flow_control_is_on = WICED_FALSE;
+
+    /* Configure GCI UART clock */
+    clk_value = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
+
+    /* Set ForceSeciClk and ForceRegClk */
+    GCI_CORE_CTRL_REG |= (GCI_CORE_CTRL_FORCE_SECI_CLK | GCI_CORE_CTRL_FORCE_REG_CLK);
+
+    /* Wait for SECI Clock Available */
+    while ( ( ( GCI_CORE_STATUS_REG & GCI_CORE_STATUS_GCI_CLK_AVAIL ) == 0 ) && ( clk_timeout > 0 ) )
+    {
+        /* spin wait for clock transition */
+        clk_timeout--;
+    }
+
+    /* Put SECI block and OffChipCoex into reset */
+    GCI_CORE_CTRL_REG |= (GCI_CORE_CTRL_SECI_RESET | GCI_CORE_CTRL_RESET_SECI_LOGIC | GCI_CORE_CTRL_RESET_OFF_CHIP_COEX);
+
+    /* Set SECI output force-low */
+    GCI_CORE_CTRL_REG |= (GCI_CORE_CTRL_FORCE_SECI_OUT_LOW);
+
+    /* Take SECI block and OffChipCoex out of reset */
+    GCI_CORE_CTRL_REG &= ~(GCI_CORE_CTRL_SECI_RESET | GCI_CORE_CTRL_RESET_SECI_LOGIC | GCI_CORE_CTRL_RESET_OFF_CHIP_COEX);
+
+    /* Clear ForceSeciClk and ForceRegClk */
+    GCI_CORE_CTRL_REG &= ~(GCI_CORE_CTRL_FORCE_SECI_CLK | GCI_CORE_CTRL_FORCE_REG_CLK);
+
+    WICED_SAVE_INTERRUPTS(flags);
+
+    /* Configure SECI_IN Control */
+    GCI_INDIRECT_ADDRESS_REG = 0x0;
+    reg_val = GCI_SECI_IN_CTRL_REG;
+    /* Setup SECI_IN operation mode */
+    reg_val &= ~(GCI_SECI_IN_OP_MODE_MASK << GCI_SECI_IN_OP_MODE_SHIFT);
+    reg_val |= (SECI_MODE_UART << GCI_SECI_IN_OP_MODE_SHIFT);
+    /* Setup GCI_GPIO to SECI_IN (UART_RX) mapping */
+    reg_val &= ~(GCI_SECI_IN_GPIO_NUM_MASK << GCI_SECI_IN_GPIO_NUM_SHIFT);
+    reg_val |= (GCI_SECI_IN_GPIO_NUM_DEFAULT << GCI_SECI_IN_GPIO_NUM_SHIFT);
+    GCI_SECI_IN_CTRL_REG = reg_val;
+
+    /* Configure SECI_OUT Control */
+    GCI_INDIRECT_ADDRESS_REG = 0x0;
+    reg_val = GCI_SECI_OUT_CTRL_REG;
+    /* Setup SECI_OUT operation mode */
+    reg_val &= ~(GCI_SECI_OUT_OP_MODE_MASK << GCI_SECI_OUT_OP_MODE_SHIFT);
+    reg_val |= (SECI_MODE_UART << GCI_SECI_OUT_OP_MODE_SHIFT);
+    /* Setup SECI_OUT (UART_TX) to GCI_GPIO mapping */
+    reg_val &= ~(GCI_SECI_OUT_GPIO_NUM_MASK << GCI_SECI_OUT_GPIO_NUM_SHIFT);
+    reg_val |= (GCI_SECI_OUT_GPIO_NUM_DEFAULT << GCI_SECI_OUT_GPIO_NUM_SHIFT);
+    GCI_SECI_OUT_CTRL_REG = reg_val;
+
+    /* Initialize the SECI_IN GCI_GPIO */
+    GCI_INDIRECT_ADDRESS_REG = GCI_GPIO_CTRL_REG_INDEX(GCI_SECI_IN_GPIO_NUM_DEFAULT);
+    reg_val = GCI_GPIO_CTRL_REG;
+    reg_val &= ~(GCI_GPIO_CTRL_GPIO_MASK(GCI_SECI_IN_GPIO_NUM_DEFAULT));
+    reg_val |= (GCI_GPIO_CTRL_INPUT_ENAB(GCI_SECI_IN_GPIO_NUM_DEFAULT));
+    reg_val |= (GCI_GPIO_CTRL_PDN(GCI_SECI_IN_GPIO_NUM_DEFAULT));
+    GCI_GPIO_CTRL_REG = reg_val;
+
+    /* Initialize the SECI_OUT GCI_GPIO */
+    GCI_INDIRECT_ADDRESS_REG = GCI_GPIO_CTRL_REG_INDEX(GCI_SECI_OUT_GPIO_NUM_DEFAULT);
+    reg_val = GCI_GPIO_CTRL_REG;
+    reg_val &= ~(GCI_GPIO_CTRL_GPIO_MASK(GCI_SECI_OUT_GPIO_NUM_DEFAULT));
+    reg_val |= (GCI_GPIO_CTRL_OUTPUT_ENAB(GCI_SECI_OUT_GPIO_NUM_DEFAULT));
+    reg_val |= (GCI_GPIO_CTRL_PDN(GCI_SECI_OUT_GPIO_NUM_DEFAULT));
+    GCI_GPIO_CTRL_REG = reg_val;
+
+    WICED_RESTORE_INTERRUPTS(flags);
+
+    /* Enable SECI data communication */
+    GCI_CORE_CTRL_REG |= (GCI_CORE_CTRL_ENABLE_SECI);
+
+    /* Setup and configure SECI UART */
+    uart_seci_setup_internal(uart_gci_base, clk_value, config);
+
+    /* Setup default FIFO level for RX */
+    gci_seci_fifo_level = GCI_GCI_RX_FIFO_PER_IP_CTRL_REG;
+    gci_seci_fifo_level &= ~(GCI_SECI_RX_FIFO_LVL_MASK << GCI_SECI_RX_FIFO_LVL_SHIFT);
+    gci_seci_fifo_level |= (SECI_RX_FIFO_LVL_DEFAULT << GCI_SECI_RX_FIFO_LVL_SHIFT);
+    GCI_GCI_RX_FIFO_PER_IP_CTRL_REG = gci_seci_fifo_level;
+
+    /* Setup default FIFO level for TX */
+    gci_seci_fifo_level = GCI_SECI_FIFO_LEVEL_REG;
+    gci_seci_fifo_level &= ~(GCI_SECI_TX_FIFO_LVL_MASK << GCI_SECI_TX_FIFO_LVL_SHIFT);
+    gci_seci_fifo_level |= (SECI_TX_FIFO_LVL_DEFAULT << GCI_SECI_TX_FIFO_LVL_SHIFT);
+    GCI_SECI_FIFO_LEVEL_REG = gci_seci_fifo_level;
+
+    /* Setup ring buffer and related parameters */
+    ring_buffer_init(&uart_gci_rx_buffer, uart_gci_rx_data, UART_GCI_RX_BUFFER_SIZE);
+    driver->rx_buffer = &uart_gci_rx_buffer;
+    host_rtos_init_semaphore(&driver->rx_complete);
+    host_rtos_init_semaphore(&driver->tx_complete);
+
+    /* Reset any error counters */
+    driver->rx_overflow = 0;
+
+    /* Strap the appropriate platform pins for GCI UART RX/TX functions */
+    platform_pinmux_init(driver->interface->rx_pin->pin, PIN_FUNCTION_SECI_IN);
+    platform_pinmux_init(driver->interface->tx_pin->pin, PIN_FUNCTION_SECI_OUT);
+
+    /* Enable UART bytes reception from SECI_IN port to RX FIFO */
+    GCI_SECI_IN_AUX_FIFO_RX_ENAB_REG |= (GCI_SECI_FIFO_RX_ENAB);
+
+    /* Enable the SECI UART TX state machine */
+    GCI_SECI_OUT_TX_ENAB_TX_BRK_REG |= (GCI_SECI_TX_ENAB);
+
+    /* Clear SECI output force-low */
+    GCI_CORE_CTRL_REG &= ~(GCI_CORE_CTRL_FORCE_SECI_OUT_LOW);
+
+    /* Wait 10us for enabled SECI block serial output to stabilize */
+    OSL_DELAY(10);
+
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+    /* Initialization complete, enable interrupts from GCI UART */
+    platform_uart_enable_interrupts(driver->interface->port);
+
+    /* Make sure ChipCommon Core external IRQ to APPS core is enabled */
+    platform_chipcommon_enable_irq();
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
 
     return PLATFORM_SUCCESS;
 }
@@ -769,6 +1141,11 @@ platform_result_t platform_uart_init( platform_uart_driver_t* driver, const plat
         driver->interface = (platform_uart_t*) interface;
         return uart_fast_init_internal( driver, config );
     }
+    else if ( interface->port == UART_GCI )
+    {
+        driver->interface = (platform_uart_t*) interface;
+        return uart_gci_init_internal( driver, config );
+    }
 
     return PLATFORM_UNSUPPORTED;
 }
@@ -780,7 +1157,7 @@ platform_result_t platform_uart_deinit( platform_uart_driver_t* driver )
     return PLATFORM_UNSUPPORTED;
 }
 
-#if !defined(BCM4390X_UART_SLOW_POLL_MODE) || !defined(BCM4390X_UART_FAST_POLL_MODE)
+#if !defined(BCM4390X_UART_SLOW_POLL_MODE) || !defined(BCM4390X_UART_FAST_POLL_MODE) || !defined(BCM4390X_UART_GCI_POLL_MODE)
 static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
 {
     platform_result_t result = PLATFORM_ERROR;
@@ -828,7 +1205,7 @@ static platform_result_t uart_receive_bytes_irq( platform_uart_driver_t* driver,
 
     return result;
 }
-#endif /* !BCM4390X_UART_SLOW_POLL_MODE || !BCM4390X_UART_FAST_POLL_MODE */
+#endif /* !BCM4390X_UART_SLOW_POLL_MODE || !BCM4390X_UART_FAST_POLL_MODE || !BCM4390X_UART_GCI_POLL_MODE */
 
 #ifdef BCM4390X_UART_SLOW_POLL_MODE
 platform_result_t uart_slow_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
@@ -902,6 +1279,42 @@ platform_result_t uart_fast_receive_bytes_poll( platform_uart_driver_t* driver, 
 }
 #endif /* BCM4390X_UART_FAST_POLL_MODE */
 
+#ifdef BCM4390X_UART_GCI_POLL_MODE
+platform_result_t uart_gci_receive_bytes_poll( platform_uart_driver_t* driver, uint8_t* data_in, uint32_t* data_size_left_to_read, uint32_t timeout_ms )
+{
+    wwd_time_t   total_start_time   = host_rtos_get_time( );
+    wwd_time_t   total_elapsed_time = 0;
+    wiced_bool_t first_read         = WICED_TRUE;
+
+    do
+    {
+        wwd_time_t read_start_time   = host_rtos_get_time( );
+        wwd_time_t read_elapsed_time = 0;
+        wwd_time_t read_timeout_ms   = ( first_read == WICED_TRUE ) ? timeout_ms : UART_GCI_MAX_READ_WAIT_TIME;
+
+        /* Wait till there is something in the RX FIFO of the GCI UART */
+        while ( !(GCI_INT_STATUS_REG & GCI_INT_ST_MASK_SECI_RX_FIFO_NOT_EMPTY) && (read_elapsed_time < read_timeout_ms) )
+        {
+            read_elapsed_time = host_rtos_get_time() - read_start_time;
+
+            host_rtos_delay_milliseconds(1);
+        }
+
+        if ( read_elapsed_time >= read_timeout_ms )
+        {
+            break;
+        }
+
+        *data_in++ = uart_gci_base->data;
+        (*data_size_left_to_read)--;
+        total_elapsed_time = host_rtos_get_time() - total_start_time;
+
+    } while ( ( *data_size_left_to_read != 0 ) && ( total_elapsed_time < timeout_ms ) );
+
+    return ( *data_size_left_to_read == 0 ) ? PLATFORM_SUCCESS : PLATFORM_TIMEOUT;
+}
+#endif /* BCM4390X_UART_GCI_POLL_MODE */
+
 static wiced_bool_t uart_slow_wait_transmit_fifo_empty( void )
 {
     const wwd_time_t start_time = host_rtos_get_time();
@@ -913,11 +1326,18 @@ static wiced_bool_t uart_slow_wait_transmit_fifo_empty( void )
 
         if ( elapsed_time >= UART_SLOW_MAX_TRANSMIT_WAIT_TIME )
         {
-            return WICED_FALSE;
+            break;
         }
     }
 
-    return WICED_TRUE;
+    if ( ( uart_slow_base->lsr & empty_mask ) != empty_mask )
+    {
+        return WICED_FALSE;
+    }
+    else
+    {
+        return WICED_TRUE;
+    }
 }
 
 platform_result_t uart_slow_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
@@ -957,12 +1377,38 @@ platform_result_t uart_fast_transmit_bytes( platform_uart_driver_t* driver, cons
             elapsed_time = host_rtos_get_time( ) - start_time;
         }
 
-        if ( elapsed_time >= UART_FAST_MAX_TRANSMIT_WAIT_TIME )
+        if ( CHIPCOMMON_SECI_STATUS_REG & CC_SECI_STATUS_TX_FIFO_FULL )
         {
             return PLATFORM_TIMEOUT;
         }
 
         uart_fast_base->data = *data_out++;
+        size--;
+
+    } while ( size != 0 );
+
+    return PLATFORM_SUCCESS;
+}
+
+platform_result_t uart_gci_transmit_bytes( platform_uart_driver_t* driver, const uint8_t* data_out, uint32_t size )
+{
+    do
+    {
+        wwd_time_t   start_time   = host_rtos_get_time();
+        wwd_time_t   elapsed_time = 0;
+
+        /* Wait till there is space in the TX FIFO of the Fast UART */
+        while ( (GCI_INT_STATUS_REG & GCI_INT_ST_MASK_SECI_TX_FIFO_FULL) && (elapsed_time < UART_GCI_MAX_TRANSMIT_WAIT_TIME) )
+        {
+            elapsed_time = host_rtos_get_time( ) - start_time;
+        }
+
+        if ( GCI_INT_STATUS_REG & GCI_INT_ST_MASK_SECI_TX_FIFO_FULL )
+        {
+            return PLATFORM_TIMEOUT;
+        }
+
+        uart_gci_base->data = *data_out++;
         size--;
 
     } while ( size != 0 );
@@ -979,6 +1425,10 @@ static platform_result_t platform_uart_transmit_bytes_common( platform_uart_driv
     else if ( driver->interface->port == UART_FAST )
     {
         return uart_fast_transmit_bytes( driver, data_out, size );
+    }
+    else if ( driver->interface->port == UART_GCI )
+    {
+        return uart_gci_transmit_bytes( driver, data_out, size );
     }
 
     return PLATFORM_UNSUPPORTED;
@@ -1036,6 +1486,14 @@ platform_result_t platform_uart_receive_bytes( platform_uart_driver_t* driver, u
         result = uart_fast_receive_bytes_poll( driver, data_in, &data_size_left_to_read, timeout_ms );
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
     }
+    else if ( driver->interface->port == UART_GCI )
+    {
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+        result = uart_receive_bytes_irq( driver, data_in, &data_size_left_to_read, timeout_ms );
+#else
+        result = uart_gci_receive_bytes_poll( driver, data_in, &data_size_left_to_read, timeout_ms );
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
+    }
 
     *expected_data_size -= data_size_left_to_read;
 
@@ -1072,6 +1530,9 @@ static void uart_slow_irq( platform_uart_driver_t* driver )
              */
             if ( ( ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size ) == driver->rx_buffer->head )
             {
+                /* RX overflow error counter */
+                driver->rx_overflow++;
+
                 /* Slow UART interrupts remain turned off */
                 return;
             }
@@ -1102,6 +1563,47 @@ static void uart_slow_irq( platform_uart_driver_t* driver )
 }
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE */
 
+#if !defined(BCM4390X_UART_FAST_POLL_MODE) || !defined(BCM4390X_UART_GCI_POLL_MODE)
+static wiced_bool_t uart_seci_process_irq( platform_uart_driver_t* driver, uart_seci_t* uart_seci_base )
+{
+    if (driver->rx_buffer == NULL)
+    {
+        /* SECI UART interrupts remain turned off */
+        return WICED_FALSE;
+    }
+
+    /*
+     * Check whether the ring buffer is already about to overflow.
+     * This condition cannot happen during correct operation of the driver, but checked here only as precaution
+     * to protect against ring buffer overflows for e.g. if UART interrupts got inadvertently enabled elsewhere.
+     */
+    if ( ( ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size ) == driver->rx_buffer->head )
+    {
+        /* RX overflow error counter */
+        driver->rx_overflow++;
+
+        /* SECI UART interrupts remain turned off */
+        return WICED_FALSE;
+    }
+
+    /* Transfer data from the SECI UART Data Register into the ring buffer */
+    driver->rx_buffer->buffer[driver->rx_buffer->tail] = uart_seci_base->data;
+    driver->rx_buffer->tail = ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size;
+
+    /* Set the semaphore whenever a byte is produced into the ring buffer */
+    host_rtos_set_semaphore( &driver->rx_complete, WICED_TRUE );
+
+    /* Check whether the ring buffer is about to overflow */
+    if ( ( ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size ) == driver->rx_buffer->head )
+    {
+        /* SECI UART interrupts remain turned off */
+        return WICED_FALSE;
+    }
+
+    return WICED_TRUE;
+}
+#endif /* !BCM4390X_UART_FAST_POLL_MODE || !BCM4390X_UART_GCI_POLL_MODE */
+
 #ifndef BCM4390X_UART_FAST_POLL_MODE
 /*
  * Fast UART interrupt service routine
@@ -1119,34 +1621,7 @@ static void uart_fast_irq( platform_uart_driver_t* driver )
 
     if ( (int_status & CC_SECI_STATUS_RX_FIFO_ALMOST_FULL) && (int_mask & CC_SECI_STATUS_RX_FIFO_ALMOST_FULL) )
     {
-        if (driver->rx_buffer != NULL)
-        {
-            /*
-             * Check whether the ring buffer is already about to overflow.
-             * This condition cannot happen during correct operation of the driver, but checked here only as precaution
-             * to protect against ring buffer overflows for e.g. if UART interrupts got inadvertently enabled elsewhere.
-             */
-            if ( ( ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size ) == driver->rx_buffer->head )
-            {
-                /* Fast UART interrupts remain turned off */
-                return;
-            }
-
-            /* Transfer data from the SECI UART Data Register into the ring buffer */
-            driver->rx_buffer->buffer[driver->rx_buffer->tail] = uart_fast_base->data;
-            driver->rx_buffer->tail = ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size;
-
-            /* Set the semaphore whenever a byte is produced into the ring buffer */
-            host_rtos_set_semaphore( &driver->rx_complete, WICED_TRUE );
-
-            /* Check whether the ring buffer is about to overflow */
-            if ( ( ( driver->rx_buffer->tail + 1 ) % driver->rx_buffer->size ) == driver->rx_buffer->head )
-            {
-                /* Fast UART interrupts remain turned off */
-                return;
-            }
-        }
-        else
+        if ( uart_seci_process_irq(driver, uart_fast_base) != WICED_TRUE )
         {
             /* Fast UART interrupts remain turned off */
             return;
@@ -1157,6 +1632,35 @@ static void uart_fast_irq( platform_uart_driver_t* driver )
     platform_uart_enable_interrupts(driver->interface->port);
 }
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
+
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+/*
+ * GCI UART interrupt service routine
+ */
+static void uart_gci_irq( platform_uart_driver_t* driver )
+{
+    uint32_t int_status;
+    uint32_t int_mask;
+
+    int_mask = GCI_INT_MASK_REG;
+    int_status = GCI_INT_STATUS_REG;
+
+    /* Turn off GCI UART interrupts */
+    platform_uart_disable_interrupts(driver->interface->port);
+
+    if ( (int_status & GCI_INT_ST_MASK_SECI_RX_FIFO_NOT_EMPTY) && (int_mask & GCI_INT_ST_MASK_SECI_RX_FIFO_NOT_EMPTY) )
+    {
+        if ( uart_seci_process_irq(driver, uart_gci_base) != WICED_TRUE )
+        {
+            /* GCI UART interrupts remain turned off */
+            return;
+        }
+    }
+
+    /* Turn on GCI UART interrupts */
+    platform_uart_enable_interrupts(driver->interface->port);
+}
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
 
 /*
  * Platform UART interrupt service routine
@@ -1169,10 +1673,16 @@ void platform_uart_irq( platform_uart_driver_t* driver )
         uart_slow_irq(driver);
 #endif /* !BCM4390X_UART_SLOW_POLL_MODE */
     }
-    else if(driver->interface->port == UART_FAST)
+    else if (driver->interface->port == UART_FAST)
     {
 #ifndef BCM4390X_UART_FAST_POLL_MODE
         uart_fast_irq(driver);
 #endif /* !BCM4390X_UART_FAST_POLL_MODE */
+    }
+    else if (driver->interface->port == UART_GCI)
+    {
+#ifndef BCM4390X_UART_GCI_POLL_MODE
+        uart_gci_irq(driver);
+#endif /* !BCM4390X_UART_GCI_POLL_MODE */
     }
 }

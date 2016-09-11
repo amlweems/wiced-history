@@ -29,9 +29,6 @@
  *                      Macros
  ******************************************************/
 
-#define PLATFORM_CC_BASE        PLATFORM_CHIPCOMMON_REGBASE(0x0)
-#define PLATFORM_CC_CLOCKSTATUS PLATFORM_CLOCKSTATUS_REG(PLATFORM_CC_BASE)
-
 /*
  * RTC registers are latched on the always-on ILP domain, and that is slow.
  * Since we do register shadowing from backplane domain to 32kHz ILP domain,
@@ -340,12 +337,6 @@ platform_result_t platform_rtc_init ( void )
     if ( (PLATFORM_PMU->pmucapabilities_ext & PMU_CAP_EXT_RTC_PRESENT) == 0 )
     {
         return PLATFORM_UNSUPPORTED;
-    }
-
-    if ( (PLATFORM_CC_CLOCKSTATUS->bits.bp_on_alp == 0) && (PLATFORM_CC_CLOCKSTATUS->bits.bp_on_ht == 0))
-    {
-        wiced_assert( "APPS CPU not running on HT or ALP backplane clock", 0 );
-        return PLATFORM_ERROR;
     }
 
     /* Set default RTC time and calendar */

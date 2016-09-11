@@ -70,6 +70,9 @@ $(NAME)_SOURCES := ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    platform_unhandled_isr.c \
                    WAF/waf_platform.c
 
+#for DCT with crc checking
+$(NAME)_COMPONENTS  += utilities/crc
+
 ifndef NO_WIFI
 $(NAME)_SOURCES += WWD/wwd_platform.c \
                    WWD/wwd_$(BUS).c

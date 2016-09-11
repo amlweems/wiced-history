@@ -11,11 +11,11 @@
 #include "network/wwd_buffer_interface.h"
 #include "platform/wwd_bus_interface.h"
 #include "lwip/netbuf.h"
-#include "FreeRTOS.h"
 #include "lwip/memp.h"
-#include "task.h"
 #include <string.h> /* for NULL */
 #include "wwd_assert.h"
+#include "RTOS/wwd_rtos_interface.h"
+#include "wiced_utilities.h"
 
 void memp_free_notify( unsigned int type );
 
@@ -35,8 +35,7 @@ wwd_result_t host_buffer_check_leaked( void )
     return WWD_SUCCESS;
 }
 
-
-wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait ) /*@allocates *buffer@*/  /*@defines **buffer@*/
+wwd_result_t internal_host_buffer_get( wiced_buffer_t * buffer, wwd_buffer_dir_t direction, unsigned short size, unsigned long timeout_ms )
 {
     UNUSED_PARAMETER( direction );
 
@@ -55,9 +54,14 @@ wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, ww
     do
     {
         *buffer = pbuf_alloc( PBUF_RAW, size, ( direction == WWD_NETWORK_RX ) ? PBUF_POOL_RX : PBUF_POOL_TX );
-    } while ( ( *buffer == NULL ) &&
-              ( wait == WICED_TRUE ) &&
-              ( vTaskDelay( (TickType_t) 1 ), 1 == 1 ) );
+        if ( *buffer != NULL )
+        {
+            break;
+        }
+        host_rtos_delay_milliseconds( 1 );
+
+    } while ( timeout_ms-- > 0);
+
     if ( *buffer == NULL )
     {
 #if 0
@@ -71,6 +75,12 @@ wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, ww
     /*@-compdef@*/ /* Lint does not realise allocation has occurred */
     return WWD_SUCCESS;
     /*@+compdef@*/
+}
+
+wwd_result_t host_buffer_get( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, wwd_buffer_dir_t direction, unsigned short size, wiced_bool_t wait ) /*@allocates *buffer@*/  /*@defines **buffer@*/
+{
+    unsigned long wait_option = ( wait == WICED_TRUE ) ? (unsigned long) WICED_NEVER_TIMEOUT : 0;
+    return internal_host_buffer_get(buffer, direction, size, wait_option);
 }
 
 void host_buffer_release( /*@only@*/ wiced_buffer_t buffer, wwd_buffer_dir_t direction )

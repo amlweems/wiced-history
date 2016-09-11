@@ -67,7 +67,7 @@ static volatile wiced_bool_t wwd_bus_interrupt = WICED_FALSE;
  *             Static Function Prototypes
  ******************************************************/
 
-static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag@*/;
+static void wwd_thread_func( wwd_thread_arg_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag@*/;
 
 /******************************************************
  *             Global Functions
@@ -137,6 +137,7 @@ wwd_result_t wwd_thread_init( void ) /*@globals undef wwd_thread, undef wwd_tran
 int8_t wwd_thread_send_one_packet( void ) /*@modifies internalState @*/
 {
     wiced_buffer_t tmp_buf_hnd = NULL;
+    wwd_result_t result;
 
     if ( wwd_sdpcm_get_packet_to_send( &tmp_buf_hnd ) != WWD_SUCCESS )
     {
@@ -146,14 +147,15 @@ int8_t wwd_thread_send_one_packet( void ) /*@modifies internalState @*/
     }
 
     /* Ensure the wlan backplane bus is up */
-    if ( wwd_bus_ensure_is_up() != WWD_SUCCESS )
+    result = wwd_ensure_wlan_bus_is_up();
+    if ( result != WWD_SUCCESS )
     {
         wiced_assert("Could not bring bus back up", 0 != 0 );
         host_buffer_release( tmp_buf_hnd, WWD_NETWORK_TX );
         return 0;
     }
 
-    WPRINT_WWD_DEBUG(("Wcd:> Sending pkt 0x%08X\n\r", (unsigned int)tmp_buf_hnd ));
+    WWD_LOG(("Wcd:> Sending pkt 0x%08lX\n", (unsigned long)tmp_buf_hnd ));
     if ( wwd_bus_send_buffer( tmp_buf_hnd ) != WWD_SUCCESS )
     {
         return 0;
@@ -188,7 +190,7 @@ int8_t wwd_thread_receive_one_packet( void )
     if ( recv_buffer != NULL )  /* Could be null if it was only a credit update */
     {
 
-        WWD_LOG(("Wcd:< Rcvd pkt 0x%08X\n", (unsigned int)recv_buffer ));
+        WWD_LOG(("Wcd:< Rcvd pkt 0x%08lX\n", (unsigned long)recv_buffer ));
 
         /* Send received buffer up to SDPCM layer */
         wwd_sdpcm_process_rx_packet( recv_buffer );
@@ -280,12 +282,14 @@ void wwd_thread_notify( void )
  * @param thread_input  : unused parameter needed to match thread prototype.
  *
  */
-static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag, wwd_inited, wwd_thread@*/
+static void wwd_thread_func( wwd_thread_arg_t /*@unused@*/thread_input ) /*@globals killed wwd_transceive_semaphore@*/ /*@modifies wwd_wlan_status, wwd_bus_interrupt, wwd_thread_quit_flag, wwd_inited, wwd_thread@*/
 {
     int8_t rx_status;
     int8_t tx_status;
 
     UNUSED_PARAMETER(thread_input);
+
+    WWD_LOG(("Started Wiced Thread\n"));
 
     /* Interrupts may be enabled inside thread. To make sure none lost set flag now. */
     wwd_inited = WICED_TRUE;
@@ -318,7 +322,11 @@ static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals kill
 
         /* Sleep till WLAN do something */
         wwd_wait_for_wlan_event( &wwd_transceive_semaphore );
+        WWD_LOG(("Wiced Thread: Woke\n"));
     }
+
+    /* Set flag before releasing objects */
+    wwd_inited = WICED_FALSE;
 
     /* Reset the quit flag */
     wwd_thread_quit_flag = WICED_FALSE;
@@ -327,7 +335,8 @@ static void wwd_thread_func( uint32_t /*@unused@*/thread_input ) /*@globals kill
     (void) host_rtos_deinit_semaphore( &wwd_transceive_semaphore );  /* Ignore return - not much can be done about failure */
 
     wwd_sdpcm_quit( );
-    wwd_inited = WICED_FALSE;
+
+    WWD_LOG(("Stopped Wiced Thread\n"));
 
     if ( WWD_SUCCESS != host_rtos_finish_thread( &wwd_thread ) )
     {

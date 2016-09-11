@@ -113,6 +113,9 @@ typedef struct
 } wiced_bt_ble_address_t;
 #endif
 
+#define LINK_KEY_LEN    16
+typedef uint8_t wiced_bt_link_key_t[LINK_KEY_LEN];
+
 /* Structure defined for Vendor Specific Command complete callback */
 typedef struct
 {

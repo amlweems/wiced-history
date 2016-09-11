@@ -32,19 +32,8 @@ extern "C" {
  ******************************************************/
 
 /******************************************************
- *                    Structures
+ *                 Type Definitions
  ******************************************************/
-
-/**
- * Configuration parameters for starting audio render.
- */
-
-typedef struct wiced_audio_render_params_s {
-    uint32_t buffer_nodes;                  /* Number of buffer nodes for audio render to allocate      */
-    uint32_t buffer_ms;                     /* Buffering (pre-roll) time that audio render should use   */
-    uint32_t threshold_ms;                  /* Threshold in ms for adding silence/dropping audio frames */
-    int      clock_enable;                  /* 0 = disable (blind push), 1 = enable */
-} wiced_audio_render_params_t;
 
 /**
  * Audio buffer structure.
@@ -58,15 +47,46 @@ typedef struct wiced_audio_render_buf_s {
     void*    opaque;
 } wiced_audio_render_buf_t;
 
-/******************************************************
- *                 Type Definitions
- ******************************************************/
-
 /**
  * Callback for releasing audio buffers.
  */
 
 typedef wiced_result_t (*wiced_audio_render_buf_release_cb_t)(wiced_audio_render_buf_t* buf, void* session_ptr);
+
+/**
+ * Callback for providing reference time in nanosecs
+ */
+
+typedef wiced_result_t (*wiced_audio_render_time_get_cb_t)(int64_t *time_in_nanosecs, void* session_ptr);
+
+/**
+ * Audio queue weight
+ */
+
+typedef struct wiced_audio_render_queue_weight_s {
+    uint32_t input_queue_weight;
+    uint32_t output_buffer_weight;
+    uint32_t output_buffer_size;
+} wiced_audio_render_queue_weight_t;
+
+/******************************************************
+ *                    Structures
+ ******************************************************/
+
+/**
+ * Configuration parameters for starting audio render.
+ */
+
+typedef struct wiced_audio_render_params_s {
+    uint32_t                                buffer_nodes;   /* Number of buffer nodes for audio render to allocate                      */
+    uint32_t                                buffer_ms;      /* Buffering (pre-roll) time that audio render should use                   */
+    uint32_t                                threshold_ms;   /* Threshold in ms for adding silence/dropping audio frames                 */
+    int                                     clock_enable;   /* 0 = disable (blind push), 1 = enable                                     */
+    platform_audio_device_id_t              device_id;      /* device identifier                                                        */
+    void*                                   session_ptr;    /* Application session pointer passed back in the following callbacks       */
+    wiced_audio_render_buf_release_cb_t     cb_buf_release; /* Audio buffer release callback                                            */
+    wiced_audio_render_time_get_cb_t        cb_time_get;    /* OPTIONAL - reference nanosecond time callback                            */
+} wiced_audio_render_params_t;
 
 /******************************************************
  *                 Global Variables
@@ -80,15 +100,11 @@ typedef struct wiced_audio_render_s *wiced_audio_render_ref;
 
 /** Initialize the audio render library.
  *
- * @param[in] params      : Pointer to the audio configuration parameters.
- * @param[in] cb          : Audio buffer release callback.
- * @paran[in] session_ptr : Application session pointer passed back in buffer release callback.
+ * @param[in] params : Pointer to the audio configuration parameters.
  *
  * @return Pointer to the audio render instance or NULL
  */
-wiced_audio_render_ref wiced_audio_render_init(wiced_audio_render_params_t*        params,
-                                               wiced_audio_render_buf_release_cb_t cb,
-                                               void*                               session_ptr);
+wiced_audio_render_ref wiced_audio_render_init(wiced_audio_render_params_t* params);
 
 /** Deinitialize the audio render library.
  *
@@ -100,13 +116,12 @@ wiced_result_t wiced_audio_render_deinit(wiced_audio_render_ref audio);
 
 /** Configure the audio render audio format.
  *
- * @param[in] dev  : Pointer to the audio device name (e.g. "ak4961_dac" or "wm8533_dac")
  * @param[in] audio  : Pointer to the audio render instance.
  * @param[in] config : Pointer to the audio configuration.
  *
  * @return    Status of the operation.
  */
-wiced_result_t wiced_audio_render_configure(const char* dev, wiced_audio_render_ref audio, wiced_audio_config_t* config);
+wiced_result_t wiced_audio_render_configure(wiced_audio_render_ref audio, wiced_audio_config_t* config);
 
 /** Put the audio render in play state.
  * @note this functionality still needs to be implemented.
@@ -164,6 +179,23 @@ wiced_result_t wiced_audio_render_push(wiced_audio_render_ref audio, wiced_audio
  */
 wiced_result_t wiced_audio_render_set_volume(wiced_audio_render_ref audio, uint8_t volume);
 
+/** Adjust audio rendering speed in part per million of default/normal speed
+ *
+ * @param[in] audio        : Pointer to the audio render instance.
+ * @param[in] speed_in_ppm : Audio playback speed adjustment in part-per-million (PPM)
+ *
+ * @return    Status of the operation.
+ */
+wiced_result_t wiced_audio_render_set_speed(wiced_audio_render_ref audio, float speed_in_ppm);
+
+/** Get audio render internal queue depth
+ *
+ * @param[in]  audio  : Pointer to the audio render instance.
+ * @param[out] weight : Pointer to @ref wiced_audio_render_queue_depth_t structure
+ *
+ * @return    Status of the operation.
+ */
+wiced_result_t wiced_audio_render_get_queue_weight(wiced_audio_render_ref audio, wiced_audio_render_queue_weight_t *weight);
 
 #ifdef __cplusplus
 } /* extern "C" */

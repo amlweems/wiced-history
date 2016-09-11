@@ -17,6 +17,7 @@ $(info Using PREBUILT:  $(AUDIO_RENDER_LIBRARY_NAME))
 $(NAME)_PREBUILT_LIBRARY :=$(AUDIO_RENDER_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
+$(info Building SRC:  $(AUDIO_RENDER_LIBRARY_NAME))
 include $(CURDIR)audio_render_src.mk
 endif # ifneq ($(wildcard $(CURDIR)$(AUDIO_RENDER_LIBRARY_NAME)),)
 

@@ -15,7 +15,7 @@ GLOBAL_INCLUDES := . \
                    WICED \
                    Components/stack/include \
                    Projects/bte/main
-                   
+
 GLOBAL_DEFINES +=  BUILDCFG \
                    BLUETOOTH_BTE
 

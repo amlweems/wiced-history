@@ -74,15 +74,29 @@ tlv8_data_t* tlv_find_tlv8( const uint8_t* message, uint32_t message_length, uin
 
 tlv16_data_t* tlv_find_tlv16( const uint8_t* message, uint32_t message_length, uint16_t type )
 {
-    tlv16_data_t* tlv = (tlv16_data_t*) message;
-    while ( ( (uint8_t*) tlv - message ) < message_length - sizeof(tlv16_header_t) )
+    while ( message_length != 0 )
     {
-        if ( htobe16( WICED_READ_16( &tlv->type ) ) == type )
+        tlv16_data_t* tlv                = (tlv16_data_t*) message;
+        uint16_t      current_tlv_type   = htobe16( WICED_READ_16( &tlv->type ) );
+        uint16_t      current_tlv_length = htobe16( WICED_READ_16( &tlv->length ) ) + 4;
+
+        /* Check if we've overrun the buffer */
+        if ( current_tlv_length > message_length )
+        {
+            return NULL;
+        }
+
+        /* Check if we've found the type we are looking for */
+        if ( current_tlv_type == type )
         {
             return tlv;
         }
-        tlv = (tlv16_data_t*)( (uint8_t*)tlv + sizeof(tlv16_header_t) + htobe16( WICED_READ_16( &tlv->length ) ) );
+
+        /* Skip current TLV */
+        message        += current_tlv_length;
+        message_length -= current_tlv_length;
     }
+
     return NULL;
 }
 

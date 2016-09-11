@@ -17,8 +17,9 @@ $(NAME)_SOURCES     := power_management.c
 $(NAME)_COMPONENTS  := drivers/power_management/max17040 \
                        drivers/power_management/max8971
 
-ifeq ($(PLATFORM),BCM943907WAE_1)
-    GLOBAL_DEFINES  += POWER_MANAGEMENT_ON_BCM943907WAE_1
+ifneq (,$(findstring BCM943907WAE_1,$(PLATFORM)))
+$(info enabling power management on $(PLATFORM))
+GLOBAL_DEFINES  += POWER_MANAGEMENT_ON_BCM943907WAE_1
 endif
 
 KEEP_LIST           := power_management.h

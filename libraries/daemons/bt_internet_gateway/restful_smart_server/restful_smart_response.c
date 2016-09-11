@@ -412,6 +412,8 @@ wiced_result_t rest_smart_response_write_long_partial_characteristic_value( wice
         unsigned_to_hex_string( partial_value[a], value_char, 2, 2 );
         WICED_VERIFY( wiced_http_response_stream_write( stream, value_char, 2 ) );
     }
+
+    wiced_http_response_stream_flush( stream );
     return WICED_SUCCESS;
 }
 
@@ -460,9 +462,9 @@ wiced_result_t rest_smart_response_write_characteristic_value( wiced_http_respon
     WICED_VERIFY( wiced_http_response_stream_write( stream, crlf, sizeof( crlf ) - 1 ) );
 
 
-    /* "value" : "<value>\r\n" */
+    /* "value" : "<value>\r\n". Value is written in network byte order */
     WICED_VERIFY( wiced_http_response_stream_write( stream, json_data_value, sizeof( json_data_value ) - 1 ) );
-    for ( a = value_length - 1; a >= 0; a-- )
+    for ( a = 0; a < value_length; a++ )
     {
         char value_char[3];
 
@@ -503,9 +505,9 @@ wiced_result_t rest_smart_response_write_descriptor_value( wiced_http_response_s
     WICED_VERIFY( wiced_http_response_stream_write( stream, descriptor_value_handle,      strlen( descriptor_value_handle      )     ) );
     WICED_VERIFY( wiced_http_response_stream_write( stream, json_data_self_end,           sizeof( json_data_self_end           ) - 1 ) );
 
-    /* "value" : "<value>\r\n" */
+    /* "value" : "<value>\r\n". Value is written in network byte order */
     WICED_VERIFY( wiced_http_response_stream_write( stream, json_data_value, sizeof( json_data_value ) - 1 ) );
-    for ( a = value_length - 1; a >= 0; a-- )
+    for ( a = 0; a < value_length; a++ )
     {
         char value_char[3];
 

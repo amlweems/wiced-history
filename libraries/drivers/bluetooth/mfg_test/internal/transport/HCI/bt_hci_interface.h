@@ -67,6 +67,7 @@ typedef enum
     HCI_CMD_LAUNCH_RAM,
     HCI_CMD_READ_BD_ADDR,
     HCI_CMD_WRITE_BD_ADDR,
+    HCI_CMD_UPDATE_BAUDRATE,
 } hci_command_type_t;
 
 typedef enum
@@ -77,6 +78,7 @@ typedef enum
     HCI_CMD_OPCODE_LAUNCH_RAM          = 0xFC4E,
     HCI_CMD_OPCODE_READ_BD_ADDR        = 0x1009,
     HCI_CMD_OPCODE_WRITE_BD_ADDR       = 0xFC01,
+    HCI_CMD_OPCODE_UPDATE_BAUDRATE     = 0xFC18,
 } hci_command_opcode_t;
 
 /******************************************************

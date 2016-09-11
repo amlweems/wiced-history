@@ -21,7 +21,6 @@
 #include "platform_peripheral.h"
 #include "platform.h" /* This file is unique for each platform */
 #include "platform_dct.h"
-#include "waf_platform.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +37,8 @@ extern "C" {
 #define WICED_I2C_START_FLAG                    (1U << 0)
 #define WICED_I2C_REPEATED_START_FLAG           (1U << 1)
 #define WICED_I2C_STOP_FLAG                     (1U << 2)
+
+#define WICED_GPIO_NONE ((wiced_gpio_t)0x7fffffff)
 
 /******************************************************
  *                   Enumerations
@@ -210,6 +211,18 @@ wiced_result_t wiced_uart_receive_bytes( wiced_uart_t uart, void* data, uint32_t
  * @return    WICED_ERROR   : if the SPI device could not be initialised
  */
 wiced_result_t wiced_spi_init( const wiced_spi_device_t* spi );
+
+
+/** Transmits data to a SPI device
+ *
+ * @param  spi      : the SPI device to be initialised
+ * @param  segments : a pointer to an array of segments
+ * @param  number_of_segments : the number of segments to transfer
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred
+ */
+wiced_result_t wiced_spi_transmit( const wiced_spi_device_t* spi, const wiced_spi_message_segment_t* segments, uint16_t number_of_segments );
 
 
 /** Transmits and/or receives data from a SPI device
@@ -762,6 +775,21 @@ wiced_result_t wiced_time_disable_8021as(void);
  */
 wiced_result_t wiced_time_read_8021as(uint32_t *master_secs, uint32_t *master_nanosecs,
                                       uint32_t *local_secs, uint32_t *local_nanosecs);
+
+
+/**
+ * Read the 802.1AS time along with the I2S-driven audio time
+ *
+ * Retrieve the origin timestamp in the last sync message, correct for the
+ * intervening interval and return the corrected time in seconds + nanoseconds.
+ * Also retrieve the corresponding time from the audio timer.
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred with any step
+ */
+wiced_result_t wiced_time_read_8021as_with_audio(uint32_t *master_secs, uint32_t *master_nanosecs,
+                                                 uint32_t *local_secs, uint32_t *local_nanosecs,
+                                                 uint32_t *audio_time_hi, uint32_t *audio_time_lo);
 
 
 /**

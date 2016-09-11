@@ -1,12 +1,13 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/****************************************************************************/
+/*                                                                          */
+/*  Name:       gattdefs.h                                                  */
+/*                                                                          */
+/*  Function    this file contains internally used ATT definitions          */
+/*                                                                          */
+/*  Copyright (c) 2009-2013, Broadcom Corp., All Rights Reserved.           */
+/*  Broadcom Bluetooth Core. Proprietary and confidential.                  */
+/*                                                                          */
+/*****************************************************************************/
 
 #ifndef  _GATTDEFS_H
 #define  _GATTDEFS_H

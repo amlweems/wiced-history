@@ -48,15 +48,15 @@ extern void xPortSysTickHandler( void );
 
 #define RTOS_USE_DYNAMIC_THREAD_STACK
 
-#ifndef WWD_LOGGING_UART_ENABLE
+#ifndef WWD_LOGGING_STDOUT_ENABLE
 #ifdef DEBUG
 #define WWD_THREAD_STACK_SIZE        (732 + 1400)   /* Stack checking requires a larger stack */
 #else /* ifdef DEBUG */
 #define WWD_THREAD_STACK_SIZE        (544 + 1400)
 #endif /* ifdef DEBUG */
-#else /* if WWD_LOGGING_UART_ENABLE */
+#else /* if WWD_LOGGING_STDOUT_ENABLE */
 #define WWD_THREAD_STACK_SIZE        (544 + 4096 + 1400) /* WWD_LOG uses printf and requires a minimum of 4K stack */
-#endif /* WWD_LOGGING_UART_ENABLE */
+#endif /* WWD_LOGGING_STDOUT_ENABLE */
 
 /******************************************************
  *             Structures

@@ -18,11 +18,7 @@ irq_instruction_vector_low_reset = 0xB03EF000;
 
 ENTRY( _low_start );
 
-MEMORY
-{
-    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 5K /* Use half of 8K AON memory as hard limit for tiny bootloader */
-    RAM              (rwx)  : ORIGIN = 0x00697000, LENGTH = 32K /* Uses the top 32K of SRAM */
-}
+INCLUDE GCC_tiny_bootloader_memory.ld
 
 SECTIONS
 {

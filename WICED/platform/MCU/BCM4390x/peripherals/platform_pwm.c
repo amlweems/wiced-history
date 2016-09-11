@@ -20,16 +20,13 @@
 #include "platform_peripheral.h"
 #include "platform_appscr4.h"
 #include "platform_toolchain.h"
+#include "platform_pinmux.h"
 
 #include "wwd_assert.h"
-#include "wwd_rtos.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
-
-#define PLATFORM_CC_BASE        PLATFORM_CHIPCOMMON_REGBASE(0x0)
-#define PLATFORM_CC_CLOCKSTATUS PLATFORM_CLOCKSTATUS_REG(PLATFORM_CC_BASE)
 
 /******************************************************
  *                    Constants
@@ -38,12 +35,6 @@
 /******************************************************
  *                   Enumerations
  ******************************************************/
-
-typedef enum
-{
-    BCM43909_PWM_CLOCK_ALP,
-    BCM43909_PWM_CLOCK_BACKPLANE
-} platform_pwm_clock_t;
 
 /******************************************************
  *                 Type Definitions
@@ -61,35 +52,17 @@ typedef enum
  *               Variables Definitions
  ******************************************************/
 
+static wiced_bool_t     pwm_core_inited = WICED_FALSE;
+static platform_clock_t pwm_core_clock;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
-static host_semaphore_type_t*
-pwm_init_sem( void )
-{
-    static wiced_bool_t done = WICED_FALSE;
-    static host_semaphore_type_t sem;
-    uint32_t flags;
-
-    WICED_SAVE_INTERRUPTS( flags );
-
-    if ( done != WICED_TRUE )
-    {
-        host_rtos_init_semaphore( &sem );
-        host_rtos_set_semaphore ( &sem, WICED_FALSE );
-        done = WICED_TRUE;
-    }
-
-    WICED_RESTORE_INTERRUPTS( flags );
-
-    return &sem;
-}
-
 static wiced_bool_t
 pwm_present( void )
 {
-    return (PLATFORM_CHIPCOMMON->clock_control.capabilities_extension.bits.pulse_width_modulation_present != 0);
+    return ( PLATFORM_CHIPCOMMON->clock_control.capabilities_extension.bits.pulse_width_modulation_present != 0 );
 }
 
 static volatile pwm_channel_t*
@@ -126,71 +99,20 @@ pwm_get_channel( platform_pin_function_t func )
     }
 }
 
-static void
-pwm_set_clock_src( platform_pwm_clock_t clock_src )
-{
-    switch ( clock_src )
-    {
-        case BCM43909_PWM_CLOCK_ALP:
-            platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG,
-                                      0x0,
-                                      PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK );
-            break;
-
-        case BCM43909_PWM_CLOCK_BACKPLANE:
-            platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG,
-                                      PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK,
-                                      0x0 );
-            break;
-    }
-}
-
-static platform_pwm_clock_t
-pwm_get_clock_src( void )
-{
-    if ( (platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG, 0x0, 0x0 ) & PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK ) == 0 )
-    {
-        return BCM43909_PWM_CLOCK_BACKPLANE;
-    }
-    else
-    {
-        return BCM43909_PWM_CLOCK_ALP;
-    }
-}
-
 static wiced_bool_t
-pwm_set_clock( platform_clock_t clock )
+pwm_set_clock_src( platform_clock_t clock )
 {
-    if ( clock == CLOCK_HT )
+    if ( ( clock == CLOCK_HT ) || ( clock == CLOCK_BACKPLANE ) )
     {
-        /* Force backplane clock to HT and then switch to backplane clock. */
-
-        uint32_t timeout = 100000000;
-        clock_control_status_t control;
-        uint32_t flags;
-
-        WICED_SAVE_INTERRUPTS( flags );
-
-        control.raw = PLATFORM_CC_CLOCKSTATUS->raw;
-        control.bits.force_ht_request = 1;
-        PLATFORM_CC_CLOCKSTATUS->raw = control.raw;
-
-        WICED_RESTORE_INTERRUPTS( flags );
-
-        while ( ( PLATFORM_CC_CLOCKSTATUS->bits.bp_on_ht == 0 ) && ( timeout != 0 ))
-        {
-            timeout--;
-        }
-
-        pwm_set_clock_src( BCM43909_PWM_CLOCK_BACKPLANE );
+        platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG,
+                                  PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK,
+                                  0x0 );
     }
     else if ( clock == CLOCK_ALP )
     {
-        pwm_set_clock_src( BCM43909_PWM_CLOCK_ALP );
-    }
-    else if ( clock == CLOCK_BACKPLANE )
-    {
-        pwm_set_clock_src( BCM43909_PWM_CLOCK_BACKPLANE );
+        platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG,
+                                  PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK,
+                                  PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK );
     }
     else
     {
@@ -198,62 +120,120 @@ pwm_set_clock( platform_clock_t clock )
         return WICED_FALSE;
     }
 
-    /* Enable PWM clock. */
-    platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_EN_REG,
-                              0x0,
-                              PMU_CHIPCONTROL_PWM_CLK_EN_MASK );
-    OSL_DELAY( 10 );
-
     return WICED_TRUE;
-}
-
-static wiced_bool_t
-pwm_set_clock_once( void )
-{
-    static wiced_bool_t done   = WICED_FALSE;
-    host_semaphore_type_t* sem = pwm_init_sem();
-    wiced_bool_t ret;
-
-    host_rtos_get_semaphore( sem, NEVER_TIMEOUT, WICED_FALSE );
-
-    if ( done != WICED_TRUE )
-    {
-        osl_core_enable( CC_CORE_ID ); /* PWM is in chipcommon. Enable core before try to access. */
-        done = pwm_set_clock( platform_pwm_getclock() );
-    }
-
-    ret = done;
-
-    host_rtos_set_semaphore( sem, WICED_FALSE );
-
-    return ret;
 }
 
 static uint32_t
 pwm_get_clock_freq( void )
 {
-    if ( ( platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_EN_REG, 0x0, 0x0 ) & PMU_CHIPCONTROL_PWM_CLK_EN_MASK ) == 0 )
+    if ( (platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_SLOW_REG, 0x0, 0x0 ) & PMU_CHIPCONTROL_PWM_CLK_SLOW_MASK ) == 0 )
     {
-        /* PWM clock is not enabled. */
-        return 0;
+        return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_BACKPLANE );
     }
-
-    switch ( pwm_get_clock_src() )
+    else
     {
-        case BCM43909_PWM_CLOCK_ALP:
-            return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
-
-        case BCM43909_PWM_CLOCK_BACKPLANE:
-            return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_BACKPLANE );
-
-        default:
-            wiced_assert("wrong clock src", 0);
-            return 0;
+        return platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ALP );
     }
 }
 
-static platform_result_t
-pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
+static void
+pwm_enable_clock( wiced_bool_t enable )
+{
+    static uint32_t ref_counter = 0;
+    uint32_t        flags;
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    if ( enable )
+    {
+        if ( ref_counter == 0 )
+        {
+            platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_EN_REG,
+                                      PMU_CHIPCONTROL_PWM_CLK_EN_MASK,
+                                      PMU_CHIPCONTROL_PWM_CLK_EN_MASK );
+            OSL_DELAY( 10 ); /* let it stabilize */
+        }
+
+        ref_counter++;
+
+        wiced_assert( "overflow", ref_counter != 0 );
+    }
+    else
+    {
+        wiced_assert( "unbalanced", ref_counter != 0 );
+
+        ref_counter--;
+
+        if ( ref_counter == 0 )
+        {
+            platform_pmu_chipcontrol( PMU_CHIPCONTROL_PWM_CLK_EN_REG,
+                                      PMU_CHIPCONTROL_PWM_CLK_EN_MASK,
+                                      0x0 );
+        }
+    }
+
+    WICED_RESTORE_INTERRUPTS( flags );
+}
+
+static wiced_bool_t
+pwm_start_clock( wiced_bool_t start )
+{
+    platform_mcu_powersave_clock_t reference_clock;
+
+    if ( ( pwm_core_clock == CLOCK_HT ) || ( pwm_core_clock == CLOCK_BACKPLANE ) )
+    {
+        reference_clock = PLATFORM_MCU_POWERSAVE_CLOCK_BACKPLANE_ON_HT;
+    }
+    else if ( pwm_core_clock == CLOCK_ALP )
+    {
+        reference_clock = PLATFORM_MCU_POWERSAVE_CLOCK_ALP_AVAILABLE;
+    }
+    else
+    {
+        wiced_assert( "wrong clock", 0 );
+        return WICED_FALSE;
+    }
+
+    if ( start )
+    {
+        platform_mcu_powersave_request_clock( reference_clock );
+        pwm_enable_clock( WICED_TRUE );
+    }
+    else
+    {
+        pwm_enable_clock( WICED_FALSE );
+        platform_mcu_powersave_release_clock( reference_clock );
+    }
+
+    return WICED_TRUE;
+}
+
+static wiced_bool_t
+pwm_enable_core( void )
+{
+    wiced_bool_t ret;
+    uint32_t     flags;
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    if ( pwm_core_inited != WICED_TRUE )
+    {
+        pwm_core_clock = platform_pwm_getclock();
+
+        osl_core_enable( CC_CORE_ID ); /* PWM is in chipcommon. Enable core before try to access. */
+
+        pwm_core_inited = pwm_set_clock_src( pwm_core_clock );
+    }
+
+    ret = pwm_core_inited;
+
+    WICED_RESTORE_INTERRUPTS( flags );
+
+    return ret;
+}
+
+platform_result_t
+platform_pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
 {
     platform_result_t       ret;
     volatile pwm_channel_t* chan;
@@ -263,13 +243,15 @@ pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
     uint32_t                clock_freq;
     pwm_channel_cycle_cnt_t cycle_cnt;
 
+    wiced_assert( "bad argument", pwm != NULL );
+
     chan = pwm_get_channel( pwm->func );
     if ( chan == NULL )
     {
         return PLATFORM_BADARG;
     }
 
-    if ( pwm_set_clock_once() != WICED_TRUE )
+    if ( pwm_enable_core() != WICED_TRUE )
     {
         return PLATFORM_ERROR;
     }
@@ -288,7 +270,7 @@ pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
         return PLATFORM_BADARG;
     }
 
-    ret = platform_pin_function_init( pwm->pin, pwm->func, PIN_FUNCTION_CONFIG_UNKNOWN );
+    ret = platform_pinmux_init( pwm->pin, pwm->func );
     if ( ret != PLATFORM_SUCCESS )
     {
         return ret;
@@ -305,15 +287,24 @@ pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
     return PLATFORM_SUCCESS;
 }
 
-static platform_result_t
-pwm_start( const platform_pwm_t* pwm )
+platform_result_t
+platform_pwm_start( const platform_pwm_t* pwm )
 {
-    volatile pwm_channel_t* chan = pwm_get_channel( pwm->func );
+    volatile pwm_channel_t* chan;
     pwm_channel_ctrl_t      ctrl;
 
+    wiced_assert( "bad argument", pwm != NULL );
+    wiced_assert( "not inited", pwm_core_inited == WICED_TRUE );
+
+    chan = pwm_get_channel( pwm->func );
     if ( chan == NULL )
     {
         return PLATFORM_BADARG;
+    }
+
+    if ( pwm_start_clock( WICED_TRUE ) != WICED_TRUE )
+    {
+        return PLATFORM_ERROR;
     }
 
     ctrl.raw                 = 0;
@@ -329,11 +320,14 @@ pwm_start( const platform_pwm_t* pwm )
     return PLATFORM_SUCCESS;
 }
 
-static platform_result_t
-pwm_stop( const platform_pwm_t* pwm )
+platform_result_t
+platform_pwm_stop( const platform_pwm_t* pwm )
 {
-    volatile pwm_channel_t* chan = pwm_get_channel( pwm->func );
+    volatile pwm_channel_t* chan;
 
+    wiced_assert( "bad argument", pwm != NULL );
+
+    chan = pwm_get_channel( pwm->func );
     if ( chan == NULL )
     {
         return PLATFORM_BADARG;
@@ -341,55 +335,15 @@ pwm_stop( const platform_pwm_t* pwm )
 
     chan->ctrl.raw = 0;
 
+    if ( pwm_start_clock( WICED_FALSE ) != WICED_TRUE )
+    {
+        return PLATFORM_ERROR;
+    }
+
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t platform_pwm_init( const platform_pwm_t* pwm, uint32_t frequency, float duty_cycle )
-{
-    platform_result_t ret;
-
-    wiced_assert( "bad argument", pwm != NULL );
-
-    platform_mcu_powersave_disable();
-
-    ret = pwm_init( pwm, frequency, duty_cycle );
-
-    platform_mcu_powersave_enable();
-
-    return ret;
-}
-
-platform_result_t platform_pwm_start( const platform_pwm_t* pwm )
-{
-    platform_result_t ret;
-
-    wiced_assert( "bad argument", pwm != NULL );
-
-    platform_mcu_powersave_disable();
-
-    ret = pwm_start( pwm );
-
-    platform_mcu_powersave_enable();
-
-    return ret;
-}
-
-platform_result_t platform_pwm_stop( const platform_pwm_t* pwm )
-{
-    platform_result_t ret;
-
-    wiced_assert( "bad argument", pwm != NULL );
-
-    platform_mcu_powersave_disable();
-
-    ret = pwm_stop( pwm );
-
-    platform_mcu_powersave_enable();
-
-    return ret;
-}
-
-WEAK platform_clock_t platform_pwm_getclock( void )
+WEAK NEVER_INLINE platform_clock_t platform_pwm_getclock( void )
 {
     return CLOCK_ALP;
 }

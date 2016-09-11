@@ -15,7 +15,7 @@
 #pragma once
 
 #include "wiced_utilities.h"
-#include "wwd_network_interface.h"
+#include "network/wwd_network_interface.h"
 #include "wiced_network.h"
 #include <limits.h>
 #include "wiced_resource.h"
@@ -46,10 +46,10 @@ extern "C" {
                                                             (addr_var).ip.v6[3] = _value[3];  \
                                                         }
 #define MAKE_IPV6_ADDRESS(a, b, c, d, e, f, g, h)       { \
-                                                            (((((uint32_t) (a)) << 16) & 0xFFFF0000UL) | ((uint32_t)(b) &0x0000FFFFUL)), \
-                                                            (((((uint32_t) (c)) << 16) & 0xFFFF0000UL) | ((uint32_t)(d) &0x0000FFFFUL)), \
-                                                            (((((uint32_t) (e)) << 16) & 0xFFFF0000UL) | ((uint32_t)(f) &0x0000FFFFUL)), \
-                                                            (((((uint32_t) (g)) << 16) & 0xFFFF0000UL) | ((uint32_t)(h) &0x0000FFFFUL))  \
+                                                            (((((uint32_t) (a)) << 16) & (uint32_t)0xFFFF0000UL) | ((uint32_t)(b) & (uint32_t)0x0000FFFFUL)), \
+                                                            (((((uint32_t) (c)) << 16) & (uint32_t)0xFFFF0000UL) | ((uint32_t)(d) & (uint32_t)0x0000FFFFUL)), \
+                                                            (((((uint32_t) (e)) << 16) & (uint32_t)0xFFFF0000UL) | ((uint32_t)(f) & (uint32_t)0x0000FFFFUL)), \
+                                                            (((((uint32_t) (g)) << 16) & (uint32_t)0xFFFF0000UL) | ((uint32_t)(h) & (uint32_t)0x0000FFFFUL))  \
                                                         }
 
 
@@ -59,6 +59,8 @@ extern "C" {
 
 typedef void (*wiced_ip_address_change_callback_t)( void* arg );
 typedef wiced_result_t (*wiced_tcp_stream_write_callback_t)( void* tcp_stream, const void* data, uint32_t data_length );
+
+typedef struct wiced_packet_pool_s* wiced_packet_pool_ref;
 
 /******************************************************
  *            Enumerations
@@ -92,6 +94,17 @@ typedef enum
     WICED_TCP_RECEIVE_EVENT      = (1 << 1),
     WICED_TCP_CONNECTED_EVENT    = (1 << 2),
 } wiced_tcp_event_t;
+
+/**
+ * Packet type for network packet allocation requests.
+ */
+typedef enum
+{
+    WICED_PACKET_TYPE_RAW,      /* No space reserved             */
+    WICED_PACKET_TYPE_IP,       /* Space reserved for IP header  */
+    WICED_PACKET_TYPE_TCP,      /* Space reserved for TCP header */
+    WICED_PACKET_TYPE_UDP       /* Space reserved for UDP header */
+} wiced_packet_type_t;
 
 /******************************************************
  *             Structures
@@ -705,7 +718,6 @@ wiced_result_t wiced_udp_delete_socket( wiced_udp_socket_t* socket );
  */
 wiced_result_t wiced_udp_packet_get_info( wiced_packet_t* packet, wiced_ip_address_t* address, uint16_t* port );
 
-
 /** Registers a callback function with the indicated UDP socket
  *
  * @param[in,out] socket           : A pointer to a TCP socket handle that has been previously created with @ref wiced_udp_create_socket
@@ -715,6 +727,49 @@ wiced_result_t wiced_udp_packet_get_info( wiced_packet_t* packet, wiced_ip_addre
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_udp_register_callbacks( wiced_udp_socket_t* socket, wiced_udp_socket_callback_t receive_callback, void* arg );
+
+/** Add DTLS security to a UDP socket
+ *
+ * @param[in] UDP_SOCKET   : pointer to UDP socket.
+ * @param[in] dtls_identity : A pointer to a wiced_dtls_identity_t object
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_udp_enable_dtls( wiced_udp_socket_t* socket, void* context );
+
+/** Start DTLS on a UDP Connection
+ *
+ * Start Datagram Transport Layer Security on a UDP Connection
+ *
+ * @param[in,out] socket       : The UDP socket to use for DTLS
+ * @param[in]     type         : Identifies whether the device will be DTLS client or server
+ * @param[in]     verification : Indicates whether to verify the certificate chain against a root server.
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_udp_start_dtls( wiced_udp_socket_t* socket, wiced_ip_address_t ip, wiced_dtls_endpoint_type_t type, wiced_dtls_certificate_verification_t verification );
+
+/** Start DTLS on a UDP Connection with a particular set of cipher suites
+ *
+ * Start Datagram Transport Layer Security on a UDP Connection
+ *
+ * @param[in,out] dtls_context  : The tls context to work with
+ * @param[in,out] referee       : Transport reference - e.g. UDP socket
+ * @param[in]     type          : Identifies whether the device will be DTLS client or server
+ * @param[in]     verification  : Indicates whether to verify the certificate chain against a root server.
+ * @param[in]     cipher_list   : a list of cipher suites. Null terminated.
+ *                               e.g.
+ *                                    static const cipher_suite_t* my_ciphers[] =
+ *                                    {
+ *                                          &TLS_RSA_WITH_AES_128_CBC_SHA,
+ *                                          &TLS_RSA_WITH_AES_256_CBC_SHA,
+ *                                          0
+ *                                    };
+ * @param[in]     transport_protocol : Which type of transport to use - e.g. TCP, UDP, EAP
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_generic_start_dtls_with_ciphers( wiced_dtls_context_t* dtls_context, void* referee, wiced_ip_address_t ip, wiced_dtls_endpoint_type_t type, wiced_tls_certificate_verification_t verification, const cipher_suite_t* cipher_list[], dtls_transport_protocol_t transport_protocol );
 
 
 /** Un-registers all callback functions associated with the indicated UDP socket
@@ -889,7 +944,7 @@ wiced_result_t wiced_packet_create_udp( wiced_udp_socket_t* socket, uint16_t con
  *
  *  @note: Packets are fixed size. and applications must be very careful
  *         to avoid writing past the end of the packet buffer.
- *         Theavailable_space parameter should be used for this.
+ *         The available_space parameter should be used for this.
  *
  * @param[in]  content_length   : the intended length of content if known.
  *                                (This can be adjusted at a later point with @ref wiced_packet_set_data_end if not known)
@@ -971,6 +1026,50 @@ wiced_result_t wiced_packet_set_data_start( wiced_packet_t* packet, uint8_t* dat
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_packet_get_next_fragment( wiced_packet_t* packet, wiced_packet_t** next_packet_fragment);
+
+
+/** Creates a network packet pool from a chunk of memory
+ *
+ * @param[out] packet_pool    : handle to a packet pool instance which will be initialized
+ * @param[in]  memory_pointer : pointer to a chunk of memory
+ * @param[in]  memory_size    : size of the memory chunk
+ * @param[in]  pool_name      : packet pool name string
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_packet_pool_init( wiced_packet_pool_ref packet_pool, uint8_t* memory_pointer, uint32_t memory_size, char *pool_name );
+
+
+/** Destroy a network packet pool
+ *
+ * @param[in,out] packet_pool : A pointer to a packet pool handle that will be de-initialized
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_packet_pool_deinit( wiced_packet_pool_ref packet_pool );
+
+/** Allocates a general packet from the specified packet pool
+ *
+ *  Allocates the desired packet type from the packet pool.
+ *  Care must be taken to allocate the correct packet type to make sure that
+ *  the packet has the proper headers for use by the network layer.
+ *
+ *  @note: Packets are fixed size. and applications must be very careful
+ *         to avoid writing past the end of the packet buffer.
+ *         The available_space parameter should be used for this.
+ *
+ * @param[in]  packet_pool      : handle to the packet pool
+ * @param[in]  packet_type      : type of packet to allocate
+ * @param[out] packet           : Pointer to a packet handle which will receive the allocated packet
+ * @param[out] data             : Pointer pointer which will receive the data pointer for the packet. This is where
+ *                                data should be written
+ * @param[out] available_space  : pointer to a variable which will receive the space
+ *                                available for data in the packet in bytes
+ * @param[in]  timeout          : timeout value in milliseconds or WICED_NEVER_TIMEOUT
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_packet_pool_allocate_packet( wiced_packet_pool_ref packet_pool, wiced_packet_type_t packet_type, wiced_packet_t** packet, uint8_t** data, uint16_t* available_space, uint32_t timeout );
 
 /** @} */
 
@@ -1060,6 +1159,14 @@ wiced_result_t wiced_ip_register_address_change_callback( wiced_ip_address_chang
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_ip_deregister_address_change_callback( wiced_ip_address_change_callback_t callback );
+
+/** Check whether any packets are pending inside IP stack
+ *
+ * @param interface: IP instance
+ *
+ * @return WICED_TRUE if any packets pending, otherwise WICED_FALSE
+ */
+wiced_bool_t wiced_ip_is_any_pending_packets( wiced_interface_t interface );
 
 /** @} */
 

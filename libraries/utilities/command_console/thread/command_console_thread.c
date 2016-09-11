@@ -160,11 +160,13 @@ int thread_spawn( int argc, char *argv[] )
 
     detail->line = (char*) calloc( 1, command_size );
     memset(detail->line, 0, command_size);
-    for( i = 0; i < argc; i++ )
+    for( i = 0; i < ( argc - 1 ); i++ )
     {
         strcat( detail->line, argv[i] );
         strcat( detail->line, " " );
     }
+    /* The last argument should not be followed by a delimiter. */
+    strcat( detail->line, argv[i] );
     detail->line[ command_size - 1] = '\x00';
 
     /* Spawn the new thread */

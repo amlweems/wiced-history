@@ -41,7 +41,7 @@ typedef enum {
 void m2m_dma_detach(m2m_hnddma_t *di);
 void m2m_dma_txinit(m2m_hnddma_t *di);
 int m2m_dma_txactive(m2m_hnddma_t *di_in);
-int BCMFASTPATH m2m_dma_txfast(m2m_hnddma_t *di, void *p0, uint16_t len, bool commit);
+int BCMFASTPATH m2m_dma_txfast(m2m_hnddma_t *di, void *p0, bool commit);
 void BCMFASTPATH m2m_dma_txreclaim(m2m_hnddma_t *di, txd_range_t range);
 void * BCMFASTPATH m2m_dma_getnexttxp(m2m_hnddma_t *di, txd_range_t range);
 void m2m_dma_rxinit(m2m_hnddma_t *di);

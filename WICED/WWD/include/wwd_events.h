@@ -197,22 +197,22 @@ typedef enum
     WLC_E_STATUS_CS_ABORT                 = 15,  /** abort channel select */
 
     /* for WLC_SUP messages */
-    WLC_SUP_DISCONNECTED                  = 0 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_CONNECTING                    = 1 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_IDREQUIRED                    = 2 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_AUTHENTICATING                = 3 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_AUTHENTICATED                 = 4 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_KEYXCHANGE                    = 5 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_KEYED                         = 6 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_TIMEOUT                       = 7 + WLC_SUP_STATUS_OFFSET,
-    WLC_SUP_LAST_BASIC_STATE              = 8 + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_DISCONNECTED                  = 0  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_CONNECTING                    = 1  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_IDREQUIRED                    = 2  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_AUTHENTICATING                = 3  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_AUTHENTICATED                 = 4  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_KEYXCHANGE                    = 5  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_KEYED                         = 6  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_TIMEOUT                       = 7  + WLC_SUP_STATUS_OFFSET,
+    WLC_SUP_LAST_BASIC_STATE              = 8  + WLC_SUP_STATUS_OFFSET,
     /* Extended supplicant authentication states */
-    WLC_SUP_KEYXCHANGE_WAIT_M1            = (int) WLC_SUP_AUTHENTICATED    + WLC_SUP_STATUS_OFFSET, /** Waiting   to receive handshake msg M1 */
-    WLC_SUP_KEYXCHANGE_PREP_M2            = (int) WLC_SUP_KEYXCHANGE       + WLC_SUP_STATUS_OFFSET, /** Preparing to send    handshake msg M2 */
-    WLC_SUP_KEYXCHANGE_WAIT_M3            = (int) WLC_SUP_LAST_BASIC_STATE + WLC_SUP_STATUS_OFFSET, /** Waiting   to receive handshake msg M3 */
-    WLC_SUP_KEYXCHANGE_PREP_M4            = 9                              + WLC_SUP_STATUS_OFFSET, /** Preparing to send    handshake msg M4 */
-    WLC_SUP_KEYXCHANGE_WAIT_G1            = 10                             + WLC_SUP_STATUS_OFFSET, /** Waiting   to receive handshake msg G1 */
-    WLC_SUP_KEYXCHANGE_PREP_G2            = 11                             + WLC_SUP_STATUS_OFFSET, /** Preparing to send    handshake msg G2 */
+    WLC_SUP_KEYXCHANGE_WAIT_M1            = WLC_SUP_AUTHENTICATED,      /** Waiting   to receive handshake msg M1 */
+    WLC_SUP_KEYXCHANGE_PREP_M2            = WLC_SUP_KEYXCHANGE,         /** Preparing to send    handshake msg M2 */
+    WLC_SUP_KEYXCHANGE_WAIT_M3            = WLC_SUP_LAST_BASIC_STATE,   /** Waiting   to receive handshake msg M3 */
+    WLC_SUP_KEYXCHANGE_PREP_M4            = 9  + WLC_SUP_STATUS_OFFSET, /** Preparing to send    handshake msg M4 */
+    WLC_SUP_KEYXCHANGE_WAIT_G1            = 10 + WLC_SUP_STATUS_OFFSET, /** Waiting   to receive handshake msg G1 */
+    WLC_SUP_KEYXCHANGE_PREP_G2            = 11 + WLC_SUP_STATUS_OFFSET, /** Preparing to send    handshake msg G2 */
 
     WLC_DOT11_SC_SUCCESS                  =  0 + WLC_DOT11_SC_STATUS_OFFSET,  /* Successful */
     WLC_DOT11_SC_FAILURE                  =  1 + WLC_DOT11_SC_STATUS_OFFSET,  /* Unspecified failure */
@@ -350,9 +350,37 @@ typedef void* (*wwd_event_handler_t)( const wwd_event_header_t* event_header, co
  *  @{
  */
 
+/**
+ * Registers locally a handler to receive event callbacks.
+ * Does not notify Wi-Fi about event subscription change.
+ * Can be used to refresh local callbacks (e.g. after deep-sleep)
+ * if Wi-Fi is already notified about them.
+ *
+ * This function registers a callback handler to be notified when
+ * a particular event is received.
+ *
+ * Alternately the function clears callbacks for given event type.
+ *
+ * @note : Currently each event may only be registered to one handler
+ *         and there is a limit to the number of simultaneously registered
+ *         events
+ *
+ * @param  event_nums     The event types that are to trigger the handler
+ *                        See @ref wwd_event_num_t for available events.
+ *                        Must be defined in a global constant.
+ * @param handler_func   A function pointer to the new handler callback,
+ *                        or NULL if callbacks are to be disabled for the given event type
+ * @param handler_user_data  A pointer value which will be passed to the event handler function
+ *                            at the time an event is triggered (NULL is allowed)
+ *
+ * @return WWD_SUCCESS or Error code
+ */
+extern wwd_result_t wwd_management_set_event_handler_locally( /*@keep@*/ const wwd_event_num_t* event_nums, /*@null@*/ wwd_event_handler_t handler_func, /*@null@*/ /*@keep@*/ void* handler_user_data, wwd_interface_t interface );
+
 
 /**
  * Registers a handler to receive event callbacks.
+ * Subscribe locally and notify Wi-Fi about subscription.
  *
  * This function registers a callback handler to be notified when
  * a particular event is received.

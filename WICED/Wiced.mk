@@ -33,6 +33,7 @@ ifndef NO_WIFI
 $(NAME)_SOURCES += internal/wifi.c \
                    internal/wiced_cooee.c \
                    internal/wiced_easy_setup.c \
+                   internal/wiced_filesystem.c
 
 $(NAME)_INCLUDES := security/BESL/crypto \
                     security/BESL/include \
@@ -59,7 +60,11 @@ GLOBAL_INCLUDES += WWD/include \
 endif #ifndef NO_WIFI
 
 else # ifndef NO_WICED_API
+ifneq ($(NETWORK),)
 $(NAME)_COMPONENTS += WICED/WWD
+else # NETWORK
+GLOBAL_INCLUDES += WWD/include
+endif # NETWORK
 GLOBAL_INCLUDES += security/BESL/include \
                    security/BESL/host/WICED \
                    security/BESL/crypto

@@ -71,6 +71,27 @@ extern "C" {
     RESULT_ENUM( prefix, PACKET_BUFFER_OVERFLOW,        31 ),   /**< Packet buffer overflow */         \
     RESULT_ENUM( prefix, ALREADY_INITIALIZED,           32 ),   /**< Module has already been inited */
 
+
+#define FILESYSTEM_RESULT_LIST( prefix ) \
+        RESULT_ENUM( prefix, SUCCESS,                       0 ),   /**< Success */               \
+        RESULT_ENUM( prefix, PENDING,                       1 ),   /**< Pending */               \
+        RESULT_ENUM( prefix, TIMEOUT,                       2 ),   /**< Timeout */               \
+        RESULT_ENUM( prefix, PARTIAL_RESULTS,               3 ),   /**< Partial results */       \
+        RESULT_ENUM( prefix, ERROR,                         4 ),   /**< Error */                 \
+        RESULT_ENUM( prefix, BADARG,                        5 ),   /**< Bad Arguments */         \
+        RESULT_ENUM( prefix, BADOPTION,                     6 ),   /**< Mode not supported */    \
+        RESULT_ENUM( prefix, UNSUPPORTED,                   7 ),   /**< Unsupported function */  \
+        RESULT_ENUM( prefix, DISK_ERROR,                10008 ),   /**< Low level error accessing media */        \
+        RESULT_ENUM( prefix, PATH_NOT_FOUND,            10009 ),   /**< Path was not found in filesystem */        \
+        RESULT_ENUM( prefix, MEDIA_NOT_READY,           10010 ),   /**< Media is not present or ready for access */          \
+        RESULT_ENUM( prefix, ACCESS_DENIED,             10011 ),   /**< Access denied due to permissions  */      \
+        RESULT_ENUM( prefix, WRITE_PROTECTED,           10012 ),   /**< Media is write protected */    \
+        RESULT_ENUM( prefix, OUT_OF_SPACE,              10013 ),   /**< No free space left on media  */ \
+        RESULT_ENUM( prefix, FILENAME_BUFFER_TOO_SMALL, 10014 ),   /**< Filename buffer was too small when retrieving directory contents  */ \
+        RESULT_ENUM( prefix, END_OF_RESOURCE,           10015 ),   /**< End of file/directory reached  */ \
+        RESULT_ENUM( prefix, FILESYSTEM_INVALID,        10016 ),   /**< Filesystem has an unrecoverable error */ \
+        RESULT_ENUM( prefix, BLOCK_SIZE_BAD,            10017 ),   /**< Block size is invalid - not a multiple or sub-multiple of DEFAULT_SECTOR_SIZE */
+
 /******************************************************
  * @endcond    Enumerations
  ******************************************************/
@@ -80,16 +101,17 @@ extern "C" {
  */
 typedef enum
 {
-    WICED_RESULT_LIST   (  WICED_          )  /*    0 -  999 */
-    WWD_RESULT_LIST     (  WICED_WWD_      )  /* 1000 - 1999 */
-    WLAN_RESULT_LIST    (  WICED_WLAN_     )  /* 2000 - 2999 */
-    WPS_BESL_RESULT_LIST(  WICED_BESL_     )  /* 3000 - 3999 */
-    RESOURCE_RESULT_LIST(  WICED_RESOURCE_ )  /* 4000 - 4999 */
-    TLS_RESULT_LIST     (  WICED_TLS_      )  /* 5000 - 5999 */
-    PLATFORM_RESULT_LIST(  WICED_PLATFORM_ )  /* 6000 - 6999 */
-    TCPIP_RESULT_LIST   (  WICED_TCPIP_    )  /* 7000 - 7999 */
-    BT_RESULT_LIST      (  WICED_BT_       )  /* 8000 - 8999 */
-    P2P_RESULT_LIST     (  WICED_P2P_      )  /* 9000 - 9999 */
+    WICED_RESULT_LIST     ( WICED_            )  /*     0 -   999 */
+    WWD_RESULT_LIST       ( WICED_WWD_        )  /*  1000 -  1999 */
+    WLAN_RESULT_LIST      ( WICED_WLAN_       )  /*  2000 -  2999 */
+    WPS_BESL_RESULT_LIST  ( WICED_BESL_       )  /*  3000 -  3999 */
+    RESOURCE_RESULT_LIST  ( WICED_RESOURCE_   )  /*  4000 -  4999 */
+    TLS_RESULT_LIST       ( WICED_TLS_        )  /*  5000 -  5999 */
+    PLATFORM_RESULT_LIST  ( WICED_PLATFORM_   )  /*  6000 -  6999 */
+    TCPIP_RESULT_LIST     ( WICED_TCPIP_      )  /*  7000 -  7999 */
+    BT_RESULT_LIST        ( WICED_BT_         )  /*  8000 -  8999 */
+    P2P_RESULT_LIST       ( WICED_P2P_        )  /*  9000 -  9999 */
+    FILESYSTEM_RESULT_LIST( WICED_FILESYSTEM_ )  /* 10000 - 10999 */
 } wiced_result_t;
 
 /******************************************************

@@ -23,6 +23,14 @@ extern "C"
 
 #define WEAK __weak
 
+#ifndef ALWAYS_INLINE
+#define ALWAYS_INLINE
+#endif
+
+#ifndef NORETURN
+#define NORETURN
+#endif
+
 /******************************************************
  *                    Constants
  ******************************************************/

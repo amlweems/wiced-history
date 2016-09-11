@@ -18,17 +18,9 @@ irq_instruction_vector_low_reset = 0xB03EF000;
 /* DMA descriptors table must be within single 64KB page, and last descriptor must have EOT flag. Let's put all out descriptors in single page and avoid last descriptor. */
 DMA_DESCRIPTORS_SIZE = (64 * 1024 - 16);
 
-BOOTLOADER_SRAM = 0x697000;
-
 ENTRY( _low_start );
 
-MEMORY
-{
-    ROM              (rx)   : ORIGIN = 0x00400000, LENGTH = 640K
-    FLOPS            (rwx)  : ORIGIN = 0x00000000, LENGTH = 32
-    SRAM             (rwx)  : ORIGIN = 0x004A0000, LENGTH = 2048K
-    AONRAM           (rwx)  : ORIGIN = 0x006A0000, LENGTH = 8K
-}
+INCLUDE GCC_app_without_rom_memory.ld
 
 SECTIONS
 {
@@ -157,7 +149,14 @@ SECTIONS
         *(.data*)
     } > SRAM
 
+    /*
+     * We should have no loadable sections past this point.
+     * Bootloader which loads current application runs starting from BOOTLOADER_SRAM address (this includes memory needed to use ROM if bootloader use ROM).
+     * If application has loadable section after the BOOTLOADER_SRAM address then bootloader will overwrite itself and may crash. Let's enforce not overwriting by assert.
+     * Application can use whole address space including bootloader's one as long as bootloader coexists with non-loadable application's sections (e.g. BSS, stack, heap).
+     */
     ASSERT((. <= BOOTLOADER_SRAM), "Application overflowing to Bootloader SRAM")
+
     .bss : /* Zero initialised memory used for zero initialised variables */
     {
         . = ALIGN(4);
@@ -173,7 +172,6 @@ SECTIONS
         . = ALIGN(8);
 
         link_stack_location = .;
-        *(.stack)
         . = MAX(link_stack_location + START_STACK_SIZE , .);
         link_stack_end = ALIGN(8);
     } > SRAM

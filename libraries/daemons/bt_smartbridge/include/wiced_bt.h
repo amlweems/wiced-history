@@ -16,6 +16,7 @@
 
 #include "wiced.h"
 #include "wiced_bt_types.h"
+#include "wiced_bt_dev.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +97,7 @@ typedef struct bt_packet wiced_bt_packet_t;
  * @return    WICED_SUCCESS : on success;
  *            WICED_ERROR   : if an error occurred
  */
+
 wiced_result_t wiced_bt_init( wiced_bt_mode_t mode, const char* device_name );
 
 /** Deinitialise the WICED Bluetooth Framework

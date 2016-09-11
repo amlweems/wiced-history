@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -57,6 +57,7 @@ enum ble_uuid_service
     UUID_SERVICE_INTERNET_PROTOCOL_SUPPORT              = 0x1820,
     UUID_SERVICE_INDOOR_POSITIONING                     = 0x1821,
     UUID_SERVICE_PULSE_OXIMETER                         = 0x1822,
+    UUID_SERVICE_HTTP_PROXY                             = 0x1823,
 };
 
 
@@ -270,6 +271,12 @@ enum ble_uuid_characteristic
     UUID_CHARACTERISTIC_ALTITUDE                                            = 0x2AB3,
     UUID_CHARACTERISTIC_UNCERTAINTY                                         = 0x2AB4,
     UUID_CHARACTERISTIC_LOCATION_NAME                                       = 0x2AB5,
-};                                            
-                                         
+    UUID_CHARACTERISTIC_URI                                                 = 0x2AB6,
+    UUID_CHARACTERISTIC_HTTP_HEADERS                                        = 0x2AB7,
+    UUID_CHARACTERISTIC_HTTP_STATUS_CODE                                    = 0x2AB8,
+    UUID_CHARACTERISTIC_HTTP_ENTITY_BODY                                    = 0x2AB9,
+    UUID_CHARACTERISTIC_HTTP_CONTROL_POINT                                  = 0x2ABA,
+    UUID_CHARACTERISTIC_HTTPS_SECURITY                                      = 0x2ABB,
+};
+
 #endif

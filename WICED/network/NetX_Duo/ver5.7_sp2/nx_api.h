@@ -996,6 +996,7 @@ typedef struct NX_IPV6_DEFAULT_ROUTER_ENTRY_STRUCT
 #define NX_INTERFACE_CAPABILITY_GET 21
 #define NX_INTERFACE_CAPABILITY_SET 22
 #define NX_LINK_USER_COMMAND        50      /* Values after this value are reserved for application.  */
+#define NX_LINK_PTP_SEND            51      /* Precision Time Protocol */
 
 /* Define Link Driver Capability Flags.  */
 #define NX_INTERFACE_CAPABILITY_IPV4_TX_CHECKSUM     0x00000001

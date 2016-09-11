@@ -482,10 +482,34 @@ wiced_bool_t wiced_bt_ble_get_security_state (wiced_bt_device_address_t bd_addr,
  * @param[in]       add: TRUE to add; FALSE to remove
  * @param[in]       remote_bda: remote device address.
  *
- * @return          void
+ * @return          TRUE if successful
  *
  */
 wiced_bool_t wiced_bt_ble_update_advertising_white_list(wiced_bool_t add, wiced_bt_device_address_t remote_bda);
+
+/**
+ *
+ * Function         wiced_bt_ble_clear_white_list
+ *
+ *                  Flush white list in controller side to be removed
+ *
+ *
+ * @return          TRUE if request of clear is sent to controller side
+ *
+ */
+wiced_bool_t wiced_bt_ble_clear_white_list(void);
+
+/**
+ *
+ * Function         wiced_bt_ble_get_white_list_size
+ *
+ *                     Returns size of white list size in controller side
+ *
+ *
+ * @return          size of whitelist in current controller
+ *
+ */
+uint8_t wiced_bt_ble_get_white_list_size(void);
 
 /**
  *

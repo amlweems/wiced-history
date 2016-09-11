@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include "wwd_constants.h"                  /* For wwd_result_t */
+#include "wwd_structures.h"
 #include "chip_constants.h"
 #include "RTOS/wwd_rtos_interface.h"        /* For semaphores */
 #include "network/wwd_network_interface.h"  /* For interface definitions */
@@ -237,6 +238,16 @@ extern wwd_result_t wwd_wifi_leave( wwd_interface_t interface );
  */
 extern wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reason_code_t reason, wwd_interface_t interface );
 
+/** Deauthenticates all client STAs associated to SoftAP or Group Owner
+ *
+ * @param[in] reason    : Deauthentication reason code
+ * @param[in] interface : SoftAP interface or P2P interface
+
+ * @return    WWD_SUCCESS : On successful deauthentication of the other STA
+ *            WWD_ERROR   : If an error occurred
+ */
+extern wwd_result_t wwd_wifi_deauth_all_associated_client_stas( wwd_dot11_reason_code_t reason, wwd_interface_t interface );
+
 /** Retrieves the current Media Access Control (MAC) address
  *  (or Ethernet hardware address) of the 802.11 device
  *
@@ -245,6 +256,14 @@ extern wwd_result_t wwd_wifi_deauth_sta( const wiced_mac_t* mac, wwd_dot11_reaso
  */
 extern wwd_result_t wwd_wifi_get_mac_address( wiced_mac_t* mac, wwd_interface_t interface );
 
+/** Retrieves the current Media Access Control (MAC) address
+ *  (or Ethernet hardware address) of the 802.11 device
+ *  and store it to local cache, so subsequent
+ *  wwd_wifi_get_mac_address() be faster.
+ *
+ * @return    WWD_SUCCESS or Error code
+ */
+extern wwd_result_t wwd_wifi_get_and_cache_mac_address( wwd_interface_t interface );
 
 /** ----------------------------------------------------------------------
  *  WARNING : This function is for internal use only!
@@ -581,7 +600,7 @@ extern wwd_result_t wwd_wifi_turn_off_roam( wiced_bool_t disable );
  *
  * @return WWD_SUCCESS or Error code
  */
-extern wwd_result_t wwd_wifi_send_action_frame( const wl_action_frame_t* action_frame, wwd_interface_t interface );
+extern wwd_result_t wwd_wifi_send_action_frame( const wiced_action_frame_t* action_frame, wwd_interface_t interface );
 
 /** Retrieve the latest STA EDCF AC parameters
  *
@@ -805,6 +824,26 @@ extern wwd_result_t wwd_wifi_get_ht_mode( wwd_interface_t interface, wiced_ht_mo
  * @return  BSS index
  */
 extern uint32_t     wwd_get_bss_index( wwd_interface_t interface );
+
+/** Gets the current EAPOL key timeout for the given interface
+ *
+ * @param interface         : the interface for which we want the EAPOL key timeout
+ *        eapol_key_timeout : pointer to store the EAPOL key timeout value
+ *
+ * @return  WICED_SUCCESS : if success
+ *          Error code    : error code to indicate the type of error
+ */
+extern wwd_result_t wwd_wifi_get_supplicant_eapol_key_timeout( wwd_interface_t interface, int32_t* eapol_key_timeout );
+
+/** Sets the current EAPOL key timeout for the given interface
+ *
+ * @param interface         : the interface for which we want to set the EAPOL key timeout
+ *        eapol_key_timeout : EAPOL key timeout value
+ *
+ * @return  WICED_SUCCESS : if success
+ *          Error code    : error code to indicate the type of error
+ */
+extern wwd_result_t wwd_wifi_set_supplicant_eapol_key_timeout( wwd_interface_t interface, int32_t eapol_key_timeout );
 
 /*@+exportlocal@*/
 /** @} */

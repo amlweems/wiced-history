@@ -195,6 +195,9 @@ typedef struct
     uint8_t                     value[1];                   /**< The attribute value (actual length is specified by 'len') */
 } wiced_bt_gatt_value_t;
 
+/* Defines the macro to get the GATT Response Structure Size. Substracting 1 to take care of size of the placeholder array which holds the start of the attribute value */
+#define GATT_RESPONSE_SIZE( attr_val_len ) ( sizeof( wiced_bt_gatt_value_t ) - 1 + attr_val_len )
+
 /** GATT Write Execute request flags */
 enum wiced_bt_gatt_exec_flag_e {
     GATT_PREP_WRITE_CANCEL      = 0x00,         /**< GATT_PREP_WRITE_CANCEL */
@@ -498,6 +501,16 @@ typedef uint16_t wiced_bt_gatt_appearance_t;     /**< GATT appearance (see #gatt
     BIT16_TO_8(end_group_handle), \
     BIT16_TO_8(service)
 
+
+#define INCLUDE_SERVICE_UUID128(handle, service_handle, end_group_handle)\
+    BIT16_TO_8((uint16_t)(handle)), \
+    LEGATTDB_PERM_READABLE, \
+    6, \
+    BIT16_TO_8(GATT_UUID_INCLUDE_SERVICE), \
+    BIT16_TO_8(service_handle), \
+    BIT16_TO_8(end_group_handle)
+
+
 #define CHARACTERISTIC_UUID16(handle, handle_value, uuid, properties, permission) \
     BIT16_TO_8((uint16_t)(handle)), \
     LEGATTDB_PERM_READABLE, \
@@ -565,6 +578,21 @@ typedef uint16_t wiced_bt_gatt_appearance_t;     /**< GATT appearance (see #gatt
     (uint8_t)(LEGATTDB_UUID16_SIZE), \
     BIT16_TO_8(uuid)
 
+#define CHAR_DESCRIPTOR_UUID128_WRITABLE(handle, uuid, permission) \
+    BIT16_TO_8((uint16_t)(handle)), \
+    (uint8_t)(permission | LEGATTDB_PERM_SERVICE_UUID_128), \
+    (uint8_t)(LEGATTDB_UUID128_SIZE), \
+    (uint8_t)(0), \
+    uuid
+
+#define CHAR_DESCRIPTOR_UUID128(handle, uuid, permission) \
+    BIT16_TO_8((uint16_t)(handle)), \
+    (uint8_t)(permission | LEGATTDB_PERM_SERVICE_UUID_128), \
+    (uint8_t)(LEGATTDB_UUID128_SIZE), \
+    uuid
+
+
+
 /** GATT events */
 typedef enum
 {
@@ -620,6 +648,13 @@ typedef struct
     wiced_bt_gatt_request_data_t            data;               /**< Information about attribute being request (dependent on request type) */
 } wiced_bt_gatt_attribute_request_t;
 
+/** GATT channel congestion/uncongestion (used by GATT_CONGESTION_EVT notification) */
+typedef struct
+{
+    uint16_t                                conn_id;            /**< ID of the connection */
+    wiced_bool_t                            congested;          /**< congestion state */
+} wiced_bt_gatt_congestion_event_t;
+
 /** Stuctures for GATT event notifications */
 typedef union
 {
@@ -628,6 +663,7 @@ typedef union
     wiced_bt_gatt_operation_complete_t      operation_complete; /**< Data for GATT_OPERATION_CPLT_EVT */
     wiced_bt_gatt_connection_status_t       connection_status;  /**< Data for GATT_CONNECTION_STATUS_EVT */
     wiced_bt_gatt_attribute_request_t       attribute_request;  /**< Data for GATT_ATTRIBUTE_REQUEST_EVT */
+    wiced_bt_gatt_congestion_event_t        congestion;         /**< Data for GATT_CONGESTION_EVT */
 } wiced_bt_gatt_event_data_t;
 
 /**
@@ -642,6 +678,38 @@ typedef union
  * @return Status of event handling
 */
 typedef wiced_bt_gatt_status_t wiced_bt_gatt_cback_t(wiced_bt_gatt_evt_t event, wiced_bt_gatt_event_data_t *p_event_data);
+
+
+/** GATT attribute structure for preferred connection parameters*/
+typedef struct
+{
+    uint16_t      int_min;
+    uint16_t      int_max;
+    uint16_t      latency;
+    uint16_t      sp_tout;
+}wiced_bt_gatt_gap_ble_pref_param_t;
+
+
+
+/** GATT attribute value included in central role DB*/
+typedef union
+{
+    wiced_bt_gatt_gap_ble_pref_param_t     conn_param;
+    wiced_bt_ble_address_type_t            reconn_bda;
+    uint16_t                                icon;
+    uint16_t                               *p_dev_name;
+    uint16_t                                privacy;
+}wiced_bt_gatt_gap_ble_attr_value_t;
+
+/**
+ * Structure used by wiced_bt_gattdb APIS, to parse GATTDB
+ */
+typedef PACKED struct
+{
+    uint16_t handle;        /**< atribute Handle  */
+    uint8_t  perm;          /**< attribute permission.*/
+    uint8_t  len;           /**< attribute length . It excludes the header.*/
+} wiced_gattdb_entry_t;
 
 /*****************************************************************************
  *  External Function Declarations
@@ -720,14 +788,14 @@ wiced_bt_gatt_status_t wiced_bt_gatt_send_notification (uint16_t conn_id, uint16
 * Function       wiced_bt_gatt_send_response
 *
 *                When application receives a Read Request, Write Request or Indication from the
-*                peer it can reply synchronously or return a WICED_BT_GATT_PENDING result code 
+*                peer it can reply synchronously or return a WICED_BT_GATT_PENDING result code
 *                indicating to the stack that the message is not processed yet.  In that case
-*                application should call this function to send data or just a confirmation to 
+*                application should call this function to send data or just a confirmation to
 *                the peer.
 *
 *  @param[in]  status      : Status of the operation to be send to the peer
 *  @param[in]  conn_id     : Connection handle
-*  @param[in]  attr_handle : Attribute handle 
+*  @param[in]  attr_handle : Attribute handle
 *  @param[in]  attr_len    : Length of the attribute to send
 *  @param[in]  offset      : Attribute value offset
 *  @param[in]  p_attr      : Attribute Value
@@ -877,10 +945,10 @@ wiced_bt_gatt_status_t wiced_bt_gatt_register (wiced_bt_gatt_cback_t *p_gatt_cba
  *          <b> FALSE </b>           : If connection start failure
  *
  */
-wiced_bt_gatt_status_t wiced_bt_gatt_le_connect ( wiced_bt_device_address_t bd_addr,
-                                                  wiced_bt_ble_address_type_t bd_addr_type,
-                                                  wiced_bt_ble_conn_mode_t conn_mode,
-                                                  wiced_bool_t is_direct);
+wiced_bool_t wiced_bt_gatt_le_connect (wiced_bt_device_address_t bd_addr,
+                                    wiced_bt_ble_address_type_t bd_addr_type,
+                                    wiced_bt_ble_conn_mode_t conn_mode,
+                                    wiced_bool_t is_direct);
 
 /**
  * Function       wiced_bt_gatt_bredr_connect
@@ -937,37 +1005,84 @@ wiced_bt_gatt_status_t wiced_bt_gatt_disconnect (uint16_t conn_id);
  *
  */
 wiced_bool_t wiced_bt_gatt_listen (wiced_bool_t start, wiced_bt_device_address_t bd_addr);
+/**@} common_api_functions*/
+
+/*****************************************************************************/
+/**
+ *  GATT Database Access Functions
+ *
+ *  @addtogroup  gattdb_api_functions GattDB
+ *  @ingroup     wicedbt_gatt
+ *
+ *  @{
+ */
+/*****************************************************************************/
 
 /**
- * Function     wiced_bt_send_vsc
+ * Function     wiced_bt_gattdb_next_entry
  *
- *              Interface to send Vendor specific HCI commands to controller
+ *                Find the next GATT attribute entry in the local GATT database
+ *                To find the first attribute entry pass the address of the local GATT database as a parameter
  *
- *  @param[in]   Opcode        : Vendor specif command opcode , the opcode is OR'd with HCI_GRP_VENDOR_SPECIFIC
- *  @param[in]   param len     : length of the paramater to be sentDevice to add/remove from whitelist
- *  @param[in]   p_param_buf   : paramater buffer
-    @param[in]   p_cb              : pointer to callback function
- *  @return <b> BTM_SUCCESS  </b>            : Success
- *          <b> BTM_CMD_STARTED </b>           : Waiting for command complete event
+ *  @param[in]   p_db_entry     : GATT DB atrribute entry
+ *
+ *  @return pointer to next attribute entry
  *
  */
-UINT8 wiced_bt_send_vsc( UINT16 opcode,      UINT8 param_len,
-                             UINT8 *p_param_buf, tBTM_MESH_VSC_CMPL *p_cb);
+wiced_gattdb_entry_t * wiced_bt_gattdb_next_entry (wiced_gattdb_entry_t *p_db_entry);
+
 /**
- * Function     wiced_bt_register_vsc_event
+ * Function     wiced_bt_gattdb_get_handle
  *
- *              Interface to register Vendor Specific Events
+ *                Utility to get attribute handle from GATT DB entry
+ *                To get next attribute handle, application needs traverse by wiced_bt_gattdb_next_entry
  *
- *  @param[in]   is_register      : TRUE, then the function will be registered , if FALSE the
- function is deregistered
- *  @param[in]   p_cb             : callback function to recieve the vendor specific events
+ *  @param[in]   p_db_entry     : GATT DB atrribute entry
  *
- *  @return <b> BTM_SUCCESS </b>  : Success
- *          <b> BTM_BUSY </b>     : if callback already registered
+ *  @return attribute handle
  *
  */
-UINT8 wiced_bt_register_vsc_event(tBTM_MESH_VS_EVT_CB *p_cb, BOOLEAN is_register);
-/**@} common_api_functions*/
+uint16_t wiced_bt_gattdb_get_handle (wiced_gattdb_entry_t *p_db_entry);
+
+/**
+ * Function     wiced_bt_gattdb_get_attribute_uuid
+ *
+ *  @param[in]   p_db_entry     : GATT DB atrribute entry
+ *  @param[out]  p_uuid         : pointer to UUID holder. Application should pass the required size of UUID
+ *                                           It is recommended to pass uint8_t[16], so that we can avoid overflow in case of 128 bit uuid
+ *
+ *  @returns size of the UUID
+ *
+ */
+int wiced_bt_gattdb_get_attribute_uuid (wiced_gattdb_entry_t *p_db_entry, uint8_t *p_uuid);
+
+/**
+ * Function       wiced_bt_gattdb_get_attribute_value_uuid16
+ *
+ *                Utility to get service UUID from GATTDB Primary/Secondary services
+ *
+ *  @param[in]     p_db_entry     : GATT DB atrribute entry
+ *
+ *  @return 16 bit uuid
+ *
+ */
+uint16_t wiced_bt_gattdb_get_attribute_value_uuid16 (wiced_gattdb_entry_t *p_db_entry);
+
+/**
+ * Function     wiced_bt_gattdb_get_charcteristic_descriptor_handle
+ *
+ *                Utility to get characteristic descriptor handle value from GATTDB.
+ *                If characteristic does not have a characteristic descriptor with specified UUID, function will return zero
+ *
+ *  @param[in]     char_handle         : GATT DB characteristic handle
+ *  @param[in]     descriptor_uuid     : Characteristic descriptor UUID
+ *
+ *  @returns characteristic descriptor handle
+ *
+ */
+uint16_t wiced_bt_gattdb_get_charcteristic_descriptor_handle (uint16_t char_handle, uint16_t descriptor_uuid);
+
+/**@} gattdb_api_functions*/
 
 #ifdef __cplusplus
 }

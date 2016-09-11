@@ -17,21 +17,18 @@ $(info Using PREBUILT:  $(APOLLO_PLAYER_LIBRARY_NAME))
 $(NAME)_PREBUILT_LIBRARY :=$(APOLLO_PLAYER_LIBRARY_NAME)
 else
 # Build from source (Broadcom internal)
+$(info Building SRC:  $(APOLLO_PLAYER_LIBRARY_NAME))
 include $(CURDIR)apollo_player_src.mk
 endif # ifneq ($(wildcard $(CURDIR)$(APOLLO_PLAYER_LIBRARY_NAME)),)
 
 GLOBAL_INCLUDES += .
 
-GLOBAL_DEFINES  += AUDIOPCM_ENABLE
 GLOBAL_DEFINES  += WICED_USE_AUDIO
 
 $(NAME)_COMPONENTS += audio/apollo/apollocore
 $(NAME)_COMPONENTS += audio/apollo/audio_render
-
-ifneq (,$(findstring AUDIOPCM_ENABLE,$(GLOBAL_DEFINES)))
-$(info Enabling audiopcm libraries...)
 $(NAME)_COMPONENTS += audio/apollo/audiopcm
 $(NAME)_COMPONENTS += audio/apollo/audioplc
-endif
+$(NAME)_COMPONENTS += audio/apollo/audio_pll_tuner
 
 $(NAME)_CFLAGS  :=

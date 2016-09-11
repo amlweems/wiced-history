@@ -155,20 +155,21 @@ TEST(unit_test_dhcp_server_start, normal )
 TEST(unit_test_dhcp_server_start, double_init )
 {
     wiced_result_t result;
-    wiced_dhcp_server_t server;
+    wiced_dhcp_server_t server1;
+    wiced_dhcp_server_t server2;
 
     wiced_init( );
 
     wiced_network_up( WICED_STA_INTERFACE, WICED_USE_STATIC_IP, &ip_settings );
 
-    result = wiced_start_dhcp_server( &server, WICED_STA_INTERFACE );
+    result = wiced_start_dhcp_server( &server1, WICED_STA_INTERFACE );
     EXPECT_EQ( WICED_SUCCESS, result );
 
-    result = wiced_start_dhcp_server( &server, WICED_STA_INTERFACE );
+    result = wiced_start_dhcp_server( &server2, WICED_STA_INTERFACE );
     EXPECT_EQ( WICED_ADDRESS_IN_USE, result );
 
 
-    result = wiced_stop_dhcp_server( &server);
+    result = wiced_stop_dhcp_server( &server1);
     EXPECT_EQ( WICED_SUCCESS, result );
 
     wiced_network_down( WICED_STA_INTERFACE );

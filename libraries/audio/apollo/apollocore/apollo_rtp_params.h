@@ -38,6 +38,7 @@ extern "C" {
 #define RTP_HEADER_SIZE_1_1             (RTP_BASE_HEADER_SIZE + RTP_EXT_SIZE_1_1)
 #define RTP_HEADER_SIZE                 RTP_HEADER_SIZE_1_1                         /* The "current" header size */
 #define RTP_PACKET_MAX_DATA             (RTP_PACKET_MAX_SIZE - RTP_HEADER_SIZE - RTP_IP_HEADER_SIZE)
+#define RTP_PACKET_MIN_DATA             64
 
 #define RTP_PAYLOAD_AUDIO               98
 #define RTP_PAYLOAD_AUDIO_DUP           99
@@ -75,6 +76,8 @@ extern "C" {
 
 #define RTP_AUDIO_BPS_16                0x00000000
 #define RTP_AUDIO_BPS_24                0x04000000
+
+#define RTP_AUDIO_BL_MASK               0x000F0000
 
 #define RTP_AUDIO_CHANNEL_SHIFT         22
 

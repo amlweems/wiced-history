@@ -48,6 +48,8 @@
 #define OTPTYPE_IPX(ccrev)  ((ccrev) == 21 || (ccrev) >= 23)
 #define OTPPROWMASK(ccrev)  ((ccrev >= 49) ? OTPP_ROW_MASK9 : OTPP_ROW_MASK)
 
+#define PLATFORM_OTP_BASE   (PLATFORM_GCI_COREBASE(0x1000))
+
 #define OTP_ERR_VAL 0x0001
 #define OTP_MSG_VAL 0x0002
 #define OTP_DBG_VAL 0x0004
@@ -855,7 +857,7 @@ ipxotp_init(si_t *sih)
 
     if (AOB_ENAB(sih)) {
         uint32_t otpaddr;
-        otpaddr = PLATFORM_GCI_COREBASE(0x1000);
+        otpaddr = PLATFORM_OTP_BASE;
         oi->otpbase = (uint16_t *)REG_MAP(otpaddr, SI_CORE_SIZE);
         OTP_ERR(("%s: mapping otpbase at 0x%08x to 0x%p\n", __FUNCTION__, (unsigned int)otpaddr, oi->otpbase));
     } else {
@@ -1684,6 +1686,18 @@ platform_otp_package_options( uint32_t *package_options )
     *package_options = (uint32_t)(PLATFORM_CHIPCOMMON->core_ctrl_status.chip_id.bits.package_option) & 0x7;
 
     *package_options |= (uint32_t)(secure_bit << 3);
+
+    return PLATFORM_SUCCESS;
+}
+
+/* Small Memory-Footprint function for OTP Read */
+platform_result_t platform_otp_read_word_unprotected(uint32_t word_number, uint16_t *read_word)
+{
+    volatile uint16_t *otpbase;
+
+    otpbase = (uint16_t*)PLATFORM_OTP_BASE;
+
+    *read_word = R_REG(NULL, &otpbase[word_number]);
 
     return PLATFORM_SUCCESS;
 }

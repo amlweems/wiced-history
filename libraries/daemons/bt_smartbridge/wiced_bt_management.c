@@ -15,13 +15,14 @@
 #include "wiced.h"
 #include "wiced_bt.h"
 #include "wiced_bt_smartbridge_constants.h"
+#include "wiced_bt_smartbridge.h"
 #include "wiced_bt_types.h"
 #include "wiced_bt_stack.h"
-#include "bt_bus.h"
-#include "bt_packet_internal.h"
 #ifdef BT_MFGTEST_MODE
 #include "bt_mfgtest.h"
 #endif
+#include "bt_smartbridge_helper.h"
+#include "bt_smartbridge_stack_interface.h"
 
 /******************************************************
  *                      Macros
@@ -49,18 +50,24 @@
  *               Static Function Declarations
  ******************************************************/
 
-static wiced_bt_dev_status_t smartbridge_bt_stack_management_callback( wiced_bt_management_evt_t event, wiced_bt_management_evt_data_t *p_event_data );
-extern wiced_bt_gatt_status_t smartbridge_gatt_callback( wiced_bt_gatt_evt_t event, wiced_bt_gatt_event_data_t *p_event_data );
+static wiced_bt_dev_status_t    smartbridge_bt_stack_management_callback    ( wiced_bt_management_evt_t event,  wiced_bt_management_evt_data_t *p_event_data );
+extern wiced_bt_gatt_status_t   smartbridge_gatt_callback                   ( wiced_bt_gatt_evt_t event,        wiced_bt_gatt_event_data_t *p_event_data );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
-extern wiced_bt_cfg_settings_t           wiced_bt_cfg_settings;
-extern const wiced_bt_cfg_buf_pool_t     wiced_bt_cfg_buf_pools[];
-static char                              bt_device_name[BT_DEVICE_NAME_MAX_LENGTH + 1] = { 0 };
-wiced_bool_t                             bt_initialised           = WICED_FALSE;
-static wiced_bt_device_address_t         bt_address               = { 0 };
+wiced_bt_local_identity_keys_t          local_identity_keys;
+wiced_bt_device_sec_keys_t              device_link_keys;
+wiced_bool_t                            device_link_key_updated = WICED_FALSE;
+extern wiced_bt_cfg_settings_t          wiced_bt_cfg_settings;
+extern wiced_bt_smartbridge_socket_t*   connecting_socket;
+extern const wiced_bt_cfg_buf_pool_t    wiced_bt_cfg_buf_pools[];
+static char                             bt_device_name[BT_DEVICE_NAME_MAX_LENGTH + 1] = { 0 };
+wiced_bool_t                            bt_initialised           = WICED_FALSE;
+static wiced_bt_device_address_t        bt_address               = { 0 };
+
+extern wiced_result_t wiced_bt_smartbridge_bond_info_update( wiced_bt_device_link_keys_t paired_device_keys );
 
 /******************************************************
  *               Function Definitions
@@ -99,9 +106,18 @@ wiced_result_t wiced_bt_init( wiced_bt_mode_t mode, const char* device_name )
 
 wiced_result_t wiced_bt_deinit( void )
 {
+    wiced_result_t result;
+
     if ( bt_initialised == WICED_FALSE )
     {
         return WICED_BT_SUCCESS;
+    }
+
+    result = wiced_bt_stack_deinit( );
+    if ( result != WICED_BT_SUCCESS )
+    {
+        WPRINT_LIB_ERROR( ("Error de-initialising Bluetooth stack\n") );
+        return result;
     }
 
     memset( bt_device_name, 0, sizeof( bt_device_name ) );
@@ -182,24 +198,109 @@ static wiced_bt_dev_status_t smartbridge_bt_stack_management_callback( wiced_bt_
             if ( ( status = p_event_data->enabled.status ) == WICED_BT_SUCCESS )
             {
                 wiced_bt_dev_read_local_addr(address);
-                WPRINT_BT_APP_INFO(( "[SmartBridge] Local Bluetooth Address: [%02X:%02X:%02X:%02X:%02X:%02X]\n", address[0], address[1], address[2], address[3], address[4], address[5]) );
+                WPRINT_LIB_INFO(( "[SmartBridge] Local Bluetooth Address: [%02X:%02X:%02X:%02X:%02X:%02X]\n", address[0], address[1], address[2], address[3], address[4], address[5]) );
                 /* Register for GATT event notifications */
                 wiced_bt_gatt_register( smartbridge_gatt_callback );
                 bt_initialised = WICED_TRUE;
             }
+            break;
         }
 
         case BTM_SECURITY_REQUEST_EVT:
+        {
+            WPRINT_LIB_INFO( ( "[SmartBridge] Security grant request\n" ) );
+            wiced_bt_ble_security_grant( p_event_data->security_request.bd_addr, WICED_BT_SUCCESS );
+            break;
+        }
+
+        case BTM_LOCAL_IDENTITY_KEYS_UPDATE_EVT:
+        {
+            memcpy(&local_identity_keys, &p_event_data->local_identity_keys_update, sizeof( wiced_bt_local_identity_keys_t ) );
+            WPRINT_LIB_INFO( ("[SmartBridge] Local Identity Keys Update type:%u\n", local_identity_keys.local_key_data[0] ) );
+            break;
+        }
+
+        case BTM_LOCAL_IDENTITY_KEYS_REQUEST_EVT:
+        {
+            memcpy( &p_event_data->local_identity_keys_request ,&local_identity_keys, sizeof(wiced_bt_local_identity_keys_t) );
+            WPRINT_LIB_INFO(("[SmartBridge] Local Identity Keys Request Event\n"));
+            break;
+        }
+
+        case BTM_PAIRED_DEVICE_LINK_KEYS_UPDATE_EVT:
+        {
+            WPRINT_LIB_INFO(("[SmartBridge] Paired Device Link Keys Update Event\n"));
+            memcpy(&device_link_keys, &p_event_data->paired_device_link_keys_request.key_data, sizeof(wiced_bt_device_sec_keys_t));
+            wiced_bt_smartbridge_bond_info_update( p_event_data->paired_device_link_keys_update );
+            device_link_key_updated  = WICED_TRUE;
+            break;
+        }
+
+        case BTM_PAIRED_DEVICE_LINK_KEYS_REQUEST_EVT:
+        {
+            WPRINT_LIB_INFO( ("[SmartBridge] Paired Device Link Keys Request Event\n") );
+            if ( device_link_key_updated == WICED_TRUE )
+            {
+                memcpy( &p_event_data->paired_device_link_keys_request.key_data, &device_link_keys, sizeof(wiced_bt_device_sec_keys_t));
+                return WICED_BT_SUCCESS;
+            }
+            status = WICED_BT_ERROR;
+            break;
+        }
+
         case BTM_PAIRING_IO_CAPABILITIES_BLE_REQUEST_EVT:
+        {
+            WPRINT_LIB_INFO( ("[SmartBridge] Pairing IO capabilities Request Event\n") );
+
+            extern wiced_bt_dev_ble_io_caps_req_t  default_io_caps_ble;
+            /* Peer requested for I/O capabilities. Copy local I/O caps to stack */
+            WPRINT_LIB_INFO( ( "Getting local I/O capabilities\n" ) );
+            p_event_data->pairing_io_capabilities_ble_request.local_io_cap = default_io_caps_ble.local_io_cap;
+            p_event_data->pairing_io_capabilities_ble_request.oob_data     = default_io_caps_ble.oob_data;
+            p_event_data->pairing_io_capabilities_ble_request.auth_req     = default_io_caps_ble.auth_req;
+            p_event_data->pairing_io_capabilities_ble_request.max_key_size = default_io_caps_ble.max_key_size;
+            p_event_data->pairing_io_capabilities_ble_request.init_keys    = default_io_caps_ble.init_keys;
+            p_event_data->pairing_io_capabilities_ble_request.resp_keys    = default_io_caps_ble.resp_keys;
+            break;
+        }
+
+        case BTM_PAIRING_COMPLETE_EVT:
+        {
+            WPRINT_LIB_INFO( ( "[SmartBridge] Pairing complete status=%i, reason=0x%x.\n", p_event_data->pairing_complete.pairing_complete_info.ble.status, p_event_data->pairing_complete.pairing_complete_info.ble.reason ) );
+            if ( p_event_data->pairing_complete.pairing_complete_info.ble.status == WICED_SUCCESS )
+            {
+            }
+            /* Notify app thread that pairing is complete, regardless of  */
+            wiced_rtos_set_semaphore( &connecting_socket->semaphore );
+            break;
+        }
+
+        case BTM_ENCRYPTION_STATUS_EVT:
+        {
+            WPRINT_LIB_INFO( ( "[SmartBridge] encryption status = %i\n", p_event_data->encryption_status.result ) );
+
+            if ( p_event_data->encryption_status.result == WICED_BT_SUCCESS )
+            {
+                /* Update state of the socket to encrypted */
+                connecting_socket->state = SOCKET_STATE_LINK_ENCRYPTED;
+            }
+            wiced_rtos_set_semaphore( &connecting_socket->semaphore );
+            break;
+        }
+
+        case BTM_PASSKEY_NOTIFICATION_EVT:
+        {
+            WPRINT_LIB_INFO( ("[SmartBridge] Passkey Notification event( PassKey generated is: %u )\n", (unsigned int)p_event_data->user_passkey_notification.passkey ) );
+            break;
+        }
+
         case BTM_PASSKEY_REQUEST_EVT:
         case BTM_SMP_REMOTE_OOB_DATA_REQUEST_EVT:
         case BTM_USER_CONFIRMATION_REQUEST_EVT:
-        case BTM_PASSKEY_NOTIFICATION_EVT:
-        case BTM_PAIRING_COMPLETE_EVT:
         case BTM_SMP_SC_LOCAL_OOB_DATA_NOTIFICATION_EVT:
         case BTM_SMP_SC_REMOTE_OOB_DATA_REQUEST_EVT:
         default:
-            WPRINT_LIB_INFO(("[SmartBridge] Stack Callback event :%x\n", event));
+            WPRINT_LIB_INFO(("[SmartBridge] Unhandled Bluetooth Stack Callback event :%d\n", event));
             break;
     }
 

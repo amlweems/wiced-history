@@ -17,7 +17,7 @@ GLOBAL_INCLUDES := . \
                    Projects/bte/main
                    
 GLOBAL_DEFINES +=  BUILDCFG \
-                   BLUETOOTH_BTE
+                   WICED_BLUETOOTH_PLATFORM
 
 ifneq ($(wildcard $(CURDIR)BTE.$(RTOS).$(NETWORK).$(HOST_ARCH).release.a),)
 $(NAME)_PREBUILT_LIBRARY := BTE.$(RTOS).$(NETWORK).$(HOST_ARCH).release.a

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "wwd_structures.h"
+#include "wwd_wlioctl.h"
 #include "wwd_debug.h"
 #include "wiced_utilities.h"
 

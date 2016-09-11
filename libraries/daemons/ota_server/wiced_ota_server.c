@@ -11,6 +11,7 @@
 #include "wiced.h"
 #include "ota_server.h"
 #include "ota_server_web_page.h"
+#include "waf_platform.h"
 
 /******************************************************
  *                      Macros

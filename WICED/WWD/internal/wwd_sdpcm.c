@@ -36,6 +36,7 @@
 #include "internal/bus_protocols/wwd_bus_protocol_interface.h"
 #include "internal/wwd_internal.h"
 #include "wwd_management.h"
+#include "wiced_utilities.h"
 
 /******************************************************
  * @cond       Constants
@@ -43,6 +44,10 @@
 
 #ifndef WWD_EVENT_HANDLER_LIST_SIZE
 #define WWD_EVENT_HANDLER_LIST_SIZE    (5)      /** Maximum number of simultaneously registered event handlers */
+#endif
+
+#ifndef WICED_IOCTL_PACKET_TIMEOUT
+#define WICED_IOCTL_PACKET_TIMEOUT      WICED_DEFAULT_IOCTL_PACKET_TIMEOUT
 #endif
 
 #define WWD_IOCTL_TIMEOUT_MS         (400)
@@ -478,14 +483,14 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     uint16_t ether_type;
 
     ether_type = NTOH16( ethernet_header->ethertype );
-    if ( ether_type == WICED_ETHERTYPE_IPv4 )
+    if (( ether_type == WICED_ETHERTYPE_IPv4 ) || (ether_type == WICED_ETHERTYPE_DOT1AS))
     {
         dscp = (uint8_t*)host_buffer_get_current_piece_data_pointer( buffer ) + IPV4_DSCP_OFFSET;
     }
 
     add_sdpcm_log_entry( LOG_TX, DATA, host_buffer_get_current_piece_size( buffer ), (char*) host_buffer_get_current_piece_data_pointer( buffer ) );
 
-    WWD_LOG( ( "Wcd:> DATA pkt 0x%08X len %d\n", (unsigned int)buffer, (int)host_buffer_get_current_piece_size( buffer ) ) );
+    WWD_LOG( ( "Wcd:> DATA pkt 0x%08lX len %d\n", (unsigned long)buffer, (int)host_buffer_get_current_piece_size( buffer ) ) );
 
 
     /* Add link space at front of packet */
@@ -510,7 +515,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     packet->bdc_header.flags    = 0;
     packet->bdc_header.flags    = (uint8_t) ( BDC_PROTO_VER << BDC_FLAG_VER_SHIFT );
     /* If it's an IPv4 packet set the BDC header priority based on the DSCP field */
-    if ((ether_type == WICED_ETHERTYPE_IPv4) && (dscp != NULL))
+    if (((ether_type == WICED_ETHERTYPE_IPv4) || (ether_type == WICED_ETHERTYPE_DOT1AS)) && (dscp != NULL))
     {
         if (*dscp != 0) /* If it's equal 0 then it's best effort traffic and nothing needs to be done */
         {
@@ -544,6 +549,7 @@ void wwd_sdpcm_update_credit(uint8_t* data)
     if ( ( header->channel_and_flags & 0x0f ) < (uint8_t) 3 )
     {
         wwd_sdpcm_credit_diff = (uint8_t)(header->bus_data_credit - wwd_sdpcm_last_bus_data_credit);
+        WWD_LOG(("credit update =%d\n ",header->bus_data_credit) );
         if ( wwd_sdpcm_credit_diff <= (uint8_t) CHIP_MAX_BUS_DATA_CREDIT_DIFF )
         {
             wwd_sdpcm_last_bus_data_credit = header->bus_data_credit;
@@ -644,7 +650,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 /* Save the response packet in a global variable */
                 wwd_sdpcm_ioctl_response = buffer;
 
-                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: IOCTL Response (%d bytes)\n", (unsigned int)buffer, size ) );
+                WWD_LOG( ( "Wcd:< Procd pkt 0x%08lX: IOCTL Response (%d bytes)\n", (unsigned long)buffer, size ) );
 
                 /* Wake the thread which sent the IOCTL/IOVAR so that it will resume */
                 host_rtos_set_semaphore( &wwd_sdpcm_ioctl_sleep, WICED_FALSE );
@@ -684,7 +690,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 }
 
                 add_sdpcm_log_entry( LOG_RX, DATA, host_buffer_get_current_piece_size( buffer ), (char*) host_buffer_get_current_piece_data_pointer( buffer ) );
-                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: Data (%d bytes)\n", (unsigned int)buffer, size ) );
+                WWD_LOG( ( "Wcd:< Procd pkt 0x%08lX: Data (%d bytes)\n", (unsigned long)buffer, size ) );
 
 
                 /* Check if we are in monitor mode */
@@ -803,7 +809,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                 }
 
                 add_sdpcm_log_entry( LOG_RX, EVENT, host_buffer_get_current_piece_size( buffer ), (char*) host_buffer_get_current_piece_data_pointer( buffer ) );
-                WWD_LOG( ( "Wcd:< Procd pkt 0x%08X: Evnt %d (%d bytes)\n", (unsigned int)buffer, (int)event->event.raw.event_type, size ) );
+                WWD_LOG( ( "Wcd:< Procd pkt 0x%08lX: Evnt %d (%d bytes)\n", (unsigned long)buffer, (int)event->event.raw.event_type, size ) );
 
                 /* Release the event packet buffer */
                 host_buffer_release( buffer, WWD_NETWORK_RX );
@@ -857,7 +863,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     }
 
     /* Get the data length and cast packet to a CDC SDPCM header */
-    data_length = host_buffer_get_current_piece_size( send_buffer_hnd ) - sizeof(sdpcm_common_header_t) - sizeof(sdpcm_cdc_header_t);
+    data_length = (uint32_t)( host_buffer_get_current_piece_size( send_buffer_hnd ) - sizeof(sdpcm_common_header_t) - sizeof(sdpcm_cdc_header_t) );
     send_packet = (sdpcm_control_header_t*) host_buffer_get_current_piece_data_pointer( send_buffer_hnd );
 
     /* Check if IOCTL is actually IOVAR */
@@ -892,7 +898,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
         host_buffer_set_size( send_buffer_hnd, 1500 );
     }
 
-    WWD_LOG( ( "Wcd:> IOCTL pkt 0x%08X: cmd %d, len %d\n", (unsigned int)send_buffer_hnd, (int)command, (int)data_length ) );
+    WWD_LOG( ( "Wcd:> IOCTL pkt 0x%08lX: cmd %d, len %d\n", (unsigned long)send_buffer_hnd, (int)command, (int)data_length ) );
 
     /* Store the length of the data and the IO control header and pass "down" */
     wwd_sdpcm_send_common( send_buffer_hnd, CONTROL_HEADER );
@@ -916,7 +922,9 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     if ( response_buffer_hnd != NULL )
     {
         *response_buffer_hnd = wwd_sdpcm_ioctl_response;
-        host_buffer_add_remove_at_front( response_buffer_hnd, (int32_t) IOCTL_OFFSET );
+        host_buffer_add_remove_at_front( response_buffer_hnd,
+                (int32_t) ( sizeof(wwd_buffer_header_t) + sizeof(sdpcm_cdc_header_t) +
+                common_header->sdpcm_header.sw_header.header_length ));
     }
     else
     {
@@ -945,7 +953,10 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
 }
 
 /**
- * Registers a handler to receive event callbacks.
+ * Registers locally a handler to receive event callbacks.
+ * Does not notify Wi-Fi about event subscription change.
+ * Can be used to refresh local callbacks (e.g. after deep-sleep)
+ * if Wi-Fi is already notified about them.
  *
  * This function registers a callback handler to be notified when
  * a particular event is received.
@@ -966,15 +977,12 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
  *
  * @return WWD result code
  */
-wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t* event_nums, /*@null@*/ wwd_event_handler_t handler_func, /*@null@*/ /*@keep@*/ void* handler_user_data, wwd_interface_t interface )
+wwd_result_t wwd_management_set_event_handler_locally( /*@keep@*/ const wwd_event_num_t* event_nums, /*@null@*/ wwd_event_handler_t handler_func, /*@null@*/ /*@keep@*/ void* handler_user_data, wwd_interface_t interface )
 {
-    wiced_buffer_t buffer;
-    uint8_t* event_mask;
     uint16_t entry = (uint16_t) 0xFF;
     uint16_t i;
-    uint16_t j;
-    wwd_result_t res;
-    uint32_t* data;
+
+    UNUSED_PARAMETER( interface );
 
     /* Find an existing matching entry OR the next empty entry */
     for ( i = 0; i < (uint16_t) WWD_EVENT_HANDLER_LIST_SIZE; i++ )
@@ -1017,6 +1025,48 @@ wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t*
         wwd_sdpcm_event_list[entry].handler           = handler_func;
         wwd_sdpcm_event_list[entry].handler_user_data = handler_user_data;
         wwd_sdpcm_event_list[entry].events            = event_nums;
+    }
+
+    return WWD_SUCCESS;
+}
+
+/**
+ * Registers a handler to receive event callbacks.
+ * Subscribe locally and notify Wi-Fi about subscription.
+ *
+ * This function registers a callback handler to be notified when
+ * a particular event is received.
+ *
+ * Alternately the function clears callbacks for given event type.
+ *
+ * @note : Currently each event may only be registered to one handler
+ *         and there is a limit to the number of simultaneously registered
+ *         events
+ *
+ * @param  event_nums     An array of event types that is to trigger the handler. The array must be terminated with a WLC_E_NONE event
+ *                        See @ref wwd_event_num_t for available events
+ * @param handler_func   A function pointer to the new handler callback,
+ *                        or NULL if callbacks are to be disabled for the given event type
+ * @param handler_user_data  A pointer value which will be passed to the event handler function
+ *                            at the time an event is triggered (NULL is allowed)
+ * @param interface      The interface to set the handler for.
+ *
+ * @return WWD result code
+ */
+wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t* event_nums, /*@null@*/ wwd_event_handler_t handler_func, /*@null@*/ /*@keep@*/ void* handler_user_data, wwd_interface_t interface )
+{
+    wiced_buffer_t buffer;
+    uint8_t* event_mask;
+    uint16_t i;
+    uint16_t j;
+    wwd_result_t res;
+    uint32_t* data;
+
+    /* Set event handler locally  */
+    res = wwd_management_set_event_handler_locally( event_nums, handler_func, handler_user_data, interface );
+    if ( res != WWD_SUCCESS )
+    {
+        return res;
     }
 
     /* Send the new event mask value to the wifi chip */
@@ -1062,9 +1112,9 @@ wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t*
  */
 /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_iovar_buffer( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length, const char* name )  /*@allocates *buffer@*/ /*@defines **buffer@*/
 {
-    uint32_t name_length = strlen( name ) + 1; /* + 1 for terminating null */
+    uint32_t name_length = (uint32_t) strlen( name ) + 1; /* + 1 for terminating null */
     uint32_t name_length_alignment_offset = (64 - name_length) % sizeof(uint32_t);
-    if ( host_buffer_get( buffer, WWD_NETWORK_TX, (unsigned short) ( IOCTL_OFFSET + data_length + name_length + name_length_alignment_offset ), WICED_TRUE ) == WWD_SUCCESS )
+    if ( internal_host_buffer_get( buffer, WWD_NETWORK_TX, (unsigned short) ( IOCTL_OFFSET + data_length + name_length + name_length_alignment_offset ), (unsigned long) WICED_IOCTL_PACKET_TIMEOUT ) == WWD_SUCCESS )
     {
         uint8_t* data = ( host_buffer_get_current_piece_data_pointer( *buffer ) + IOCTL_OFFSET );
         memset( data, 0, name_length_alignment_offset );
@@ -1087,7 +1137,7 @@ wwd_result_t wwd_management_set_event_handler( /*@keep@*/ const wwd_event_num_t*
  */
 /*@null@*/ /*@exposed@*/ void* wwd_sdpcm_get_ioctl_buffer( /*@special@*/ /*@out@*/ wiced_buffer_t* buffer, uint16_t data_length ) /*@allocates *buffer@*/  /*@defines **buffer@*/
 {
-    if ( host_buffer_get( buffer, WWD_NETWORK_TX, (unsigned short) ( IOCTL_OFFSET + data_length ), WICED_TRUE ) == WWD_SUCCESS )
+    if ( internal_host_buffer_get( buffer, WWD_NETWORK_TX, (unsigned short) ( IOCTL_OFFSET + data_length ), (unsigned long) WICED_IOCTL_PACKET_TIMEOUT ) == WWD_SUCCESS )
     {
         return ( host_buffer_get_current_piece_data_pointer( *buffer ) + IOCTL_OFFSET );
     }

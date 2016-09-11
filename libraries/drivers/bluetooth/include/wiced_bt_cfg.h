@@ -172,7 +172,7 @@ typedef struct
 /** Audio/Video Remote Control configuration */
 typedef struct
 {
-    uint8_t                             roles;                         /**< Mask of local roles supported (AVRC_CONN_INITIATOR|AVRC_CONN_ACCEPTOR) */
+    uint8_t                             roles;                         /**< Local roles supported: AVRC_CONN_INITIATOR or AVRC_CONN_ACCEPTOR */
     uint8_t                             max_links;                     /**< Maximum simultaneous remote control links */
 } wiced_bt_cfg_avrc_t;
 
@@ -213,6 +213,8 @@ typedef struct
     /* Audio/Video Remote Control configuration */
     wiced_bt_cfg_avrc_t                 avrc_cfg;                       /**< Audio/Video Remote Control configuration */
 
+    /* LE Address Resolution DB size  */
+    uint8_t                             addr_resolution_db_size;        /**< LE Address Resolution DB settings - effective only for pre 4.2 controller*/
 } wiced_bt_cfg_settings_t;
 
 /*****************************************************************************

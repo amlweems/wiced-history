@@ -129,7 +129,7 @@ static const char base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
        characters followed by one "=" padding character.
    */
 
-int isspace( int c )
+int is_base64_space( int c )
 {
     return ( ( c >= 0x09 && c <= 0x0D ) || ( c == 0x20 ) );
 }
@@ -256,7 +256,7 @@ int base64_decode( unsigned char const* src, int32_t src_length, unsigned char* 
     while ( ( ( ch = *src++ ) != '\0' ) && ( ( src_length < 0 ) || ( src - orig_src <= src_length ) ) )
     {
         /* Skip whitespace anywhere. */
-        if ( isspace( ch ) != 0 )
+        if ( is_base64_space( ch ) != 0 )
         {
             continue;
         }
@@ -359,7 +359,7 @@ int base64_decode( unsigned char const* src, int32_t src_length, unsigned char* 
                     /* Skip any number of spaces. */
                     for ( ; ( ( ch != '\0' ) && ( ( src_length < 0 ) || ( src - orig_src <= src_length ) ) ); ch = *src++ )
                     {
-                        if ( isspace( ch ) == 0 )
+                        if ( is_base64_space( ch ) == 0 )
                         {
                             break;
                         }
@@ -383,7 +383,7 @@ int base64_decode( unsigned char const* src, int32_t src_length, unsigned char* 
                      */
                     for ( ; ( ( ch != '\0' ) && ( ( src_length < 0 ) || ( src - orig_src <= src_length ) ) ); ch = *src++ )
                     {
-                        if ( isspace( ch ) == 0 )
+                        if ( is_base64_space( ch ) == 0 )
                         {
                             return ( -1 );
                         }

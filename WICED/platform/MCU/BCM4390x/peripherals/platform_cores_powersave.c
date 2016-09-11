@@ -40,7 +40,6 @@
       PMU_RES_MASK( PMU_RES_SR_SLEEP )                 | \
       PMU_RES_MASK( PMU_RES_MAC_PHY_CLK_AVAIL ) )
 
-
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -55,8 +54,9 @@
 
 typedef struct
 {
-    uint32_t    core_addr;
-    uint32_t    wrapper_addr;
+    uint32_t        core_addr;
+    uint32_t        wrapper_addr;
+    wiced_bool_t    is_enabled;
 } platform_cores_powersave_clock_gate_core_t;
 
 /******************************************************
@@ -170,31 +170,94 @@ platform_cores_powersave_init_wlan_domain( void )
 #endif /* WICED_NO_WIFI */
 
 static void
+platform_cores_powersave_shutoff_usb20d( void )
+{
+    /*
+     * Shutoff USB PHY using USB20D core.
+     * Need to do it once only during cold boot.
+     */
+
+    if ( WICED_DEEP_SLEEP_IS_WARMBOOT( ) || !PLATFORM_CAPABILITY_ENAB( PLATFORM_CAPS_USB  ) )
+    {
+        return;
+    }
+
+    platform_gci_chipcontrol( GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_REG, GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_MASK, GCI_CHIPCONTROL_USBPHY_MODE_OVR_VAL_USB );
+
+    platform_gci_chipcontrol( GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_REG, GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_MASK, GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_SET );
+
+    osl_wrapper_enable( (void*)PLATFORM_USB20D_MASTER_WRAPPER_REGBASE(0x0) );
+
+    platform_common_chipcontrol( (void*)PLATFORM_USB20D_PHY_UTMI_CTL1_REG, PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_MASK, PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_DISABLE );
+    OSL_DELAY(50);
+    platform_common_chipcontrol( (void*)PLATFORM_USB20D_PHY_UTMI_CTL1_REG, PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_MASK, PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_ENABLE );
+
+    osl_wrapper_disable( (void*)PLATFORM_USB20D_MASTER_WRAPPER_REGBASE(0x0) );
+
+    platform_gci_chipcontrol( GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_REG, GCI_CHIPCONTROL_USBPHY_MODE_OVR_EN_MASK, 0x0 );
+}
+
+static void
+platform_cores_powersave_enable_memory_clock_gating( void )
+{
+    PLATFORM_SOCSRAM_POWERCONTROL_REG->bits.enable_mem_clk_gate = 1;
+}
+
+static void
 platform_cores_powersave_init_apps_domain( void )
 {
     platform_cores_powersave_clock_gate_core_t cores[] =
     {
-        { .core_addr = PLATFORM_GMAC_REGBASE(0x0), .wrapper_addr = PLATFORM_GMAC_MASTER_WRAPPER_REGBASE(0x0) },
-        { .core_addr = PLATFORM_I2S0_REGBASE(0x0), .wrapper_addr = PLATFORM_I2S0_MASTER_WRAPPER_REGBASE(0x0) },
-        { .core_addr = PLATFORM_I2S1_REGBASE(0x0), .wrapper_addr = PLATFORM_I2S1_MASTER_WRAPPER_REGBASE(0x0) }
+        { .core_addr = PLATFORM_GMAC_REGBASE(0x0), .wrapper_addr = PLATFORM_GMAC_MASTER_WRAPPER_REGBASE(0x0), PLATFORM_CAPABILITY_ENAB(PLATFORM_CAPS_GMAC) },
+        { .core_addr = PLATFORM_I2S0_REGBASE(0x0), .wrapper_addr = PLATFORM_I2S0_MASTER_WRAPPER_REGBASE(0x0), PLATFORM_CAPABILITY_ENAB(PLATFORM_CAPS_I2S) },
+        { .core_addr = PLATFORM_I2S1_REGBASE(0x0), .wrapper_addr = PLATFORM_I2S1_MASTER_WRAPPER_REGBASE(0x0), PLATFORM_CAPABILITY_ENAB(PLATFORM_CAPS_I2S) }
     };
     unsigned i;
 
     for ( i = 0; i < ARRAYSIZE( cores ); ++i )
     {
-        platform_cores_powersave_clock_gate_core( &cores[i] );
+        if ( cores[i].is_enabled == WICED_TRUE )
+        {
+            platform_cores_powersave_clock_gate_core( &cores[i] );
+        }
     }
+
+    platform_cores_powersave_shutoff_usb20d( );
+
+    platform_cores_powersave_enable_memory_clock_gating( );
 }
 
-void platform_cores_powersave_init( void )
+static void
+platform_cores_powersave_disable_wl_reg_on_pulldown( wiced_bool_t disable )
 {
+    platform_pmu_regulatorcontrol( PMU_REGULATOR_WL_REG_ON_PULLDOWN_REG, PMU_REGULATOR_WL_REG_ON_PULLDOWN_MASK,
+                                   disable ? PMU_REGULATOR_WL_REG_ON_PULLDOWN_DIS : PMU_REGULATOR_WL_REG_ON_PULLDOWN_EN );
+}
+
+void
+platform_cores_powersave_init( void )
+{
+    platform_cores_powersave_disable_wl_reg_on_pulldown( WICED_TRUE );
     platform_cores_powersave_init_apps_domain( );
     platform_cores_powersave_init_wlan_domain( );
 }
 
+WICED_DEEP_SLEEP_EVENT_HANDLER( deep_sleep_cores_powersave_event_handler )
+{
+    if ( event == WICED_DEEP_SLEEP_EVENT_ENTER )
+    {
+        platform_cores_powersave_disable_wl_reg_on_pulldown( WICED_FALSE );
+    }
+    else if ( event == WICED_DEEP_SLEEP_EVENT_CANCEL )
+    {
+        platform_cores_powersave_disable_wl_reg_on_pulldown( WICED_TRUE );
+    }
+}
+
 #else
 
-void platform_cores_powersave_init( void )
+void
+platform_cores_powersave_init( void )
 {
 }
 

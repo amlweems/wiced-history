@@ -284,6 +284,42 @@ wiced_bt_rfcomm_result_t wiced_bt_rfcomm_flow_control (uint16_t handle, wiced_bo
  */
 wiced_bt_rfcomm_result_t wiced_bt_rfcomm_write_data (uint16_t handle, char *p_data, uint16_t max_len, uint16_t *p_len);
 
+/**
+ *  This function checks connection referenced by handle is up and running.
+ *
+ *  @param[in]  handle              : The connection handle returned by
+ *                                    @link wiced_bt_rfcomm_create_connection wiced_bt_rfcomm_create_connection @endlink
+ *  @param[out]  bd_addr            : Peer BD Address
+ *  @param[out]  p_lcid             : L2CAP's LCID
+ *
+ *  @return     <b> WICED_BT_RFCOMM_SUCCESS </b>        : If successful
+ *              <b> WICED_BT_RFCOMM_LINE_ERR </b>       : If connection is not up and running
+ */
+wiced_bt_rfcomm_result_t wiced_bt_rfcomm_check_connection (UINT16 handle, BD_ADDR bd_addr, UINT16 *p_lcid);
+
+#ifdef MPAF_CUSTOM_STACK
+/**
+ *  This function allocates private pool to be used by RFCOMM.
+ *
+ *  @param[in]  buffer_size              : size of buffer
+ *  @param[out]  buffer_cnt              : buffers
+ *
+ *  @return     <b> WICED_BT_RFCOMM_SUCCESS </b>        : If successful
+ *              <b> WICED_BT_RFCOMM_ERROR </b>          : If pool allocation fails
+ */
+wiced_bt_rfcomm_result_t wiced_bt_rfcomm_init(uint32_t buffer_size, uint32_t buffer_cnt);
+
+/**
+ *  This function enables flow control based on ACL buffer availability
+ *
+ *  @param[in]  peer_addr              : Peer BD Address
+ *
+ *  @return     <b> WICED_TRUE </b>    : If successful
+ *              <b> WICED_FALSE </b>   : If fails
+ */
+wiced_bool_t wiced_bt_rfcomm_control_data_flow(BD_ADDR peer_bda);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

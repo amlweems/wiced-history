@@ -69,7 +69,7 @@ extern char bcm439x_platform_inited;
 
 host_semaphore_type_t sflash_mutex;
 sflash_handle_t       wicedfs_sflash_handle;
-wiced_filesystem_t    resource_fs_handle;
+wicedfs_filesystem_t  resource_fs_handle;
 static  wiced_app_t   fs_app;
 static  uint8_t       fs_init_done = 0;
 

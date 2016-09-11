@@ -1,13 +1,15 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
-
+/****************************************************************************
+**
+**  Name:       dyn_mem.h
+**
+**  Function    this file contains definitions used to determine if a component
+**              uses static or dynamic memory for its control blocks.
+**
+**
+**  Copyright (c) 2002-2010, Broadcom Corp., All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+**
+*****************************************************************************/
 #ifndef DYN_MEM_H
 #define DYN_MEM_H
 

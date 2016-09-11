@@ -811,38 +811,7 @@ TRACE_PRINT();
 
         i = 0;
         while ( ( i < n ) && ( ( p = PKTGET(di->osh, (di->rxbufsize + extra_offset +  alignment_req - 1), FALSE) ) != NULL ) )
-//		for (i = 0; i < n; i++)
         {
-            /* the di->rxbufsize doesn't include the extra headroom, we need to add it to the
-           size to be allocated
-             */
-//            if (POOL_ENAB(di->pktpool)) {
-//                ASSERT(di->pktpool);
-//                p = pktpool_get(di->pktpool);
-//                __asm("bkpt");
-//#ifdef BCMDBG_POOL
-//                if (p)
-//                    PKTPOOLSETSTATE(p, POOL_RXFILL);
-//#endif /* BCMDBG_POOL */
-//            }
-//            else {
-//                p = PKTGET(di->osh, (di->rxbufsize + extra_offset +  alignment_req - 1), FALSE);
-//                memset(PKTDATA(di->osh, p), 0, PKTLEN(di->osh, p));
-//            }
-//            if (p == NULL) {
-//                DMA_TRACE(("%s: m2m_dma_rxfill: out of rxbufs\n", di->name));
-//                if (i == 0) {
-//                        if (dma64_rxidle(di)) {
-//                            DMA_TRACE(("%s: rxfill64: ring is empty !\n",
-//                            di->name));
-//                            ring_empty = TRUE;
-//                        }
-//                }
-//                di->hnddma.rxnobuf++;
-//                break;
-//            }
-			memset(PKTDATA(di->osh, p), 0, PKTLEN(di->osh, p));
-//			strcpy(PKTDATA(di->osh, p) + 1000, "        In RX DMA Queue" );
             /* reserve an extra headroom, if applicable */
             if (di->hnddma.dmactrlflags & DMA_CTRL_USB_BOUNDRY4KB_WAR) {
                 extra_pad = ((alignment_req - (uint)(((unsigned long)PKTDATA(di->osh, p) -
@@ -1253,7 +1222,7 @@ bool m2m_dma_rxreset_inner(void *osh, void *rxregs)
      * WARNING: call must check the return value for error.
      *   the error(toss frames) could be fatal and cause many subsequent hard to debug problems
      */
-    int BCMFASTPATH m2m_dma_txfast(m2m_hnddma_t *di_in, void *p0, uint16_t unused_len, bool commit)
+    int BCMFASTPATH m2m_dma_txfast(m2m_hnddma_t *di_in, void *p0, bool commit)
     {
        	dma_info_t *di = (dma_info_t *) di_in;
         void *next;

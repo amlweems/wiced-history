@@ -8,7 +8,7 @@
 # written permission of Broadcom Corporation.
 #
 
-NAME = Usb20h_43909_Library_$(PLATFORM)
+NAME = USB_Host_43909_Library_$(PLATFORM)
 
 GLOBAL_INCLUDES := .
 
@@ -16,6 +16,6 @@ GLOBAL_INCLUDES := .
 
 $(NAME)_SOURCES := platform_usb_host.c
 
-GLOBAL_DEFINES += WICED_USB_SUPPORT=1
+#GLOBAL_DEFINES += WICED_USB_SUPPORT=1
 
 $(eval $(call PLATFORM_LOCAL_DEFINES_INCLUDES_43909, ../..))

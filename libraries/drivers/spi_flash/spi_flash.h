@@ -23,11 +23,19 @@
 #endif
 
 #include <stdint.h>
+#include <platform_toolchain.h>
 
-
+#define SFLASH_SHA256_HASH_SIZE             32
+#define SECURE_SECTOR_METADATA_SIZE         SFLASH_SHA256_HASH_SIZE
+#define SECURE_SECTOR_DATA_SIZE             ( SECURE_SECTOR_SIZE - SECURE_SECTOR_METADATA_SIZE )
+#define SECURE_SECTOR_SIZE                  4096 /* SECURE_SECTOR_DATA_SIZE + SECURE_SECTOR_METADATA_SIZE */
+#define SWAP( T, x, y )                     do { T temp = x; x = y; y = temp; } while ( 0 )
+#define ALIGN_TO_SECTOR_ADDRESS( x )        ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE )
+#define SECURE_SFLASH_METADATA_SIZE( x )    ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE )
+#define SECURE_SECTOR_ADDRESS( x )          ( ( ( ( ( x ) + ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE ) )
+#define OFFSET_WITHIN_SECURE_SECTOR( x )    ( ( x ) % SECURE_SECTOR_DATA_SIZE )
 
 struct sflash_capabilities;
-
 
 typedef enum
 {
@@ -35,7 +43,7 @@ typedef enum
     SFLASH_WRITE_ALLOWED     = 1,
 } sflash_write_allowed_t;
 
-
+typedef struct securesflash_handle securesflash_handle_t;
 /**
  * Handle for a sflash access instance
  * Users should not access these values - they are provided here only
@@ -47,17 +55,25 @@ typedef /*@abstract@*/ /*@immutable@*/ struct
     void * platform_peripheral;
     const struct sflash_capabilities* capabilities;
     sflash_write_allowed_t write_allowed;
+    securesflash_handle_t* securesflash_handle;
 } sflash_handle_t;
 
-#define SFLASH_SHA256_HASH_SIZE             32
-#define SECURE_SECTOR_METADATA_SIZE         SFLASH_SHA256_HASH_SIZE
-#define SECURE_SECTOR_DATA_SIZE             ( SECURE_SECTOR_SIZE - SECURE_SECTOR_METADATA_SIZE )
-#define SECURE_SECTOR_SIZE                  4096 /* SECURE_SECTOR_DATA_SIZE + SECURE_SECTOR_METADATA_SIZE */
-#define SWAP( T, x, y )                     do { T temp = x; x = y; y = temp; } while ( 0 )
-#define ALIGN_TO_SECTOR_ADDRESS( x )        ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE )
-#define SECURE_SFLASH_METADATA_SIZE( x )    ( ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE )
-#define SECURE_SECTOR_ADDRESS( x )          ( ( ( ( ( x ) + ( ( x ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_METADATA_SIZE ) / SECURE_SECTOR_SIZE ) * SECURE_SECTOR_SIZE ) )
-#define OFFSET_WITHIN_SECURE_SECTOR( x )    ( ( x ) % SECURE_SECTOR_DATA_SIZE )
+typedef int ( *sflash_write_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@observer@*/ const void* const data_addr, unsigned int size );
+typedef int ( *sflash_read_t ) ( const sflash_handle_t* const handle, unsigned long device_address,
+        /*@out@*/ /*@dependent@*/ void* data_addr, unsigned int size );
+
+struct securesflash_handle
+{
+    /* Buffer to Read from Sflash and encrypt/decrypt data */
+    uint8_t         hwcrypto_buffer[ SECURE_SECTOR_SIZE * 2 ];
+    uint8_t         hmac_key[ 32 ]; /* HMAC Key size */
+    uint8_t         hmac_key_redundant[ 32 ];
+    uint8_t         aes128_key[ 16 ]; /* AES CBC 128 Key size */
+    uint8_t         aes128_key_redundant[ 16 ];
+    sflash_read_t   sflash_secure_read_function;
+    sflash_write_t  sflash_secure_write_function;
+};
 
 /**
  *  Initializes a SPI Flash chip

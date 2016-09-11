@@ -23,6 +23,7 @@
  */
 #include "rtos.h"
 #include "wiced_result.h"
+#include "RTOS/wwd_rtos_interface.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +43,9 @@ typedef enum
  *             Structures
  ******************************************************/
 
-typedef void (*wiced_thread_function_t)( uint32_t arg );
+typedef wwd_thread_arg_t wiced_thread_arg_t;
+
+typedef void (*wiced_thread_function_t)( wiced_thread_arg_t arg );
 
 /******************************************************
  *             Function declarations
@@ -408,6 +411,18 @@ wiced_result_t wiced_rtos_is_queue_empty( wiced_queue_t* queue );
  * @return    WICED_ERROR   : queue is not full.
  */
 wiced_result_t wiced_rtos_is_queue_full( wiced_queue_t* queue );
+
+
+/** Get the queue occupancy
+ *
+ * @param queue : a pointer to the queue handle
+ * @param count : pointer to integer for storing occupancy count
+ *
+ * @return    WICED_SUCCESS : on success.
+ * @return    WICED_ERROR   : if an error occurred
+ */
+wiced_result_t wiced_rtos_get_queue_occupancy( wiced_queue_t* queue, uint32_t *count );
+
 
 /** @} */
 /*****************************************************************************/

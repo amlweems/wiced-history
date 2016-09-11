@@ -21,6 +21,7 @@
 #include "wiced_utilities.h"
 #include "wwd_debug.h"
 #include "wwd_assert.h"
+#include "internal/wiced_internal_api.h"
 #include "RTOS/wiced_rtos_common.h"
 #include "tx_thread.h"
 
@@ -74,7 +75,6 @@ typedef struct
 
 static void application_thread_main    ( ULONG thread_input );
 static void application_thread_cleanup ( TX_THREAD* thread_ptr, UINT condition );
-extern void system_monitor_thread_main ( void* arg );
 
 /******************************************************
  *               Variable Definitions
@@ -393,6 +393,12 @@ wiced_result_t wiced_rtos_deinit_queue( wiced_queue_t* queue )
     }
 
     return result;
+}
+
+wiced_result_t wiced_rtos_get_queue_occupancy( wiced_queue_t* queue, uint32_t *count )
+{
+    *count = queue->handle.tx_queue_enqueued;
+    return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_rtos_is_queue_empty( wiced_queue_t* queue )

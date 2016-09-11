@@ -319,7 +319,7 @@ of order */
 
 /* TRUE if GKI includes debug functionality. */
 #ifndef GKI_DEBUG
-#define GKI_DEBUG                   FALSE
+#define GKI_DEBUG                   TRUE
 #endif
 
 /* Maximum number of exceptions logged. */

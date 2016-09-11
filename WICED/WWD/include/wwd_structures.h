@@ -48,10 +48,10 @@ typedef volatile void*    host_mutex_pointer_t;
 typedef volatile void*    host_thread_pointer_t;
 
 typedef uint32_t          wwd_time_t;          /* Time value in milliseconds */
-typedef wl_bss_info_t     wiced_bss_info_t;
+typedef struct wl_bss_info_struct     wiced_bss_info_t;
 
-typedef edcf_acparam_t    wiced_edcf_ac_param_t;
-typedef wl_action_frame_t wiced_action_frame_t;
+typedef struct edcf_acparam    wiced_edcf_ac_param_t;
+typedef struct wl_action_frame wiced_action_frame_t;
 
 /** @endcond */
 
@@ -92,7 +92,7 @@ typedef struct
 } wiced_packet_filter_t;
 
 /** @cond */
-typedef wl_pkt_filter_stats_t wiced_packet_filter_stats_t;
+typedef struct wl_pkt_filter_stats wiced_packet_filter_stats_t;
 /** @endcond */
 
 /**

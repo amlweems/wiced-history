@@ -138,7 +138,8 @@ extern void free_entry( int i );
 
 wiced_result_t wiced_network_init( void )
 {
-    SemaphoreHandle_t lwip_done_sema;
+    wwd_result_t result;
+    host_semaphore_type_t lwip_done_sema;
 
     /* Initialize the LwIP system.  */
     WPRINT_NETWORK_INFO(("Initialising LwIP " LwIP_VERSION "\n"));
@@ -148,8 +149,8 @@ wiced_result_t wiced_network_init( void )
     ip_networking_inited[2] = WICED_FALSE;
 
     /* Create a semaphore to signal when LwIP has finished initialising */
-    lwip_done_sema = xSemaphoreCreateCounting( 1, 0 );
-    if ( lwip_done_sema == NULL )
+    result = host_rtos_init_semaphore(  &lwip_done_sema );
+    if ( result != WWD_SUCCESS )
     {
         /* Could not create semaphore */
         WPRINT_NETWORK_ERROR(("Could not create LwIP init semaphore"));
@@ -158,8 +159,8 @@ wiced_result_t wiced_network_init( void )
 
     /* Initialise LwIP, providing the callback function and callback semaphore */
     tcpip_init( tcpip_init_done, (void*) &lwip_done_sema );
-    xSemaphoreTake( lwip_done_sema, portMAX_DELAY );
-    vQueueDelete( lwip_done_sema );
+    host_rtos_get_semaphore( &lwip_done_sema, NEVER_TIMEOUT, WICED_FALSE );
+    host_rtos_deinit_semaphore( &lwip_done_sema );
 
     memset(&internal_dhcp_server, 0, sizeof(internal_dhcp_server));
 
@@ -201,8 +202,8 @@ wiced_result_t wiced_network_init( void )
 
 static void tcpip_init_done( void* arg )
 {
-    SemaphoreHandle_t* LwIP_done_sema = (SemaphoreHandle_t*) arg;
-    xSemaphoreGive( *LwIP_done_sema );
+    host_semaphore_type_t* LwIP_done_sema = (host_semaphore_type_t*) arg;
+    host_rtos_set_semaphore( LwIP_done_sema, WICED_FALSE );
 }
 
 
@@ -265,7 +266,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         ip_addr_set_zero( &netmask );
     }
 
-    if ( NULL == netif_add( &IP_HANDLE(interface), &ipaddr, &netmask, &gw, (void*) WICED_TO_WWD_INTERFACE( interface ), ethernetif_init, ethernet_input ) )
+    if ( NULL == netif_add( &IP_HANDLE(interface), &ipaddr, &netmask, &gw, (void*) (ptrdiff_t) WICED_TO_WWD_INTERFACE( interface ), ethernetif_init, ethernet_input ) )
     {
         WPRINT_NETWORK_ERROR(( "Could not add network interface\n" ));
         return WICED_ERROR;
@@ -512,8 +513,10 @@ wiced_result_t wiced_wireless_link_up_handler( void* arg )
     return result;
 }
 
-wiced_result_t wiced_wireless_link_renew_handler( void )
+wiced_result_t wiced_wireless_link_renew_handler( void* arg )
 {
+    UNUSED_PARAMETER( arg );
+
     /* TODO : need to invalidate only particular arp instead of all arp entries*/
     netifapi_netif_common( &IP_HANDLE(WICED_STA_INTERFACE), (netifapi_void_fn) invalidate_all_arp_entries, NULL );
 

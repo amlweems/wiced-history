@@ -45,14 +45,67 @@
  ******************************************************/
 
 /**
- * Turn on the Wi-Fi device
+ * Initialise Wi-Fi platform
  *
  * - Initialises the required parts of the hardware platform
  *   i.e. pins for SDIO/SPI, interrupt, reset, power etc.
  *
- * - Bring the Wireless interface "Up"
  * - Initialises the WWD thread which arbitrates access
  *   to the SDIO/SPI bus
+ *
+ * @return WWD_SUCCESS if initialization is successful, error code otherwise
+ */
+wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wiced_bool_t resume_after_deep_sleep )
+{
+    wwd_result_t retval;
+
+    wwd_wlan_status.country_code = country;
+
+    retval = host_platform_init( );
+    if ( retval != WWD_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not initialize platform interface\n"));
+        return retval;
+    }
+
+    retval = host_platform_bus_init( );
+    if ( retval != WWD_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not initialize platform bus interface\n"));
+        return retval;
+    }
+
+    /* Enable 32K WLAN sleep clock */
+    host_platform_init_wlan_powersave_clock();
+
+    retval = resume_after_deep_sleep ? wwd_bus_resume_after_deep_sleep( ) : wwd_bus_init( );
+    if ( retval != WWD_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not initialize bus\n"));
+        return retval;
+    }
+
+    /* WLAN device is now powered up. Change state from OFF to DOWN */
+    wwd_wlan_status.state = WLAN_DOWN;
+
+    retval = wwd_thread_init( );
+    if ( retval != WWD_SUCCESS )
+    {
+        WPRINT_WWD_ERROR(("Could not initialize WWD thread\n"));
+        return retval;
+    }
+
+    host_platform_bus_enable_interrupt( );
+
+    return WWD_SUCCESS;
+}
+
+/**
+ * Turn on the Wi-Fi device
+ *
+ * - Initialise Wi-Fi device
+ *
+ * - Program various WiFi parameters and modes
  *
  * @return WWD_SUCCESS if initialization is successful, error code otherwise
  */
@@ -77,43 +130,12 @@ wwd_result_t wwd_management_wifi_on( wiced_country_code_t country )
         return WWD_SUCCESS;
     }
 
-    wwd_wlan_status.country_code = country;
-
-    retval = host_platform_init( );
+    retval = wwd_management_wifi_platform_init( country, WICED_FALSE );
     if ( retval != WWD_SUCCESS )
     {
-        WPRINT_WWD_ERROR(("Could not initialize platform interface\n"));
+        WPRINT_WWD_ERROR(("Could not initialize"));
         return retval;
     }
-
-    retval = host_platform_bus_init( );
-    if ( retval != WWD_SUCCESS )
-    {
-        WPRINT_WWD_ERROR(("Could not initialize platform bus interface\n"));
-        return retval;
-    }
-
-    retval = wwd_bus_init( );
-    if ( retval != WWD_SUCCESS )
-    {
-        WPRINT_WWD_ERROR(("Could not initialize bus\n"));
-        return retval;
-    }
-
-    /* WLAN device is now powered up. Change state from OFF to DOWN */
-    wwd_wlan_status.state = WLAN_DOWN;
-
-    retval = wwd_thread_init( );
-    if ( retval != WWD_SUCCESS )
-    {
-        WPRINT_WWD_ERROR(("Could not initialize WWD thread\n"));
-        return retval;
-    }
-
-    /* Enable 32K WLAN sleep clock */
-    host_platform_init_wlan_powersave_clock();
-
-    host_platform_bus_enable_interrupt( );
 
 #ifdef MAC_ADDRESS_SET_BY_HOST
     /* See <WICED-SDK>/generated_mac_address.txt for info about setting the MAC address  */
@@ -209,10 +231,10 @@ wwd_result_t wwd_management_wifi_on( wiced_country_code_t country )
     memset(country_struct, 0, sizeof(wl_country_t));
 
     ptr  = (uint32_t*)country_struct->ccode;
-    *ptr = (uint32_t) wwd_wlan_status.country_code & 0x00ffffff;
+    *ptr = (uint32_t) wwd_wlan_status.country_code & 0x0000ffff;
     ptr  = (uint32_t*)country_struct->country_abbrev;
-    *ptr = (uint32_t) wwd_wlan_status.country_code & 0x00ffffff;
-    country_struct->rev = (int32_t) ( ( wwd_wlan_status.country_code & 0xff000000 ) >> 24 );
+    *ptr = (uint32_t) wwd_wlan_status.country_code & 0x0000ffff;
+    country_struct->rev = (int32_t) ( ( wwd_wlan_status.country_code & 0xffff0000 ) >> 16 );
 
     retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, 0, WWD_STA_INTERFACE );
     if ( retval != WWD_SUCCESS )

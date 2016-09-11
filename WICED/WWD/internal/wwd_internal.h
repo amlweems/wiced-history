@@ -194,6 +194,13 @@ extern void         wwd_set_country            ( wiced_country_code_t code );
 
 extern void         wwd_wait_for_wlan_event    ( host_semaphore_type_t* transceive_semaphore );
 
+/* Chip specific functions */
+extern wwd_result_t wwd_allow_wlan_bus_to_sleep( void );
+extern wwd_result_t wwd_ensure_wlan_bus_is_up  ( void );
+
+extern wwd_result_t wwd_chip_specific_init     ( void );
+extern wwd_result_t wwd_disable_sram3_remap    ( void );
+
 /******************************************************
  *             Global variables
  ******************************************************/

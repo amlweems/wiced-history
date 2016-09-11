@@ -25,6 +25,8 @@ extern "C"
 
 typedef /*@owned@*/ struct pbuf * wiced_buffer_t;
 
+typedef void wiced_buffer_fifo_t;
+
 /******************************************************
  *             Function declarations
  ******************************************************/

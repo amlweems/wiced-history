@@ -23,6 +23,10 @@ extern "C" {
 
 #define BESL_ASSERT(string, x)
 
+#define BESL_INFO(x)     WPRINT_SECURITY_INFO(x)
+#define BESL_ERROR(x)    WPRINT_SECURITY_ERROR(x)
+#define BESL_DEBUG(x)    WPRINT_SECURITY_DEBUG(x)
+
 #ifdef BESL_HOST_IS_ALIGNED
 
 #define BESL_READ_16(ptr)              ((uint16_t)(((uint8_t*)ptr)[0] + (((uint8_t*)ptr)[1] << 8)))

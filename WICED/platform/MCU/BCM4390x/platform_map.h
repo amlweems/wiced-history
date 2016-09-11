@@ -17,6 +17,10 @@
 extern "C" {
 #endif
 
+#ifndef __ASSEMBLER__
+#include "stdint.h"
+#endif /* ifndef __ASSEMBLER__ */
+
 /****************************************************************************************************************
  *                      Macros
  ****************************************************************************************************************/
@@ -45,7 +49,10 @@ extern "C" {
 #define PLATFORM_SOCSRAM_CH1_RAM_BASE(offset)                   PLATFORM_SOCSRAM_CH1_BASE(0xA0000  + (offset))
 #define PLATFORM_SOCSRAM_CH1_AON_RAM_BASE(offset)               PLATFORM_SOCSRAM_CH1_BASE(0x2A0000 + (offset))
 
+#define PLATFORM_SOCSRAM_MAX_SIZE                               (0x2A2000)
+
 #define PLATFORM_DDR_BASE(offset)                               (0x40000000 + (offset))
+#define PLATFORM_DDR_MAX_SIZE                                   (128 * 1024 * 1024)
 
 #define PLATFORM_FLASH_BASE(offset)                             (0x14000000 + (offset))
 
@@ -56,9 +63,12 @@ extern "C" {
 #define PLATFORM_APPSCR4_REGBASE(offset)                        (PLATFORM_REGBASE(0x003000) + (offset))
 #define PLATFORM_M2M_REGBASE(offset)                            (PLATFORM_REGBASE(0x004000) + (offset))
 #define PLATFORM_GMAC_REGBASE(offset)                           (PLATFORM_REGBASE(0x005000) + (offset))
+#define PLATFORM_SDIOH_REGBASE(offset)                          (PLATFORM_REGBASE(0x008000) + (offset))
 #define PLATFORM_EHCI_REGBASE(offset)                           (PLATFORM_REGBASE(0x006000) + (offset))
+#define PLATFORM_USB20D_REGBASE(offset)                         (PLATFORM_REGBASE(0x007000) + (offset))
 #define PLATFORM_CRYPTO_REGBASE(offset)                         (PLATFORM_REGBASE(0x00A000) + (offset))
 #define PLATFORM_DDR_CONTROLLER_REGBASE(offset)                 (PLATFORM_REGBASE(0x00B000) + (offset))
+#define PLATFORM_SOCSRAM_CONTROLLER_REGBASE(offset)             (PLATFORM_REGBASE(0x00C000) + (offset))
 #define PLATFORM_OHCI_REGBASE(offset)                           (PLATFORM_REGBASE(0x00D000) + (offset))
 #define PLATFORM_WLANCR4_REGBASE(offset)                        (PLATFORM_REGBASE(0x011000) + (offset))
 #define PLATFORM_PMU_REGBASE(offset)                            (PLATFORM_REGBASE(0x020000) + (offset))
@@ -97,18 +107,31 @@ extern "C" {
  ****************************************************************************************************************/
 
 #ifndef __ASSEMBLER__
-static inline void* platform_addr_cached_to_uncached(void *cached)
+static inline void* platform_addr_cached_to_uncached( const void* cached )
 {
+    /* First channel SOCSRAM addresses are mapped as cached via MPU, and second as uncached. */
     const uint32_t cached_addr = (uint32_t)cached;
     const uint32_t uncached_addr = cached_addr - PLATFORM_SOCSRAM_CH0_BASE(0x0) + PLATFORM_SOCSRAM_CH1_BASE(0x0);
     return (void*)uncached_addr;
 }
 
-static inline void* platform_addr_uncached_to_cached(void *uncached)
+static inline void* platform_addr_uncached_to_cached( const void* uncached )
 {
+    /* First channel SOCSRAM addresses are mapped as cached via MPU, and second as uncached. */
     const uint32_t uncached_addr = (uint32_t)uncached;
     const uint32_t cached_addr = uncached_addr - PLATFORM_SOCSRAM_CH1_BASE(0x0) + PLATFORM_SOCSRAM_CH0_BASE(0x0);
     return (void*)cached_addr;
+}
+
+static inline uint32_t platform_addr_cpu_to_dma( const void* cpu_addr )
+{
+    /* For performance optimization let CPU mainly use first SOCSRAM channel, and DMA operations use second channel. */
+    uint32_t dma_addr = (uint32_t)cpu_addr;
+    if ((dma_addr >= PLATFORM_SOCSRAM_CH0_BASE(0x0)) && (dma_addr < PLATFORM_SOCSRAM_CH0_BASE(0x0) + PLATFORM_SOCSRAM_MAX_SIZE))
+    {
+        dma_addr = dma_addr - PLATFORM_SOCSRAM_CH0_BASE(0x0) + PLATFORM_SOCSRAM_CH1_BASE(0x0);
+    }
+    return dma_addr;
 }
 #endif /* __ASSEMBLER__ */
 

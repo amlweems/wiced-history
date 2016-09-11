@@ -28,9 +28,9 @@ extern "C"
  * network interface.
  */
 
-extern VOID wiced_sta_netx_driver_entry( NX_IP_DRIVER* driver );
-extern VOID wiced_ap_netx_driver_entry ( NX_IP_DRIVER* driver );
-extern VOID wiced_p2p_netx_driver_entry( NX_IP_DRIVER* driver );
+extern VOID wiced_sta_netx_driver_entry     ( NX_IP_DRIVER* driver );
+extern VOID wiced_ap_netx_driver_entry      ( NX_IP_DRIVER* driver );
+extern VOID wiced_p2p_netx_driver_entry     ( NX_IP_DRIVER* driver );
 extern VOID wiced_ethernet_netx_driver_entry( NX_IP_DRIVER* driver );
 
 #ifdef __cplusplus

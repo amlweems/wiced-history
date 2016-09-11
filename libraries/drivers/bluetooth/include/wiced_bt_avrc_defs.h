@@ -824,8 +824,8 @@ typedef struct
 } wiced_bt_avrc_msg_pass_t;
 
 /* Command/Response indicator. */
-#define AVRC_CMD            AVCT_CMD        /* Command message */
-#define AVRC_RSP            AVCT_RSP        /* Response message */
+#define AVRC_CMD            0        /* Command message */
+#define AVRC_RSP            2        /* Response message */
 
 /** Browsing channel message */
 typedef struct

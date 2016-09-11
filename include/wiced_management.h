@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "wwd_network_interface.h"
+#include "network/wwd_network_interface.h"
 #include "wiced_tcpip.h"
 #include "wiced_wifi.h"
 
@@ -409,6 +409,49 @@ wiced_result_t wiced_wlan_connectivity_init  ( void );
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_wlan_connectivity_deinit( void );
+
+
+/*****************************************************************************/
+/** @addtogroup initconf       Deep-sleep related functions
+ *  @ingroup deep-sleep
+ *
+ * Functions to resume WICED after the deep-sleep.
+ * Platform is not necessary to support deep-sleep mode.
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/** Resumes the WICED system after deep-sleep
+ *
+ * This function sets up the system same way as wiced_init
+ * and has to be used when system resumes from deep-sleep
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_resume_after_deep_sleep( void );
+
+
+/** Brings up a network interface after deep-sleep
+ *
+ *
+ * @param[in] interface     : the interface to bring up
+ * @param[in] config        : the network IP configuration
+ * @param[in] ip_settings   : static IP settings that are mandatory for the AP interface,
+ *                        but are optional for the STA interface
+ *
+ * @return @ref wiced_result_t
+ */
+extern wiced_result_t wiced_network_resume_after_deep_sleep( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings );
+
+
+/** Resume the WLAN parts of WICED after host deep-sleep
+ *
+ * @note: The WICED core should have already been initialised when this is called
+ *
+ * @return @ref wiced_result_t
+ */
+wiced_result_t wiced_wlan_connectivity_resume_after_deep_sleep( void );
 
 /** @} */
 

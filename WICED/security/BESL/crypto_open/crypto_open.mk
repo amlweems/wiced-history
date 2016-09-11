@@ -22,8 +22,8 @@ $(NAME)_SOURCES += \
                    chacha_reference.c \
                    curve25519.c \
                    des.c \
-                   ecc.c \
                    ed25519/ed25519.c \
+                   md4.c \
                    md5.c \
                    poly1305.c \
                    seed.c \
@@ -45,7 +45,8 @@ $(NAME)_DEFINES += TROPICSSL_HAVE_LONGLONG
 # Used by SRP
 $(NAME)_DEFINES += STDC_HEADERS \
                    USE_SRP_SHA_512 \
-				   OPENSSL
+                   OPENSSL \
+                   ED25519_FORCE_32BIT
 
 # Used by SEED
 $(NAME)_DEFINES += OPENSSL_SMALL_FOOTPRINT

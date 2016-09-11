@@ -76,6 +76,16 @@ typedef enum
 } eapol_packet_type_t;
 
 
+/*
+ * MSCHAPV2 codes
+ */
+typedef enum {
+    MSCHAPV2_OPCODE_CHALLENGE       = 1,
+    MSCHAPV2_OPCODE_RESPONSE        = 2,
+    MSCHAPV2_OPCODE_SUCCESS         = 3,
+    MSCHAPV2_OPCODE_FAILURE         = 4,
+    MSCHAPV2_OPCODE_CHANGE_PASSWORD = 7,
+} mschapv2_opcode_t;
 #ifdef __cplusplus
 } /*extern "C" */
 #endif

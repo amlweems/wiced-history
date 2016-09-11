@@ -21,10 +21,6 @@ extern "C" {
 /******************************************************
  *                      Macros
  ******************************************************/
-#define BESL_INFO(x)     WPRINT_SECURITY_INFO(x)
-#define BESL_ERROR(x)    WPRINT_SECURITY_ERROR(x)
-#define BESL_DEBUG(x)    WPRINT_SECURITY_DEBUG(x)
-
 
 /******************************************************
  *                    Constants

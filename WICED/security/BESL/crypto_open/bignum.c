@@ -1848,7 +1848,7 @@ int32_t mpi_self_test(int32_t verbose)
 
         if (mpi_cmp_int(&A, gcd_pairs[i][2]) != 0) {
             if (verbose != 0)
-                printf("failed at %ld\n", i);
+                printf("failed at %ld\n", (long)i);
 
             return (1);
         }
