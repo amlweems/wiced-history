@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,7 +39,8 @@ extern "C" {
  * Audio buffer structure.
  */
 
-typedef struct wiced_audio_render_buf_s {
+typedef struct wiced_audio_render_buf_s
+{
     int64_t  pts;
     uint8_t* data_buf;
     uint32_t data_offset;
@@ -54,7 +55,7 @@ typedef struct wiced_audio_render_buf_s {
 typedef wiced_result_t (*wiced_audio_render_buf_release_cb_t)(wiced_audio_render_buf_t* buf, void* session_ptr);
 
 /**
- * Callback for providing reference time in nanosecs
+ * Callback for providing reference time in nanoseconds
  */
 
 typedef wiced_result_t (*wiced_audio_render_time_get_cb_t)(int64_t *time_in_nanosecs, void* session_ptr);
@@ -63,11 +64,25 @@ typedef wiced_result_t (*wiced_audio_render_time_get_cb_t)(int64_t *time_in_nano
  * Audio queue weight
  */
 
-typedef struct wiced_audio_render_queue_weight_s {
+typedef struct wiced_audio_render_queue_weight_s
+{
     uint32_t input_queue_weight;
     uint32_t output_buffer_weight;
     uint32_t output_buffer_size;
 } wiced_audio_render_queue_weight_t;
+
+/**
+ * Audio playback statistics
+ */
+
+typedef struct
+{
+    uint64_t    audio_frames_played;
+    uint64_t    audio_frames_dropped;
+    uint64_t    audio_frames_inserted;
+    int64_t     audio_max_early;
+    int64_t     audio_max_late;
+} wiced_audio_render_stats_t;
 
 /******************************************************
  *                    Structures
@@ -196,6 +211,15 @@ wiced_result_t wiced_audio_render_set_speed(wiced_audio_render_ref audio, float 
  * @return    Status of the operation.
  */
 wiced_result_t wiced_audio_render_get_queue_weight(wiced_audio_render_ref audio, wiced_audio_render_queue_weight_t *weight);
+
+/** Get the current audio render playback statistics.
+ *
+ * @param[in]  audio  : Pointer to the audio render instance.
+ * @param[out] stats  : Pointer to @ref wiced_audio_render_stats_t structure
+ *
+ * @return    Status of the operation.
+ */
+wiced_result_t wiced_audio_render_get_stats(wiced_audio_render_ref audio, wiced_audio_render_stats_t* stats);
 
 #ifdef __cplusplus
 } /* extern "C" */

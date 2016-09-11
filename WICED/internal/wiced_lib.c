@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -52,7 +52,7 @@
  *               Function Definitions
  ******************************************************/
 
-static uint8_t string_to_generic( const char* string, uint8_t str_length,  uint32_t* value_out, uint8_t is_unsigned, uint8_t is_hex )
+static uint8_t string_to_generic( const char* string, uint16_t str_length,  uint32_t* value_out, uint8_t is_unsigned, uint8_t is_hex )
 {
     uint8_t nibble;
     uint8_t characters_processed = 0;
@@ -132,7 +132,7 @@ uint32_t generic_string_to_unsigned( const char* str )
  * @return the number of characters successfully converted (including sign).  i.e. 0 = error
  *
  */
-uint8_t string_to_signed( const char* string, uint8_t str_length, int32_t* value_out, uint8_t is_hex )
+uint8_t string_to_signed( const char* string, uint16_t str_length, int32_t* value_out, uint8_t is_hex )
 {
     uint8_t characters_processed = 0;
     uint8_t retval;
@@ -198,7 +198,13 @@ uint8_t string_to_unsigned( const char* string, uint8_t str_length, uint32_t* va
 uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length )
 {
     uint8_t digits_left;
-    char buffer[ 10 ] = "0000000000";
+    char buffer[] = "0000000000";
+
+    if ( output == NULL )
+    {
+        return 0;
+    }
+
     max_length = (uint8_t) MIN( max_length, sizeof( buffer ) );
     digits_left = max_length;
     while ( ( value != 0 ) && ( digits_left != 0 ) )
@@ -233,7 +239,7 @@ uint8_t unsigned_to_decimal_string( uint32_t value, char* output, uint8_t min_le
 uint8_t signed_to_decimal_string( int32_t value, char* output, uint8_t min_length, uint8_t max_length )
 {
     uint8_t retval = 0;
-    if ( ( value < 0 ) && ( max_length > 0 ) )
+    if ( ( value < 0 ) && ( max_length > 0 ) && ( output != NULL ) )
     {
         *output = '-';
         output++;
@@ -262,7 +268,7 @@ uint8_t signed_to_decimal_string( int32_t value, char* output, uint8_t min_lengt
 uint8_t unsigned_to_hex_string( uint32_t value, char* output, uint8_t min_length, uint8_t max_length )
 {
     uint8_t digits_left;
-    char buffer[ 8 ] = "00000000";
+    char buffer[] = "00000000";
     max_length = (uint8_t) MIN( max_length, sizeof( buffer ) );
     digits_left = max_length;
     while ( ( value != 0 ) && ( digits_left != 0 ) )
@@ -376,6 +382,37 @@ uint8_t match_string_with_wildcard_pattern( const char* string, uint32_t length,
     return ( *current_pattern == '\0' );
 }
 
+char* wiced_ether_ntoa( const uint8_t *ea, char *buf, uint8_t buf_len )
+{
+    const char hex[] =
+    {
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+    };
+    char *output = buf;
+    const uint8_t *octet = ea;
+
+    if ( buf_len < WICED_ETHER_ADDR_STR_LEN )
+    {
+        if ( buf_len > 0 )
+        {
+            /* buffer too short */
+            buf[0] = '\0';
+        }
+        return buf;
+    }
+
+    for ( ; octet != &ea[WICED_ETHER_ADDR_LEN] ; octet++) {
+        *output++ = hex[(*octet >> 4) & 0xf];
+        *output++ = hex[*octet & 0xf];
+        *output++ = ':';
+    }
+
+    *(output-1) = '\0';
+
+    return buf;
+}
+
 /*
  ******************************************************************************
  * Length limited version of strstr. Ported from bcmutils.c
@@ -398,4 +435,113 @@ char* strnstr(const char *s, uint16_t s_len, const char *substr, uint16_t substr
     }
 
     return NULL;
+}
+
+/*
+ ******************************************************************************
+ * Length limited version of strcasestr. Ported from bcmutils.c
+ *
+ * @param     arg  The string to be searched.
+ * @param     arg  The length of the string to be searched.
+ * @param     arg  The string to be found.
+ * @param     arg  The length of the string to be found.
+ *
+* @return    pointer to the found string if search successful, otherwise NULL
+ */
+char* strncasestr(const char *s, uint16_t s_len, const char *substr, uint16_t substr_len)
+{
+    for (; s_len >= substr_len; s++, s_len--)
+    {
+        if (strncasecmp(s, substr, substr_len) == 0)
+        {
+            return (char*)s;
+        }
+    }
+
+    return NULL;
+}
+
+/*
+ ******************************************************************************
+ * Float output into the char buffer
+ *
+ * @param     arg  Char buffer in which float value to be stored.
+ * @param     arg  Float value.
+ * @param     arg  Decimal resolution max support upto 6.
+ *
+* @return    Number of char printed in buffer. On error, returns 0.
+ */
+
+uint8_t float_to_string ( char* buffer, uint8_t buffer_len, float value, uint8_t resolution  )
+{
+    long double fraction;
+    long double input = value;
+    char fraction_buf[FLOAT_TO_STRING_MAX_FRACTION_SUPPORTED + 1];
+    int  decimal;
+    uint8_t ret_value, i;
+
+    if ( ( buffer == NULL ) || (resolution > FLOAT_TO_STRING_MAX_FRACTION_SUPPORTED) )
+    {
+        return 0;
+    }
+
+    /* Extract integer part of the float value */
+    decimal = (int)input;
+
+    /* Extract float part of the value */
+    fraction = input - (int)input;
+    for ( i = 0; i <= resolution; i++ )
+    {
+        fraction *= 10;
+        fraction_buf[i] = (char)((int)fraction);
+        fraction = fraction - (int)fraction;
+    }
+
+    /* Check if round off required */
+    if (fraction_buf[resolution] > 4)
+    {
+        /* Do round off */
+        for ( i = resolution; i > 0; i--)
+        {
+            fraction_buf[i - 1] = (char)(fraction_buf[i - 1] + 1);
+            if ( fraction_buf[i - 1] <= 9)
+            {
+                break;
+            }
+        }
+
+        /* All the fractional digits are rounded. Hence increment decimal by 1 */
+        if ( i == 0 )
+        {
+            decimal += 1;
+        }
+    }
+
+    /* Convert the fractions to characters */
+    for ( i = 0; i < resolution; i++ )
+    {
+        if (fraction_buf[i] == 10)
+        {
+            fraction_buf[i] = '0';
+        }
+        else
+        {
+            fraction_buf[i] = (char)(fraction_buf[i] + '0');
+        }
+    }
+    fraction_buf[i] = '\0';
+
+    /* Prepare the decimal string */
+    ret_value =  signed_to_decimal_string( (int32_t) decimal, buffer, 1, buffer_len );
+    if ((ret_value  + 1 + resolution + 1) > buffer_len)
+    {
+        return 0;
+    }
+    buffer [ret_value] = '.';
+    ret_value++;
+
+    /* Prepare the fractional string */
+    strlcpy ( (buffer + ret_value), (char*)fraction_buf, (size_t)(buffer_len - ret_value) );
+
+    return (uint8_t)(ret_value + resolution);
 }

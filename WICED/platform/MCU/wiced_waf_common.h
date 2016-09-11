@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -50,7 +50,6 @@ typedef struct wiced_app_s
 void           wiced_waf_start_app                  ( uint32_t entry_point );
 wiced_result_t wiced_waf_check_factory_reset        ( void );
 uint32_t       wiced_waf_get_button_press_time      ( void );
-
 wiced_result_t wiced_waf_reboot                     ( void );
 wiced_result_t wiced_waf_app_set_boot               ( uint8_t app_id, char load_once );
 wiced_result_t wiced_waf_app_open                   ( uint8_t app_id, wiced_app_t* app );

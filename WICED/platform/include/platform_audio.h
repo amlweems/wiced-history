@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,26 +29,24 @@ extern "C" {
  *                   Enumerations
  ******************************************************/
 
-typedef enum
-{
-    /* input devices */
-    AUDIO_DEVICE_ID_NONE                    = 0x0000,
-    AUDIO_DEVICE_ID_AK4954_ADC_LINE         = 0x0001,
-    AUDIO_DEVICE_ID_AK4961_ADC_LINE         = 0x0002,
-    AUDIO_DEVICE_ID_AK4961_ADC_DIGITAL_MIC  = 0x0003,
-    AUDIO_DEVICE_ID_SPDIF_ADC               = 0x0004,
+#define AUDIO_DEVICE_ID_NONE                    0x0000  /* generic no device on platform */
+/* input devices */
+#define AUDIO_DEVICE_ID_AK4954_ADC_LINE         0x0001
+#define AUDIO_DEVICE_ID_AK4961_ADC_LINE         0x0002
+#define AUDIO_DEVICE_ID_AK4961_ADC_DIGITAL_MIC  0x0003
+#define AUDIO_DEVICE_ID_SPDIF_ADC               0x0004
 
-    /* output devices */
-    AUDIO_DEVICE_ID_OUTPUT_NONE             = 0x0100,    /* used to differentiate between input and output */
-    AUDIO_DEVICE_ID_AK4954_DAC_LINE         = 0x0101,
-    AUDIO_DEVICE_ID_AK4961_DAC_LINE         = 0x0102,
-    AUDIO_DEVICE_ID_WM8533_DAC_LINE         = 0x0103,
-    AUDIO_DEVICE_ID_SPDIF_DAC               = 0x0104,
-
+#define AUDIO_DEVICE_ID_OUTPUT_NONE             0x0100    /* used to differentiate between input and output */
+/* output devices */
+#define AUDIO_DEVICE_ID_AK4954_DAC_LINE         0x0101
+#define AUDIO_DEVICE_ID_AK4961_DAC_LINE         0x0102
+#define AUDIO_DEVICE_ID_WM8533_DAC_LINE         0x0103
+#define AUDIO_DEVICE_ID_SPDIF_DAC               0x0104
     /* must be last */
-    AUDIO_DEVICE_ID_MAX
+#define     AUDIO_DEVICE_ID_MAX                 0x0800  /* General testing for a device # that is out of bounds */
+/* audio device ID type */
+typedef uint16_t    platform_audio_device_id_t;
 
-} platform_audio_device_id_t;
 
 enum platform_audio_direction_e
 {

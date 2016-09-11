@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,6 +61,13 @@ extern platform_hibernation_t hibernation_config;
 /******************************************************
  *               Variables Definitions
  ******************************************************/
+
+#if PLATFORM_DDR_HEAP_SIZE_CONFIG
+#if PLATFORM_NO_DDR
+#error "Misconfiguration: to use external heap DDR has to be enabled"
+#endif
+uint8_t PLATFORM_DDR_HEAP_SECTION( ddr_heap_array )[ PLATFORM_DDR_HEAP_SIZE_CONFIG ];
+#endif
 
 static wiced_bool_t platform_inited = WICED_FALSE;
 
@@ -197,6 +204,8 @@ static void platform_boot_status_init( void )
 
 void platform_init_system_clocks( void )
 {
+    wiced_bool_t result;
+
     platform_watchdog_init( );
 
     platform_boot_status_init( );
@@ -209,7 +218,8 @@ void platform_init_system_clocks( void )
 
     platform_hibernation_init( &hibernation_config );
 
-    platform_cpu_clock_init( PLATFORM_CPU_CLOCK_FREQUENCY );
+    result = platform_cpu_clock_init( PLATFORM_CPU_CLOCK_FREQUENCY );
+    wiced_assert( "must always succeed", result == WICED_TRUE );
 
     platform_slow_clock_init( );
 }
@@ -235,10 +245,17 @@ void platform_init_mcu_infrastructure( void )
 
     /* Initialise external serial flash */
     platform_sflash_init( );
+
+    /* Initialize deep-sleep support */
+    platform_deep_sleep_init( );
 }
 
 void platform_init_complete( void )
 {
+#if !PLATFORM_NO_DDR
+    wiced_assert( "Something wrong with DDR BSS", platform_ddr_get_size( ) >= PLATFORM_DDR_BSS_SIZE );
+#endif
+
     /* Platform initialization done */
     platform_inited = WICED_TRUE;
 
@@ -266,15 +283,25 @@ uint32_t platform_ddr_get_size( void )
     return platform_ddr_size;
 }
 
+void platform_udelay( uint32_t usec )
+{
+    OSL_DELAY( usec );
+}
+
 /******************************************************
  *                 DCT Functions
  ******************************************************/
 
 wwd_result_t host_platform_get_mac_address( wiced_mac_t* mac )
 {
-#if 0 //ifndef WICED_DISABLE_BOOTLOADER
+#ifndef WICED_DISABLE_BOOTLOADER
     wiced_mac_t* temp_mac;
-    wiced_dct_read_lock( (void**)&temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, mac_address), sizeof(mac->octet) );
+    wiced_result_t result;
+    result = wiced_dct_read_lock( (void**)&temp_mac, WICED_FALSE, DCT_WIFI_CONFIG_SECTION, OFFSETOF(platform_dct_wifi_config_t, mac_address), sizeof(mac->octet) );
+    if ( result != WICED_SUCCESS )
+    {
+        return (wwd_result_t) result;
+    }
     memcpy( mac->octet, temp_mac, sizeof(mac->octet) );
     wiced_dct_read_unlock( temp_mac, WICED_FALSE );
 #else
@@ -289,6 +316,7 @@ wwd_result_t host_platform_get_ethernet_mac_address( wiced_mac_t* mac )
     uint16_t mac_size;
     wiced_mac_t* temp_mac;
     platform_result_t result;
+    wiced_result_t wiced_result;
 
     mac_size = sizeof(mac->octet);
     result = platform_otp_read_tag( PLATFORM_OTP_HW_RGN, HNBU_MACADDR, mac->octet, &mac_size );
@@ -305,9 +333,14 @@ wwd_result_t host_platform_get_ethernet_mac_address( wiced_mac_t* mac )
 
 #ifdef WICED_DISABLE_BOOTLOADER
     UNUSED_VARIABLE( temp_mac );
+    UNUSED_VARIABLE( wiced_result );
     memcpy( mac->octet, DCT_GENERATED_ETHERNET_MAC_ADDRESS, sizeof(mac->octet) );
 #else
-    wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_ETHERNET_CONFIG_SECTION, OFFSETOF( platform_dct_ethernet_config_t, mac_address ), sizeof(mac->octet) );
+    wiced_result = wiced_dct_read_lock( (void**) &temp_mac, WICED_FALSE, DCT_ETHERNET_CONFIG_SECTION, OFFSETOF( platform_dct_ethernet_config_t, mac_address ), sizeof(mac->octet) );
+    if ( wiced_result != WICED_SUCCESS )
+    {
+        return (wwd_result_t) wiced_result;
+    }
     memcpy( mac->octet, temp_mac, sizeof(mac->octet) );
     wiced_dct_read_unlock( temp_mac, WICED_FALSE );
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -283,12 +283,14 @@ int32_t read_characteristic_value( const char* url_path, const char* url_query_s
             if ( ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_INDICATE, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS ) && ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_EVENT, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS ) )
             {
                 PRINT_REST_API( "Subscribe to indication event\n" );
-                /* TODO: Subscribe to indication (parameter: indicate=1&event=1) */
+                /* Subscribe to indication (parameter: indicate=1&event=1) */
+                result = restful_smart_subscribe_indication(stream,&node,&characteristic);
             }
             else if ( ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_NOTIFY, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS ) && ( wiced_http_match_query_parameter( url_query_string, REST_PARAMETER_KEY_EVENT, REST_PARAMETER_VALUE_1 ) == WICED_SUCCESS ) )
             {
                 PRINT_REST_API( "Subscribe to notification event\n" );
-                /* TODO: Subscribe to notification (parameter: notify=1&event=1) */
+                /*  Subscribe to notification (parameter: notify=1&event=1) */
+                result = restful_smart_subscribe_notification(stream,&node,&characteristic);
             }
             break;
         default:

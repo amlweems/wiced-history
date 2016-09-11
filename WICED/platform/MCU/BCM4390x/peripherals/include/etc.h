@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -366,5 +366,8 @@ extern uint etc_totlen(etc_info_t *etc, void *p);
 extern void *etc_bcm53115_war(etc_info_t *etc, void *p);
 #endif /* ETROBO */
 extern void etc_unitmap(uint vendor, uint device, uint coreunit, uint *unit);
+
+extern int etc_multicast_filter_add(etc_info_t *etc, struct ether_addr *mcaddr);
+extern int etc_multicast_filter_remove(etc_info_t *etc, struct ether_addr *mcaddr);
 
 #endif	/* _etc_h_ */

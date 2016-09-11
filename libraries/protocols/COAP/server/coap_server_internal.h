@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -123,6 +123,8 @@ typedef struct wiced_coap_server_s
         wiced_thread_t              event_thread;
         wiced_queue_t               event_queue;
         wiced_udp_socket_t          socket;
+        wiced_dtls_context_t        context;
+        wiced_dtls_identity_t       identity;
         linked_list_t               service_list;
         linked_list_t               transaction_list;
         wiced_timed_event_t         coap_timer_event;

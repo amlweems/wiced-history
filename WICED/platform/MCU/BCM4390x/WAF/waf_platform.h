@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -30,7 +30,9 @@ extern "C" {
 #else
 #define PLATFORM_DCT_COPY1_START_ADDRESS     ( 0x00008000 )
 #endif
+#ifndef PLATFORM_DCT_COPY1_SIZE
 #define PLATFORM_DCT_COPY1_SIZE              ( 4 * SECTOR_SIZE )
+#endif
 
 #define PLATFORM_DCT_COPY2_START_ADDRESS     ( PLATFORM_DCT_COPY1_START_ADDRESS + PLATFORM_DCT_COPY1_SIZE )
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include "crypto_structures.h"
 #include "besl_structures.h"
+#include "tls_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1540,9 +1541,172 @@ void x509_free( x509_cert *crt );
 
 /** @} */
 
+/*****************************************************************************/
+/** @addtogroup 80211       802.11
+ *  @ingroup crypto
+ *
+ *  802.11 functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
 extern besl_result_t besl_802_11_generate_pmk              ( const char* password, const unsigned char* ssid, int ssid_length, unsigned char* output );
 extern besl_result_t besl_802_11_generate_random_passphrase( char* passphrase, const int passphrase_length );
 
+/** @} */
+
+/*****************************************************************************/
+/** @addtogroup dhn       DHM
+ *  @ingroup crypto
+ *
+ *  Diffie-Hellman Key Exchange functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/**
+ * @brief          Parse the ServerKeyExchange parameters
+ *
+ * @param ctx      DHM context
+ * @param p        &(start of input buffer)
+ * @param end      end of buffer
+ *
+ * @return         0 if successful, or an MYKROSSL_ERR_DHM_XXX error code
+ */
+int32_t dhm_read_params( dhm_context *ctx,
+                         const unsigned char **p,
+                         const unsigned char *end );
+
+/**
+ * @brief          Setup and write the ServerKeyExchange parameters
+ *
+ * @param ctx      DHM context
+ * @param s_size   private value size in bits
+ * @param output   destination buffer
+ * @param olen     number of chars written
+ * @param f_rng    RNG function
+ * @param p_rng    RNG parameter
+ *
+ * @note           This function assumes that ctx->P and ctx->G
+ *                 have already been properly set (for example
+ *                 using mpi_read_string or mpi_read_binary).
+ *
+ * @return         0 if successful, or an MYKROSSL_ERR_DHM_XXX error code
+ */
+int32_t dhm_make_params( dhm_context *ctx, int32_t s_size,
+                         unsigned char *output, int32_t *olen,
+                         int32_t (*f_rng)(void *), void *p_rng );
+
+/**
+ * @brief          Import the peer's public value G^Y
+ *
+ * @param ctx      DHM context
+ * @param input    input buffer
+ * @param ilen     size of buffer
+ *
+ * @return         0 if successful, or an MYKROSSL_ERR_DHM_XXX error code
+ */
+int32_t dhm_read_public( dhm_context *ctx,
+                         const unsigned char *input, int32_t ilen );
+
+/**
+ * @brief          Create own private value X and export G^X
+ *
+ * @param ctx      DHM context
+ * @param s_size   private value size in bits
+ * @param output   destination buffer
+ * @param olen     must be equal to ctx->P.len
+ * @param f_rng    RNG function
+ * @param p_rng    RNG parameter
+ *
+ * @return         0 if successful, or an MYKROSSL_ERR_DHM_XXX error code
+ */
+int32_t dhm_make_public( dhm_context *ctx, int32_t s_size,
+                         unsigned char *output, int32_t olen,
+                         int32_t (*f_rng)(void *), void *p_rng );
+
+/**
+ * @brief          Derive and export the shared secret (G^Y)^X mod P
+ *
+ * @param ctx      DHM context
+ * @param output   destination buffer
+ * @param olen     number of chars written
+ *
+ * @return         0 if successful, or an MYKROSSL_ERR_DHM_XXX error code
+ */
+int32_t dhm_calc_secret( dhm_context *ctx,
+                         unsigned char *output, uint32_t *olen );
+
+/*
+ * @brief          Free the components of a DHM key
+ */
+void dhm_free( dhm_context *ctx );
+
+int dh_tls_create_premaster_secret( void*          key_context,
+                                    uint8_t        is_ssl_3,
+                                    uint16_t       max_version,
+                                    uint8_t*       premaster_secret_out,
+                                    uint32_t*      pms_length_out,
+                                    int32_t        (*f_rng)(void *),
+                                    void*          p_rng,
+                                    uint8_t*       encrypted_output,
+                                    uint32_t*      encrypted_length_out );
+
+int dhm_tls_decode_premaster_secret( const uint8_t* data,
+                                     uint32_t       data_len,
+                                     const uint8_t* key_context,
+                                     uint8_t        is_ssl_3,
+                                     uint16_t       max_version,
+                                     uint8_t*       premaster_secret_out,
+                                     uint32_t       pms_buf_length,
+                                     uint32_t*      pms_length_out );
+
+
+
+int dhm_parse_server_key_exchange( ssl_context *ssl, const uint8_t* data, uint32_t data_length, tls_digitally_signed_signature_algorithm_t input_signature_algorithm);
+int dhm_create_server_key_exchange( ssl_context *ssl, uint8_t* data_out, uint32_t* data_buffer_length_out, tls_digitally_signed_signature_algorithm_t input_signature_algorithm );
+
+/**
+ * @brief          Checkup routine
+ *
+ * @return         0 if successful, or 1 if the test failed
+ */
+int32_t dhm_self_test( int32_t verbose );
+
+/** @} */
+
+/*****************************************************************************/
+/** @addtogroup microrng       MICRORNG
+ *  @ingroup crypto
+ *
+ *  microrang functions
+ *
+ *  @{
+ */
+/*****************************************************************************/
+
+/**
+ * @brief          MICRORNG initialization
+ *
+ * @param state    MICRORNG state to be initialized
+ *
+ * caller can optionally supply an entropy value
+ * in state that may be zero by default
+ */
+void microrng_init( microrng_state *state);
+
+/**
+ * @brief          MICRORNG rand function
+ *
+ * @param p_state  points to an MICRORNG state
+ *
+ * @return         A random int
+ */
+int32_t microrng_rand( void *p_state );
+
+/** @} */
 
 #ifdef __cplusplus
 } /*extern "C" */

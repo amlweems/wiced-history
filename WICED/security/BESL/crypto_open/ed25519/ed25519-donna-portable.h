@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,6 +17,20 @@ extern "C"
 
 #define mul32x32_64(a,b) (((uint64_t)(a))*(b))
 
+/* A uniform alignment framework for future use
+#define DONNA_ALIGN_DECL(pow2, type, var) DONNA_ALIGN_DECL_ ##pow2 (type, var)
+
+ * Then define a platform dependent implementation of DONNA_ALIGN_DECL_xxx
+#if defined(COMPILER_MSVC)
+    #define DONNA_ALIGN_DECL_xxx(type, var) type var __declspec(align(16))
+#elif defined(__ICCARM__)
+    #define DONNA_ALIGN_DECL_xxx(type, var) _Pragma ("data_alignment = xxx") \
+    type var
+#else
+    #define DONNA_ALIGN_DECL_xxx(type, var) type __attribute__((aligned(x))) var
+#endif
+*/
+
 /* platform */
 #if defined(COMPILER_MSVC)
     #include <intrin.h>
@@ -32,10 +46,23 @@ extern "C"
     #define ROTL32(a,b) _rotl(a,b)
     #define ROTR32(a,b) _rotr(a,b)
 #else
-    #include <sys/param.h>
+#if defined(__ICCARM__)
+    /*
+     * The currently support MCU such as Cortex M/R does not support vectorization.
+     * Therefore, it is safe to use default natural alignment for IAR compiler. To enable
+     * manual alignment support, please use above uniform alignment framework.
+     */
+    #define ALIGN(x)
+    #define DONNA_INLINE _Pragma ("inline=forced")
+    #define DONNA_NOINLINE _Pragma ("inline=never")
+#else
+#ifndef __NUTTX__
+#include <sys/param.h>
+#endif
     #define DONNA_INLINE inline __attribute__((always_inline))
     #define DONNA_NOINLINE __attribute__((noinline))
     #define ALIGN(x) __attribute__((aligned(x)))
+#endif
     #define ROTL32(a,b) (((a) << (b)) | ((a) >> (32 - b)))
     #define ROTR32(a,b) (((a) >> (b)) | ((a) << (32 - b)))
 #endif

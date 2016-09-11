@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -9,7 +9,7 @@
  */
 #include <stdint.h>
 #include <stdlib.h>
-static void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen )
+void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen )
 {
     unsigned char* needle_char = (unsigned char*) needle;
     unsigned char* haystack_char = (unsigned char*) haystack;

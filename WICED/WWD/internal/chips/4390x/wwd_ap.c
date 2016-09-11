@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -23,21 +23,11 @@
 #include "internal/wwd_sdpcm.h"
 #include "internal/wwd_internal.h"
 #include "internal/wwd_ap.h"
+#include "internal/wwd_ap_common.h"
 
 /******************************************************
  *                      Macros
  ******************************************************/
-
-/* HT/AMPDU specific define */
-
-#define htod32(i) ((uint32_t)(i))
-#define htod16(i) ((uint16_t)(i))
-#define dtoh32(i) ((uint32_t)(i))
-#define dtoh16(i) ((uint16_t)(i))
-#define CHECK_IOCTL_BUFFER( buff )  if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0); return WWD_BUFFER_ALLOC_FAIL; }
-#define CHECK_IOCTL_BUFFER_WITH_SEMAPHORE( buff, sema )  if ( buff == NULL ) { wiced_assert("Buffer alloc failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return WWD_BUFFER_ALLOC_FAIL; }
-#define CHECK_RETURN( expr )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); return check_res; } }
-#define CHECK_RETURN_WITH_SEMAPHORE( expr, sema )  { wwd_result_t check_res = (expr); if ( check_res != WWD_SUCCESS ) { wiced_assert("Command failed\n", 0 == 1 ); (void) host_rtos_deinit_semaphore( sema ); return check_res; } }
 
 /******************************************************
  * @cond               Constants
@@ -45,10 +35,9 @@
 
 #define WLC_EVENT_MSG_LINK      (0x01)
 #define RATE_SETTING_11_MBPS    (11000000 / 500000)
-#define AMPDU_RX_FACTOR_8K      (0)   /* max rcv ampdu len (8kb) */
-#define AMPDU_RX_FACTOR_16K     (1)   /* max rcv ampdu len (16kb) */
-#define AMPDU_RX_FACTOR_32K     (2)   /* max rcv ampdu len (32kb) */
-#define AMPDU_RX_FACTOR_64K     (3)   /* max rcv ampdu len (64kb) */
+
+#define AMPDU_STA_DEFAULT_BA_WSIZE  (12)   /* STA mode default AMPDU block ack window size */
+#define AMPDU_AP_DEFAULT_BA_WSIZE   (8)   /* SoftAP mode default AMPDU block ack window size */
 
 typedef enum
 {
@@ -390,34 +379,11 @@ wwd_result_t wwd_wifi_stop_ap( void )
  */
 wwd_result_t wwd_wifi_set_ampdu_parameters( void )
 {
-    wiced_buffer_t buffer;
-    wwd_result_t retval;
-
-    /* Set AMPDU Block ACK window size */
-    uint32_t* data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_BA_WINDOW_SIZE );
-    CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) 8;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_ampdu_parameters: Failed to set block ack window size\r\n", retval == WWD_SUCCESS );
-
-    /* Set number of MPDUs available for AMPDU */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_MPDU );
-    CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) 4;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_ampdu_parameters: Failed to set number of MPDUs\r\n", retval == WWD_SUCCESS );
-
-    /* Set size of advertised receive AMPDU */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_RX_FACTOR );
-    CHECK_IOCTL_BUFFER( data );
-    *data = (uint32_t) AMPDU_RX_FACTOR_8K;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_ampdu_parameters: Failed to set advertised receive AMPDU size\r\n", retval == WWD_SUCCESS );
-
-    return retval;
+#ifdef AMPDU_CUSTOM_RX_FACTOR
+    return wwd_wifi_set_ampdu_parameters_common( WWD_STA_INTERFACE, AMPDU_STA_DEFAULT_BA_WSIZE, AMPDU_MPDU_AUTO, AMPDU_CUSTOM_RX_FACTOR );
+#else
+    return wwd_wifi_set_ampdu_parameters_common( WWD_STA_INTERFACE, AMPDU_STA_DEFAULT_BA_WSIZE, AMPDU_MPDU_AUTO, AMPDU_RX_FACTOR_INVALID );
+#endif  /* AMPDU_CUSTOM_RX_FACTOR */
 }
 
 /** Sets the chip specific AMPDU parameters for AP and STA
@@ -426,30 +392,5 @@ wwd_result_t wwd_wifi_set_ampdu_parameters( void )
 
 wwd_result_t wwd_wifi_set_block_ack_window_size( wwd_interface_t interface )
 {
-    wiced_buffer_t buffer;
-    wwd_result_t retval;
-    uint32_t block_ack_window_size = 2;
-    uint32_t* data = NULL;
-
-    /* If the AP interface is already up then don't change the Block Ack window size */
-    if ( wwd_wifi_is_ready_to_transceive( WWD_AP_INTERFACE ) == WWD_SUCCESS )
-    {
-        return WWD_SUCCESS;
-    }
-
-    /* AP can handle BA window size of 1 but STA can handle BA window size of 8 */
-    if ( interface == WWD_STA_INTERFACE )
-    {
-        block_ack_window_size = 8;
-    }
-
-    /* Set AMPDU Block ACK window size */
-    data = (uint32_t*) wwd_sdpcm_get_iovar_buffer( &buffer, (uint16_t) 4, IOVAR_STR_AMPDU_BA_WINDOW_SIZE );
-    CHECK_IOCTL_BUFFER( data );
-    *data = block_ack_window_size;
-    retval = wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );
-
-    wiced_assert("set_block_ack_window_size: Failed to set block ack window size\r\n", retval == WWD_SUCCESS );
-
-    return retval;
+    return wwd_wifi_set_block_ack_window_size_common( interface, AMPDU_AP_DEFAULT_BA_WSIZE, AMPDU_STA_DEFAULT_BA_WSIZE );
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -95,6 +95,7 @@
 #include <stdio.h>
 #include <time.h>
 
+wiced_tls_key_type_t type;
 
 static int32_t x509_get_rsa_public_key( const unsigned char **p, const unsigned char *end, mpi * N, mpi * E );
 
@@ -388,7 +389,8 @@ static int32_t x509_get_name(const unsigned char **p, const unsigned char *end, 
 
     if (**p != ASN1_BMP_STRING && **p != ASN1_UTF8_STRING &&
         **p != ASN1_T61_STRING && **p != ASN1_PRINTABLE_STRING &&
-        **p != ASN1_IA5_STRING && **p != ASN1_UNIVERSAL_STRING)
+        **p != ASN1_IA5_STRING && **p != ASN1_UNIVERSAL_STRING &&
+        **p != ASN1_BIT_STRING )
         return (TROPICSSL_ERR_X509_CERT_INVALID_NAME |
             TROPICSSL_ERR_ASN1_UNEXPECTED_TAG);
 
@@ -502,7 +504,7 @@ static int32_t x509_get_dates(const unsigned char **p,
     /*
      * TODO: also handle GeneralizedTime
      */
-    if( ( ( ret = asn1_get_tag( p, end, &len, ASN1_UTC_TIME ) ) == 0 ) || ( len != 13 ) )
+    if( ( ( ret = asn1_get_tag( p, end, &len, ASN1_UTC_TIME ) ) == 0 ) && ( len == 13 ) )
     {
         short_year = 1;
     }
@@ -524,7 +526,7 @@ static int32_t x509_get_dates(const unsigned char **p,
     *p += len;
 
     short_year = 0;
-    if( ( ( ret = asn1_get_tag( p, end, &len, ASN1_UTC_TIME ) ) == 0 ) || ( len != 13 ) )
+    if( ( ( ret = asn1_get_tag( p, end, &len, ASN1_UTC_TIME ) ) == 0 ) && ( len == 13 ) )
     {
         short_year = 1;
     }
@@ -557,13 +559,13 @@ static int32_t x509_get_dates(const unsigned char **p,
  *         algorithm              AlgorithmIdentifier,
  *         subjectPublicKey      BIT STRING }
  */
-static int32_t x509_get_public_key( x509_cert* crt, const unsigned char **p, const unsigned char *end )
+static int32_t x509_get_public_key( x509_buf* pk_oid, const unsigned char **p, const unsigned char *end, wiced_tls_key_t** public_key_out )
 {
     int32_t ret;
     uint32_t len;
     const unsigned char *end2;
 
-    ret = x509_get_alg( p, end, &crt->pk_oid );
+    ret = x509_get_alg( p, end, pk_oid );
     if ( ret != 0 )
     {
         return ( ret );
@@ -588,17 +590,29 @@ static int32_t x509_get_public_key( x509_cert* crt, const unsigned char **p, con
     }
 
     /* Check for PKCS1 public keys */
-    if ( crt->pk_oid.len == 9 && memcmp( crt->pk_oid.p, OID_PKCS1, 8 ) == 0 )
+    if ( pk_oid->len == 9 && memcmp( pk_oid->p, OID_PKCS1, 8 ) == 0 )
     {
-        rsa_context* rsa_key = tls_host_malloc( "pubkey", sizeof(rsa_context) );
+        rsa_context* rsa_key = (rsa_context*) *public_key_out;
+        /* coverity[Resource leaks]
+           FALSE-POSITIVE:
+           Only when public_key_out is not allocated it allocates heap for rsa_key.
+           So caller must manage this very carefully.
+           However, generally public_key_out is scanning memory pointer on the x509 DER format
+           from loaded file (or data packet) to parse,
+           we can assume already loaded on memory. */
         if ( rsa_key == NULL )
         {
-            return TLS_ERROR_OUT_OF_MEMORY;
+            rsa_key = tls_host_malloc( "pubkey", sizeof(rsa_context) );
+            if ( rsa_key == NULL )
+            {
+                return TLS_ERROR_OUT_OF_MEMORY;
+            }
+            *public_key_out = (wiced_tls_key_t*) rsa_key;
         }
-        crt->public_key = (wiced_tls_key_t*) rsa_key;
-        memset( crt->public_key, 0, sizeof(rsa_context) );
-        crt->public_key->type = TLS_RSA_KEY;
 
+        memset( rsa_key, 0, sizeof(rsa_context) );
+        rsa_key->type = TLS_RSA_KEY;
+        type = TLS_RSA_KEY;
         ret = x509_get_rsa_public_key( p, end2, &rsa_key->N, &rsa_key->E );
         if ( ret != 0 )
         {
@@ -611,27 +625,39 @@ static int32_t x509_get_public_key( x509_cert* crt, const unsigned char **p, con
             return ( ret );
         }
 
-        crt->public_key->length = mpi_size( &rsa_key->N );
+        rsa_key->length = mpi_size( &rsa_key->N );
     }
     /* Check for X9.62 public keys */
-    else if ( crt->pk_oid.len == 7 && memcmp( crt->pk_oid.p, OID_x962_KEY_TYPES, 6 ) == 0 )
+    else if ( pk_oid->len == 7 && memcmp( pk_oid->p, OID_x962_KEY_TYPES, 6 ) == 0 )
     {
+        int32_t l;
         uint8_t compression_type = *(*p)++;
         if ( compression_type != 0x04 && compression_type != 0x02 )
         {
             return TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY;
         }
 
-        wiced_tls_ecc_key_t* ecc_key = tls_host_malloc("x509", sizeof(wiced_tls_ecc_key_t));
+        wiced_tls_ecc_key_t* ecc_key = (wiced_tls_ecc_key_t*) *public_key_out;
         if ( ecc_key == NULL )
         {
-            return TLS_ERROR_OUT_OF_MEMORY;
+            ecc_key = tls_host_malloc("x509", sizeof(wiced_tls_ecc_key_t));
+            if ( ecc_key == NULL )
+            {
+                return TLS_ERROR_OUT_OF_MEMORY;
+            }
+            *public_key_out = (wiced_tls_key_t*) ecc_key;
         }
         memset( ecc_key, 0xFF, sizeof( *ecc_key ) );
         ecc_key->type   = TLS_ECC_KEY;
-        ecc_key->length = len - 2;
+        type = TLS_ECC_KEY;
+        l = len - 2;
+        /* ecc_key->length have to be bigger than 0 and smaller than ECC_KEY_MAX */
+        if ( ( l <= 0 ) || ( l > ECC_KEY_MAX ) )
+        {
+            return TROPICSSL_ERR_X509_CERT_INVALID_PUBKEY;
+        }
+        ecc_key->length = l;
         memcpy( ecc_key->key, *p, ecc_key->length );
-        crt->public_key = (wiced_tls_key_t*) ecc_key;
         *p += ecc_key->length;
     }
 
@@ -837,8 +863,6 @@ static int32_t x509_get_ext(const unsigned char **p,
         if (*p != end2)
             return (TROPICSSL_ERR_X509_CERT_INVALID_EXTENSIONS |
                 TROPICSSL_ERR_ASN1_LENGTH_MISMATCH);
-
-        max_pathlen++;
     }
 
     if (*p != end)
@@ -864,7 +888,7 @@ int32_t x509_convert_pem_to_der( const unsigned char* pem_certificate, uint32_t 
     {
         const unsigned char* pem_cert_start;
         uint32_t             pem_cert_length;
-    } chained_cert_details[5];
+    } chained_cert_details[MAX_CERT_CHAINS];
 
     do
     {
@@ -888,6 +912,14 @@ int32_t x509_convert_pem_to_der( const unsigned char* pem_certificate, uint32_t 
             s1++;
         else
             return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
+
+        /* Still Coverity complains about the boundary issue,
+           movied boundary checker here */
+        /* generally cert chain is 1, no more than 3 in practice */
+        if ( cert_count >= MAX_CERT_CHAINS )
+        {
+            return ( TROPICSSL_ERR_X509_CERT_INVALID_PEM );
+        }
 
         /* Get the PEM data length */
         chained_cert_details[cert_count].pem_cert_length = s2 - s1;
@@ -1150,7 +1182,8 @@ int32_t x509_parse_certificate_data( x509_cert* crt, const unsigned char* p, uin
         return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
     }
 
-    ret = x509_get_public_key(crt, &p, p + len );
+    crt->public_key = NULL;
+    ret = x509_get_public_key( &crt->pk_oid, &p, p + len, &crt->public_key );
     if ( ret != 0 )
     {
         return ( TROPICSSL_ERR_X509_CERT_INVALID_FORMAT | ret );
@@ -1368,6 +1401,7 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
     int32_t  newlen;
     const unsigned char *s1, *s2;
     const unsigned char *p = buf, *end;
+    x509_buf pk_oid;
     unsigned char *decode_buf = NULL;
     unsigned char des3_iv[8];
     s1 = (unsigned char *)strstr((char *)buf,
@@ -1442,16 +1476,16 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
         if (enc != 0) {
 #if defined(TROPICSSL_DES_C)
             if (pwd == NULL) {
-                tls_host_free ( buf );
+                tls_host_free ( decode_buf );
                 return
                     (TROPICSSL_ERR_X509_KEY_PASSWORD_REQUIRED);
             }
 
-            x509_des3_decrypt(des3_iv, buf, buflen, pwd, pwdlen);
+            x509_des3_decrypt(des3_iv, decode_buf, buflen, pwd, pwdlen);
 
-            if (buf[0] != 0x30 || buf[1] != 0x82 ||
-                buf[4] != 0x02 || buf[5] != 0x01) {
-                tls_host_free ( buf );
+            if (decode_buf[0] != 0x30 || decode_buf[1] != 0x82 ||
+                decode_buf[4] != 0x02 || decode_buf[5] != 0x01) {
+                tls_host_free ( decode_buf );
                 return
                     (TROPICSSL_ERR_X509_KEY_PASSWORD_MISMATCH);
             }
@@ -1482,7 +1516,13 @@ int32_t x509parse_pubkey( rsa_context *rsa, unsigned char *buf, int32_t buflen, 
 
     end = p + len;
 
-    if ((ret = x509_get_rsa_public_key( &p, p + len, &rsa->N, &rsa->E)) != 0) {
+    /* coverity[Resource leaks]
+       FALSE-POSITIVE:
+       rsa_context *rsa should be allocated statically (or dynamically) by caller.
+       generally this is the x509 DER format from loaded file (or data packet) to parse,
+       we can assume already loaded on memory.
+       Refer to the another comment on the function x509_get_public_key as well */
+    if ((ret = x509_get_public_key( &pk_oid, &p, p + len, (wiced_tls_key_t**)&rsa)) != 0) {
         if (s1 != NULL)
             tls_host_free ( decode_buf );
 
@@ -1708,6 +1748,84 @@ static int32_t _x509parse_key_1(rsa_context * rsa, const unsigned char *buf, uin
 }
 
 /*
+ * Parse a private ECC key
+ */
+static int32_t _x509parse_key_2(wiced_tls_ecc_key_t * ecc, const unsigned char *buf, uint32_t buflen,
+          const unsigned char *pwd, uint32_t pwdlen)
+{
+    int32_t ret, enc;
+    uint32_t len;
+    int32_t newlen;
+    unsigned char *decode_buf = NULL;
+    const unsigned char *s1, *s2;
+    const unsigned char *p = buf, *end;
+
+    s1 = (unsigned char *) strstr( (char *) buf, "-----BEGIN EC PRIVATE KEY-----" );
+
+    if ( s1 != NULL )
+    {
+        s2 = (unsigned char *) strstr( (char *) buf, "-----END EC PRIVATE KEY-----" );
+
+        if ( s2 == NULL || s2 <= s1 )
+            return ( TROPICSSL_ERR_X509_KEY_INVALID_PEM );
+
+        s1 += 30;
+
+        if ( *s1 == '\r' )
+            s1++;
+        if ( *s1 == '\n' )
+            s1++;
+        else
+            return ( TROPICSSL_ERR_X509_KEY_INVALID_PEM );
+
+        enc = 0;
+
+        len = 3 * ( ( ( (uint32_t) ( s2 - s1 ) ) + 3 ) / 4 );
+
+        decode_buf = (unsigned char *) tls_host_malloc( "x509", len );
+        if ( decode_buf == NULL )
+        {
+            return ( 1 );
+        }
+
+        newlen = base64_decode( s1, s2 - s1, decode_buf, len, BASE64_STANDARD );
+        if ( newlen < 0 )
+        {
+            tls_host_free( decode_buf );
+            return ( TROPICSSL_ERR_X509_KEY_INVALID_PEM );
+        }
+
+        len = newlen;
+        buflen = len;
+        p = decode_buf;
+
+        (void) end;
+        (void) enc;
+        (void) ret;
+    }
+
+    memset( ecc, 0, sizeof(wiced_tls_ecc_key_t) );
+
+    ecc->length = uECC_BYTES;
+    memcpy( ecc->key, ( p + 7 ), ecc->length );
+    ecc->type = TLS_ECC_KEY;
+    ecc->version = 0;
+    end = p + buflen;
+
+/*
+ *   ECPrivateKey ::= SEQUENCE {
+ *   version        INTEGER { ecPrivkeyVer1(1) } (ecPrivkeyVer1),
+ *   privateKey     OCTET STRING,
+ *   parameters [0] ECParameters {{ NamedCurve }} OPTIONAL,
+ *   publicKey  [1] BIT STRING OPTIONAL
+ *   }
+ */
+
+    tls_host_free( decode_buf );
+    return ( 0 );
+}
+
+/*
  * Parse a private RSA key
  */
 int32_t x509parse_key(rsa_context * rsa,
@@ -1726,8 +1844,24 @@ int32_t x509parse_key(rsa_context * rsa,
     return ret;
 }
 
-
-
+/*
+ * Parse a private ECC key
+ */
+int32_t x509parse_key_ecc(wiced_tls_ecc_key_t * ecc,
+          const unsigned char *key, uint32_t keylen,
+          const unsigned char *pwd, uint32_t pwdlen)
+{
+    int ret;
+    unsigned char *buf1;
+    buf1 = malloc(keylen);
+    if (buf1 == NULL) {
+        return (1);
+    }
+    memcpy(buf1, key, keylen);
+    ret = _x509parse_key_2(ecc, buf1, keylen, pwd, pwdlen);
+    free(buf1);
+    return ret;
+}
 
 #ifdef ENABLE_X509_FUNCTIONS_WHICH_USE_SPRINTF
 
@@ -1736,13 +1870,34 @@ int32_t x509parse_key(rsa_context * rsa,
 #define snprintf _snprintf
 #endif
 
+#include <stdarg.h>
+static int snprintf2( char * s, size_t n, char **buf, const char * format, ... )
+{
+    int ret;
+    va_list args;
+
+    va_start(args, format);
+    ret = vsnprintf( s, n, format, args );
+    va_end(args);
+
+    if ( ret >= 0 )
+    {
+        *buf += ret;
+    }
+
+    printf( "%s\n", s );
+    printf( "ret = %d\n", ret );
+
+    return ret;
+}
+
 /*
  * Store the name in printable form into buf; no more
  * than (end - buf) characters will be written
  */
 int32_t x509parse_dn_gets(char *buf, const char *end, const x509_name *dn)
 {
-    int32_t i;
+    int32_t i, ret;
     unsigned char c;
     const x509_name *name;
     char s[128], *p;
@@ -1754,52 +1909,61 @@ int32_t x509parse_dn_gets(char *buf, const char *end, const x509_name *dn)
 
     while (name != NULL) {
         if (name != dn)
-            p += snprintf(p, end - p, ", ");
+            if ( ( ret = snprintf2(p, end - p, &p, ", ") ) < 0 )
+                return ret;
 
         if (memcmp(name->oid.p, OID_X520, 2) == 0) {
             switch (name->oid.p[2]) {
             case X520_COMMON_NAME:
-                p += snprintf(p, end - p, "CN=");
+                if ( ( ret = snprintf2( p, end - p, &p, "CN=" ) ) < 0 )
+                    return ret;
                 break;
 
             case X520_COUNTRY:
-                p += snprintf(p, end - p, "C=");
+                if ( ( ret = snprintf2( p, end - p, &p, "C=" ) ) < 0 )
+                    return ret;
                 break;
 
             case X520_LOCALITY:
-                p += snprintf(p, end - p, "L=");
+                if ( ( ret = snprintf2( p, end - p, &p, "L=" ) ) < 0 )
+                    return ret;
                 break;
 
             case X520_STATE:
-                p += snprintf(p, end - p, "ST=");
+                if ( ( ret = snprintf2( p, end - p, &p, "ST=" ) ) < 0 )
+                    return ret;
                 break;
 
             case X520_ORGANIZATION:
-                p += snprintf(p, end - p, "O=");
+                if ( ( ret = snprintf2( p, end - p, &p, "O=" ) ) < 0 )
+                    return ret;
                 break;
 
             case X520_ORG_UNIT:
-                p += snprintf(p, end - p, "OU=");
+                if ( ( ret = snprintf2( p, end - p, &p, "OU=" ) ) < 0 )
+                    return ret;
                 break;
 
             default:
-                p += snprintf(p, end - p, "0x%02X=",
-                          name->oid.p[2]);
+                if ( ( ret = snprintf2( p, end - p, &p, "0x%02X=", name->oid.p[2] ) ) < 0 )
+                    return ret;
                 break;
             }
         } else if (memcmp(name->oid.p, OID_PKCS9, 8) == 0) {
             switch (name->oid.p[8]) {
             case PKCS9_EMAIL:
-                p += snprintf(p, end - p, "emailAddress=");
+                if ( ( ret = snprintf2( p, end - p, &p, "emailAddress=" ) ) < 0 )
+                    return ret;
                 break;
 
             default:
-                p += snprintf(p, end - p, "0x%02X=",
-                          name->oid.p[8]);
+                if ( ( ret = snprintf2( p, end - p, &p, "0x%02X=", name->oid.p[8] ) ) < 0 )
+                    return ret;
                 break;
             }
         } else
-            p += snprintf(p, end - p, "\?\?=");
+            if ( ( ret = snprintf2( p, end - p, &p, "\?\?=" ) ) < 0 )
+                    return ret;
 
         for (i = 0; i < name->val.len; i++) {
             if (i >= (int)sizeof(s) - 1)
@@ -1812,7 +1976,8 @@ int32_t x509parse_dn_gets(char *buf, const char *end, const x509_name *dn)
                 s[i] = c;
         }
         s[i] = '\0';
-        p += snprintf(p, end - p, "%s", s);
+        if ( ( ret = snprintf2( p, end - p, &p, "%s", s ) ) < 0 )
+                    return ret;
         name = name->next;
     }
 
@@ -1826,83 +1991,106 @@ int32_t x509parse_dn_gets(char *buf, const char *end, const x509_name *dn)
 char *x509parse_cert_info(char *buf, size_t buf_size,
               const char *prefix, const x509_cert * crt)
 {
-    int32_t i, n;
+    int32_t i, n, ret;
     char *p;
     const char *end;
 
     p = buf;
     end = buf + buf_size - 1;
 
-    p += snprintf(p, end - p, "%scert. version : %ld\n",
-              prefix, (long)crt->version);
-    p += snprintf(p, end - p, "%sserial number : ", prefix);
+    if ( snprintf2(p, end - p, &p, "%scert. version : %ld\n", prefix, (long)crt->version) < 0 )
+        return NULL;
+    if ( snprintf2(p, end - p, &p, "%sserial number : ", prefix) < 0 )
+        return NULL;
 
     n = (crt->serial.len <= 32)
         ? crt->serial.len : 32;
 
     for (i = 0; i < n; i++)
-        p += snprintf(p, end - p, "%02X%s",
-                  crt->serial.p[i], (i < n - 1) ? ":" : "");
+        if ( snprintf2(p, end - p, &p, "%02X%s", crt->serial.p[i], (i < n - 1) ? ":" : "") < 0 )
+            return NULL;
 
-    p += snprintf(p, end - p, "\n%sissuer    name  : ", prefix);
-    p += x509parse_dn_gets(p, end, &crt->issuer);
+    if ( snprintf2(p, end - p, &p, "\n%sissuer    name  : ", prefix) < 0 )
+        return NULL;
+    if ( ( ret = x509parse_dn_gets(p, end, &crt->issuer ) ) < 0 )
+        return NULL;
+    p += ret;
 
-    p += snprintf(p, end - p, "\n%ssubject name  : ", prefix);
-    p += x509parse_dn_gets(p, end, &crt->subject);
+    if ( snprintf2(p, end - p, &p, "\n%ssubject name  : ", prefix) < 0 )
+        return NULL;
+    if ( ( ret = x509parse_dn_gets(p, end, &crt->subject ) ) < 0 )
+        return NULL;
+    p += ret;
 
-    p += snprintf(p, end - p, "\n%sissued    on      : "
+    if ( snprintf2(p, end - p, &p, "\n%sissued    on      : "
               "%04ld-%02ld-%02ld %02ld:%02ld:%02ld", prefix,
               (long)crt->valid_from.year, (long)crt->valid_from.mon,
               (long)crt->valid_from.day, (long)crt->valid_from.hour,
-              (long)crt->valid_from.min, (long)crt->valid_from.sec);
+              (long)crt->valid_from.min, (long)crt->valid_from.sec) < 0 )
+        return NULL;
 
-    p += snprintf(p, end - p, "\n%sexpires on      : "
+    if ( snprintf2(p, end - p, &p, "\n%sexpires on      : "
               "%04ld-%02ld-%02ld %02ld:%02ld:%02ld", prefix,
               (long)crt->valid_to.year, (long)crt->valid_to.mon,
               (long)crt->valid_to.day, (long)crt->valid_to.hour,
-              (long)crt->valid_to.min, (long)crt->valid_to.sec);
+              (long)crt->valid_to.min, (long)crt->valid_to.sec) < 0 )
+        return NULL;
 
-    p += snprintf(p, end - p, "\n%ssigned using  : RSA+", prefix);
+    if ( snprintf2(p, end - p, &p, "\n%ssigned using  : RSA+", prefix) < 0 )
+        return NULL;
 
     switch (crt->sig_oid1.p[8]) {
     case RSA_MD2:
-        p += snprintf(p, end - p, "MD2");
+        if ( snprintf2(p, end - p, &p, "MD2") < 0 )
+            return NULL;
         break;
     case RSA_MD4:
-        p += snprintf(p, end - p, "MD4");
+        if ( snprintf2(p, end - p, &p, "MD4") < 0 )
+            return NULL;
         break;
     case RSA_MD5:
-        p += snprintf(p, end - p, "MD5");
+        if ( snprintf2(p, end - p, &p, "MD5") < 0 )
+            return NULL;
         break;
     case RSA_SHA1:
-        p += snprintf(p, end - p, "SHA1");
+        if ( snprintf2(p, end - p, &p, "SHA1") < 0 )
+            return NULL;
         break;
     case RSA_SHA256:
-        p += snprintf( p, end - p, "SHA256" );
+        if ( snprintf2( p, end - p, &p, "SHA256" ) < 0 )
+            return NULL;
         break;
     case RSA_SHA384:
-        p += snprintf( p, end - p, "SHA384" );
+        if ( snprintf2( p, end - p, &p, "SHA384" ) < 0 )
+            return NULL;
         break;
     case RSA_SHA512:
-        p += snprintf( p, end - p, "SHA512" );
+        if ( snprintf2( p, end - p, &p, "SHA512" ) < 0 )
+            return NULL;
         break;
     default:
-        p += snprintf(p, end - p, "???");
+        if ( snprintf2(p, end - p, &p, "???") < 0 )
+            return NULL;
         break;
     }
 
     if ( crt->public_key->type == TLS_RSA_KEY )
     {
-        rsa_context* rsa = (rsa_context*) &crt->public_key;
-        snprintf(p, end - p, "\n%sRSA key size  : %ld bits\n", prefix,
-                  (long)(rsa->N.n * (int) sizeof(uint32_t) * 8));
+        rsa_context* rsa = (rsa_context*) crt->public_key;
+        if ( snprintf(p, end - p, "\n%sRSA key size  : %ld bits\n", prefix,
+                  (long)(rsa->N.n * (int) sizeof(uint32_t) * 8)) < 0 )
+            return NULL;
     }
     else if ( crt->public_key->type == TLS_ECC_KEY )
     {
-        wiced_tls_ecc_key_t* ecc = (wiced_tls_ecc_key_t*) &crt->public_key;
-        snprintf(p, end - p, "\n%sECC key size  : %ld bits\n", prefix,
-                  (long)(ecc->length * 8));
+        wiced_tls_ecc_key_t* ecc = (wiced_tls_ecc_key_t*) crt->public_key;
+        /* for brainpool curve key size in bit is length * 4 */
+        if ( snprintf(p, end - p, "\n%sECC key size  : %ld bits\n", prefix,
+                  (long)(ecc->length * 4)) < 0 )
+            return NULL;
     }
+
+    printf( "%s\n", buf );
 
     return (buf);
 }
@@ -2030,7 +2218,7 @@ int32_t x509parse_verify(const x509_cert *crt,
 
             x509_hash( cur->tbs.p, cur->tbs.len, hash_id, hash );
 
-            if ( rsa_pkcs1_verify( (rsa_context*)cur->next->public_key, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
+            if ( rsa_pkcs1_verify( (rsa_context*)cur->next->public_key, RSA_PUBLIC, ( rsa_hash_id_t ) hash_id, 0, hash, cur->sig.p ) != 0 )
             {
                 return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
             }
@@ -2048,7 +2236,7 @@ int32_t x509parse_verify(const x509_cert *crt,
 
                 if ( trusted_ca_iter->public_key->type == TLS_RSA_KEY )
                 {
-                    if ( rsa_pkcs1_verify( (rsa_context*) trusted_ca_iter->public_key, RSA_PUBLIC, hash_id, 0, hash, cur->sig.p ) != 0 )
+                    if ( rsa_pkcs1_verify( (rsa_context*) trusted_ca_iter->public_key, RSA_PUBLIC, ( rsa_hash_id_t ) hash_id, 0, hash, cur->sig.p ) != 0 )
                     {
                         return ( TROPICSSL_ERR_X509_CERT_VERIFY_FAILED );
                     }

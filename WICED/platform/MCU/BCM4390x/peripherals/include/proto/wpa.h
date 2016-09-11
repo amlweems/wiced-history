@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,7 +15,7 @@
 #ifndef _proto_wpa_h_
 #define _proto_wpa_h_
 
-#include <typedefs.h>
+#include <bcmdefs.h>
 #include <proto/ethernet.h>
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,6 +20,7 @@
 #define NX_PHYSICAL_TRAILER         (0)
 #undef NX_LINK_MTU
 
+#define NX_IP_MAX_REASSEMBLY_TIME   1
 #define NX_DHCP_PACKET_PAYLOAD      (NX_BOOT_BUFFER_SIZE + NX_PHYSICAL_HEADER + 20 + 8 + 4 + 100)
 #define NX_DHCP_THREAD_PRIORITY     (4)
 #define NX_DNS_MAX_RETRIES          (1)
@@ -38,6 +39,8 @@
 #define NX_DHCP_CLIENT_RESTORE_STATE
 
 #define NX_TCP_ENABLE_KEEPALIVE
+
+#define NX_ARP_UPDATE_RATE 1
 
 /* This define specifies the maximum packets that are out of order. The default value is 8.  */
 #define NX_TCP_MAX_OUT_OF_ORDER_PACKETS 8
@@ -65,6 +68,7 @@ extern UINT nx_rand16( void );
 /* This define enabled simple IPv6 multicast group join/leave function.  By default
    the IPv6 multicast join/leave function is not enabled. */
 #define NX_IPV6_MULTICAST_ENABLE
+#define NX_IPV6_MLD_MULTICAST_ENABLE
 
 /* Disable NetX information gathering */
 #define NX_DISABLE_ARP_INFO
@@ -78,7 +82,9 @@ extern UINT nx_rand16( void );
 /*
 #define NX_ARP_DEFEND_BY_REPLY
 */
+/*
 #define NX_DISABLE_UDP_INFO
+*/
 
 extern unsigned long host_rtos_get_tickrate( void );
 
@@ -92,9 +98,9 @@ extern unsigned long host_rtos_get_tickrate( void );
 
 /* To use the ARP collision handler to check for invalid ARP messages
    matching existing entries in the table, enable this feature.  */
-/* 
+/*
 #define  NX_ARP_MAC_CHANGE_NOTIFICATION_ENABLE
-*/ 
+*/
 
 
 /* Define the ARP defend interval. The default value is 10 seconds.  */
@@ -131,7 +137,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_DISABLE_LOOPBACK_INTERFACE
 #undef NX_MAX_PHYSICAL_INTERFACES
 #undef NX_TCP_IMMEDIATE_ACK
-#undef NX_TCP_ACK_EVERY_N_PACKETS
+#define NX_TCP_ACK_EVERY_N_PACKETS                      2
 #undef NX_MAX_IPV6_ADDRESSES
 #undef NX_DISABLE_LOOPBACK_INTERFACE
 #undef FEATURE_NX_IPV6
@@ -141,7 +147,6 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_ARP_EXPIRATION_RATE
 #undef NX_ARP_MAX_QUEUE_DEPTH
 #undef NX_ARP_MAXIMUM_RETRIES
-#undef NX_ARP_UPDATE_RATE
 #undef NX_AUTO_IP_ANNOUNCE_INTERVAL
 #undef NX_AUTO_IP_ANNOUNCE_NUM
 #undef NX_AUTO_IP_ANNOUNCE_WAIT
@@ -360,7 +365,7 @@ extern unsigned long host_rtos_get_tickrate( void );
 #undef NX_SNTP_SERVER_UDP_PORT
 #undef NX_SNTP_UPDATE_TIMEOUT_INTERVAL
 #undef NX_TCP_ACK_TIMER_RATE
-#undef NX_TCP_ENABLE_WINDOW_SCALING
+#define NX_TCP_ENABLE_WINDOW_SCALING
 #undef NX_TCP_FAST_TIMER_RATE
 #undef NX_TCP_KEEPALIVE_INITIAL
 #undef NX_TCP_KEEPALIVE_RETRIES

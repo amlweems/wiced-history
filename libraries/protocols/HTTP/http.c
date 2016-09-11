@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -106,22 +106,75 @@ wiced_result_t wiced_http_get( wiced_ip_address_t* address, const char* query, v
     return ( result );
 }
 
+
+static wiced_bool_t certificate_loaded = WICED_FALSE;
+static wiced_tls_identity_t tls_identity;
+
 wiced_result_t wiced_https_get( wiced_ip_address_t* address, const char* query, void* buffer, uint32_t buffer_length, const char* peer_cn )
 {
     wiced_tcp_socket_t         socket;
     wiced_packet_t*            reply_packet;
     wiced_result_t             rx_result;
-    wiced_tls_context_t        context;
+    wiced_tls_context_t        *context;
     wiced_result_t             result;
     char*                      buffer_ptr = (char*) buffer;
 
-    wiced_tls_init_context( &context, NULL, peer_cn );
+    platform_dct_security_t* dct_security = NULL;
+
+    if(certificate_loaded == WICED_FALSE)
+    {
+        /*
+         * Certificates are loaded into library [and not configured from application]. The newer version of the HTTP client library implementation provides
+         *  support for configuring certificates from application.
+         */
+        /* Lock the DCT to allow us to access the certificate and key */
+        WPRINT_APP_INFO(( "Read the certificate Key from DCT\n" ));
+        result = wiced_dct_read_lock( (void**) &dct_security, WICED_FALSE, DCT_SECURITY_SECTION, 0, sizeof( *dct_security ) );
+        if ( result != WICED_SUCCESS )
+        {
+             WPRINT_APP_INFO(("Unable to lock DCT to read certificate\n"));
+             return WICED_ERROR;
+        }
+
+        if(dct_security->private_key[0] != '\0' && dct_security->certificate[0] != '\0')
+        {
+            /* Setup TLS identity */
+            result = wiced_tls_init_identity( &tls_identity, dct_security->private_key, strlen( dct_security->private_key ), (uint8_t*) dct_security->certificate, strlen( dct_security->certificate ) );
+            if ( result != WICED_SUCCESS )
+            {
+                WPRINT_APP_INFO(( "Unable to initialize TLS identity. Error = [%d]\n", result ));
+                wiced_dct_read_unlock( dct_security, WICED_FALSE );
+                return WICED_ERROR;
+            }
+        }
+
+        /* Finished accessing the certificates */
+        result = wiced_dct_read_unlock( dct_security, WICED_FALSE );
+        if ( result != WICED_SUCCESS )
+        {
+            WPRINT_APP_INFO(( "DCT Read Unlock Failed. Error = [%d]\n", result ));
+        }
+
+        certificate_loaded = WICED_TRUE;
+    }
 
     if ( ( result = wiced_tcp_create_socket( &socket, WICED_STA_INTERFACE ) ) != WICED_SUCCESS )
     {
         return result;
     }
-    wiced_tcp_enable_tls( &socket, &context );
+
+    context = MALLOC_OBJECT( "HTTP Client TLS Context", wiced_tls_context_t );
+
+    if ( context == NULL )
+    {
+        return WICED_OUT_OF_HEAP_SPACE;
+    }
+
+    socket.context_malloced = WICED_TRUE;
+
+    wiced_tls_init_context( context, &tls_identity, peer_cn );
+
+    wiced_tcp_enable_tls( &socket, context );
 
     result = wiced_tcp_connect( &socket, address, 443, 20000 );
     if ( result != WICED_SUCCESS )

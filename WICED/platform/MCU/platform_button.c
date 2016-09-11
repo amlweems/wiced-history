@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -90,5 +90,5 @@ WEAK platform_result_t platform_button_register_state_change_callback( platform_
 
 static void platform_button_state_change_callback( gpio_button_t* button, wiced_bool_t new_state )
 {
-    user_callback( ARRAY_POSITION( platform_gpio_buttons, button ), new_state );
+    user_callback( ( platform_button_t ) ARRAY_POSITION( platform_gpio_buttons, button ), new_state );
 }

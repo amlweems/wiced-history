@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -71,7 +71,7 @@ typedef struct json_object{
     uint8_t             object_string_length;
     wiced_JSON_types_t  value_type;
     char*               value;
-    uint8_t             value_length;
+    uint16_t            value_length;
     struct json_object* parent_object;
 
 } wiced_json_object_t;
@@ -92,6 +92,12 @@ typedef wiced_result_t (*wiced_json_callback_t)( wiced_json_object_t* json_objec
  * @return @ref wiced_result_t
  */
 wiced_result_t wiced_JSON_parser_register_callback( wiced_json_callback_t json_callback );
+
+/** Returns the current callback function registered with by JSON parser
+ *
+ * @return @ref wiced_json_callback_t
+ */
+wiced_json_callback_t wiced_JSON_parser_get_callback( void );
 
 /** Parse JSON input string.
  *  This function will parse the JSON input string through a single parse, calling a callback whenever it encounters milestones

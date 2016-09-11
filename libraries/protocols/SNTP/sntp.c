@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,6 +13,7 @@
  */
 #include "sntp.h"
 #include "wiced.h"
+#include "wiced_crypto.h"
 
 /******************************************************
  *                      Macros
@@ -30,7 +31,9 @@
 #endif
 
 #define MAX_NTP_ATTEMPTS     3
-
+#define TIME_BTW_ATTEMPTS    5000
+/* RFC4330 recommends min 15s between polls */
+#define MIN_POLL_INTERVAL    15 * 1000
 
 /******************************************************
  *                   Enumerations
@@ -45,8 +48,8 @@
  ******************************************************/
 
 /*
- * Taken from RFC 5905
- * http://www.ietf.org/rfc/rfc5905.txt
+ * Taken from RFC 1305
+ * http://www.ietf.org/rfc/rfc1305.txt
  */
 typedef struct
 {
@@ -60,8 +63,8 @@ typedef struct
     uint32_t     reference_identifier;
     uint32_t     reference_timestamp_seconds;
     uint32_t     reference_timestamp_fraction;
-    uint32_t     origin_timestamp_seconds;
-    uint32_t     origin_timestamp_fraction;
+    uint32_t     originate_timestamp_seconds;
+    uint32_t     originate_timestamp_fraction;
     uint32_t     receive_timestamp_seconds;
     uint32_t     receive_timestamp_fraction;
     uint32_t     transmit_timestamp_seconds;
@@ -79,6 +82,8 @@ static wiced_result_t sync_ntp_time( void* arg );
  ******************************************************/
 
 static wiced_timed_event_t sync_ntp_time_event;
+/* Only support primary and secondary servers */
+static wiced_ip_address_t ntp_server[2];
 
 /******************************************************
  *               Function Definitions
@@ -87,11 +92,37 @@ static wiced_timed_event_t sync_ntp_time_event;
 wiced_result_t sntp_start_auto_time_sync( uint32_t interval_ms )
 {
     wiced_result_t result;
+    uint8_t random_initial;
 
-    /* Synchronise time with NTP server and schedule for re-sync every one day */
+    /* Synchronize time with NTP server and schedule for re-sync every one day */
+    wiced_crypto_get_random(&random_initial, 1);
+    /* prevent thundering herd scenarios by randomizing per RFC4330 */
+    wiced_rtos_delay_milliseconds(300 * (unsigned int)random_initial);
     result = sync_ntp_time( NULL );
+    if (interval_ms < MIN_POLL_INTERVAL)
+        interval_ms = MIN_POLL_INTERVAL;
     wiced_rtos_register_timed_event( &sync_ntp_time_event, WICED_NETWORKING_WORKER_THREAD, sync_ntp_time, interval_ms, 0 );
     return result;
+}
+
+wiced_result_t sntp_set_server_ip_address(uint32_t index, wiced_ip_address_t ip_address)
+{
+    if ((index != 0) && (index != 1))
+        return WICED_BADARG;
+    if ((ip_address.version != 4) && (ip_address.version != 6))
+        return WICED_BADARG;
+
+    ntp_server[index] = ip_address;
+    return WICED_SUCCESS;
+}
+
+wiced_result_t sntp_clr_server_ip_address(uint32_t index)
+{
+    if (index > 1)
+        return WICED_BADARG;
+
+    ntp_server[index].version = 0;
+    return WICED_SUCCESS;
 }
 
 wiced_result_t sntp_stop_auto_time_sync( void )
@@ -108,9 +139,12 @@ wiced_result_t sntp_get_time( const wiced_ip_address_t* address, ntp_timestamp_t
     uint16_t           available_data_length;
     wiced_utc_time_t   utc_time;
     wiced_result_t     result;
+    uint32_t           client_sent_timestamp;
 
     /* Create the query packet */
-    if ( wiced_packet_create_udp( &socket, sizeof(ntp_packet_t), &packet, (uint8_t**) &data, &available_data_length ) != WICED_SUCCESS )
+    memset( &socket, 0, sizeof(wiced_udp_socket_t));
+    result = wiced_packet_create_udp( &socket, sizeof(ntp_packet_t), &packet, (uint8_t**) &data, &available_data_length );
+    if ( ( result != WICED_SUCCESS ) || ( available_data_length < sizeof(ntp_packet_t) ) )
     {
         return WICED_ERROR;
     }
@@ -122,8 +156,8 @@ wiced_result_t sntp_get_time( const wiced_ip_address_t* address, ntp_timestamp_t
     data->vn                         = 3;
     data->mode                       = 3;
     data->poll                       = 17;
-    data->root_dispersion            = 0xfe030100;
     data->transmit_timestamp_seconds = htobe32( utc_time + NTP_EPOCH );
+    client_sent_timestamp            = data->transmit_timestamp_seconds;
     wiced_packet_set_data_end( packet, (uint8_t*) data + sizeof(ntp_packet_t) );
 
     /* Create the UDP socket and send request */
@@ -150,9 +184,30 @@ wiced_result_t sntp_get_time( const wiced_ip_address_t* address, ntp_timestamp_t
     {
         return result;
     }
-    wiced_packet_get_data( packet, 0, (uint8_t**) &data, &data_length, &available_data_length );
-    timestamp->seconds      = htobe32( data->transmit_timestamp_seconds ) - NTP_EPOCH;
-    timestamp->microseconds = htobe32( data->transmit_timestamp_fraction ) / 4295; /* 4295 = 2^32 / 10^6 */
+    result = wiced_packet_get_data( packet, 0, (uint8_t**) &data, &data_length, &available_data_length );
+    if ((result == WICED_SUCCESS) && (data_length >= sizeof(ntp_packet_t)))
+    {
+        if (client_sent_timestamp != data->originate_timestamp_seconds)
+        {
+            WPRINT_LIB_INFO( (" Server Returned Bad Originate TimeStamp \n" ));
+            wiced_packet_delete( packet );
+            return WICED_ERROR;
+        }
+        if (data->li > 2 || data->vn != 3 || data->stratum == 0 || data->stratum > 15 || data->transmit_timestamp_seconds == 0 || data->mode != 4)
+        {
+            WPRINT_LIB_INFO( (" Invalid Protocol Parameters returned n"));
+            wiced_packet_delete( packet );
+            return WICED_ERROR;
+        }
+        timestamp->seconds      = htobe32( data->transmit_timestamp_seconds ) - NTP_EPOCH;
+        timestamp->microseconds = htobe32( data->transmit_timestamp_fraction ) / 4295; /* 4295 = 2^32 / 10^6 */
+    }
+    else
+    {
+        wiced_packet_delete( packet );
+        return WICED_PACKET_BUFFER_CORRUPT;
+    }
+
     wiced_packet_delete( packet );
     return WICED_SUCCESS;
 }
@@ -173,9 +228,25 @@ static wiced_result_t sync_ntp_time( void* arg )
     {
         wiced_result_t result = WICED_ERROR;
 
-        if ( wiced_hostname_lookup( "pool.ntp.org", &ntp_server_ip, 3 * SECONDS ) == WICED_SUCCESS )
+        /* First check if there are local servers to use */
+        if (ntp_server[0].version != 0)
         {
-            result = sntp_get_time( &ntp_server_ip, &current_time );
+            WPRINT_LIB_INFO( ( "Sending request primary ...") );
+            result = sntp_get_time ( &ntp_server[0], &current_time );
+        }
+        if (result != WICED_SUCCESS && (ntp_server[1].version != 0))
+        {
+            WPRINT_LIB_INFO( ( "Sending request secondary ...") );
+            result = sntp_get_time ( &ntp_server[1], &current_time );
+        }
+        /* only fall back to global servers if we can't get local */
+        if (result != WICED_SUCCESS)
+        {
+            if ( wiced_hostname_lookup( "pool.ntp.org", &ntp_server_ip, 3 * SECONDS ) == WICED_SUCCESS )
+            {
+                WPRINT_LIB_INFO( ( "Sending global request ... ") );
+                result = sntp_get_time( &ntp_server_ip, &current_time );
+            }
         }
 
         if ( result == WICED_SUCCESS )
@@ -185,6 +256,7 @@ static wiced_result_t sync_ntp_time( void* arg )
         }
         else
         {
+            wiced_rtos_delay_milliseconds(TIME_BTW_ATTEMPTS);
             WPRINT_LIB_INFO( ( "\nfailed, trying again...\n" ) );
         }
     }

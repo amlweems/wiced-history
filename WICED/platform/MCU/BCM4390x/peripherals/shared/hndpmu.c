@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -168,6 +168,11 @@ si_pmu_cal_fvco(si_t *sih, osl_t *osh)
     pll_reg = si_pmu_pllcontrol(sih, PMU1_PLL0_PLLCTL2, 0, 0);
 
     p1_div = (pll_reg & PMU4335_PLL0_PC2_P1DIV_MASK) >> PMU4335_PLL0_PC2_P1DIV_SHIFT;
+    if (p1_div == 0)
+    {
+        ASSERT(p1_div != 0);
+        return 0;
+    }
 
     ndiv_int = (pll_reg & PMU4335_PLL0_PC2_NDIV_INT_MASK) >> PMU4335_PLL0_PC2_NDIV_INT_SHIFT;
 

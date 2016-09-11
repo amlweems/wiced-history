@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -216,14 +216,14 @@ wiced_result_t   dns_write_uint32  ( dns_message_iterator_t* iter, uint32_t data
 wiced_result_t   dns_write_bytes   ( dns_message_iterator_t* iter, const uint8_t* data, uint16_t length );
 
 /* Functions to aid processing received queries */
-uint16_t     dns_read_uint16           ( const uint8_t* data );
-uint32_t     dns_read_uint32           ( const uint8_t* data );
-char*        dns_read_name             ( const uint8_t* data, const dns_message_header_t* start_of_packet ); /* Note: This function returns a dynamically allocated string */
-void         dns_get_next_question     ( dns_message_iterator_t* iter, dns_question_t* q, dns_name_t* name );
-void         dns_get_next_record       ( dns_message_iterator_t* iter, dns_record_t* r,   dns_name_t* name );
-void         dns_reset_iterator        ( dns_message_iterator_t* iter );
-wiced_bool_t dns_compare_name_to_string( const dns_name_t* name, const char* string );
-void         dns_skip_name             ( dns_message_iterator_t* iter );
+uint16_t        dns_read_uint16           ( const uint8_t* data );
+uint32_t        dns_read_uint32           ( const uint8_t* data );
+char*           dns_read_name             ( const uint8_t* data, uint16_t data_len, const dns_message_header_t* start_of_packet ); /* Note: This function returns a dynamically allocated string */
+wiced_result_t  dns_get_next_question     ( dns_message_iterator_t* iter, uint8_t* iter_end, dns_question_t* q, dns_name_t* name );
+wiced_result_t  dns_get_next_record       ( dns_message_iterator_t* iter, uint8_t* iter_end, dns_record_t* r,   dns_name_t* name );
+void            dns_reset_iterator        ( dns_message_iterator_t* iter );
+wiced_bool_t    dns_compare_name_to_string( const dns_name_t* name, const char* string );
+wiced_result_t  dns_skip_name             ( dns_message_iterator_t* iter, uint8_t* iter_end );
 
 #ifdef __cplusplus
 } /* extern "C" */

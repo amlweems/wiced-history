@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,6 +20,7 @@ $(NAME)_SOURCES := vector_table_$(TOOLCHAIN_NAME).S \
                    ../wiced_apps_common.c \
                    ../wiced_waf_common.c \
                    ../wiced_dct_external_common.c \
+                   ../wiced_dct_update.c \
                    ../../$(HOST_ARCH)/crt0_$(TOOLCHAIN_NAME).c \
                    ../../$(HOST_ARCH)/platform_cache.c \
                    ../../$(HOST_ARCH)/platform_cache_asm.S \
@@ -29,7 +30,6 @@ $(NAME)_SOURCES := vector_table_$(TOOLCHAIN_NAME).S \
                    platform_tick.c \
                    platform_chipcommon.c \
                    platform_deep_sleep.c \
-                   wwd_bus.c \
                    wwd_platform.c \
                    ../platform_nsclock.c \
                    ../../$(HOST_ARCH)/exception_handlers.c      \
@@ -53,20 +53,26 @@ HOST_ARCH  := ARM_CR4
 # Host MCU alias for OpenOCD
 HOST_OPENOCD := BCM4390x
 
-VALID_BUSES := SoC.43909
-
 GLOBAL_INCLUDES +=  . \
                     .. \
                     ../../$(HOST_ARCH) \
                     WAF \
                     peripherals \
                     peripherals/include \
+                    peripherals/tlsf
 
 ifneq ($(wildcard WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(APPS_CHIP_REVISION)/$(HOST_MCU_VARIANT)$(APPS_CHIP_REVISION).mk),)
 include WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)/$(HOST_MCU_VARIANT).mk
 endif # wildcard $(WICED ...)
 
 include $(CURDIR)BCM94390x_common.mk
+
+ifeq ($(BUS),SoC.43909)
+$(NAME)_SOURCES += wwd_m2m.c
+else
+$(NAME)_SOURCES += ../wwd_resources.c \
+                   wwd_SDIO.c
+endif
 
 ifdef BUILD_ROM
 $(NAME)_COMPONENTS += WICED/platform/MCU/BCM4390x/ROM_build
@@ -88,18 +94,28 @@ $(NAME)_DEFINES += BCMDRIVER \
                    BCMM2MDEV_ENABLED \
                    CFG_GMAC
 
-ifeq ($(WLAN_CHIP_REVISION),A0)
+ifeq ($(APPS_CHIP_REVISION),A0)
 $(NAME)_DEFINES += BCMCHIPREV=0
 endif
-ifeq ($(WLAN_CHIP_REVISION),B0)
+ifeq ($(APPS_CHIP_REVISION),B0)
 $(NAME)_DEFINES += BCMCHIPREV=1
 endif
+ifeq ($(APPS_CHIP_REVISION),B1)
+$(NAME)_DEFINES += BCMCHIPREV=2
+endif
+
+$(NAME)_CFLAGS += -Wundef
 endef
 
 ifneq ($(APPS_CHIP_REVISION),A0)
 ifneq ($(APPS_CHIP_REVISION),B0)
 GLOBAL_DEFINES += PLATFORM_ALP_CLOCK_RES_FIXUP=0
 endif
+endif
+
+# USB require some fixup to use ALP clock. Necessary for A0/B0/B1 chips
+ifeq ($(filter $(APPS_CHIP_REVISION),A0 B0 B1),)
+GLOBAL_DEFINES += PLATFORM_USB_ALP_CLOCK_RES_FIXUP=0
 endif
 
 $(eval $(call PLATFORM_LOCAL_DEFINES_INCLUDES_43909, .))
@@ -135,6 +151,9 @@ GLOBAL_ASMFLAGS += --defsym SYS_STACK_SIZE=$($(RTOS)_SYS_STACK) \
 
 # Pick-up MCU variant linker-scripts.
 GLOBAL_LDFLAGS  += -L WICED/platform/MCU/BCM4390x/$(HOST_MCU_VARIANT)
+
+# Let linker script include other generic linker scripts.
+GLOBAL_LDFLAGS  += -L WICED/platform/MCU/BCM4390x
 endif # GCC
 
 ifdef NO_WIFI

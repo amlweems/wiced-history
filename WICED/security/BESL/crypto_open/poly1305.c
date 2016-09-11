@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -277,8 +277,11 @@ int test_poly1305_tls( void )
     volatile int test_number;
     for( test_number = 0; test_number < sizeof( poly1305_tls_tests ) / sizeof( poly1305_tls_test_t ); test_number++ )
     {
-        unsigned char tag[16];
-        poly1305_auth( tag, poly1305_tls_tests[test_number].input_data, poly1305_tls_tests[test_number].input_data_length, poly1305_tls_tests[test_number].key );
+        unsigned char  tag[16];
+        const uint8_t* input_data = poly1305_tls_tests[test_number].input_data;
+        uint32_t       input_data_length = poly1305_tls_tests[test_number].input_data_length;
+
+        poly1305_auth( tag, input_data, input_data_length, poly1305_tls_tests[test_number].key );
         if ( 0 != memcmp( poly1305_tls_tests[test_number].expected_tag, tag, sizeof( tag ) ) )
         {
             return -2;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,13 +19,20 @@ extern "C"
 #include "wiced_result.h"
 #include "bt_target.h"
 
+/**
+ * @addtogroup  wicedbt_hfp          Hands Free Profile (HFP)
+ * @ingroup wicedbt_av_profiles
+
+ * Hands Free Profile
+ *
+ * @{
+*/
+
+
 /** @file:   wiced_bt_hfp_hf.h
  *  This file Contains Hand Free Profile - Hands Free Device APIs and definitions.
  */
 
-/** @defgroup hfp_hf WICED BT HFP Hand Free Device APIs
- * @{
- */
 
 /******************************************************
  *                      Macros

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,8 +20,7 @@ extern "C" {
  *                      Macros
  ******************************************************/
 
-#define WICED_TO_WWD_INTERFACE( interface )        ((interface)&3)
-#define IP_NETWORK_IS_INITED(interface)            (ip_networking_inited[(interface)&3] == WICED_TRUE)
+#define WICED_TO_WWD_INTERFACE( interface )        ( wwd_interface_t )( (interface)&3 )
 #define SET_IP_NETWORK_INITED(interface, status)   (ip_networking_inited[(interface)&3] = status)
 
 #ifdef WICED_USE_ETHERNET_INTERFACE
@@ -92,6 +91,7 @@ extern wiced_result_t wiced_start_ap      ( wiced_ssid_t* ssid, wiced_security_t
 extern wiced_result_t wiced_stop_ap       ( void );
 extern wiced_result_t wiced_ip_up         ( wiced_interface_t interface, wiced_network_config_t config, const wiced_ip_setting_t* ip_settings );
 extern wiced_result_t wiced_ip_down       ( wiced_interface_t interface );
+extern wiced_bool_t IP_NETWORK_IS_INITED( wiced_interface_t interface );
 
 /* WICED <-> Network Link Management API */
 /* NOTE:
@@ -116,9 +116,6 @@ wiced_result_t network_tcp_receive( wiced_tcp_socket_t* socket, wiced_packet_t**
 wiced_result_t network_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** packet, uint32_t timeout );
 
 void system_monitor_thread_main( wiced_thread_arg_t arg );
-
-wiced_result_t internal_defer_tcp_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_socket_callback_t callback  );
-wiced_result_t internal_defer_udp_callback_to_wiced_network_thread( wiced_udp_socket_t* socket );
 
 wiced_result_t internal_defer_tcp_callback_to_wiced_network_thread( wiced_tcp_socket_t* socket, wiced_tcp_socket_callback_t callback  );
 wiced_result_t internal_defer_udp_callback_to_wiced_network_thread( wiced_udp_socket_t* socket );

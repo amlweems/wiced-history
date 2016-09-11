@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -95,6 +95,8 @@
 #define BADCERT_CN_MISMATCH             4
 #define BADCERT_NOT_TRUSTED             8
 
+#define MAX_CERT_CHAINS                 5
+
 /*
  * DER constants
  */
@@ -137,9 +139,18 @@
 
 #define OID_X520                "\x55\x04"
 #define OID_CN                  "\x55\x04\x03"
+#define OID_COUNTRY             "\x55\x04\x06"
+#define OID_LOCALITY            "\x55\x04\x07"
+#define OID_STATE               "\x55\x04\x08"
+#define OID_ORGANIZATION        "\x55\x04\x0A"
+#define OID_ORG_UNIT            "\x55\x04\x0B"
+#define OID_SUB_KEY_ID          "\x55\x1D\x0E"
+#define OID_BASIC_CONSTRAINTS   "\x55\x1D\x13"
+#define OID_AUTH_KEY_ID         "\x55\x1D\x23"
 #define OID_PKCS1               "\x2A\x86\x48\x86\xF7\x0D\x01\x01"
 #define OID_PKCS1_RSA           "\x2A\x86\x48\x86\xF7\x0D\x01\x01\x01"
 #define OID_PKCS1_RSA_SHA       "\x2A\x86\x48\x86\xF7\x0D\x01\x01\x05"
+#define OID_PKCS1_RSA_SHA256    "\x2A\x86\x48\x86\xF7\x0D\x01\x01\x0B"
 #define OID_PKCS9               "\x2A\x86\x48\x86\xF7\x0D\x01\x09"
 #define OID_PKCS9_EMAIL         "\x2A\x86\x48\x86\xF7\x0D\x01\x09\x01"
 
@@ -217,6 +228,20 @@ extern "C" {
      * \return         0 if successful, or a specific X509 error code
      */
     int32_t x509parse_key(rsa_context *rsa,
+              const unsigned char *key, uint32_t keylen,
+              const unsigned char *pwd, uint32_t pwdlen);
+    /**
+     * \brief          Parse a private ECC key
+     *
+     * \param ecc      ECC context to be initialized
+     * \param key      input buffer
+     * \param keylen   size of the buffer
+     * \param pwd      password for decryption (optional)
+     * \param pwdlen   size of the password
+     *
+     * \return         0 if successful, or a specific X509 error code
+     */
+    int32_t x509parse_key_ecc(wiced_tls_ecc_key_t *ecc,
               const unsigned char *key, uint32_t keylen,
               const unsigned char *pwd, uint32_t pwdlen);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -118,6 +118,11 @@ interrupt_vector_t interrupt_vector_table[] =
  *               Function Definitions
  ******************************************************/
 
+uint32_t WEAK NEVER_INLINE platform_irq_demuxer_hook( uint32_t irq_status )
+{
+    return irq_status;
+}
+
 WWD_RTOS_DEFINE_ISR_DEMUXER( platform_irq_demuxer )
 {
     uint32_t mask = PLATFORM_APPSCR4->irq_mask;
@@ -128,6 +133,10 @@ WWD_RTOS_DEFINE_ISR_DEMUXER( platform_irq_demuxer )
         unsigned i;
 
         PLATFORM_APPSCR4->fiqirq_status = status;
+
+#if PLATFORM_IRQ_DEMUXER_HOOK
+        status = platform_irq_demuxer_hook( status );
+#endif
 
         for ( i = 0; status && (i < ARRAYSIZE(interrupt_vector_table)); ++i )
         {

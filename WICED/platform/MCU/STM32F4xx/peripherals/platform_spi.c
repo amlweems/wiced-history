@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,7 +24,9 @@
  ******************************************************/
 
 #define MAX_NUM_SPI_PRESCALERS (8)
-#define SPI_DMA_TIMEOUT_LOOPS  (10000)
+#define SPI_DMA_CTL_TIMEOUT_LOOPS  (1000)
+#define DMA_MIN_TX 32
+#define DMA_MIN_RX 32
 
 /******************************************************
  *                    Constants
@@ -48,18 +50,30 @@ typedef struct
     uint16_t prescaler_value;
 } spi_baudrate_division_mapping_t;
 
+typedef struct
+{
+    uint32_t speed;
+    uint8_t mode;
+    uint8_t bits;
+    platform_gpio_t cs;
+    wiced_bool_t spi_ready;
+    platform_spi_port_t* spi;
+} spi_current_config_t;
+
 /******************************************************
  *               Static Function Declarations
  ******************************************************/
 
-static platform_result_t calculate_prescaler( uint32_t speed, uint16_t* prescaler );
+static platform_result_t calculate_prescaler( const platform_spi_port_t* spi, uint32_t speed, uint16_t* prescaler );
 static uint16_t          spi_transfer       ( const platform_spi_t* spi, uint16_t data );
-static platform_result_t spi_dma_transfer   ( const platform_spi_t* spi, const platform_spi_config_t* config );
-static void              spi_dma_config     ( const platform_spi_t* spi, const platform_spi_message_segment_t* message );
+static platform_result_t spi_dma_transfer   ( const platform_spi_t* spi, const platform_spi_message_segment_t* message );
 
 /******************************************************
  *               Variable Definitions
  ******************************************************/
+uint32_t         dummy; // Dummy memory for RX DMA
+
+static spi_current_config_t spi_current_config[NUMBER_OF_SPI_PORTS];
 
 static const spi_baudrate_division_mapping_t spi_baudrate_prescalers[MAX_NUM_SPI_PRESCALERS] =
 {
@@ -79,10 +93,11 @@ static const platform_peripheral_clock_function_t spi_peripheral_clock_functions
     [0] = RCC_APB2PeriphClockCmd,
     [1] = RCC_APB1PeriphClockCmd,
     [2] = RCC_APB1PeriphClockCmd,
-#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) ||\
+    defined(STM32F429_439xx) || defined(STM32F412xG)
     [3] = RCC_APB2PeriphClockCmd,
 #endif
-#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx) || defined(STM32F412xG)
     [4] = RCC_APB2PeriphClockCmd,
 #endif
 #if defined(STM32F427_437xx) || defined(STM32F429_439xx)
@@ -96,10 +111,11 @@ static const uint32_t spi_peripheral_clocks[NUMBER_OF_SPI_PORTS] =
     [0] = RCC_APB2Periph_SPI1,
     [1] = RCC_APB1Periph_SPI2,
     [2] = RCC_APB1Periph_SPI3,
-#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) ||\
+    defined(STM32F429_439xx) || defined(STM32F412xG)
     [3] = RCC_APB2Periph_SPI4,
 #endif
-#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx)
+#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx) || defined(STM32F412xG)
     [4] = RCC_APB2Periph_SPI5,
 #endif
 #if defined(STM32F427_437xx) || defined(STM32F429_439xx)
@@ -125,6 +141,25 @@ uint8_t platform_spi_get_port_number( platform_spi_port_t* spi )
     {
         return 2;
     }
+#if defined(STM32F401xx) || defined(STM32F446xx) || defined(STM32F411xE) || defined(STM32F427_437xx) ||\
+    defined(STM32F429_439xx) || defined(STM32F412xG)
+    else if ( spi == SPI4 )
+    {
+        return 3;
+    }
+#endif
+#if defined(STM32F411xE) || defined(STM32F427_437xx) || defined(STM32F429_439xx) || defined(STM32F412xG)
+    else if ( spi == SPI5 )
+    {
+        return 4;
+    }
+#endif
+#if defined(STM32F427_437xx) || defined(STM32F429_439xx)
+    else if ( spi == SPI6 )
+    {
+        return 5;
+    }
+#endif
     else
     {
         return INVALID_UART_PORT_NUMBER;
@@ -139,21 +174,38 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
 
     wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) );
 
-    platform_mcu_powersave_disable();
-
+    /* Only configure if we have not done so already or parameters have changed */
     spi_number = platform_spi_get_port_number( spi->port );
 
+    if (spi_current_config[spi_number].bits == config->bits &&
+            spi_current_config[spi_number].cs.port == config->chip_select->port &&
+            spi_current_config[spi_number].cs.pin_number == config->chip_select->pin_number &&
+            spi_current_config[spi_number].mode == config->mode &&
+            spi_current_config[spi_number].speed == config->speed &&
+            spi_current_config[spi_number].spi == spi->port &&
+            spi_current_config[spi_number].spi_ready == WICED_TRUE)
+        return PLATFORM_SUCCESS;
+
+    platform_mcu_powersave_disable();
+
+#if defined SPLIT_SPI_CONFIG
     /* Init SPI GPIOs */
-    platform_gpio_set_alternate_function( spi->pin_clock->port, spi->pin_clock->pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
-    platform_gpio_set_alternate_function( spi->pin_mosi->port,  spi->pin_mosi->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
-    platform_gpio_set_alternate_function( spi->pin_miso->port,  spi->pin_miso->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af );
+    platform_gpio_set_alternate_function( spi->pin_clock->port, spi->pin_clock->pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af & 0xFF);
+    platform_gpio_set_alternate_function( spi->pin_mosi->port,  spi->pin_mosi->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, (spi->gpio_af >>  8) & 0xFF);
+    platform_gpio_set_alternate_function( spi->pin_miso->port,  spi->pin_miso->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, (spi->gpio_af >> 16) & 0xFF);
+#else
+    /* Init SPI GPIOs */
+    platform_gpio_set_alternate_function( spi->pin_clock->port, spi->pin_clock->pin_number, GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af & 0xFF );
+    platform_gpio_set_alternate_function( spi->pin_mosi->port,  spi->pin_mosi->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af & 0xFF);
+    platform_gpio_set_alternate_function( spi->pin_miso->port,  spi->pin_miso->pin_number,  GPIO_OType_PP, GPIO_PuPd_NOPULL, spi->gpio_af & 0xFF);
+#endif
 
     /* Init the chip select GPIO */
     platform_gpio_init( config->chip_select, OUTPUT_PUSH_PULL );
     platform_gpio_output_high( config->chip_select );
 
     /* Calculate prescaler */
-    result = calculate_prescaler( config->speed, &spi_init.SPI_BaudRatePrescaler );
+    result = calculate_prescaler( spi->port, config->speed, &spi_init.SPI_BaudRatePrescaler );
     if ( result != PLATFORM_SUCCESS )
     {
         platform_mcu_powersave_enable();
@@ -225,11 +277,19 @@ platform_result_t platform_spi_init( const platform_spi_t* spi, const platform_s
 
     /* Init and enable SPI */
     SPI_Init( spi->port, &spi_init );
-    SPI_Cmd ( spi->port, ENABLE );
+
+    /* Save configuration to avoid having to do this every time */
+    spi_current_config[spi_number].bits = config->bits;
+    spi_current_config[spi_number].cs.port = config->chip_select->port;
+    spi_current_config[spi_number].cs.pin_number = config->chip_select->pin_number;
+    spi_current_config[spi_number].mode = config->mode;
+    spi_current_config[spi_number].speed = config->speed;
+    spi_current_config[spi_number].spi = spi->port;
+    spi_current_config[spi_number].spi_ready = WICED_TRUE;
 
     platform_mcu_powersave_enable();
 
-    return WICED_SUCCESS;
+    return PLATFORM_SUCCESS;
 }
 
 platform_result_t platform_spi_deinit( const platform_spi_t* spi )
@@ -247,8 +307,13 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
 
     wiced_assert( "bad argument", ( spi != NULL ) && ( config != NULL ) && ( segments != NULL ) && ( number_of_segments != 0 ) );
 
+    if (( spi == NULL ) || ( config == NULL ) || ( segments == NULL ) || ( number_of_segments == 0 ) )
+        return PLATFORM_BADARG;
+
     platform_mcu_powersave_disable();
 
+    /* Enable port first */
+    SPI_Cmd ( spi->port, ENABLE );
     /* Activate chip select */
     platform_gpio_output_low( config->chip_select );
 
@@ -257,15 +322,23 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
         /* Check if we are using DMA */
         if ( config->mode & SPI_USE_DMA )
         {
-            spi_dma_config( spi, &segments[ i ] );
-
-            result = spi_dma_transfer( spi, config );
-            if ( result != PLATFORM_SUCCESS )
+            /* DMA is only efficient if we are using this for large transfers */
+            if (segments[i].length == 0)
+                continue; // Dummy segment
+            /* Max DMA size */
+            if (segments[i].length < 65536)
             {
-                goto cleanup_transfer;
+                if (((segments[i].tx_buffer != NULL) && (segments[i].length > DMA_MIN_TX)) ||
+                        ((segments[i].rx_buffer != NULL) && (segments[i].length > DMA_MIN_RX)))
+                {
+                    result = spi_dma_transfer( spi, &segments[ i ] );
+
+                    if ( result == PLATFORM_SUCCESS )
+                        continue;
             }
         }
-        else
+        }
+        /* Fall back to non-DMA operations if either DMA is not enabled or DMA doesn't work correctly or if this is more efficient*/
         {
             count = segments[i].length;
 
@@ -300,7 +373,7 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
                 /* Check that the message length is a multiple of 2 */
                 if ( ( count % 2 ) != 0 )
                 {
-                    result = WICED_ERROR;
+                    result = PLATFORM_ERROR;
                     goto cleanup_transfer;
                 }
 
@@ -328,6 +401,9 @@ platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platfo
     }
 
 cleanup_transfer:
+
+    SPI_Cmd ( spi->port, DISABLE );
+
     /* Deassert chip select */
     platform_gpio_output_high( config->chip_select );
 
@@ -355,124 +431,183 @@ static uint16_t spi_transfer( const platform_spi_t* spi, uint16_t data )
     return SPI_I2S_ReceiveData( spi->port );
 }
 
-static platform_result_t calculate_prescaler( uint32_t speed, uint16_t* prescaler )
+static platform_result_t calculate_prescaler( const platform_spi_port_t* SPIx, uint32_t speed, uint16_t* prescaler )
 {
+    RCC_ClocksTypeDef RCC_Clocks;
+    uint32_t APB_Frequency;
     uint8_t i;
-
-    RCC_ClocksTypeDef rcc_clock_frequencies;
 
     wiced_assert("Bad args", prescaler != NULL);
 
-    RCC_GetClocksFreq( &rcc_clock_frequencies );
+    if (prescaler == NULL)
+        return PLATFORM_BADARG;
 
-    for( i = 0 ; i < MAX_NUM_SPI_PRESCALERS ; i++ )
+    if (speed == 0)
     {
-        if( ( rcc_clock_frequencies.PCLK2_Frequency / spi_baudrate_prescalers[i].factor ) <= speed )
-        {
+        *prescaler = spi_baudrate_prescalers[MAX_NUM_SPI_PRESCALERS-1].prescaler_value;
+        return PLATFORM_SUCCESS;
+    }
+
+    RCC_GetClocksFreq( &RCC_Clocks );
+
+    if (SPIx == SPI1 || SPIx == SPI4 || SPIx == SPI5 || SPIx == SPI6)
+        APB_Frequency = RCC_Clocks.PCLK2_Frequency;
+    else
+        APB_Frequency = RCC_Clocks.PCLK1_Frequency;
+
+    for (i = 0; i < MAX_NUM_SPI_PRESCALERS; i++) {
+        if ((APB_Frequency / spi_baudrate_prescalers[i].factor ) <= speed) {
             *prescaler = spi_baudrate_prescalers[i].prescaler_value;
             return PLATFORM_SUCCESS;
         }
     }
 
-    return PLATFORM_ERROR;
+    return PLATFORM_BADARG;
 }
 
-static platform_result_t spi_dma_transfer( const platform_spi_t* spi, const platform_spi_config_t* config )
-{
-    uint32_t loop_count;
-
-    /* Enable dma channels that have just been configured */
-    DMA_Cmd( spi->tx_dma.stream, ENABLE );
-    DMA_Cmd( spi->rx_dma.stream, ENABLE );
-
-    /* Wait for DMA to complete */
-    /* TODO: This should wait on a semaphore that is triggered from an IRQ */
-    loop_count = 0;
-    while ( ( DMA_GetFlagStatus( spi->tx_dma.stream, spi->tx_dma.complete_flags ) == RESET ) )
-    {
-        loop_count++;
-        /* Check if we've run out of time */
-        if ( loop_count >= (uint32_t) SPI_DMA_TIMEOUT_LOOPS )
-        {
-            platform_gpio_output_high( config->chip_select );
-            return WICED_TIMEOUT;
-        }
-    }
-
-    platform_gpio_output_high( config->chip_select );
-    return WICED_SUCCESS;
-}
-
-static void spi_dma_config( const platform_spi_t* spi, const platform_spi_message_segment_t* message )
+static platform_result_t spi_dma_transfer( const platform_spi_t* spi, const platform_spi_message_segment_t* message )
 {
     DMA_InitTypeDef dma_init;
-    uint8_t         dummy = 0xFF;
+    uint32_t loop_count;
+    platform_result_t result = PLATFORM_SUCCESS;
 
-    /* Setup DMA for SPI TX if it is enabled */
-    DMA_DeInit( spi->tx_dma.stream );
+    /* Error check buffers */
+    if ((message->rx_buffer == NULL) && (message->tx_buffer == NULL))
+        return PLATFORM_ERROR;
 
-    /* Setup DMA stream for TX */
-    dma_init.DMA_Channel            = spi->tx_dma.channel;
-    dma_init.DMA_PeripheralBaseAddr = ( uint32_t )spi->port->DR;
-    dma_init.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
-    dma_init.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
-    dma_init.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-    dma_init.DMA_BufferSize         = message->length;
-    dma_init.DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte;
-    dma_init.DMA_Mode               = DMA_Mode_Normal;
-    dma_init.DMA_Priority           = DMA_Priority_VeryHigh;
-    dma_init.DMA_FIFOMode           = DMA_FIFOMode_Disable;
-    dma_init.DMA_FIFOThreshold      = DMA_FIFOThreshold_Full;
-    dma_init.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
-    dma_init.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-
-    if ( message->tx_buffer != NULL )
+    /* Enable DMA peripheral clock */
+    if ( spi->tx_dma.controller == DMA1 )
     {
-       dma_init.DMA_Memory0BaseAddr = ( uint32_t )message->tx_buffer;
-       dma_init.DMA_MemoryInc       = DMA_MemoryInc_Enable;
+        RCC->AHB1ENR |= RCC_AHB1Periph_DMA1;
     }
     else
     {
-       dma_init.DMA_Memory0BaseAddr = ( uint32_t )(&dummy);
-       dma_init.DMA_MemoryInc       = DMA_MemoryInc_Disable;
+        RCC->AHB1ENR |= RCC_AHB1Periph_DMA2;
     }
 
-    DMA_Init( spi->tx_dma.stream, &dma_init );
-
-    /* Activate SPI DMA mode for transmission */
-    SPI_I2S_DMACmd( spi->port, SPI_I2S_DMAReq_Tx, ENABLE );
-
-    /* TODO: Init TX DMA finished semaphore  */
-
-    /* Setup DMA for SPI RX stream */
-    DMA_DeInit( spi->rx_dma.stream );
-    dma_init.DMA_Channel            = spi->rx_dma.channel;
     dma_init.DMA_PeripheralBaseAddr = ( uint32_t )&spi->port->DR;
-    dma_init.DMA_DIR                = DMA_DIR_PeripheralToMemory;
     dma_init.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
     dma_init.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
     dma_init.DMA_BufferSize         = message->length;
     dma_init.DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte;
     dma_init.DMA_Mode               = DMA_Mode_Normal;
-    dma_init.DMA_Priority           = DMA_Priority_VeryHigh;
+    dma_init.DMA_Priority           = DMA_Priority_High;
     dma_init.DMA_FIFOMode           = DMA_FIFOMode_Disable;
-    dma_init.DMA_FIFOThreshold      = DMA_FIFOThreshold_Full;
+    dma_init.DMA_FIFOThreshold      = DMA_FIFOThreshold_1QuarterFull;
     dma_init.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
     dma_init.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-    if ( message->rx_buffer != NULL )
+
+    /* Setup RX first */
+    DMA_ClearFlag( spi->rx_dma.stream, spi->rx_dma.complete_flags | spi->rx_dma.error_flags );
+
+    DMA_DeInit( spi->rx_dma.stream );
+
+    loop_count = 0;
+    while (DMA_GetCmdStatus( spi->rx_dma.stream ) == ENABLE)
     {
-        dma_init.DMA_Memory0BaseAddr = (uint32_t)message->rx_buffer;
-        dma_init.DMA_MemoryInc = DMA_MemoryInc_Enable;
+        loop_count++;
+          if ( loop_count >= (uint32_t) SPI_DMA_CTL_TIMEOUT_LOOPS )
+            return PLATFORM_TIMEOUT;
+    }
+
+    dma_init.DMA_Channel            = spi->rx_dma.channel;
+    dma_init.DMA_DIR                = DMA_DIR_PeripheralToMemory;
+    if (message->rx_buffer != NULL)
+    {
+        dma_init.DMA_Memory0BaseAddr    = (uint32_t)message->rx_buffer;
+        dma_init.DMA_MemoryInc          = DMA_MemoryInc_Enable;
     }
     else
     {
-        dma_init.DMA_Memory0BaseAddr = (uint32_t)&dummy;
-        dma_init.DMA_MemoryInc = DMA_MemoryInc_Disable;
+        dma_init.DMA_Memory0BaseAddr    = (uint32_t)&dummy; /* To support the TX only case */
+        dma_init.DMA_MemoryInc          = DMA_MemoryInc_Disable;
     }
 
     /* Init and activate RX DMA channel */
-    DMA_Init( spi->tx_dma.stream, &dma_init );
-    SPI_I2S_DMACmd( spi->port, SPI_I2S_DMAReq_Rx, ENABLE );
+    DMA_Init( spi->rx_dma.stream, &dma_init );
 
-    /* TODO: Init RX DMA finish semaphore */
+    DMA_Cmd( spi->rx_dma.stream, ENABLE );
+    loop_count = 0;
+    while (DMA_GetCmdStatus( spi->rx_dma.stream ) == DISABLE)
+    {
+        loop_count++;
+        if ( loop_count >= (uint32_t) SPI_DMA_CTL_TIMEOUT_LOOPS )
+        {
+            return PLATFORM_TIMEOUT;
+        }
+    }
+
+    /* Now the TX */
+    DMA_ClearFlag( spi->tx_dma.stream, spi->tx_dma.complete_flags | spi->tx_dma.error_flags );
+
+    DMA_DeInit( spi->tx_dma.stream );
+
+    loop_count = 0;
+    while (DMA_GetCmdStatus( spi->tx_dma.stream ) == ENABLE)
+    {
+        loop_count++;
+        if ( loop_count >= (uint32_t) SPI_DMA_CTL_TIMEOUT_LOOPS )
+        {
+            return PLATFORM_TIMEOUT;
+        }
+    }
+
+    /* Setup DMA stream for TX */
+    dma_init.DMA_Channel            = spi->tx_dma.channel;
+    dma_init.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
+    if (message->tx_buffer != NULL)
+    {
+        dma_init.DMA_Memory0BaseAddr    = ( uint32_t )message->tx_buffer;
+        dma_init.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+    }
+    else
+    {
+        dma_init.DMA_Memory0BaseAddr    = ( uint32_t )&dummy; /* To support the RX only case */
+        dma_init.DMA_MemoryInc          = DMA_MemoryInc_Disable;
+    }
+
+    DMA_Init( spi->tx_dma.stream, &dma_init );
+
+    DMA_Cmd( spi->tx_dma.stream, ENABLE );
+
+    loop_count = 0;
+    while (DMA_GetCmdStatus( spi->tx_dma.stream ) == DISABLE)
+    {
+        loop_count++;
+        if ( loop_count >= (uint32_t) SPI_DMA_CTL_TIMEOUT_LOOPS )
+        {
+            return PLATFORM_TIMEOUT;
+        }
+    }
+
+    /* Start both DMA together. TX is needed to drive the master clock for RX */
+    SPI_I2S_DMACmd( spi->port, SPI_I2S_DMAReq_Rx | SPI_I2S_DMAReq_Tx, ENABLE );
+
+    /* Wait for DMAs done */
+    while (DMA_GetCurrDataCounter(spi->tx_dma.stream) != 0)
+    {
+    }
+
+    /* Strictly not necessary for RX since this should finish at the same time as TX */
+    while (DMA_GetCurrDataCounter(spi->rx_dma.stream) != 0)
+    {
+    }
+
+    /* Make sure the SPI is idle */
+    while ( SPI_I2S_GetFlagStatus( spi->port, SPI_I2S_FLAG_TXE ) != SET )
+    {
+    }
+    while ( SPI_I2S_GetFlagStatus( spi->port, SPI_I2S_FLAG_BSY ) != RESET )
+    {
+    }
+    while ( SPI_I2S_GetFlagStatus( spi->port, SPI_I2S_FLAG_RXNE ) == SET )
+    {
+    }
+
+    /* Clean up for next operation */
+    SPI_I2S_DMACmd( spi->port, SPI_I2S_DMAReq_Tx | SPI_I2S_DMAReq_Rx, DISABLE );
+    DMA_Cmd(spi->tx_dma.stream, DISABLE);
+    DMA_Cmd(spi->rx_dma.stream, DISABLE);
+
+    return result;
 }

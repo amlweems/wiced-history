@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -51,15 +51,20 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
-#define PLATFORM_APPSCR4    ( (volatile appscr4_regs_t*    ) PLATFORM_APPSCR4_REGBASE(    0x0 ) )
-#define PLATFORM_CHIPCOMMON ( (volatile chipcommon_regs_t* ) PLATFORM_CHIPCOMMON_REGBASE( 0x0 ) )
-#define PLATFORM_PMU        ( (volatile pmu_regs_t*        ) PLATFORM_PMU_REGBASE(        0x0 ) )
+#define PLATFORM_APPSCR4    ( (volatile appscr4_regs_t*    ) PLATFORM_APPSCR4_REGBASE(            0x0 ) )
+#define PLATFORM_CHIPCOMMON ( (volatile chipcommon_regs_t* ) PLATFORM_CHIPCOMMON_REGBASE(         0x0 ) )
+#define PLATFORM_PMU        ( (volatile pmu_regs_t*        ) PLATFORM_PMU_REGBASE(                0x0 ) )
+#define PLATFORM_SOCSRAM    ( (volatile socsram_regs_t*    ) PLATFORM_SOCSRAM_CONTROLLER_REGBASE( 0x0 ) )
 
+#ifdef STRUCTURE_CHECK_DISABLE
+#define STRUCTURE_CHECK( unique_number, structure, member, offset )
+#else
 #define STRUCTURE_CHECK( unique_number, structure, member, offset ) \
     /* Make sure the expression is constant. */ \
     typedef enum { _STATIC_ASSERT_NOT_CONSTANT ## unique_number = (offsetof(structure,member) == (offset)) } _static_assert_e ## unique_number ; \
     /* Make sure the expression is true. */ \
-    typedef char STATIC_ASSERT_FAIL ## unique_number [(offsetof(structure,member) == (offset)) ? 1 : -1]
+    typedef char STATIC_ASSERT_FAIL ## unique_number [(offsetof(structure,member) == (offset)) ? 1 : -1];
+#endif
 
 
 /******************************************************
@@ -1234,6 +1239,77 @@ typedef union
     uint32_t raw;
     struct
     {
+        unsigned int reserved1:4;      /* 3:0 */
+        unsigned int num_sram_banks:4; /* 7:4 */
+        unsigned int reserved2:4;      /* 11:8 */
+        unsigned int num_rom_banks:4;  /* 15:12 */
+        unsigned int reserved3:16;     /* 31:16 */
+    } bits;
+} socsram_core_info_t;
+
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int bank_number:5; /* 4:0 */
+        unsigned int reserved1:3;   /* 7:5 */
+        unsigned int mem_type:2;    /* 9:8 */
+        unsigned int reserved2:22;  /* 31:10 */
+    } bits;
+} socsram_bank_x_index_t;
+
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int bank_size:7;                   /* 6:0 */
+        unsigned int reserved1:1;                   /* 7 */
+        unsigned int rom:1;                         /* 8 */
+        unsigned int patchable_rom:1;               /* 9 */
+        unsigned int stby_supported:1;              /* 10 */
+        unsigned int stby_timer_present:1;          /* 11 */
+        unsigned int dev_ram:1;                     /* 12 */
+        unsigned int dev_ram_select:1;              /* 13 */
+        unsigned int dev_ram_protect:1;             /* 14 */
+        unsigned int sleep_supported:1;             /* 15 */
+        unsigned int retention_ram:1;               /* 16 */
+        unsigned int pda_size:5;                    /* 21:17 */
+        unsigned int reserved2:2;                   /* 23:22 */
+        unsigned int dev_ram_remap:1;               /* 24 */
+        unsigned int addr_remap_required_for_pda:1; /* 25 */
+        unsigned int pda_on_doze_only:1;            /* 26 */
+        unsigned int reserved3:5;                   /* 31:27 */
+    } bits;
+} socsram_bank_x_info_t;
+
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
+        unsigned int pda:16;                       /* 15:0 */
+        unsigned int reserved1:15;                 /* 30:16 */
+        unsigned int addr_remap_enabled_for_pda:1; /* 31 */
+    } bits;
+} socsram_bank_x_pda_t;
+
+typedef struct
+{
+    socsram_core_info_t    core_info;    /* Offset 0x00 */
+    uint32_t               reserved1[3];
+    socsram_bank_x_index_t bank_x_index; /* Offset 0x10 */
+    uint32_t               reserved2[11];
+    socsram_bank_x_info_t  bank_x_info;  /* Offset 0x40 */
+    socsram_bank_x_pda_t   bank_x_pda;   /* Offset 0x44 */
+} socsram_regs_t;
+
+typedef union
+{
+    uint32_t raw;
+    struct
+    {
         unsigned int stby_mode_val:3;        /* 2:0  */
         unsigned int stby_override:1;        /* 3 */
         unsigned int pmu_mem_stby_disable:1; /* 4 */
@@ -1244,6 +1320,10 @@ typedef union
 
 #define PLATFORM_POWERCONTROL_REG(core_base)         ((core_base) + 0x1E8)
 #define PLATFORM_SOCSRAM_POWERCONTROL_REG            ((volatile socsram_power_control_t*)PLATFORM_POWERCONTROL_REG(PLATFORM_SOCSRAM_CONTROLLER_REGBASE(0x0)))
+
+#define SOCSRAM_BANK_SIZE                            ( ( PLATFORM_SOCSRAM->bank_x_info.bits.bank_size + 1 ) * 8 * 1024 )
+#define SOCSRAM_BANK_NUMBER                          ( PLATFORM_SOCSRAM->core_info.bits.num_sram_banks )
+#define SOCSRAM_BANK_PDA_MASK                        0xFF
 
 /* ChipCommon IntStatus and IntMask register bit */
 #define CHIPCOMMON_GPIO_INT_MASK                     (1 << 0)
@@ -1280,10 +1360,23 @@ typedef union
 #define GCI_CHIPCONTROL_GMAC_INTERFACE_RMII          (0x3 << GCI_CHIPCONTROL_GMAC_INTERFACE_SHIFT)
 #define GCI_CHIPCONTROL_GMAC_INTERFACE_MII           (0x1 << GCI_CHIPCONTROL_GMAC_INTERFACE_SHIFT)
 
+#define GCI_CHIPCONTROL_DDR_FREQ_REG                 5
+#define GCI_CHIPCONTROL_DDR_FREQ_SHIFT               21
+#define GCI_CHIPCONTROL_DDR_FREQ_MASK                (0x7 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_DDR_FREQ_320_480             (0x0 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_DDR_FREQ_160                 (0x1 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_DDR_FREQ_120                 (0x2 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_DDR_FREQ_48                  (0x3 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_DDR_FREQ_16                  (0x4 << GCI_CHIPCONTROL_DDR_FREQ_SHIFT)
+
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_REG            7
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT          16
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_MASK           (0x7 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#if defined(PLATFORM_4390X_OVERCLOCK)
+#define GCI_CHIPCONTROL_APPS_CPU_FREQ_320_480        (0x0 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#else
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_320            (0x0 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
+#endif /* PLATFORM_4390X_OVERCLOCK */
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_160            (0x1 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_120            (0x2 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_APPS_CPU_FREQ_80             (0x3 << GCI_CHIPCONTROL_APPS_CPU_FREQ_SHIFT)
@@ -1314,9 +1407,15 @@ typedef union
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_RC_VAL(v)   (((v) << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_RC_SHIFT) & GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_RC_MASK)
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT  5
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_MASK   (0x7 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
+#ifndef PLATFORM_HIB_WAKE_CTRL_FREQ_BITS_FLIPPED
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_128KHZ (0x0 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_32KHZ  (0x2 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_16KHZ  (0x3 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
+#else
+#define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_128KHZ (0x2 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_32KHZ  (0x0 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
+#define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_16KHZ  (0x1 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_FREQ_SHIFT)
+#endif
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_DOWN_SHIFT  8
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_DOWN_MASK   (0x1 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_DOWN_SHIFT)
 #define GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_DOWN_EXEC   (0x1 << GCI_CHIPCONTROL_HIB_WAKE_CTL_LPO_DOWN_SHIFT)
@@ -1385,6 +1484,7 @@ typedef union
 #define GCI_CHIPCONTROL_GPIO_WAKEMASK_POS_EDGE(gpio_num)                  (0x2 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
 #define GCI_CHIPCONTROL_GPIO_WAKEMASK_NEG_EDGE(gpio_num)                  (0x4 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
 #define GCI_CHIPCONTROL_GPIO_WAKEMASK_FAST_EDGE(gpio_num)                 (0x8 << GCI_CHIPCONTROL_GPIO_WAKEMASK_SHIFT(gpio_num))
+#define GCI_CHIPCONTROL_GPIO_WAKEMASK_ANY_EDGE(gpio_num)                  (GCI_CHIPCONTROL_GPIO_WAKEMASK_POS_EDGE(gpio_num) | GCI_CHIPCONTROL_GPIO_WAKEMASK_NEG_EDGE(gpio_num) | GCI_CHIPCONTROL_GPIO_WAKEMASK_FAST_EDGE(gpio_num))
 
 #define GCI_CHIPSTATUS_BOOT_MODE_REG                 4
 #define GCI_CHIPSTATUS_BOOT_MODE_ACPU_SHIFT          21
@@ -1463,6 +1563,11 @@ typedef union
 #define PMU_CHIPCONTROL_GCI2WL_WAKE_MASK             ( 1 << PMU_CHIPCONTROL_GCI2WL_WAKE_SHIFT )
 #define PMU_CHIPCONTROL_GCI2WL_WAKE_EN               ( 1 << PMU_CHIPCONTROL_GCI2WL_WAKE_SHIFT )
 
+#define PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_REG    2
+#define PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_SHIFT  25
+#define PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_MASK   ( 1 << PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_SHIFT )
+#define PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_EN     ( 1 << PMU_CHIPCONTROL_INVERT_GPIO0_POLARITY_SHIFT )
+
 #define PMU_RES_MASK(bit)                            ( 1UL << (bit) )
 #define PMU_RES_LPLDO_PU                             0
 #define PMU_RES_BAND_GAP_PU                          1
@@ -1493,6 +1598,9 @@ typedef union
 #define PMU_RES_HT_START                             28
 #define PMU_RES_HT_AVAIL                             29
 #define PMU_RES_MAC_PHY_CLK_AVAIL                    30
+#define PMU_RES_HT_CLOCKS_MASK                       ( PMU_RES_MASK( PMU_RES_HT_START )                  | \
+                                                       PMU_RES_MASK( PMU_RES_HT_AVAIL )                  | \
+                                                       PMU_RES_MASK( PMU_RES_MAC_PHY_CLK_AVAIL ) )
 #define PMU_RES_HT_MASK                              ( PMU_RES_MASK( PMU_RES_LPLDO_PU )                  | \
                                                        PMU_RES_MASK( PMU_RES_BAND_GAP_PU )               | \
                                                        PMU_RES_MASK( PMU_RES_SLEEP_REGOFF_PULL_DOWN_EN ) | \
@@ -1555,11 +1663,59 @@ typedef union
 #define PMU_CONTROL_EXT_ILP_ON_BP_DEBUG_MODE_SHIFT   1
 #define PMU_CONTROL_EXT_ILP_ON_BP_DEBUG_MODE_MASK    (1 << PMU_CONTROL_EXT_ILP_ON_BP_DEBUG_MODE_SHIFT)
 
+#define PMU_CONTROL_PLLCTL_UPDATE_SHIFT              10
+#define PMU_CONTROL_PLLCTL_UPDATE_MASK               (0x1 << PMU_CONTROL_PLLCTL_UPDATE_SHIFT)
+#define PMU_CONTROL_PLLCTL_UPDATE_EXEC               (0x1 << PMU_CONTROL_PLLCTL_UPDATE_SHIFT)
+
 #define PMU_CONTROL_RESETCONTROL_SHIFT               13
 #define PMU_CONTROL_RESETCONTROL_MASK                (0x3 << PMU_CONTROL_RESETCONTROL_SHIFT)
 #define PMU_CONTROL_RESETCONTROL_UNTOUCHED           (0x0 << PMU_CONTROL_RESETCONTROL_SHIFT) /* reset the backplane and leave PMU state untouched */
 #define PMU_CONTROL_RESETCONTROL_RESET               (0x1 << PMU_CONTROL_RESETCONTROL_SHIFT) /* equivalent to PMU watchdog reset */
 #define PMU_CONTROL_RESETCONTROL_RESTORE_RES_MASKS   (0x2 << PMU_CONTROL_RESETCONTROL_SHIFT) /* reset the backplane and reload min_res_mask and max_res_mask from the power-on-reset values */
+
+#define PLL_CONTROL_M1DIV_REG                        1
+#define PLL_CONTROL_M1DIV_SHIFT                      0
+#define PLL_CONTROL_M1DIV_MASK                       (0xFF << PLL_CONTROL_M1DIV_SHIFT)
+#define PLL_CONTROL_M1DIV_VAL(v)                     (((v) << PLL_CONTROL_M1DIV_SHIFT) & PLL_CONTROL_M1DIV_MASK)
+
+#define PLL_CONTROL_M2DIV_REG                        1
+#define PLL_CONTROL_M2DIV_SHIFT                      8
+#define PLL_CONTROL_M2DIV_MASK                       (0xFF << PLL_CONTROL_M2DIV_SHIFT)
+#define PLL_CONTROL_M2DIV_VAL(v)                     (((v) << PLL_CONTROL_M2DIV_SHIFT) & PLL_CONTROL_M2DIV_MASK)
+
+#define PLL_CONTROL_M3DIV_REG                        1
+#define PLL_CONTROL_M3DIV_SHIFT                      16
+#define PLL_CONTROL_M3DIV_MASK                       (0xFF << PLL_CONTROL_M3DIV_SHIFT)
+#define PLL_CONTROL_M3DIV_VAL(v)                     (((v) << PLL_CONTROL_M3DIV_SHIFT) & PLL_CONTROL_M3DIV_MASK)
+
+#define PLL_CONTROL_M4DIV_REG                        1
+#define PLL_CONTROL_M4DIV_SHIFT                      24
+#define PLL_CONTROL_M4DIV_MASK                       (0xFF << PLL_CONTROL_M4DIV_SHIFT)
+#define PLL_CONTROL_M4DIV_VAL(v)                     (((v) << PLL_CONTROL_M4DIV_SHIFT) & PLL_CONTROL_M4DIV_MASK)
+
+#define PLL_CONTROL_M5DIV_REG                        2
+#define PLL_CONTROL_M5DIV_SHIFT                      0
+#define PLL_CONTROL_M5DIV_MASK                       (0xFF << PLL_CONTROL_M5DIV_SHIFT)
+#define PLL_CONTROL_M5DIV_VAL(v)                     (((v) << PLL_CONTROL_M5DIV_SHIFT) & PLL_CONTROL_M5DIV_MASK)
+
+#define PLL_CONTROL_M6DIV_REG                        2
+#define PLL_CONTROL_M6DIV_SHIFT                      8
+#define PLL_CONTROL_M6DIV_MASK                       (0xFF << PLL_CONTROL_M6DIV_SHIFT)
+#define PLL_CONTROL_M6DIV_VAL(v)                     (((v) << PLL_CONTROL_M6DIV_SHIFT) & PLL_CONTROL_M6DIV_MASK)
+
+#define PLL_CONTROL_LOAD_ENABLE_REG                  5
+#define PLL_CONTROL_LOAD_ENABLE_SHIFT                24
+#define PLL_CONTROL_LOAD_ENABLE_MASK                 (0x3F << PLL_CONTROL_LOAD_ENABLE_SHIFT)
+#define PLL_CONTROL_LOAD_ENABLE_VAL(v)               ((0x1 << (PLL_CONTROL_LOAD_ENABLE_SHIFT + (v) - 1)) & PLL_CONTROL_LOAD_ENABLE_MASK)
+
+#define PLL_FREQ_320_480_MHZ_CHANNEL                 1
+#define PLL_FREQ_480_MHZ_DIVIDER                     2
+#define PLL_FREQ_320_MHZ_DIVIDER                     3
+
+#define PLL_CONTROL_ENABLE_CHANNEL_REG               0
+#define PLL_CONTROL_ENABLE_CHANNEL_SHIFT             1
+#define PLL_CONTROL_ENABLE_CHANNEL_MASK              (0x3F << PLL_CONTROL_ENABLE_CHANNEL_SHIFT)
+#define PLL_CONTROL_ENABLE_CHANNEL_VAL(v)            (((v) << PLL_CONTROL_ENABLE_CHANNEL_SHIFT) & PLL_CONTROL_ENABLE_CHANNEL_MASK)
 
 #define PMU_SLOWCLKPERIOD_ALP_PERIOD_MASK            0x3FFF
 
@@ -1577,29 +1733,29 @@ typedef union
 #define PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_DISABLE    PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_MASK
 #define PLATFORM_USB20D_PHY_UTMI1_CTL_PHY_SHUTOFF_ENABLE     0x0
 
-STRUCTURE_CHECK(  1, chipcommon_regs_t, core_ctrl_status.bist_status, 0x0C );
-STRUCTURE_CHECK(  2, chipcommon_regs_t, otp.otp_ctrl_1, 0xF4 );
-STRUCTURE_CHECK(  3, chipcommon_regs_t, interrupt.chip_status, 0x2C );
-STRUCTURE_CHECK(  4, chipcommon_regs_t, jtag_master.ctrl, 0x3C );
-STRUCTURE_CHECK(  5, chipcommon_regs_t, sflash.data, 0x48 );
-STRUCTURE_CHECK(  6, chipcommon_regs_t, broadcast.data, 0x54 );
-STRUCTURE_CHECK(  7, chipcommon_regs_t, gpio.debug_sel, 0xA8 );
-STRUCTURE_CHECK(  8, chipcommon_regs_t, clock_control.clock_divider_2, 0xF0 );
-STRUCTURE_CHECK(  9, chipcommon_regs_t, interconnect.flag_status, 0xFE8 );
-STRUCTURE_CHECK( 10, chipcommon_regs_t, general_serial_io_controllers.interface_3.clock_divider, 0x4AC );
-STRUCTURE_CHECK( 11, chipcommon_regs_t, external_bus_control.parallel_flash.memory_wait_count, 0x12C );
-STRUCTURE_CHECK( 12, chipcommon_regs_t, enhanced_coexistence_interface.parallel.data_tag, 0x180 );
-STRUCTURE_CHECK( 13, chipcommon_regs_t, enhanced_coexistence_interface.serial.uart.timestamp_fractional_increment, 0x1F8 );
-STRUCTURE_CHECK( 14, chipcommon_regs_t, serial_prom.data, 0x198 );
-STRUCTURE_CHECK( 15, chipcommon_regs_t, nand_flash.id_status, 0x1B8 );
-STRUCTURE_CHECK( 16, chipcommon_regs_t, pmu_clock_control.status, 0x1E0 );
-STRUCTURE_CHECK( 17, chipcommon_regs_t, audio_sync_control_unit.sample_cnt1, 0x274 );
-STRUCTURE_CHECK( 18, chipcommon_regs_t, uarts.uart[0].scratchpad, 0x307 );
-STRUCTURE_CHECK( 19, chipcommon_regs_t, uarts.uart[1].scratchpad, 0x317 );
-STRUCTURE_CHECK( 20, chipcommon_regs_t, uarts.uart[2].scratchpad, 0x327 );
-STRUCTURE_CHECK( 21, chipcommon_regs_t, pwm.pwm_channels[5].total_period, 0x460 );
-STRUCTURE_CHECK( 22, pmu_regs_t,        res_event1, 0x724 );
-STRUCTURE_CHECK( 23, pmu_regs_t,        pmuintctrl1, 0x784 );
+STRUCTURE_CHECK(  1, chipcommon_regs_t, core_ctrl_status.bist_status, 0x0C )
+STRUCTURE_CHECK(  2, chipcommon_regs_t, otp.otp_ctrl_1, 0xF4 )
+STRUCTURE_CHECK(  3, chipcommon_regs_t, interrupt.chip_status, 0x2C )
+STRUCTURE_CHECK(  4, chipcommon_regs_t, jtag_master.ctrl, 0x3C )
+STRUCTURE_CHECK(  5, chipcommon_regs_t, sflash.data, 0x48 )
+STRUCTURE_CHECK(  6, chipcommon_regs_t, broadcast.data, 0x54 )
+STRUCTURE_CHECK(  7, chipcommon_regs_t, gpio.debug_sel, 0xA8 )
+STRUCTURE_CHECK(  8, chipcommon_regs_t, clock_control.clock_divider_2, 0xF0 )
+STRUCTURE_CHECK(  9, chipcommon_regs_t, interconnect.flag_status, 0xFE8 )
+STRUCTURE_CHECK( 10, chipcommon_regs_t, general_serial_io_controllers.interface_3.clock_divider, 0x4AC )
+STRUCTURE_CHECK( 11, chipcommon_regs_t, external_bus_control.parallel_flash.memory_wait_count, 0x12C )
+STRUCTURE_CHECK( 12, chipcommon_regs_t, enhanced_coexistence_interface.parallel.data_tag, 0x180 )
+STRUCTURE_CHECK( 13, chipcommon_regs_t, enhanced_coexistence_interface.serial.uart.timestamp_fractional_increment, 0x1F8 )
+STRUCTURE_CHECK( 14, chipcommon_regs_t, serial_prom.data, 0x198 )
+STRUCTURE_CHECK( 15, chipcommon_regs_t, nand_flash.id_status, 0x1B8 )
+STRUCTURE_CHECK( 16, chipcommon_regs_t, pmu_clock_control.status, 0x1E0 )
+STRUCTURE_CHECK( 17, chipcommon_regs_t, audio_sync_control_unit.sample_cnt1, 0x274 )
+STRUCTURE_CHECK( 18, chipcommon_regs_t, uarts.uart[0].scratchpad, 0x307 )
+STRUCTURE_CHECK( 19, chipcommon_regs_t, uarts.uart[1].scratchpad, 0x317 )
+STRUCTURE_CHECK( 20, chipcommon_regs_t, uarts.uart[2].scratchpad, 0x327 )
+STRUCTURE_CHECK( 21, chipcommon_regs_t, pwm.pwm_channels[5].total_period, 0x460 )
+STRUCTURE_CHECK( 22, pmu_regs_t,        res_event1, 0x724 )
+STRUCTURE_CHECK( 23, pmu_regs_t,        pmuintctrl1, 0x784 )
 
 /******************************************************
  *                 Global Variables
@@ -1623,6 +1779,7 @@ static inline __attribute__((always_inline)) void
 platform_irq_disable_irq(unsigned irqno)
 {
     PLATFORM_APPSCR4_CLEAR_ATOMIC(&PLATFORM_APPSCR4->irq_mask, IRQN2MASK(irqno));
+    (void)PLATFORM_APPSCR4->irq_mask; /* read back */
 }
 
 static inline __attribute__((always_inline)) int
@@ -1641,6 +1798,7 @@ static inline __attribute__((always_inline)) void
 platform_irq_disable_int(unsigned irqno)
 {
     PLATFORM_APPSCR4_CLEAR_ATOMIC(&PLATFORM_APPSCR4->int_mask, IRQN2MASK(irqno));
+    (void)PLATFORM_APPSCR4->int_mask; /* read back */
 }
 
 static inline __attribute__((always_inline)) int
@@ -1652,3 +1810,4 @@ platform_irq_is_int_enabled(unsigned irqno)
 #ifdef __cplusplus
 } /*extern "C" */
 #endif
+

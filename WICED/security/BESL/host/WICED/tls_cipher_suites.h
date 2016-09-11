@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,15 +29,20 @@ extern "C" {
     #define USE_DHE_RSA_KEYSCHEME
     #define USE_ECDH_ECDSA_KEYSCHEME
     #define USE_ECDHE_ECDSA_KEYSCHEME
+    #define USE_ECDHE_RSA_KEYSCHEME
 
     /* Default supported MACs */
     #define USE_SHA_MAC
     #define USE_SHA256_MAC
     //#define USE_SHA384_MAC
+    #define USE_AES_128_CCM_8_MAC
+
 
     /* Default supported ciphers */
     #define USE_AES_256_CBC_CIPHER
     #define USE_AES_128_CBC_CIPHER
+    #define USE_AES_128_GCM_CIPHER
+    #define USE_AES_128_CCM_8_CIPHER
 
     /* Rarely used ciphers */
     //#define USE_CAMELLIA_128_CBC_CIPHER
@@ -48,8 +53,8 @@ extern "C" {
     #define X509_SUPPORT_MD5
     #define X509_SUPPORT_SHA1
     #define X509_SUPPORT_SHA256
-    //#define X509_SUPPORT_SHA384
-    //#define X509_SUPPORT_SHA512
+    #define X509_SUPPORT_SHA384
+    #define X509_SUPPORT_SHA512
 
 #endif /* #ifndef WICED_USE_CUSTOM_CIPHER_SUITES */
 
@@ -1359,10 +1364,82 @@ extern const cipher_suite_t TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
 #endif /* if defined( USE_DHE_RSA_KEYSCHEME ) && defined( USE_CHACHA20_POLY1305_CIPHER ) && defined( USE_SHA256_MAC ) */
 
 
-
-
-
-
+/*
+ * Adding custom callbacks :
+ *
+ * Please follow below procedure to add custom implementation for keyscheme driver.
+ * The following example describes in 3-steps, the procedure to change rsa_keyscheme_driver to custom_key_scheme_driver with the desired implementation.
+ * Please change rsa_keyscheme_driver in tls_cipher_suites.c to the custom key scheme driver [ex. custom_rsa_keyscheme_driver ]
+ *
+ * 1.) Add the custom cipher suite:
+ * const cipher_suite_t TLS_RSA_WITH_AES_128_CBC_SHA = { 0x002F, &custom_rsa_keyscheme_driver, &aes_128_cbc_cipher_driver, &sha_mac_driver };
+ *
+ * 2.) Create the custom implementation source file [ex. tls_custom_callback.c] and initialize custom_rsa_keyscheme_driver
+ * const struct keyscheme_api_t custom_rsa_keyscheme_driver =
+ *  {
+ *      .type                    = RSA_KEYSCHEME,
+ *     .create_premaster_secret = custom_rsa_tls_create_premaster_secret,
+ *     .decode_premaster_secret = custom_rsa_tls_decode_premaster_secret,
+ *     .minimum_tls_version     = 0x0300,
+ * };
+ *
+ * 3.) Implement below functions to create premaster and decode premaster secret key.
+ * int custom_rsa_tls_create_premaster_secret( void*          key_context,
+ *                                             uint8_t        is_ssl_3,
+ *                                             uint16_t       max_version,
+ *                                             uint8_t*       premaster_secret_out,
+ *                                             uint32_t*      pms_length_out,
+ *                                             int32_t        (*f_rng)(void *),
+ *                                             void*          p_rng,
+ *                                             uint8_t*       encrypted_output,
+ *                                             uint32_t*      encrypted_length_out );
+ *
+ *
+ * int custom_rsa_tls_decode_premaster_secret( const uint8_t* data,
+ *                                             uint32_t       data_len,
+ *                                             const uint8_t* key_context,
+ *                                             uint8_t        is_ssl_3,
+ *                                             uint16_t       max_version,
+ *                                             uint8_t*       premaster_secret_out,
+ *                                             uint32_t       pms_buf_length,
+ *                                             uint32_t*      pms_length_out );
+ *
+ * Similarly to create a custom driver for DHE_RSA keyscheme :
+ *
+ * const cipher_suite_t TLS_DHE_RSA_WITH_AES_128_CBC_SHA = { 0x0033, &custom_dhe_rsa_keyscheme_driver, &aes_128_cbc_cipher_driver, &sha_mac_driver };
+ *
+ * const struct keyscheme_api_t custom_dhe_rsa_keyscheme_driver =
+ * {
+ *     .type                    = DHE_RSA_KEYSCHEME,
+ *     .create_premaster_secret = custom_dh_tls_create_premaster_secret,
+ *     .decode_premaster_secret = custom_dhm_tls_decode_premaster_secret,
+ *     .minimum_tls_version     = 0x0300,
+ *     .parse_dhe_parameters    = custom_dhm_parse_server_key_exchange,
+ *     .create_dhe_parameters   = custom_dhm_create_server_key_exchange,
+ * };
+ *
+ * int custom_dh_tls_create_premaster_secret( void*          key_context,
+ *                                            uint8_t        is_ssl_3,
+ *                                            uint16_t       max_version,
+ *                                            uint8_t*       premaster_secret_out,
+ *                                            uint32_t*      pms_length_out,
+ *                                            int32_t        (*f_rng)(void *),
+ *                                            void*          p_rng,
+ *                                            uint8_t*       encrypted_output,
+ *                                            uint32_t*      encrypted_length_out );
+ *
+ *  int custom_dhm_tls_decode_premaster_secret( const uint8_t* data,
+ *                                              uint32_t       data_len,
+ *                                              const uint8_t* key_context,
+ *                                              uint8_t        is_ssl_3,
+ *                                              uint16_t       max_version,
+ *                                              uint8_t*       premaster_secret_out,
+ *                                              uint32_t       pms_buf_length,
+ *                                              uint32_t*      pms_length_out );
+ *
+ * int custom_dhm_parse_server_key_exchange ( ssl_context *ssl, const uint8_t* data, uint32_t data_length, tls_digitally_signed_signature_algorithm_t input_signature_algorithm);
+ * int custom_dhm_create_server_key_exchange( ssl_context *ssl, uint8_t* data_out, uint32_t* data_buffer_length_out, tls_digitally_signed_signature_algorithm_t input_signature_algorithm );
+ */
 
 #ifdef __cplusplus
 } /*extern "C" */

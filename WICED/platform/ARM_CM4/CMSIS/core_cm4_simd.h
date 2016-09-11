@@ -129,7 +129,10 @@
 
 /*-- End CM4 SIMD Intrinsics -----------------------------------------------------*/
 
-
+#include <stdint.h>
+#ifndef __INLINE
+#define __INLINE inline
+#endif
 
 #elif defined ( __ICCARM__ ) /*------------------ ICC Compiler -------------------*/
 /* IAR iccarm specific functions */

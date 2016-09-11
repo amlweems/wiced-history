@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -55,15 +55,17 @@
 #define OTP_DBG_VAL 0x0004
 uint32_t otp_msg_level = OTP_ERR_VAL;
 
+#define OTP_PRINT(args) do { if (platform_is_init_completed()) {printf args;} else {wiced_assert("Printing before init completed", 0);} } while(0)
+
 #if defined(OTP_DEBUG) || defined(OTP_DEBUG_ERR)
-#define OTP_ERR(args)   do {if (otp_msg_level & OTP_ERR_VAL) printf args;} while (0)
+#define OTP_ERR(args)   do {if (otp_msg_level & OTP_ERR_VAL) OTP_PRINT(args);} while (0)
 #else
 #define OTP_ERR(args)
 #endif
 
 #ifdef OTP_DEBUG
-#define OTP_MSG(args)   do {if (otp_msg_level & OTP_MSG_VAL) printf args;} while (0)
-#define OTP_DBG(args)   do {if (otp_msg_level & OTP_DBG_VAL) printf args;} while (0)
+#define OTP_MSG(args)   do {if (otp_msg_level & OTP_MSG_VAL) OTP_PRINT(args);} while (0)
+#define OTP_DBG(args)   do {if (otp_msg_level & OTP_DBG_VAL) OTP_PRINT(args);} while (0)
 #else
 #define OTP_MSG(args)
 #define OTP_DBG(args)
@@ -859,7 +861,7 @@ ipxotp_init(si_t *sih)
         uint32_t otpaddr;
         otpaddr = PLATFORM_OTP_BASE;
         oi->otpbase = (uint16_t *)REG_MAP(otpaddr, SI_CORE_SIZE);
-        OTP_ERR(("%s: mapping otpbase at 0x%08x to 0x%p\n", __FUNCTION__, (unsigned int)otpaddr, oi->otpbase));
+        OTP_MSG(("%s: mapping otpbase at 0x%08x to 0x%p\n", __FUNCTION__, (unsigned int)otpaddr, oi->otpbase));
     } else {
         unsigned int idx2;
         /* Take offset of OTP Base address from GCI CORE */
@@ -1553,7 +1555,7 @@ platform_otp_cis_parse(platform_otp_region_t region, platform_otp_cis_parse_call
     {
         uint8_t tag;
         uint8_t tag_len;
-        uint8_t brcm_tag;
+        uint8_t brcm_tag = 0;
 
         result = platform_otp_read_array(byte_number, &tag, 1);
         if (result != PLATFORM_SUCCESS)

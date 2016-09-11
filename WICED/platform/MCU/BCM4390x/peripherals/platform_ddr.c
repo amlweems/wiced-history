@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -13,9 +13,19 @@
 #include "platform_config.h"
 #include "wiced_defaults.h"
 
+#include "wwd_assert.h"
+
 #include "typedefs.h"
 #include "hndsoc.h"
 #include "wiced_osl.h"
+
+#include "tlsf.h"
+
+#ifdef NO_MALLOC_H
+#include <stdlib.h>
+#else
+#include <malloc.h>
+#endif
 
 /******************************************************
  *                      Macros
@@ -459,6 +469,8 @@ const static ddr_seq_config_t phy_1_hynix_bp162_cl5_bl8_320 =
     }
 };
 
+static tlsf_t ddr_heap;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -492,49 +504,227 @@ ddr_init_seq(const ddr_seq_config_t *cfg)
     }
 }
 
+static void
+ddr_setup_reference_clock(void)
+{
+    /*
+     * Pads are calibrated for 320MHZ, so reference clock cannot exceeds this value.
+     * For overclocking 480MHZ mode let's switch to 160MHZ reference clock.
+     */
+#if defined(PLATFORM_4390X_OVERCLOCK)
+    /* Overclocking */
+    platform_gci_chipcontrol(GCI_CHIPCONTROL_DDR_FREQ_REG, GCI_CHIPCONTROL_DDR_FREQ_MASK, GCI_CHIPCONTROL_DDR_FREQ_160);
+#else
+    /* Normal */
+    platform_gci_chipcontrol(GCI_CHIPCONTROL_DDR_FREQ_REG, GCI_CHIPCONTROL_DDR_FREQ_MASK, GCI_CHIPCONTROL_DDR_FREQ_320_480);
+#endif  /* PLATFORM_4390X_OVERCLOCK */
+}
+
+static void
+ddr_setup_bss_sections(void)
+{
+    if (PLATFORM_DDR_BSS_SIZE != 0)
+    {
+        wiced_assert("BSS location is outside of valid range", (size_t) &link_ddr_bss_location >= PLATFORM_DDR_BASE(0x0));
+        wiced_assert("BSS location is outside of valid range", (size_t) &link_ddr_bss_end <= PLATFORM_DDR_BASE(0x0) + platform_ddr_get_size());
+
+        memset(&link_ddr_bss_location, 0, PLATFORM_DDR_BSS_SIZE);
+    }
+}
+
+static void
+ddr_setup_heap(void)
+{
+    if (PLATFORM_DDR_HEAP_SIZE != 0)
+    {
+        wiced_assert("Heap location is outside of valid range", (size_t) &link_ddr_heap_location >= PLATFORM_DDR_BASE(0x0));
+        wiced_assert("Heap location is outside of valid range", (size_t) &link_ddr_heap_end <= PLATFORM_DDR_BASE(0x0) + platform_ddr_get_size());
+
+        ddr_heap = tlsf_create_with_pool(&link_ddr_heap_location, PLATFORM_DDR_HEAP_SIZE);
+    }
+}
+
+static void
+ddr_post_init(uint32_t chip_size)
+{
+    /* Announce via DDR size assigning that it is ready */
+    platform_ddr_size = MIN(PLATFORM_DDR_MAX_SIZE, chip_size);
+
+    /* Ready to initialize BSS sections */
+    ddr_setup_bss_sections();
+
+    /* Ready to initialize heap */
+    ddr_setup_heap();
+}
+
+static void
+ddr_pre_init(void)
+{
+    if (!PLATFORM_DDR_SKIP_INIT)
+    {
+        /* Setup clock */
+        ddr_setup_reference_clock();
+
+        /* Enable DDR controller */
+        osl_core_enable(DMEMC_CORE_ID);
+    }
+}
+
 PLATFORM_DDR_FUNCDECL(nanya_nt5cb64m16dp_cf)
 {
-    /* Enable DDR controller */
-    osl_core_enable(DMEMC_CORE_ID);
+    ddr_pre_init();
 
-    /* Turn the pads RX on and enable termination */
-    ddr_write_reg(0x48, 0x0);
-    ddr_write_reg(0x4c, 0x01010101);
+    if (!PLATFORM_DDR_SKIP_INIT)
+    {
+        /* Turn the pads RX on and enable termination */
+        ddr_write_reg(0x48, 0x0);
+        ddr_write_reg(0x4c, 0x01010101);
 
-    /* Program DDR core */
-    ddr_init_seq(&ctl_0_nanya_nt5cb64m16dp_cf);
-    ddr_init_seq(&phy_0_nanya_nt5cb64m16dp_cf);
-    ddr_init_seq(&phy_1_nanya_nt5cb64m16dp_cf);
-    ddr_write_reg(0x45c, 0x03000000);
-    ddr_mask_reg(0x504, 0xffffffff, 0x10000);
-    ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
-    ddr_mask_reg(0x400, 0xffffffff, 0x1);
+        /* Program DDR core */
+        ddr_init_seq(&ctl_0_nanya_nt5cb64m16dp_cf);
+        ddr_init_seq(&phy_0_nanya_nt5cb64m16dp_cf);
+        ddr_init_seq(&phy_1_nanya_nt5cb64m16dp_cf);
+        ddr_write_reg(0x45c, 0x03000000);
+        ddr_mask_reg(0x504, 0xffffffff, 0x10000);
+        ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
+        ddr_mask_reg(0x400, 0xffffffff, 0x1);
+    }
 
-    platform_ddr_size = MIN( PLATFORM_DDR_MAX_SIZE, 128 * PLATFORM_DDR_SIZE_1_MBYTE /* chip size */ );
+    ddr_post_init(128 * PLATFORM_DDR_SIZE_1_MBYTE);
 
     return PLATFORM_SUCCESS;
 }
 
 PLATFORM_DDR_FUNCDECL(hynix_bp162_cl5_bl8_320)
 {
-    /* Enable DDR controller */
-    osl_core_enable(DMEMC_CORE_ID);
+    ddr_pre_init();
 
-    /* Turn the pads RX on and enable termination */
-    ddr_write_reg(0x48, 0x0);
-    ddr_write_reg(0x4c, 0x01010101);
+    if (!PLATFORM_DDR_SKIP_INIT)
+    {
+        /* Turn the pads RX on and enable termination */
+        ddr_write_reg(0x48, 0x0);
+        ddr_write_reg(0x4c, 0x01010101);
 
-    /* Program DDR core */
-    ddr_init_seq(&ctl_0_hynix_bp162_cl5_bl8_320);
-    ddr_init_seq(&phy_0_hynix_bp162_cl5_bl8_320);
-    ddr_init_seq(&phy_1_hynix_bp162_cl5_bl8_320);
-    ddr_write_reg(0x45c, 0x03000000);
-    ddr_mask_reg(0x504, 0xffffffff, 0x10000);
-    ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
-    ddr_mask_reg(0x400, 0xffffffff, 0x1);
+        /* Program DDR core */
+        ddr_init_seq(&ctl_0_hynix_bp162_cl5_bl8_320);
+        ddr_init_seq(&phy_0_hynix_bp162_cl5_bl8_320);
+        ddr_init_seq(&phy_1_hynix_bp162_cl5_bl8_320);
+        ddr_write_reg(0x45c, 0x03000000);
+        ddr_mask_reg(0x504, 0xffffffff, 0x10000);
+        ddr_mask_reg(0x4fc, 0xfffeffff, 0x0);
+        ddr_mask_reg(0x400, 0xffffffff, 0x1);
+    }
 
-    platform_ddr_size = MIN( PLATFORM_DDR_MAX_SIZE, 1 * PLATFORM_DDR_SIZE_1_GBYTE /* chip size */ );
+    ddr_post_init(128 * PLATFORM_DDR_SIZE_1_MBYTE);
 
     return PLATFORM_SUCCESS;
 }
 
+static inline wiced_bool_t platform_heap_is_ddr_address(void* ptr)
+{
+    wiced_bool_t result = WICED_FALSE;
+    uint32_t addr = (uint32_t)ptr;
+
+    if ((addr >= PLATFORM_DDR_BASE(0x0)) && (addr < PLATFORM_DDR_BASE(PLATFORM_DDR_MAX_SIZE)))
+    {
+        result = WICED_TRUE;
+    }
+
+    return result;
+}
+
+void* platform_heap_malloc_record_caller(platform_heap_type_t heap, size_t bytes, const char* filename, int line)
+{
+    void* res;
+
+    UNUSED_PARAMETER(filename);
+    UNUSED_PARAMETER(line);
+
+    if ((PLATFORM_DDR_HEAP_SIZE != 0) && (heap == PLATFORM_HEAP_DDR))
+    {
+        uint32_t flags;
+
+        WICED_SAVE_INTERRUPTS(flags);
+        res = tlsf_malloc(ddr_heap, bytes);
+        WICED_RESTORE_INTERRUPTS(flags);
+    }
+    else
+    {
+        res = malloc(bytes);
+    }
+
+    return res;
+}
+
+void* platform_heap_memalign_record_caller(platform_heap_type_t heap, size_t align, size_t bytes, const char* filename, int line)
+{
+    void* res;
+
+    UNUSED_PARAMETER(filename);
+    UNUSED_PARAMETER(line);
+
+    if ((PLATFORM_DDR_HEAP_SIZE != 0) && (heap == PLATFORM_HEAP_DDR))
+    {
+        uint32_t flags;
+
+        WICED_SAVE_INTERRUPTS(flags);
+        res = tlsf_memalign(ddr_heap, align, bytes);
+        WICED_RESTORE_INTERRUPTS(flags);
+    }
+    else
+    {
+        res = memalign(align, bytes);
+    }
+
+    return res;
+}
+
+void* platform_heap_realloc_record_caller(platform_heap_type_t heap, void* ptr, size_t size, const char* filename, int line)
+{
+    void* res;
+
+    UNUSED_PARAMETER(filename);
+    UNUSED_PARAMETER(line);
+
+    if ((PLATFORM_DDR_HEAP_SIZE != 0) && (heap == PLATFORM_HEAP_DDR))
+    {
+        uint32_t flags;
+
+        wiced_assert("Must be DDR address", platform_heap_is_ddr_address(ptr));
+
+        WICED_SAVE_INTERRUPTS(flags);
+        res = tlsf_realloc(ddr_heap, ptr, size);
+        WICED_RESTORE_INTERRUPTS(flags);
+    }
+    else
+    {
+        wiced_assert("Must be not DDR address", !platform_heap_is_ddr_address(ptr));
+
+        res = realloc(ptr, size);
+    }
+
+    return res;
+}
+
+void platform_heap_free_record_caller(platform_heap_type_t heap, void* ptr, const char* filename, int line)
+{
+    UNUSED_PARAMETER(filename);
+    UNUSED_PARAMETER(line);
+
+    if ((PLATFORM_DDR_HEAP_SIZE != 0) && (heap == PLATFORM_HEAP_DDR))
+    {
+        uint32_t flags;
+
+        wiced_assert("Must be DDR address", platform_heap_is_ddr_address(ptr));
+
+        WICED_SAVE_INTERRUPTS(flags);
+        tlsf_free(ddr_heap, ptr);
+        WICED_RESTORE_INTERRUPTS(flags);
+    }
+    else
+    {
+        wiced_assert("Must be not DDR address", !platform_heap_is_ddr_address(ptr));
+
+        free(ptr);
+    }
+}

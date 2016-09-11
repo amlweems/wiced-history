@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,6 +15,8 @@
 #include "dtls_cipher_suites.h"
 #include "wwd_constants.h"
 #include "tls_types.h"
+
+#include "linked_list.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -121,9 +123,15 @@ typedef enum
     DTLS_UDP_TRANSPORT = 2,
 } dtls_transport_protocol_t;
 
+typedef enum
+{
+    WICED_IPV4_VERSION = 4,
+    WICED_IPV6_VERSION = 6,
+} wiced_ip_version_temp_t;
+
 typedef struct
 {
-        uint32_t ver;
+        wiced_ip_version_temp_t ver;
         union
         {
             uint32_t v4;
@@ -137,6 +145,13 @@ typedef struct
         uint16_t port;
 } dtls_session_t;
 
+typedef struct
+{
+   void*           callback_args;
+   tls_packet_t*   packet;
+   dtls_session_t  session;
+} dtls_peer_data;
+
 #pragma  pack(1)
 
 /** Generic header structure of the DTLS record layer. */
@@ -146,7 +161,7 @@ typedef struct
         uint16_t    version;           /**< Protocol version */
         uint16_t    epoch;             /**< counter for cipher state changes */
         uint8_t     sequence_number[6];   /**< sequence number */
-        uint8_t    length[2];            /**< length of the following fragment */
+        uint8_t     length[2];            /**< length of the following fragment */
         /* fragment */
 } dtls_record_header_t;
 
@@ -160,6 +175,13 @@ typedef struct
         uint8_t     fragment_length[ 3 ];   /**< Fragment length. */
         /* body */
 } dtls_handshake_header_t;
+
+typedef struct
+{
+    dtls_record_header_t header;
+    uint8_t  certificate_length[3];
+    uint8_t  certificate_data[1];
+} dtls_certificate_record_t;
 
 /** Structure of the Hello Verify Request. */
 typedef struct
@@ -184,26 +206,8 @@ typedef struct
 
 #pragma  pack()
 
-typedef struct
-{
-        const uint8_t*   certificate_data;
-        uint32_t         certificate_data_length;
-        wiced_bool_t     certificate_data_malloced;
-        wiced_tls_key_t* public_key;
-        const char*      common_name;
-        x509_cert*       processed_certificate_data;
-} wiced_dtls_certificate_t;
-
-typedef struct
-{
-        union
-        {
-            wiced_tls_key_t      common;
-            wiced_dtls_psk_key_t psk;
-        } private_key;
-        wiced_dtls_certificate_t certificate;
-} wiced_dtls_identity_t;
-
+typedef wiced_tls_certificate_t wiced_dtls_certificate_t;
+typedef wiced_tls_identity_t    wiced_dtls_identity_t;
 
 typedef struct
 {
@@ -213,8 +217,6 @@ typedef struct
 
 typedef struct
 {
-        dtls_compression_t      compression;   /* compression method */
-        const cipher_suite_t*   cipher;        /* cipher suite selected by server. */
         uint16_t                epoch;         /* counter for cipher state changes */
         uint64_t                rseq;          /* sequence number of last record sent */
 } dtls_security_parameters_t;
@@ -223,21 +225,10 @@ typedef struct
 {
         uint16_t     mseq_s;
         uint16_t     mseq_r;
-        sha2_context hs_hash;
 } dtls_hs_state_t;
 
 typedef struct
 {
-        union
-        {
-                struct random_t
-                {
-                        uint8_t         client[ DTLS_RANDOM_LENGTH ]; /**< client random gmt and bytes */
-                        uint8_t         server[ DTLS_RANDOM_LENGTH ]; /**< server random gmt and bytes */
-                } random;
-                uint8_t                 master_secret[ DTLS_MASTER_SECRET_LENGTH ];
-        } tmp;
-
         dtls_hs_state_t                 hs_state;
         unsigned int                    do_client_auth :1;
         dtls_handshake_parameters_psk_t psk;
@@ -248,41 +239,36 @@ typedef struct
  * for each peer. */
 typedef struct dtls_peer_t
 {
-        unsigned char                cookie_secret[ 32 ];
-        uint16_t                     cookie_length;
+        linked_list_node_t           this_node;
+        /* Only few members in ssl_context has been used for DTLS */
+        ssl_context                  context;
+
         dtls_session_t               session;              /**< peer address and local interface */
-        dtls_peer_type               role;                 /**< denotes if this host is DTLS_CLIENT or DTLS_SERVER */
-        dtls_states_t                state;                /**< DTLS engine state */
         dtls_security_parameters_t  *security_params[ 2 ];
         dtls_handshake_parameters_t *handshake_params;
 } dtls_peer_t;
 
 typedef struct context_t
 {
-        int32_t                   state;                /* current state of Peer. */
-        dtls_peer_t               peer;                 /* peer hash map */
-        void*                     send_context;
-        dtls_packet_t*            outgoing_packet;
-
-        wiced_dtls_identity_t*    identity;
-        const cipher_suite_t**    ciphers;              /* allowed ciphersuites for DTLS */
-        dtls_transport_protocol_t transport_protocol;
-
-        unsigned char             randbytes[64];        /* random bytes     */
-        unsigned char             premaster[256];       /* premaster secret */
-        uint32_t                  pmslen;               /* premaster length */
-
-        uint32_t*                 received_packet;
-        uint16_t                  received_packet_length;
-        uint16_t                  received_packet_bytes_skipped;
-        uint16_t                  current_record_original_length;
-        dtls_record_t*            current_record;
-        uint16_t                  current_record_bytes_processed;
-        dtls_handshake_message_t* current_handshake_message;
-
+        unsigned char             cookie_secret[ 32 ];
+        uint16_t                  cookie_length;
+        linked_list_t             peer_list;            /* peer list */
+        uint32_t                  retransmission_timer; /* current retransmission value */
         uint8_t                   key_block[ MAX_KEYBLOCK_LENGTH ];
         int32_t                   do_crypt;             /* en(de)cryption flag     */
         tls_cipher_context        ctx_enc;              /* encryption context   */
+
+        tls_packet_t*             outgoing_packet;
+        void*                     send_context;               /*!< context for writing operations   */
+        const cipher_suite_t**    ciphers;     /*!<  allowed ciphersuites*/
+
+        int32_t  (*f_rng)(void *);
+        void (*f_dbg)(void *, int32_t, char *);
+
+        void *p_rng;                /*!< context for the RNG function     */
+        void *p_dbg;                /*!< context for the debug function   */
+
+        wiced_dtls_identity_t*     identity;
 
 } dtls_context_t;
 
@@ -292,11 +278,17 @@ typedef struct context_t
 
 typedef struct context_t wiced_dtls_workspace_t;
 
-typedef struct wiced_dtls_context_s
+/* Callback registered with DTLS will be called when there is application data available and application should free the packet after use.
+ * Callback is called from high priority thread so please free as soon as possible */
+typedef int (*wiced_dtls_data_callback_t)( void* socket, void* arg );
+
+typedef struct
 {
-        wiced_dtls_workspace_t context;
-        wiced_dtls_identity_t* identity;
-} wiced_dtls_context_t;
+        wiced_dtls_workspace_t     context;
+        wiced_dtls_identity_t*     identity;
+        wiced_dtls_data_callback_t receive_callback;
+        void*                      callback_arg;
+}wiced_dtls_context_t;
 
 typedef enum
 {
@@ -317,6 +309,7 @@ typedef enum
      ******************************************************/
 
     dtls_result_t dtls_handshake_client_async( dtls_context_t* dtls, dtls_session_t* session );
+    dtls_result_t dtls_handshake_server_async( dtls_context_t* dtls_context, dtls_session_t* session, dtls_peer_t* peer, dtls_record_t* record, uint16_t data_length);
     dtls_result_t dtls_close_notify( dtls_context_t* context );
     void          dtls_free ( dtls_context_t* context, dtls_session_t* session );
 

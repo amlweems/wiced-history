@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,6 +10,9 @@
 
 #include "platform_peripheral.h"
 #include "platform_map.h"
+
+#include "typedefs.h"
+#include "wiced_osl.h"
 
 /******************************************************
  *                      Macros
@@ -142,6 +145,137 @@ uint32_t platform_pmu_pllcontrol(uint8_t reg_offset, uint32_t clear_mask, uint32
     return platform_chipcontrol(&PLATFORM_PMU->pllcontrol_addr, &PLATFORM_PMU->pllcontrol_data,
                                 reg_offset, clear_mask, set_mask);
 }
+
+#if defined(PLATFORM_4390X_OVERCLOCK)
+static wiced_bool_t platform_pmu_pllcontrol_mdiv_get_init_params(uint8_t channel, uint8_t divider, uint8_t* reg_offset, uint32_t* mask, uint32_t* val, uint16_t* shift)
+{
+    switch (channel)
+    {
+        case 1:
+            *reg_offset = PLL_CONTROL_M1DIV_REG;
+            *mask       = PLL_CONTROL_M1DIV_MASK;
+            *val        = PLL_CONTROL_M1DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M1DIV_SHIFT;
+            return WICED_TRUE;
+
+        case 2:
+            *reg_offset = PLL_CONTROL_M2DIV_REG;
+            *mask       = PLL_CONTROL_M2DIV_MASK;
+            *val        = PLL_CONTROL_M2DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M2DIV_SHIFT;
+            return WICED_TRUE;
+
+        case 3:
+            *reg_offset = PLL_CONTROL_M3DIV_REG;
+            *mask       = PLL_CONTROL_M3DIV_MASK;
+            *val        = PLL_CONTROL_M3DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M3DIV_SHIFT;
+            return WICED_TRUE;
+
+        case 4:
+            *reg_offset = PLL_CONTROL_M4DIV_REG;
+            *mask       = PLL_CONTROL_M4DIV_MASK;
+            *val        = PLL_CONTROL_M4DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M4DIV_SHIFT;
+            return WICED_TRUE;
+
+        case 5:
+            *reg_offset = PLL_CONTROL_M5DIV_REG;
+            *mask       = PLL_CONTROL_M5DIV_MASK;
+            *val        = PLL_CONTROL_M5DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M5DIV_SHIFT;
+            return WICED_TRUE;
+
+        case 6:
+            *reg_offset = PLL_CONTROL_M6DIV_REG;
+            *mask       = PLL_CONTROL_M6DIV_MASK;
+            *val        = PLL_CONTROL_M6DIV_VAL(divider);
+            *shift      = PLL_CONTROL_M6DIV_SHIFT;
+            return WICED_TRUE;
+
+        default:
+            return WICED_FALSE;
+    }
+}
+
+uint8_t platform_pmu_pllcontrol_mdiv_get(uint8_t channel)
+{
+    uint8_t  reg_offset;
+    uint32_t mask;
+    uint32_t val;
+    uint16_t shift;
+
+    if (!platform_pmu_pllcontrol_mdiv_get_init_params(channel, 0, &reg_offset, &mask, &val, &shift))
+    {
+        return 0;
+    }
+
+    return ((platform_pmu_pllcontrol(reg_offset, 0x0, 0x0) & mask) >> shift);
+}
+
+void platform_pmu_pllcontrol_mdiv_set(uint8_t channel, uint8_t divider)
+{
+    uint32_t flags;
+    uint32_t val;
+    uint8_t  reg_offset;
+    uint32_t mask;
+    uint16_t shift;
+    uint32_t new_val;
+    uint32_t load_enable;
+    uint32_t min_res_mask;
+    uint32_t max_res_mask;
+    uint32_t pmucontrol;
+
+    if (!platform_pmu_pllcontrol_mdiv_get_init_params(channel, divider, &reg_offset, &mask, &new_val, &shift))
+    {
+        return;
+    }
+
+    WICED_SAVE_INTERRUPTS(flags);
+
+    PLATFORM_PMU->pllcontrol_addr = reg_offset;
+    val                           = PLATFORM_PMU->pllcontrol_data;
+
+    if (new_val != (val & mask))
+    {
+        /* Force dropping HT resources */
+        min_res_mask = PLATFORM_PMU->min_res_mask;
+        max_res_mask = PLATFORM_PMU->max_res_mask;
+        PLATFORM_PMU->min_res_mask = min_res_mask & ~PMU_RES_HT_CLOCKS_MASK;
+        PLATFORM_PMU->max_res_mask = max_res_mask & ~PMU_RES_HT_CLOCKS_MASK;
+
+        /* Wait till backplane start to run on ALP clock */
+        while (PLATFORM_CLOCKSTATUS_REG(PLATFORM_APPSCR4_REGBASE(0x0))->bits.ht_clock_available);
+        OSL_DELAY(100);
+
+        /* Enable divider loading into PLL */
+        PLATFORM_PMU->pllcontrol_addr = PLL_CONTROL_LOAD_ENABLE_REG;
+        load_enable                   = PLATFORM_PMU->pllcontrol_data & ~PLL_CONTROL_LOAD_ENABLE_MASK;
+        PLATFORM_PMU->pllcontrol_data = load_enable | PLL_CONTROL_LOAD_ENABLE_VAL(channel);
+
+        /* Set new divider */
+        PLATFORM_PMU->pllcontrol_addr = reg_offset;
+        PLATFORM_PMU->pllcontrol_data = new_val | (val & ~mask);
+
+        /* Trigger PLL update */
+        pmucontrol = (PLATFORM_PMU->pmucontrol & ~PMU_CONTROL_PLLCTL_UPDATE_MASK) | PMU_CONTROL_PLLCTL_UPDATE_EXEC;
+        PLATFORM_PMU->pmucontrol = pmucontrol;
+
+        /* Disable divider loading */
+        PLATFORM_PMU->pllcontrol_addr = PLL_CONTROL_LOAD_ENABLE_REG;
+        PLATFORM_PMU->pllcontrol_data = load_enable;
+
+        /* Trigger PLL update */
+        PLATFORM_PMU->pmucontrol = pmucontrol;
+
+        /* Restore masks */
+        PLATFORM_PMU->max_res_mask = max_res_mask;
+        PLATFORM_PMU->min_res_mask = min_res_mask;
+    }
+
+    WICED_RESTORE_INTERRUPTS(flags);
+}
+#endif  /* PLATFORM_4390X_OVERCLOCK */
 
 uint32_t platform_common_chipcontrol(volatile uint32_t* reg, uint32_t clear_mask, uint32_t set_mask)
 {

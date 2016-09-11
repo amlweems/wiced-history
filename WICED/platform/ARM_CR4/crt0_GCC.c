@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,8 +34,16 @@ extern constructor_ptr_t link_constructors_end;
 WEAK void _start( void )      NORETURN;
 WEAK void _exit( int status ) NORETURN;
 
-#define link_constructors_size   ((unsigned long)&link_constructors_end  -  (unsigned long)&link_constructors_location )
+#ifdef NO_CRT_START_AND_EXIT
+#define CRT_START_FUNCTION_TYPE WEAK NEVER_INLINE
+#else
+#define CRT_START_FUNCTION_TYPE static inline ALWAYS_INLINE
+#endif
+CRT_START_FUNCTION_TYPE void _start_low( void );
+CRT_START_FUNCTION_TYPE void _start_platform_init( void );
+CRT_START_FUNCTION_TYPE void _start_done( void ) NORETURN;
 
+#define link_constructors_size   ((unsigned long)&link_constructors_end  -  (unsigned long)&link_constructors_location )
 
 #ifdef WICED_ROM_OFFLOAD
 extern void *link_rom_global_data_initial_values;
@@ -48,10 +56,8 @@ extern void *link_rom_global_bss_end;
 #define ROM_GLOBAL_BSS_SIZE      ((unsigned long)&link_rom_global_bss_end - (unsigned long)&link_rom_global_bss_start)
 #endif /* ifdef WICED_ROM_OFFLOAD */
 
-void _start( void )
+CRT_START_FUNCTION_TYPE void _start_low( void )
 {
-    unsigned long ctor_num;
-
     cr4_init_cycle_counter( );
 
 #ifdef WICED_ROM_OFFLOAD
@@ -76,6 +82,11 @@ void _start( void )
 
     /* Initialize DMA descriptors */
     memset( &link_dma_location, 0, (size_t) link_dma_size );
+}
+
+CRT_START_FUNCTION_TYPE void _start_platform_init( void )
+{
+    unsigned long ctor_num;
 
     /* Initialise clocks and memory. */
     platform_init_system_clocks();
@@ -117,9 +128,10 @@ void _start( void )
     platform_init_complete( );
 
     WICED_BOOT_CHECKPOINT_WRITE_C( 104 );
+}
 
-    main( );
-
+CRT_START_FUNCTION_TYPE void _start_done( void )
+{
     WICED_BOOT_CHECKPOINT_WRITE_C( 105 );
 
     /* the main loop has returned - there is now nothing to do - reboot. */
@@ -129,6 +141,18 @@ void _start( void )
 #else
     while ( 1 ); /* Loop forever */
 #endif
+}
+
+#ifndef NO_CRT_START_AND_EXIT
+void _start( void )
+{
+    _start_low( );
+
+    _start_platform_init( );
+
+    main( );
+
+    _start_done( );
 }
 
 void _exit( int status )
@@ -152,3 +176,4 @@ void _exit( int status )
     /* Reset request */
     platform_mcu_reset( );
 }
+#endif /* !NO_CRT_START_AND_EXIT */

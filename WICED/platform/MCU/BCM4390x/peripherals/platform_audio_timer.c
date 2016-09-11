@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -86,6 +86,7 @@ wiced_result_t platform_audio_timer_disable( void )
 
     platform_ascu_disable_interrupts   ( ASCU_ASTP_INT_MASK );
 
+    host_rtos_set_semaphore( &audio_timer_semaphore, WICED_FALSE );
     result = host_rtos_deinit_semaphore( &audio_timer_semaphore );
 
 _exit:

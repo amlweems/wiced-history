@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -66,7 +66,8 @@ typedef enum
     ERR_TOO_MANY_ARGS    = -4,
     ERR_ADDRESS          = -5,
     ERR_NO_CMD           = -6,
-    ERR_LAST_ERROR       = -7
+    ERR_TOO_LARGE_ARG    = -7,
+    ERR_LAST_ERROR       = -8
 } cmd_err_t;
 
 /******************************************************

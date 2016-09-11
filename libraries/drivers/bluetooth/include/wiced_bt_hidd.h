@@ -15,7 +15,6 @@
  */
 #pragma once
 
-#include "wiced.h"
 #include "wiced_bt_dev.h"
 
 /******************************************************

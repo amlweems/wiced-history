@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -81,7 +81,7 @@ static const wiced_wps_device_detail_t registrar_details =
     .model_name                       = "BCM943362",
     .model_number                     = "Wiced",
     .serial_number                    = "12345670",
-    .device_category                  = PRIMARY_DEVICE_NETWORK_INFRASTRUCTURE,
+    .device_category                  = ( wiced_wps_device_category_t )PRIMARY_DEVICE_NETWORK_INFRASTRUCTURE,
     .sub_category                     = 1,
     .config_methods                   = WPS_CONFIG_LABEL | WPS_CONFIG_PUSH_BUTTON | WPS_CONFIG_VIRTUAL_PUSH_BUTTON | WPS_CONFIG_VIRTUAL_DISPLAY_PIN,
     .authentication_type_flags        = WPS_OPEN_AUTHENTICATION | WPS_WPA_PSK_AUTHENTICATION | WPS_WPA2_PSK_AUTHENTICATION,
@@ -110,9 +110,9 @@ int join_wps( int argc, char* argv[] )
 
     memset( credential, 0, MAX_CREDENTIAL_COUNT*sizeof( wiced_wps_credential_t ) );
 
-    if (wwd_wifi_is_ready_to_transceive(WWD_STA_INTERFACE) == WWD_SUCCESS)
+    if (wwd_wifi_is_ready_to_transceive( WWD_STA_INTERFACE ) == WWD_SUCCESS)
     {
-        wiced_network_down( WWD_STA_INTERFACE );
+        wiced_network_down( WICED_STA_INTERFACE );
     }
 
     if ( workspace != NULL )
@@ -278,7 +278,7 @@ int join_wps( int argc, char* argv[] )
             }
             cred = &credential[a];
             WPRINT_APP_INFO(("Joining : %s\n", cred->ssid.value));
-            ret = wifi_join( (char*)cred->ssid.value, cred->security, (uint8_t*) cred->passphrase, cred->passphrase_length, ip, netmask, gateway );
+            ret = wifi_join( (char*)cred->ssid.value, cred->ssid.length, cred->security, (uint8_t*) cred->passphrase, cred->passphrase_length, ip, netmask, gateway );
             if (ret != ERR_CMD_OK)
             {
                 WPRINT_APP_INFO(("Failed to join  : %s   .. retrying\n", cred->ssid.value));
@@ -312,7 +312,7 @@ int start_registrar( int argc, char* argv[] )
 
     wiced_result_t result = WICED_ERROR;
 
-    if ( wwd_wifi_is_ready_to_transceive( WICED_AP_INTERFACE ) != WWD_SUCCESS )
+    if ( wwd_wifi_is_ready_to_transceive( WWD_AP_INTERFACE ) != WWD_SUCCESS )
     {
         WPRINT_APP_INFO(("Use start_ap command to bring up AP interface first\n"));
         return ERR_CMD_OK;
@@ -436,7 +436,7 @@ static wiced_result_t internal_start_registrar( wiced_wps_mode_t mode, const wic
             return WICED_OUT_OF_HEAP_SPACE;
         }
 
-        besl_wps_init( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WICED_AP_INTERFACE );
+        besl_wps_init( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WWD_AP_INTERFACE );
     }
     else
     {
@@ -447,7 +447,7 @@ static wiced_result_t internal_start_registrar( wiced_wps_mode_t mode, const wic
             workspace->wps_result == WPS_SUCCESS)
         {
             besl_wps_deinit( workspace );
-            besl_wps_init( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WICED_AP_INTERFACE );
+            besl_wps_init( workspace, (besl_wps_device_detail_t*) details, WPS_REGISTRAR_AGENT, WWD_AP_INTERFACE );
         }
         else if (workspace->wps_result != WPS_NOT_STARTED )
         {
@@ -460,11 +460,11 @@ static wiced_result_t internal_start_registrar( wiced_wps_mode_t mode, const wic
             {
                 WPRINT_APP_INFO(("WPS already running\n"));
             }
-            return WWD_SUCCESS;
+            return WICED_SUCCESS;
         }
     }
 
-    result = besl_wps_start( workspace, mode, password, (besl_wps_credential_t*) credentials, credential_count );
+    result = (wiced_result_t)besl_wps_start( workspace, (besl_wps_mode_t)mode, password, (besl_wps_credential_t*) credentials, credential_count );
 
     if ( result == WICED_BESL_PBC_OVERLAP )
     {
@@ -479,7 +479,7 @@ static wiced_result_t internal_start_registrar( wiced_wps_mode_t mode, const wic
         return result;
     }
 
-    return WWD_SUCCESS;
+    return result;
 }
 
 
@@ -536,13 +536,13 @@ wiced_result_t enable_ap_registrar_events( void )
         }
     }
 
-    if ( ( result = besl_wps_init( workspace, (besl_wps_device_detail_t*) &registrar_details, WPS_REGISTRAR_AGENT, WWD_AP_INTERFACE ) ) != WICED_SUCCESS )
+    if ( ( result = (wiced_result_t)besl_wps_init( workspace, (besl_wps_device_detail_t*) &registrar_details, WPS_REGISTRAR_AGENT, WWD_AP_INTERFACE ) ) != WICED_SUCCESS )
     {
         WPRINT_APP_INFO(("Error besl init %u\n", (unsigned int)result));
         stop_ap(0, NULL);
         return result;
     }
-    if ( ( result = besl_wps_management_set_event_handler( workspace, WICED_TRUE ) ) != WICED_SUCCESS )
+    if ( ( result = (wiced_result_t)besl_wps_management_set_event_handler( workspace, WICED_TRUE ) ) != WICED_SUCCESS )
     {
         WPRINT_APP_INFO(("Error besl setting event handler %u\n", (unsigned int)result));
         stop_ap(0, NULL);
@@ -575,10 +575,10 @@ int scan_wps( int argc, char* argv[] )
             return ERR_UNKNOWN;
         }
 
-        besl_wps_init( workspace, (besl_wps_device_detail_t*) &enrollee_details, WPS_ENROLLEE_AGENT, WICED_STA_INTERFACE );
+        besl_wps_init( workspace, (besl_wps_device_detail_t*) &enrollee_details, WPS_ENROLLEE_AGENT, WWD_STA_INTERFACE );
     }
 
-    if ( besl_wps_scan( workspace, &ap_array, &ap_array_size, WICED_STA_INTERFACE ) == BESL_SUCCESS )
+    if ( besl_wps_scan( workspace, &ap_array, &ap_array_size, WWD_STA_INTERFACE ) == BESL_SUCCESS )
     {
         int a;
         for ( a = 0; a < ap_array_size; ++a )
@@ -650,7 +650,7 @@ int join_wps_specific( int argc, char* argv[] )
                 }
             }
             WPRINT_APP_INFO(("Starting Enrollee in PIN mode\n"));
-            result = run_wps(WICED_WPS_PIN_MODE, argv[1], credential, MAX_CREDENTIAL_COUNT);
+            result = run_wps( (besl_wps_mode_t)WICED_WPS_PIN_MODE, argv[1], credential, MAX_CREDENTIAL_COUNT );
         }
         else
         {
@@ -665,7 +665,7 @@ int join_wps_specific( int argc, char* argv[] )
         if ( besl_wps_validate_pin_checksum( pin_string ) )
         {
             WPRINT_APP_INFO(("Starting Enrollee in PIN mode\n"));
-            result = run_wps(WICED_WPS_PIN_MODE, pin_string, credential, MAX_CREDENTIAL_COUNT);
+            result = run_wps((besl_wps_mode_t)WICED_WPS_PIN_MODE, pin_string, credential, MAX_CREDENTIAL_COUNT);
         }
         else
         {
@@ -732,7 +732,7 @@ int join_wps_specific( int argc, char* argv[] )
             }
             cred = &credential[a];
             WPRINT_APP_INFO(("Joining : %s\n", cred->ssid.value));
-            ret = wifi_join( (char*)cred->ssid.value, cred->security, (uint8_t*) cred->passphrase, cred->passphrase_length, ip, netmask, gateway );
+            ret = wifi_join( (char*)cred->ssid.value, cred->ssid.length, cred->security, (uint8_t*) cred->passphrase, cred->passphrase_length, ip, netmask, gateway );
             if (ret != ERR_CMD_OK)
             {
                 WPRINT_APP_INFO(("Failed to join  : %s   .. retrying\n", cred->ssid.value));
@@ -760,12 +760,12 @@ static wiced_result_t run_wps(besl_wps_mode_t mode, char* password, wiced_wps_cr
         return WICED_ERROR;
     }
 
-    result = besl_wps_start( workspace, mode, password, (besl_wps_credential_t*) credentials, credential_count );
+    result = (wiced_result_t)besl_wps_start( workspace, mode, password, (besl_wps_credential_t*) credentials, credential_count );
     wiced_rtos_delay_milliseconds(10); /* Delay required to allow the WPS thread to run */
     if ( result == WICED_SUCCESS )
     {
         besl_wps_wait_till_complete( workspace );
-        result = besl_wps_get_result( workspace );
+        result = (wiced_result_t)besl_wps_get_result( workspace );
     }
 
     besl_wps_deinit( workspace );

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -4307,40 +4307,43 @@ dma64_txfast_lfrag(dma_info_t *di, void *p0, bool commit)
 		}
 
 program_frags:
-		/*
-		 * Now, walk the chain of fragments in this lfrag allocating
-		 * and initializing transmit descriptor entries.
-		 */
-		for (i = 1, j = 1; j <= ftot; i++, j++) {
-			flags = 0;
-			if (PKTFRAGISCHAINED(di->osh, i)) {
-				 i = 1;
-				 p = PKTNEXT(di->osh, p);
-				 ASSERT(p != NULL);
-				 next = PKTNEXT(di->osh, p);
-			}
 
-			len = PKTFRAGLEN(di->osh, p, i);
+        if (ftot > 0) {
+    		/*
+    		 * Now, walk the chain of fragments in this lfrag allocating
+    		 * and initializing transmit descriptor entries.
+    		 */
+    		for (i = 1, j = 1; j <= ftot; i++, j++) {
+    			flags = 0;
+    			if (PKTFRAGISCHAINED(di->osh, i)) {
+    				 i = 1;
+    				 p = PKTNEXT(di->osh, p);
+    				 ASSERT(p != NULL);
+    				 next = PKTNEXT(di->osh, p);
+    			}
+
+    			len = PKTFRAGLEN(di->osh, p, i);
 
 #ifdef BCM_DMAPAD
-			if (DMAPADREQUIRED(di)) {
-				len += PKTDMAPAD(di->osh, p);
-			}
+    			if (DMAPADREQUIRED(di)) {
+    				len += PKTDMAPAD(di->osh, p);
+    			}
 #endif /* BCM_DMAPAD */
 
-			pa64.loaddr = PKTFRAGDATA_LO(di->osh, p, i);
-			pa64.hiaddr = PKTFRAGDATA_HI(di->osh, p, i);
+    			pa64.loaddr = PKTFRAGDATA_LO(di->osh, p, i);
+    			pa64.hiaddr = PKTFRAGDATA_HI(di->osh, p, i);
 
-			if ((j == ftot) && (next == NULL))
-				flags |= (D64_CTRL1_IOC | D64_CTRL1_EOF);
-			if (txout == (di->ntxd - 1))
-				flags |= D64_CTRL1_EOT;
+    			if ((j == ftot) && (next == NULL))
+    				flags |= (D64_CTRL1_IOC | D64_CTRL1_EOF);
+    			if (txout == (di->ntxd - 1))
+    				flags |= D64_CTRL1_EOT;
 
-			/* War to handle 64 bit dma address for now */
-			dma64_dd_upd_64(di, di->txd64, pa64, txout, &flags, len);
+    			/* War to handle 64 bit dma address for now */
+    			dma64_dd_upd_64(di, di->txd64, pa64, txout, &flags, len);
 
-			ASSERT(di->txp[txout] == NULL);
-			txout = NEXTTXD(txout);
+    			ASSERT(di->txp[txout] == NULL);
+    			txout = NEXTTXD(txout);
+    		}
 		}
 	}
 

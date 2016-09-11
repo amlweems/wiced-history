@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -368,6 +368,11 @@ contract256_slidingwindow_modm(signed char r[256], const bignum256modm s, int wi
         if (!r[j])
             continue;
 
+        /* coverity[Out-of-bounds read]
+           FALSE-POSITIVE:
+           max value of b is 6 or under 256 - j. so max j + b never exceed 255
+           case 1: When j is 249, max j + b is 255
+           case 2: when j is 250, b < 6, max j + b is also 255 */
         for (b = 1; (b < (soplen - j)) && (b <= 6); b++) {
             if ((r[j] + (r[j + b] << b)) <= m) {
                 r[j] += r[j + b] << b;

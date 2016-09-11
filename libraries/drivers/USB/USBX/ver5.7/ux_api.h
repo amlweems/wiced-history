@@ -1636,6 +1636,23 @@ typedef struct UX_HOST_CLASS_DPUMP_STRUCT
 } UX_HOST_CLASS_DPUMP;
 
 
+/*
+ * #BRCM#: Add UX_USER_CONFIG_HOST for several parameters used in _ux_host_stack_initialize()
+ *         those had better to open for application layer config.
+ *         So that we don't have to recompile the library when one item is adjusted.
+ */
+/* Define USBX User Config Host Data structure.  */
+typedef struct UX_USER_CONFIG_HOST_STRUCT
+{
+    UINT            ux_user_config_host_max_class;
+    UINT            ux_user_config_host_max_hcd;
+    ULONG           ux_user_config_host_max_devices;
+    ULONG           ux_user_config_host_max_ed;
+    ULONG           ux_user_config_host_max_td;
+    ULONG           ux_user_config_host_max_iso_td;
+} UX_USER_CONFIG_HOST;
+
+
 /* Define the system API mappings based on the error checking 
    selected by the user.  Note: this section is only applicable to 
    application source code, hence the conditional that turns off this
@@ -1727,7 +1744,7 @@ UINT    ux_host_stack_device_configuration_select(UX_CONFIGURATION *configuratio
 UINT    ux_host_stack_device_get(ULONG device_index, UX_DEVICE **device);
 UINT    ux_host_stack_endpoint_transfer_abort(UX_ENDPOINT *endpoint);
 UINT    ux_host_stack_hcd_register(UCHAR *hcd_name, UINT (*hcd_initialize_function)(struct UX_HCD_STRUCT *), ULONG hcd_param1, ULONG hcd_param2);
-UINT    ux_host_stack_initialize(UINT (*ux_system_host_change_function)(ULONG, UX_HOST_CLASS *, VOID *));
+UINT    ux_host_stack_initialize(UINT (*ux_system_host_change_function)(ULONG, UX_HOST_CLASS *, VOID *), UX_USER_CONFIG_HOST *user_config_host);   /* #BRCM#: Add argument to get user config from application. */
 UINT    ux_host_stack_interface_endpoint_get(UX_INTERFACE *interface, UINT endpoint_index, UX_ENDPOINT **endpoint);
 UINT    ux_host_stack_interface_setting_select(UX_INTERFACE *interface);
 UINT    ux_host_stack_transfer_request(UX_TRANSFER *transfer_request);
@@ -1776,11 +1793,9 @@ UINT    ux_device_stack_transfer_request_abort(UX_SLAVE_TRANSFER *transfer_reque
 #include "ux_utility.h"
 #include "ux_system.h"
 
-/* +++ #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
-/* Include WICED include file.  */
+/* #BRCM#: Include WICED include file.  */
 #include "wiced.h"
-#include "platform_cache.h" //Usb20hTODO: Temp solution, need refine data trans buffer usage!!!
-/* --- #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
+#include "platform_cache.h"
 
 /* Determine if a C++ compiler is being used.  If so, complete the standard
    C conditional started above.  */

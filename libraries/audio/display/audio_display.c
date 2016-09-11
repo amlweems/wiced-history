@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -16,6 +16,8 @@
 /******************************************************
  *                      Macros
  ******************************************************/
+
+#define SPACE_CHAR_STR " "
 
 /******************************************************
  *                    Constants
@@ -199,6 +201,7 @@ static bluetooth_icon_t       audio_bluetooth;
 static signal_strength_icon_t audio_signal_strength;
 static audio_footer_t         audio_footer;
 static int32_t g_rssi = 0;
+static uint32_t g_channel = 0;
 
 const static generic_bitmap_t battery_shell =
 {
@@ -401,8 +404,23 @@ void audio_display_update_header(power_management_status_t* battery_status, int3
 
 void audio_display_footer_update_song_info(char* title, char* artist)
 {
-    strncpy(audio_footer.song.title, title, SONG_DETAILS_STRING_SIZE_LIMIT);
-    strncpy(audio_footer.song.artist, artist, SONG_DETAILS_STRING_SIZE_LIMIT);
+    if ( (title != NULL) && (title[0] != '\0') )
+    {
+        strlcpy(audio_footer.song.title, title, sizeof(audio_footer.song.title));
+    }
+    else
+    {
+        strlcpy(audio_footer.song.title, SPACE_CHAR_STR, sizeof(audio_footer.song.title));
+    }
+
+    if ( (artist != NULL) && (artist[0] != '\0') )
+    {
+        strlcpy(audio_footer.song.artist, artist, sizeof(audio_footer.song.artist));
+    }
+    else
+    {
+        strlcpy(audio_footer.song.artist, SPACE_CHAR_STR, sizeof(audio_footer.song.artist));
+    }
 
     if (audio_footer.options & FOOTER_CENTER_ALIGN)
     {
@@ -426,10 +444,10 @@ uint8_t audio_display_get_footer_options(void)
 void audio_display_format_time_info(void)
 {
     if (audio_footer.options & FOOTER_OPTION_APOLLO_TX) {
-        snprintf(audio_footer.duration_string, SONG_DETAILS_DURATION_STRLEN, "%ld - %d TX", g_rssi, audio_footer.song.current_time);
+        snprintf(audio_footer.duration_string, SONG_DETAILS_DURATION_STRLEN, "Ch: %ld %ld - %d TX", g_channel, g_rssi, audio_footer.song.current_time);
     }
     else if (audio_footer.options & FOOTER_OPTION_APOLLO_RX) {
-        snprintf(audio_footer.duration_string, SONG_DETAILS_DURATION_STRLEN, "%ld - %d/%d", g_rssi, audio_footer.song.current_time, audio_footer.song.duration);
+        snprintf(audio_footer.duration_string, SONG_DETAILS_DURATION_STRLEN, "Ch: %ld %ld - %d/%d", g_channel, g_rssi, audio_footer.song.current_time, audio_footer.song.duration);
     } else {
         snprintf(audio_footer.duration_string, SONG_DETAILS_DURATION_STRLEN, "%d:%02d/%d:%02d", audio_footer.song.current_time / 60, audio_footer.song.current_time % 60, audio_footer.song.duration / 60, audio_footer.song.duration % 60);
     }
@@ -584,13 +602,17 @@ static void audio_display_main(uint32_t arg)
         .speed_mode    = I2C_HIGH_SPEED_MODE,
     };
     power_management_status_t battery_status;
+#ifndef USE_NO_WIFI
     uint32_t update_rssi_counter = 0;
+#endif
 
     u8g_init_wiced_i2c_device(&oled_display);
     u8g_InitComFn(&thread_u8g, &u8g_dev_ssd1306_128x64_i2c, u8g_com_hw_i2c_fn);
     power_management_init(0);
     audio_display_init(&thread_u8g);
+#ifndef USE_NO_WIFI
     wiced_wlan_connectivity_init(); // Required to get rssi and update signal strength
+#endif
 
     while(1)
     {
@@ -598,14 +620,17 @@ static void audio_display_main(uint32_t arg)
         power_management_update(&battery_status, MAXIM_CHARGE_SPEED_FAST, 0);
         audio_display_header_update_battery(&battery_status, audio_battery.options);
 
+#ifndef USE_NO_WIFI
         if ( !(update_rssi_counter++ % 6) )
         {
             wwd_wifi_get_rssi(&g_rssi);
+            wwd_wifi_get_channel(WWD_STA_INTERFACE, &g_channel);
             audio_display_header_update_signal_strength(g_rssi, audio_signal_strength.options);
             if (audio_footer.options & (FOOTER_OPTION_APOLLO_TX | FOOTER_OPTION_APOLLO_RX)) {
                 audio_display_format_time_info();
             }
         }
+#endif
 
         do {
             audio_display_draw_header();

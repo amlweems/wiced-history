@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -79,6 +79,7 @@ wiced_result_t wiced_mqtt_connect( wiced_mqtt_object_t mqtt_obj, wiced_ip_addres
 
     memset( &args, 0, sizeof(mqtt_connect_arg_t) );
 
+    conn->peer_cn = conninfo->peer_cn;
     result = mqtt_connection_init( address, conninfo->port_number, interface, callback, conn, security );
 
     if ( result != WICED_SUCCESS )

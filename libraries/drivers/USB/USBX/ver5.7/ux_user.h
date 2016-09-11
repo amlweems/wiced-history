@@ -81,7 +81,7 @@
 
 /* +++ #BRCM#WICED#: WICED use, modified by JustinLi, 07/24/2015. */
 //#define UX_THREAD_STACK_SIZE                                (2 * 1024)
-#define UX_THREAD_STACK_SIZE                      (20 * 1024)
+#define UX_THREAD_STACK_SIZE                      (8 * 1024)
 /* --- #BRCM#WICED#: WICED use, modified by JustinLi, 07/24/2015. */
 
 /* Override various options with default values already assigned in ux_api.h or ux_port.h. Please

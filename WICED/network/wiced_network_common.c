@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -61,7 +61,7 @@ wiced_bool_t wiced_network_is_up( wiced_interface_t interface )
 
 wiced_bool_t wiced_network_is_ip_up( wiced_interface_t interface )
 {
-    return IP_NETWORK_IS_INITED(interface);
+    return IP_NETWORK_IS_INITED( interface );
 }
 
 wiced_result_t wiced_network_up_default( wiced_interface_t* interface, const wiced_ip_setting_t* ap_ip_settings )
@@ -214,6 +214,13 @@ wiced_result_t wiced_network_up( wiced_interface_t interface, wiced_network_conf
     if ( result != WICED_SUCCESS )
     {
         return result;
+    }
+
+    /*
+     * Indirect fix (workaround) for the SoftAP Issue by adding a 100ms delay.
+     */
+    if (interface == WICED_AP_INTERFACE) {
+        wiced_rtos_delay_milliseconds(100);
     }
 
     result = wiced_ip_up( interface, config, ip_settings );
@@ -463,4 +470,9 @@ void format_wep_keys( char* wep_key_output, const char* wep_key_data, uint8_t* w
     wep_key->index = 3;
 
     *wep_key_length = (uint8_t) ( 4 * wep_key_entry_size );
+}
+
+wiced_bool_t IP_NETWORK_IS_INITED( wiced_interface_t interface )
+{
+    return (ip_networking_inited[( ( uint8_t ) interface)&3]);
 }

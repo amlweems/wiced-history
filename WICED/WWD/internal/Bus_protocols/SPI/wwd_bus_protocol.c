@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -474,6 +474,12 @@ wwd_result_t wwd_bus_init( void )
 
     /* Download the firmware */
     result = wwd_download_firmware( );
+    if ( result == WWD_UNFINISHED )
+    {
+        host_platform_reset_wifi( WICED_TRUE );
+        host_platform_power_wifi( WICED_FALSE );
+    }
+
     if ( result != WWD_SUCCESS )
     {
         WPRINT_WWD_ERROR(("Could not download firmware\n"));
@@ -512,6 +518,7 @@ wwd_result_t wwd_bus_deinit( void )
 
     /* put device in reset. */
     host_platform_reset_wifi( WICED_TRUE );
+    wwd_bus_set_resource_download_halt( WICED_FALSE );
 
     return WWD_SUCCESS;
 }
@@ -646,7 +653,7 @@ static wwd_result_t wwd_download_firmware( void )
     VERIFY_RESULT( wwd_disable_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
     VERIFY_RESULT( wwd_reset_device_core( SOCRAM_CORE, WLAN_CORE_FLAG_NONE ) );
 
-    VERIFY_RESULT( wwd_disable_sram3_remap( ));
+    VERIFY_RESULT( wwd_chip_specific_socsram_init( ));
 
 #ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
     VERIFY_RESULT( external_write_wifi_firmware_and_nvram_image( ) );

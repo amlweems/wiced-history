@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,8 +27,8 @@
 
 #pragma once
 
-#include "wiced.h"
 #include "wiced_bt_types.h"
+#include "rtos.h"
 #include "wiced_result.h"
 #include "hcidefs.h"
 #include "bt_target.h"
@@ -284,19 +284,13 @@ enum wiced_bt_sec_flags_e
 /** Pairing IO Capabilities */
 enum wiced_bt_dev_io_cap_e
 {
-    BTM_IO_CAPABILITIES_DISPLAY_ONLY,             /**< Display Only        */
-    BTM_IO_CAPABILITIES_DISPLAY_AND_KEYBOARD,     /**< Display Yes/No      */
-    BTM_IO_CAPABILITIES_KEYBOARD_ONLY,            /**< Keyboard Only       */
-    BTM_IO_CAPABILITIES_NONE,                     /**< No Input, No Output */
-    BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY,         /**< Keyboard display    */
+    BTM_IO_CAPABILITIES_DISPLAY_ONLY,                   /**< Display Only        */
+    BTM_IO_CAPABILITIES_DISPLAY_AND_YES_NO_INPUT,       /**< Display Yes/No      */
+    BTM_IO_CAPABILITIES_KEYBOARD_ONLY,                  /**< Keyboard Only       */
+    BTM_IO_CAPABILITIES_NONE,                           /**< No Input, No Output */
+    BTM_IO_CAPABILITIES_BLE_DISPLAY_AND_KEYBOARD_INPUT, /**< Keyboard display (For BLE SMP) */
     BTM_IO_CAPABILITIES_MAX
 };
-#define BTM_IO_CAPABILIES_DISPLAY_ONLY          BTM_IO_CAPABILITIES_DISPLAY_ONLY
-#define BTM_IO_CAPABILIES_DISPLAY_AND_KEYBOARD  BTM_IO_CAPABILITIES_DISPLAY_AND_KEYBOARD
-#define BTM_IO_CAPABILIES_KEYBOARD_ONLY         BTM_IO_CAPABILITIES_KEYBOARD_ONLY
-#define BTM_IO_CAPABILIES_NONE                  BTM_IO_CAPABILITIES_NONE
-#define BTM_IO_CAPABILIES_KEYBOARD_DISPLAY      BTM_IO_CAPABILITIES_KEYBOARD_DISPLAY
-#define BTM_IO_CAPABILIES_MAX                   BTM_IO_CAPABILITIES_MAX
 typedef uint8_t wiced_bt_dev_io_cap_t;          /**< IO capabilities (see #wiced_bt_dev_io_cap_e) */
 
 /** BR/EDR Authentication requirement */
@@ -400,7 +394,6 @@ typedef struct
     wiced_result_t                    status;                 /**< status of the simple pairing process   */
     uint8_t                           reason;                 /**< failure reason (see #wiced_bt_smp_status_t) */
     uint8_t                           sec_level;              /**< 0 - None, 1- Unauthenticated Key, 4-Authenticated Key  */
-    wiced_bool_t                      privacy_supported;      /**< True if privacy supported, False if not    */
     wiced_bool_t                      is_pair_cancel;         /**< True if cancelled, else False   */
     wiced_bt_device_address_t         resolved_bd_addr;       /**< Resolved address (if remote device using private address) */
     wiced_bt_ble_address_type_t       resolved_bd_addr_type;  /**< Resolved addr type of bonded device */
@@ -559,6 +552,22 @@ typedef struct
     BT_OCTET32                  private_key_used;       /**< private key */
     wiced_bt_public_key_t       public_key_used;        /**< public key */
 } wiced_bt_smp_sc_local_oob_t;
+
+/* FIXME: The peer_oob_t has been added back in Low-Energy stack for compatibility of BIG app.
+ * These will be removed/reviewed again in the future */
+typedef struct
+{
+    wiced_bool_t                present;                /**< TRUE if local oob is present */
+    BT_OCTET16                  randomizer;             /**< randomizer */
+    BT_OCTET16                  commitment;             /**< commitment */
+    tBLE_BD_ADDR                addr_received_from;     /**< peer address */
+} wiced_bt_smp_sc_peer_oob_t;
+
+typedef struct
+{
+    wiced_bt_smp_sc_local_oob_t local_oob_data;
+    wiced_bt_smp_sc_peer_oob_t  peer_oob_data;
+} wiced_bt_smp_sc_oob_t;
 
 
 /** SCO link type */
@@ -723,7 +732,7 @@ typedef struct {
     wiced_bool_t                extended_oob_data;      /**< TRUE if requesting extended OOB (P-256) */
 } wiced_bt_dev_remote_oob_t;
 
-/** BR/EDR Pairing IO Capabilities (to be filled by application callback on BTM_PAIRING_IO_CAPABILITIES_REQUEST_EVT) */
+/** BR/EDR Pairing IO Capabilities (to be filled by application callback on BTM_PAIRING_IO_CAPABILITIES_BR_EDR_REQUEST_EVT) */
 typedef struct
 {
     wiced_bt_device_address_t   bd_addr;                /**< [in] BD Address of remote   */
@@ -733,7 +742,7 @@ typedef struct
     wiced_bool_t                is_orig;                /**< TRUE, if local device initiated the pairing process    */
 } wiced_bt_dev_bredr_io_caps_req_t;
 
-/** BLE Pairing IO Capabilities (to be filled by application callback on BTM_PAIRING_IO_CAPABILITIES_REQUEST_EVT) */
+/** BLE Pairing IO Capabilities (to be filled by application callback on BTM_PAIRING_IO_CAPABILITIES_BLE_REQUEST_EVT) */
 typedef struct
 {
     wiced_bt_device_address_t   bd_addr;                /**< [in] BD Address of remote   */
@@ -894,10 +903,19 @@ typedef wiced_result_t (wiced_bt_management_cback_t) (wiced_bt_management_evt_t 
  * @param[in] is_connected  : TRUE if connected
  * @param[in] handle        : Connection handle
  * @param[in] transport     : BT_TRANSPORT_BR_EDR or BT_TRANSPORT_LE
+ * @param[in] reason        : status for acl connection change
+ *                                    HCI_SUCCESS
+ *                                    HCI_ERR_PAGE_TIMEOUT
+ *                                    HCI_ERR_MEMORY_FULL
+ *                                    HCI_ERR_CONNECTION_TOUT
+ *                                    HCI_ERR_PEER_USER
+ *                                    HCI_ERR_CONN_CAUSE_LOCAL_HOST
+ *                                    HCI_ERR_LMP_RESPONSE_TIMEOUT
+ *                                    HCI_ERR_CONN_FAILED_ESTABLISHMENT
  *
  * @return void
  */
-typedef void (wiced_bt_connection_status_change_cback_t) (wiced_bt_device_address_t bd_addr, uint8_t *p_features, wiced_bool_t is_connected, uint16_t handle, wiced_bt_transport_t transport);  /**<   connection status change callback */
+typedef void (wiced_bt_connection_status_change_cback_t) (wiced_bt_device_address_t bd_addr, uint8_t *p_features, wiced_bool_t is_connected, uint16_t handle, wiced_bt_transport_t transport, uint8_t reason);  /**<   connection status change callback */
 
 
 /**
@@ -1516,12 +1534,11 @@ wiced_result_t wiced_bt_dev_delete_bonded_device(wiced_bt_device_address_t bd_ad
  *                  add link key information to internal address resolution db
  *
  * @param[in]      p_link_keys    : link keys information stored in application side
- * @param[in]      addr_type      : peer address type stored in application side
  *
  * @return          wiced_result_t
  *
  */
-wiced_result_t wiced_bt_dev_add_device_to_address_resolution_db(wiced_bt_device_link_keys_t *p_link_keys,wiced_bt_ble_address_type_t addr_type);
+wiced_result_t wiced_bt_dev_add_device_to_address_resolution_db(wiced_bt_device_link_keys_t *p_link_keys);
 
 
 /**

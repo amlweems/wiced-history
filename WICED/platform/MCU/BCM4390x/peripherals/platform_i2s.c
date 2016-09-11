@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -157,7 +157,7 @@ struct i2s_ops
 static void           i2s_cleanup( platform_i2s_port_t port );
 static wiced_result_t i2s_set_clkdiv( platform_i2s_port_t port, const wiced_i2s_params_t *config, uint32_t *mclk );
 static wiced_result_t i2s_configure_peripheral( platform_i2s_port_t i2s, const wiced_i2s_params_t *config, uint32_t *mclk, platform_i2s_direction_t dir);
-static wiced_result_t i2s_peripheral_transfer_enable( platform_i2s_port_t port, uint32_t bits, wiced_bool_t on);
+static wiced_result_t i2s_peripheral_transfer_enable( platform_i2s_port_t port, platform_i2s_direction_t dir, uint32_t bits, wiced_bool_t on);
 static wiced_result_t i2s_dma_attach( platform_i2s_port_t port, platform_i2s_direction_t dir, uint16_t period_size );
 static wiced_result_t i2s_stop_stream( platform_i2s_port_t port, platform_i2s_direction_t dir );
 
@@ -473,7 +473,7 @@ wiced_result_t wiced_i2s_start( wiced_i2s_t i2s )
 
     (*I2S_OPS(dir)->interrupts_on)(port, WICED_TRUE);
 
-    i2s_peripheral_transfer_enable(port, I2S_OPS(dir)->peripheral_transfer_enable_val, WICED_TRUE);
+    i2s_peripheral_transfer_enable(port, dir, I2S_OPS(dir)->peripheral_transfer_enable_val, WICED_TRUE);
 
 ERROR_INSUFFICIENT_DATA:
     I2S_UNLOCK_PORT(port);
@@ -530,7 +530,7 @@ wiced_result_t wiced_i2s_get_current_hw_pointer(wiced_i2s_t i2s, uint32_t *hw_po
 
 static wiced_result_t i2s_stop_stream( platform_i2s_port_t port, platform_i2s_direction_t dir )
 {
-    i2s_peripheral_transfer_enable(port, I2S_OPS(dir)->peripheral_transfer_enable_val, WICED_FALSE);
+    i2s_peripheral_transfer_enable(port, dir, I2S_OPS(dir)->peripheral_transfer_enable_val, WICED_FALSE);
     (*I2S_OPS(dir)->interrupts_on)(port, WICED_FALSE);
     (*I2S_OPS(dir)->dma_init)(port, WICED_FALSE);
 
@@ -1208,15 +1208,39 @@ DONE:
 }
 
 /* Enable/disable stream transfer. */
-static wiced_result_t i2s_peripheral_transfer_enable( platform_i2s_port_t port, uint32_t bits, wiced_bool_t on)
+static wiced_result_t i2s_peripheral_transfer_enable( platform_i2s_port_t port, platform_i2s_direction_t dir, uint32_t bits, wiced_bool_t on)
 {
     if (on == WICED_TRUE)
     {
         OR_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->i2scontrol, bits);
+
+        if (I2S_CONTROL(port)->i2s_spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+        {
+            if (dir == PLATFORM_I2S_READ)
+            {
+                OR_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->srxctrl, I2S_SRXC_RXEN);
+            }
+            else
+            {
+                OR_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->stxctrl, I2S_STXC_TXEN);
+            }
+        }
     }
     else
     {
         AND_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->i2scontrol, ~bits);
+
+        if (I2S_CONTROL(port)->i2s_spdif_mode == WICED_I2S_SPDIF_MODE_ON)
+        {
+            if (dir == PLATFORM_I2S_READ)
+            {
+                AND_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->srxctrl, ~I2S_SRXC_RXEN);
+            }
+            else
+            {
+                AND_REG(I2S_CONTROL(port)->osh, &I2S_REGS(port)->stxctrl, ~I2S_STXC_TXEN);
+            }
+        }
     }
 
     return WICED_SUCCESS;
@@ -1462,6 +1486,10 @@ static void service_transfer_complete( platform_i2s_port_t port, platform_i2s_di
     {
         I2S_INC_POSITION(stream);
         (*I2S_OPS(dir)->post_dma_descriptor)(port);
+    }
+    else if (dir == PLATFORM_I2S_READ)
+    {
+        i2s_stop_stream(port, dir);
     }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -20,6 +20,7 @@
 #include "wiced_result.h"
 #include "wiced_utilities.h"
 #include "platform_dct.h"
+#include "wiced_framework.h"
 #include "wiced_apps_common.h"
 #include "wiced_waf_common.h"
 #include "wiced_dct_common.h"
@@ -40,10 +41,6 @@
 /******************************************************
  *                    Constants
  ******************************************************/
-
-#ifndef PLATFORM_FACTORY_RESET_TIMEOUT
-#define PLATFORM_FACTORY_RESET_TIMEOUT  (5000)      // TODO: Put in header!
-#endif
 
 #define PLATFORM_SFLASH_PERIPHERAL_ID  (0)
 
@@ -79,6 +76,10 @@ wiced_result_t wiced_waf_reboot( void )
     return WICED_SUCCESS;
 }
 
+#if (DCT_BOOTLOADER_SDK_VERSION < DCT_BOOTLOADER_SDK_3_1_2)
+    /* this SDK does not have apps_locations in bootloader_dct_header_t (platform_dct_header_t for the SDK) */
+#else
+
 wiced_result_t wiced_waf_app_set_boot(uint8_t app_id, char load_once)
 {
     boot_detail_t boot;
@@ -92,10 +93,9 @@ wiced_result_t wiced_waf_app_set_boot(uint8_t app_id, char load_once)
     {
         return WICED_ERROR;
     }
-    if ( wiced_dct_write( &boot, DCT_INTERNAL_SECTION, OFFSETOF( platform_dct_header_t, boot_detail ), sizeof(boot_detail_t) ) != WICED_SUCCESS )
-    {
+    if ( wiced_dct_write_boot_details( &boot ) != WICED_SUCCESS)
         return WICED_ERROR;
-    }
+
     return WICED_SUCCESS;
 }
 
@@ -284,6 +284,7 @@ void wiced_waf_start_app( uint32_t entry_point )
 {
     platform_start_app( entry_point );
 }
+#endif
 
 wiced_result_t wiced_waf_check_factory_reset( void )
 {
@@ -292,10 +293,11 @@ wiced_result_t wiced_waf_check_factory_reset( void )
     factory_reset_time = platform_get_factory_reset_button_time( PLATFORM_FACTORY_RESET_TIMEOUT );
     if (factory_reset_time >= PLATFORM_FACTORY_RESET_TIMEOUT)
     {
-        return WICED_TRUE;
+        /* The operation time ran long; return non-zero */
+        return WICED_TIMEOUT;
     }
-
-    return WICED_FALSE;
+    /* the time wsa short; return zero */
+    return WICED_SUCCESS;
 }
 
 uint32_t wiced_waf_get_button_press_time( void )

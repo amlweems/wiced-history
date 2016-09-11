@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -82,7 +82,7 @@ wwd_result_t host_platform_resource_size( wwd_resource_t resource, uint32_t* siz
         *size_out = 0;
         if ( wiced_waf_app_open( DCT_WIFI_FIRMWARE_INDEX, &wifi_app ) != WICED_SUCCESS )
         {
-            return RESOURCE_UNSUPPORTED;
+            return ( wwd_result_t ) RESOURCE_UNSUPPORTED;
         }
         wiced_waf_app_get_size( &wifi_app, size_out );
 #else
@@ -124,13 +124,13 @@ wwd_result_t host_platform_resource_read_indirect( wwd_resource_t resource, uint
 
 #ifdef NO_WIFI_FIRMWARE
         wiced_assert("Request firmware in a no wifi firmware application", 0 == 1);
-        return RESOURCE_UNSUPPORTED;
+        return ( wwd_result_t ) RESOURCE_UNSUPPORTED;
 #else
 #ifdef WIFI_FIRMWARE_IN_MULTI_APP
         wiced_app_t wifi_app;
         if ( wiced_waf_app_open( DCT_WIFI_FIRMWARE_INDEX, &wifi_app ) != WICED_SUCCESS )
         {
-            return RESOURCE_UNSUPPORTED;
+            return ( wwd_result_t ) RESOURCE_UNSUPPORTED;
         }
         if ( wiced_waf_app_read_chunk( &wifi_app, offset, buffer, buffer_size ) == WICED_SUCCESS )
         {

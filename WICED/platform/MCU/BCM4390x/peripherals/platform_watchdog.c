@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -30,13 +30,12 @@
  *                    Constants
  ******************************************************/
 
-
-#define PLATFORM_WATCHDOG_TIMEOUT_MULTIPLIER    platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ILP )
-
-#define PLATFORM_WATCHDOG_TIMEOUT(sec)          ((sec) * PLATFORM_WATCHDOG_TIMEOUT_MULTIPLIER)
-
 #ifndef APPLICATION_WATCHDOG_TIMEOUT_SECONDS
 #define APPLICATION_WATCHDOG_TIMEOUT_SECONDS    MAX_WATCHDOG_TIMEOUT_SECONDS
+#endif
+
+#ifndef APPLICATION_WATCHDOG_HIGH_PRECISION
+#define APPLICATION_WATCHDOG_HIGH_PRECISION     0
 #endif
 
 #ifndef PLATFORM_MCU_RESET_MAX_REBOOT_SECONDS
@@ -46,7 +45,6 @@
 #ifndef PLATFORM_MCU_RESET_MAX_WAIT_SECONDS
 #define PLATFORM_MCU_RESET_MAX_WAIT_SECONDS     3
 #endif
-
 
 /******************************************************
  *                   Enumerations
@@ -68,19 +66,49 @@
  *               Variables Definitions
  ******************************************************/
 
+static wiced_bool_t platform_watchdog_inited = WICED_FALSE;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
+#ifndef WICED_DISABLE_WATCHDOG
+static uint32_t
+platform_watchdog_milliseconds_to_ticks( uint32_t milliseconds )
+{
+#if APPLICATION_WATCHDOG_HIGH_PRECISION
+    const uint64_t freq  = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ILP );
+    const uint64_t ticks = ( (uint64_t)milliseconds * freq + 999 ) / 1000;
+
+    wiced_assert( "exceeds range", ticks <= 0xFFFFFFFF );
+
+    return (uint32_t)ticks;
+#else
+    const uint32_t freq     = platform_reference_clock_get_freq( PLATFORM_REFERENCE_CLOCK_ILP );
+    const uint32_t freq_khz = ( freq + 999 ) / 1000;
+    const uint32_t ticks    = milliseconds * freq_khz;
+
+    wiced_assert( "exceeds range", ( ticks / freq_khz ) == milliseconds );
+
+    return ticks;
+#endif
+}
+#endif
+
 static void
 platform_watchdog_set( uint32_t timeout )
 {
-    while ( PLATFORM_PMU->pmustatus & PST_SLOW_WR_PENDING );
-    PLATFORM_PMU->pmuwatchdog = timeout;
+    if ( platform_watchdog_inited )
+    {
+        while ( PLATFORM_PMU->pmustatus & PST_SLOW_WR_PENDING );
+        PLATFORM_PMU->pmuwatchdog = timeout;
+    }
 }
 
 platform_result_t platform_watchdog_init( void )
 {
+    platform_watchdog_inited = WICED_TRUE;
+
 #ifndef WICED_DISABLE_WATCHDOG
     return platform_watchdog_kick();
 #else
@@ -92,13 +120,26 @@ platform_result_t platform_watchdog_init( void )
 platform_result_t platform_watchdog_deinit( void )
 {
     platform_watchdog_set( 0 );
+
+    platform_watchdog_inited = WICED_FALSE;
+
     return PLATFORM_SUCCESS;
 }
 
-platform_result_t platform_watchdog_kick_seconds( uint32_t seconds )
+platform_result_t platform_watchdog_kick_milliseconds( uint32_t milliseconds )
 {
 #ifndef WICED_DISABLE_WATCHDOG
-    platform_watchdog_set( PLATFORM_WATCHDOG_TIMEOUT( seconds ) );
+    platform_watchdog_set( platform_watchdog_milliseconds_to_ticks( milliseconds ) );
+    return PLATFORM_SUCCESS;
+#else
+    return PLATFORM_FEATURE_DISABLED;
+#endif
+}
+
+platform_result_t platform_watchdog_stop( void )
+{
+#ifndef WICED_DISABLE_WATCHDOG
+    platform_watchdog_set( 0 );
     return PLATFORM_SUCCESS;
 #else
     return PLATFORM_FEATURE_DISABLED;
@@ -107,7 +148,7 @@ platform_result_t platform_watchdog_kick_seconds( uint32_t seconds )
 
 platform_result_t platform_watchdog_kick( void )
 {
-    return platform_watchdog_kick_seconds( APPLICATION_WATCHDOG_TIMEOUT_SECONDS );
+    return platform_watchdog_kick_milliseconds( APPLICATION_WATCHDOG_TIMEOUT_SECONDS * 1000 );
 }
 
 wiced_bool_t platform_watchdog_check_last_reset( void )
@@ -160,6 +201,12 @@ void platform_mcu_specific_reset( platform_reset_type_t type )
     if ( type == PLATFORM_RESET_TYPE_POWERCYCLE )
     {
         platform_common_chipcontrol( &PLATFORM_PMU->pmucontrol, PMU_CONTROL_RESETCONTROL_MASK, PMU_CONTROL_RESETCONTROL_RESET );
+    }
+
+    /* Deinitalize power-save */
+    if ( type != PLATFORM_RESET_TYPE_POWERCYCLE )
+    {
+        platform_cores_powersave_deinit( );
     }
 
     /* Set watchdog to reset system on next tick */

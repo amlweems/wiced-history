@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -457,7 +457,7 @@ static void p2p_thread_main( wwd_thread_arg_t arg )
                     workspace->sent_go_discoverability_request = 0;
                     memcpy( &discovery_requestor.p2p_device_address, &workspace->discovery_requestor, sizeof( besl_mac_t ) );
                     discovery_requestor.dialog_token = workspace->discovery_dialog_token;
-                    discovery_requestor.status = 0; // Success
+                    discovery_requestor.status = ( p2p_device_status_t ) 0; /* Success */
                     besl_p2p_send_action_frame( workspace, &discovery_requestor, p2p_write_device_discoverability_response, (uint32_t)workspace->operating_channel.channel, 0 );
                 }
                 break;
@@ -777,7 +777,7 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
         workspace->group_owner.scan_result.SSID.length = workspace->group_candidate.ssid_length;
         memcpy(workspace->group_owner.scan_result.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
         workspace->group_owner.scan_result.security = WICED_SECURITY_WPS_SECURE;
-        workspace->group_owner.scan_result.band = WICED_802_11_BAND_2_4GHZ;
+        workspace->group_owner.scan_result.band = WICED_WIFI_CH_TO_BAND( workspace->group_candidate.operating_channel.channel );
         workspace->p2p_wps_agent->directed_wps_max_attempts = 0xFFFFFFFF;
         workspace->p2p_wps_agent->ap = &workspace->group_owner;
 
@@ -794,7 +794,7 @@ static besl_result_t p2p_start_client( p2p_workspace_t* workspace )
         memcpy(&workspace->group_owner.scan_result.BSSID, &workspace->group_candidate.bssid, sizeof(besl_mac_t));
         workspace->group_owner.scan_result.SSID.length = workspace->group_candidate.ssid_length;
         memcpy(workspace->group_owner.scan_result.SSID.value, workspace->group_candidate.ssid, workspace->group_candidate.ssid_length);
-        workspace->group_owner.scan_result.band = WICED_802_11_BAND_2_4GHZ;
+        workspace->group_owner.scan_result.band = WICED_WIFI_CH_TO_BAND( workspace->current_channel );
         result = (wwd_result_t) p2p_join_group_owner( workspace );
     }
     return (besl_result_t) result;
@@ -838,7 +838,7 @@ static besl_result_t p2p_join_group_owner( p2p_workspace_t* workspace )
 
         besl_host_set_mac_address(&workspace->p2p_interface_address, WWD_STA_INTERFACE ); // If this isn't done we don't respond to provision discovery
 
-        if ( wiced_ip_up(WWD_P2P_INTERFACE, WICED_USE_EXTERNAL_DHCP_SERVER, NULL) != WICED_SUCCESS )
+        if ( wiced_ip_up( ( wiced_interface_t ) WWD_P2P_INTERFACE, WICED_USE_EXTERNAL_DHCP_SERVER, NULL) != WICED_SUCCESS )
         {
             BESL_DEBUG( ("IP failed to get an address\r\n") );
             workspace->p2p_result = BESL_P2P_ERROR_FAIL;

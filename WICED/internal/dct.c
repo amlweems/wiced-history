@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -129,14 +129,17 @@ static const platform_dct_data_t initial_dct =
 #else
     .dct_header.used_size            = (unsigned long)&dct_used_size_loc,
 #endif
+    .dct_header.magic_number         = BOOTLOADER_MAGIC_NUMBER,
     .dct_header.write_incomplete     = 0,
     .dct_header.app_valid            = 1,
     .dct_header.mfg_info_programmed  = 0,
-    .dct_header.magic_number         = BOOTLOADER_MAGIC_NUMBER,
+#if  defined(DCT_BOOTLOADER_CRC_IS_IN_HEADER)
     .dct_header.sequence             = 0,
     .dct_header.crc32                = 0,
     .dct_header.initial_write        = 1,
-
+#else
+    .dct_header.is_current_dct       = 1,
+#endif
     .dct_header.apps_locations[ DCT_FR_APP_INDEX ].id       = EXTERNAL_FIXED_LOCATION,
     .dct_header.apps_locations[ DCT_DCT_IMAGE_INDEX ].id    = EXTERNAL_FIXED_LOCATION,
     .dct_header.apps_locations[ DCT_OTA_APP_INDEX ].id      = EXTERNAL_FIXED_LOCATION,
@@ -192,38 +195,46 @@ static const platform_dct_data_t initial_dct =
 #else
     .wifi_config.country_code        = WICED_DEFAULT_COUNTRY_CODE,
 #endif
+#ifdef DCT_GENERATED_MAC_ADDRESS
     .wifi_config.mac_address.octet     = DCT_GENERATED_MAC_ADDRESS,
+#endif
 
     .network_config.interface          = CONFIG_NETWORK_INTERFACE,
     .network_config.hostname.value     = CONFIG_NETWORK_IP_HOSTNAME,
 
-#ifdef WICED_USE_ETHERNET_INTERFACE
+#ifdef DCT_GENERATED_ETHERNET_MAC_ADDRESS
     .ethernet_config.mac_address.octet = DCT_GENERATED_ETHERNET_MAC_ADDRESS,
 #endif
-#ifdef WICED_DCT_INCLUDE_BT_CONFIG
+
+#ifdef WICED_BLUETOOTH_DEVICE_ADDRESS
      .bt_config.bluetooth_device_address            = WICED_BLUETOOTH_DEVICE_ADDRESS,
      .bt_config.bluetooth_device_name               = WICED_BLUETOOTH_DEVICE_NAME,
      .bt_config.bluetooth_device_class              = WICED_BLUETOOTH_DEVICE_CLASS,
+#endif
 #ifdef WICED_BLUETOOTH_SSP_DEBUG_MODE
      .bt_config.ssp_debug_mode                      = WICED_BLUETOOTH_SSP_DEBUG_MODE,
 #else
      .bt_config.ssp_debug_mode                      = WICED_FALSE,
 #endif
-#endif
 
-#ifdef WICED_DCT_INCLUDE_P2P_CONFIG
+#ifdef P2P_GROUP_OWNER_SSID
      .p2p_config.p2p_group_owner_settings = {{sizeof(P2P_GROUP_OWNER_SSID)-1, P2P_GROUP_OWNER_SSID}, P2P_GROUP_OWNER_SECURITY, P2P_GROUP_OWNER_CHANNEL, P2P_GROUP_OWNER_PASSPHRASE_LENGTH, P2P_GROUP_OWNER_PASSPHRASE, CONFIG_VALIDITY_VALUE},
 #endif
 
-#if defined(OTA2_SUPPORT)
     .ota2_config.update_count          = 0,
     .ota2_config.boot_type             = 0,
-#endif
+    .ota2_config.force_factory_reset   = 0,
 
+    .dct_version.crc32                      = 0,
+    .dct_version.sequence                   = 1,
+    .dct_version.initial_write              = 1,
+    .dct_version.version                    = DCT_BOOTLOADER_SDK_CURRENT,
+    .dct_version.magic_number               = DCT_VERSION_MAGIC_NUMBER,
+    .dct_version.data_dct_usage_flags       = WICED_DCT_CONFIG_FLAGS,
 };
 
 #if defined ( __IAR_SYSTEMS_ICC__ )
-__root int wiced_program_start(void)
+int _start(void)
 {
     /* in iar we must reference dct structure, otherwise it may not be included in */
     /* the dct image */

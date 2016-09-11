@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -40,8 +40,8 @@
 /******************************************************
  *                      Macros
  ******************************************************/
-#define USB_POOL_SIZE           (128*1024)
-#define USB_DMA_POOL_SIZE       (256*1024)
+#define USB_POOL_SIZE           (128*1024) //Use 80KB or above for application
+#define USB_DMA_POOL_SIZE       (128*1024) //Use 80KB or above for application
 #define USB_DMA_POOL_ALIGN      5
 
 /******************************************************
@@ -107,8 +107,11 @@ wiced_result_t wiced_usb_host_init( wiced_usb_user_config_t *config )
 {
     uint pool_size;
     dmaaddr_t pool_base;
+#ifndef WICED_USB_OHCI_ONLY
     platform_usb_host_hci_resource_t *ehci_resource = NULL;
+#endif  /* WICED_USB_OHCI_ONLY */
     platform_usb_host_hci_resource_t *ohci_resource = NULL;
+    UX_USER_CONFIG_HOST ux_user_obj = {0};
     UINT status;
     UINT i;
 
@@ -137,7 +140,15 @@ wiced_result_t wiced_usb_host_init( wiced_usb_user_config_t *config )
     WPRINT_PLATFORM_DEBUG( ("Initialized USBX. status=%d\n", status) );
 
     /* The code below is required for installing the host portion of USBX.  */
-    status = ux_host_stack_initialize(wiced_usb_host_usbx_host_evt_callback);
+    /* Initialize USBX Host Stack (Use USBX system default values if given UX_USER_CONFIG_HOST as NULL) */
+    ux_user_obj.ux_user_config_host_max_class   = usb20h_user_cfg.host_max_class;
+    ux_user_obj.ux_user_config_host_max_hcd     = usb20h_user_cfg.host_max_hcd;
+    ux_user_obj.ux_user_config_host_max_devices = usb20h_user_cfg.host_max_devices;
+    ux_user_obj.ux_user_config_host_max_ed      = usb20h_user_cfg.host_max_ed;
+    ux_user_obj.ux_user_config_host_max_td      = usb20h_user_cfg.host_max_td;
+    ux_user_obj.ux_user_config_host_max_iso_td  = usb20h_user_cfg.host_max_iso_td;
+
+    status = ux_host_stack_initialize(wiced_usb_host_usbx_host_evt_callback, &ux_user_obj);
     if(status != UX_SUCCESS)
     {
         WPRINT_PLATFORM_ERROR( ("USBX host stack init failed. status=%d\n", status) );
@@ -217,21 +228,31 @@ wiced_result_t wiced_usb_host_init( wiced_usb_user_config_t *config )
 
     for (i = 0; i < usb20h_hci_num; i ++)
     {
+#ifndef WICED_USB_OHCI_ONLY
         if (usb20h_hci_info[i].usb_host_hci_type == USB_HOST_CONTROLLER_INTERFACE_EHCI)
         {
             ehci_resource = &usb20h_hci_info[i];
         }
+#endif  /* WICED_USB_OHCI_ONLY */
         if (usb20h_hci_info[i].usb_host_hci_type == USB_HOST_CONTROLLER_INTERFACE_OHCI)
         {
             ohci_resource = &usb20h_hci_info[i];
         }
     }
-    if ((ehci_resource == NULL) || (ohci_resource == NULL))
+#ifndef WICED_USB_OHCI_ONLY
+    if ( ehci_resource == NULL )
     {
-        WPRINT_PLATFORM_ERROR( ("USB20 Host HCI resources insufficient for USBX\n") );
+        WPRINT_PLATFORM_ERROR( ("No USB20 EHCI resources for USBX\n") );
+        goto exit;
+    }
+#endif  /* WICED_USB_OHCI_ONLY */
+    if ( ohci_resource == NULL )
+    {
+        WPRINT_PLATFORM_ERROR( ("No USB20 OHCI resources for USBX\n") );
         goto exit;
     }
 
+#ifndef WICED_USB_OHCI_ONLY
     /* Register all the USB20 Host controllers available in this system */
     /* EHCI Host controller  */
     status = ux_host_stack_hcd_register(_ux_system_host_hcd_ehci_name, ux_hcd_ehci_initialize, ehci_resource->usb_host_hci_ioaddress, ehci_resource->usb_host_hci_irq_number); //0x18006000
@@ -241,6 +262,7 @@ wiced_result_t wiced_usb_host_init( wiced_usb_user_config_t *config )
         goto exit;
     }
     WPRINT_PLATFORM_DEBUG( ("USBX EHCI init ok!\n") );
+#endif  /* WICED_USB_OHCI_ONLY */
 
     /* OHCI Host controller  */
     status = ux_host_stack_hcd_register(_ux_system_host_hcd_ohci_name, ux_hcd_ohci_initialize, ohci_resource->usb_host_hci_ioaddress, ohci_resource->usb_host_hci_irq_number); //0x1800d000
@@ -250,6 +272,9 @@ wiced_result_t wiced_usb_host_init( wiced_usb_user_config_t *config )
         goto exit;
     }
     WPRINT_PLATFORM_DEBUG( ("USBX OHCI init ok!\n") );
+
+    /* USB host post initialization */
+    platform_usb_host_post_init();
 
     /* Enable USB20 EHCI/OHCI interrupt  */
     status = platform_usb_host_enable_irq();
@@ -283,7 +308,9 @@ wiced_result_t wiced_usb_host_deinit( void )
  ******************************************************/
 static void wiced_usb_host_usbx_isr( void )
 {
+#ifndef WICED_USB_OHCI_ONLY
     _ux_hcd_ehci_interrupt_handler();
+#endif  /* WICED_USB_OHCI_ONLY */
     _ux_hcd_ohci_interrupt_handler();
 }
 
@@ -424,6 +451,8 @@ static UINT wiced_usb_host_usbx_host_evt_callback( ULONG evt, UX_HOST_CLASS *cla
                         if ( usbdisk_filesystem->device->device_specific_data == NULL )
                         {
                             usbdisk_filesystem->device->device_specific_data = (void*)media;
+
+                            /* Mount filesystem */
                             wiced_filesystem_mount( usbdisk_filesystem->device, usbdisk_filesystem->type, &usbdisk_media_handle, USB_DISK_STORAGE_MOUNT_NAME );
                             WPRINT_PLATFORM_INFO( ("usb storage get ok!!!\n") );
                         }
@@ -443,6 +472,9 @@ static UINT wiced_usb_host_usbx_host_evt_callback( ULONG evt, UX_HOST_CLASS *cla
                 /*  Check if the storage device is removed. Due to single USB port, now we assume all devices are cleaned at one removal! */
                 if (instance == storage)
                 {
+                    /* Unmount filesystem */
+                    wiced_filesystem_unmount( &usbdisk_media_handle );
+
                     /* Reset pointers to null.  */
                     usbdisk_filesystem->device->device_specific_data = NULL;
                     memset((void*)&usbdisk_media_handle, 0, sizeof(wiced_filesystem_t));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -179,7 +179,7 @@ wiced_result_t wiced_simple_https_server_start(wiced_simple_https_server_t* serv
     }
 
     /* Load our security data */
-    wiced_tls_init_identity( &server->tls_identity, server_key, server_cert, strlen( (const char*) server_cert ) );
+    wiced_tls_init_identity( &server->tls_identity, server_key, strlen( server_key ), server_cert, strlen( (const char*) server_cert ) );
     wiced_tls_init_context( &server->tls_context, &server->tls_identity, NULL );
 
     wiced_tcp_enable_tls( &server->socket, &server->tls_context );
@@ -273,15 +273,35 @@ static wiced_result_t process_url_request( wiced_tcp_socket_t* socket, const wic
 
     while ( ( *params != '?' ) && ( params_len > 0 ) )
     {
-        params++;
         params_len--;
+        if ( params_len == 0 )
+        {
+            /* ensure params dereference from going beyond url */
+            break;
+        }
+        params++;
     }
 
-    /* terminate the path part of the string with a null - will replace the question mark */
-    *params = '\x00';
+    if ( params_len != 0 )
+    {
+        /* terminate the path part of the string with a null - will replace the question mark */
+        *params = '\x00';
 
-    /* increment the pointer to the parameter query part of the url to skip over the null which was just written */
-    params++;
+        /* increment the pointer to the parameter query part of the url to skip over the null which was just written */
+        /* also check if '?' is the last character in url, if so assign NULL */
+        if ( params_len == 1 )
+        {
+            params = NULL;
+        }
+        else
+        {
+            params++;
+        }
+    }
+    else
+    {
+        params = NULL;
+    }
 
     WPRINT_WEBSERVER_DEBUG(("Processing request for: %s\n", url));
 

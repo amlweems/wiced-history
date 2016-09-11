@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -52,8 +52,11 @@ GLOBAL_DEFINES  := ADD_LWIP_EAPOL_SUPPORT  NXD_EXTENDED_BSD_SOCKET_SUPPORT OPENS
 
 $(NAME)_COMPONENTS += utilities/base64
 $(NAME)_COMPONENTS += utilities/TLV
+$(NAME)_COMPONENTS += utilities/linked_list
 
 $(NAME)_COMPONENTS += BESL/crypto_open \
                       crypto/micro-ecc
 
+ifeq ($(IAR),)
 $(NAME)_CFLAGS =  -fno-strict-aliasing
+endif

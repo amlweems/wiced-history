@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -120,22 +120,22 @@ wiced_result_t mqtt_network_init( const wiced_ip_address_t *server_ip_address, u
     }
     if ( security != NULL )
     {
-        if ( ( result = wiced_tls_init_root_ca_certificates( security->ca_cert ) ) != WICED_SUCCESS )
+        if ( ( result = wiced_tls_init_root_ca_certificates( security->ca_cert, security->ca_cert_len ) ) != WICED_SUCCESS )
         {
             goto ERROR_CA_CERT_INIT;
         }
         if ( ( security->cert != NULL ) && ( security->key != NULL ) )
         {
-            result = wiced_tls_init_identity( &socket->tls_identity, (char*) security->key, (const uint8_t*) security->cert, strlen( security->cert ) );
+            result = wiced_tls_init_identity( &socket->tls_identity, (char*) security->key, security->key_len, (const uint8_t*) security->cert, security->cert_len );
             if ( result != WICED_SUCCESS )
             {
                 goto ERROR_TLS_INIT;
             }
-            wiced_tls_init_context( &socket->tls_context, &socket->tls_identity, NULL );
+            wiced_tls_init_context( &socket->tls_context, &socket->tls_identity, (const char*) conn->peer_cn );
         }
         else
         {
-            wiced_tls_init_context( &socket->tls_context, NULL, NULL );
+            wiced_tls_init_context( &socket->tls_context, NULL,  (const char*) conn->peer_cn );
 
         }
         wiced_tcp_enable_tls( &socket->socket, &socket->tls_context );
@@ -172,7 +172,10 @@ ERROR_QUEUE_INIT:
     }
 
     wiced_tls_reset_context( &socket->tls_context );
-    wiced_tls_deinit_identity(&socket->tls_identity);
+    if ( ( security->cert != NULL ) && ( security->key != NULL ) )
+    {
+        wiced_tls_deinit_identity( &socket->tls_identity );
+    }
 
 ERROR_TLS_INIT:
     wiced_tls_deinit_root_ca_certificates( );
@@ -228,7 +231,7 @@ static void mqtt_thread_main( uint32_t arg )
                 break;
 
             case MQTT_DISCONNECT_EVENT:
-                mqtt_frame_recv( NULL, socket->p_user, NULL );
+                mqtt_frame_recv( NULL, 0, socket->p_user, NULL );
                 break;
 
             default:
@@ -256,18 +259,25 @@ static void wiced_process_mqtt_request( void *arg )
         wiced_mqtt_buffer_t buffer;
 
         /*Process the client request*/
-        wiced_packet_get_data( packet, 0, (uint8_t**) ( &data ), &rx_data_length, &available_data_length );
-        while ( current_size < rx_data_length )
+        do
         {
             uint32_t size;
-            buffer.packet = packet;
-            buffer.data = data + current_size;
-            if ( mqtt_frame_recv( &buffer, socket->p_user, &size ) != WICED_SUCCESS )
+            wiced_packet_get_data( packet, current_size, (uint8_t**) ( &data ), &rx_data_length, &available_data_length );
+            if ( available_data_length == 0 )
             {
                 break;
             }
-            current_size = (uint16_t) ( current_size + size );
-        }
+
+            buffer.packet = packet;
+            buffer.data = data + current_size;
+
+            if ( mqtt_frame_recv( &buffer, rx_data_length, socket->p_user, &size ) != WICED_SUCCESS )
+            {
+                break;
+            }
+            current_size = (uint16_t) ( current_size + rx_data_length );
+        } while ( current_size < available_data_length );
+
         /*Delete the packet, we're done with it*/
         wiced_packet_delete( buffer.packet );
     }
@@ -275,18 +285,7 @@ static void wiced_process_mqtt_request( void *arg )
 
 wiced_result_t mqtt_network_connect( mqtt_socket_t *socket )
 {
-    wiced_result_t result = WICED_SUCCESS;
-    int connection_retries;
-
-    /* Connect to the remote TCP server, try several times */
-    connection_retries = 0;
-    do
-    {
-        result = wiced_tcp_connect( &socket->socket, &socket->server_ip_address, socket->portnumber, WICED_MQTT_CONNECTION_TIMEOUT );
-        connection_retries++ ;
-    } while ( ( result != WICED_SUCCESS ) && ( connection_retries < WICED_MQTT_CONNECTION_NUMBER_OF_RETRIES ) );
-
-    return result;
+    return wiced_tcp_connect( &socket->socket, &socket->server_ip_address, socket->portnumber, WICED_MQTT_CONNECTION_TIMEOUT );
 }
 
 wiced_result_t mqtt_network_disconnect( mqtt_socket_t *socket )

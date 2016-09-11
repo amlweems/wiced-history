@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -69,10 +69,12 @@ static const uint8_t crc8_table[256] = {
     0xF4, 0x03, 0x4D, 0xBA, 0xD1, 0x26, 0x68, 0x9F
 };
 
-uint8_t crc8( uint8_t* pdata,       /* pointer to array of data to process */
-              unsigned int  nbytes, /* number of input data bytes to process */
-              uint8_t crc           /* either CRC8_INIT_VALUE or previous return value */
-            )
+uint8_t WICED_CRC_FUNCTION_NAME( crc8 )
+    (
+        uint8_t* pdata,       /* pointer to array of data to process */
+        unsigned int  nbytes, /* number of input data bytes to process */
+        uint8_t crc           /* either CRC8_INIT_VALUE or previous return value */
+    )
 {
     /* hard code the crc loop instead of using CRC_INNER_LOOP macro
      * to avoid the undefined and unnecessary (uint8 >> 8) operation.
@@ -144,10 +146,12 @@ static const uint16_t crc16_table[256] = {
     0x7BC7, 0x6A4E, 0x58D5, 0x495C, 0x3DE3, 0x2C6A, 0x1EF1, 0x0F78
 };
 
-uint16_t crc16 ( uint8_t* pdata,       /* pointer to array of data to process */
-                 unsigned int nbytes,  /* number of input data bytes to process */
-                 uint16_t crc          /* either CRC16_INIT_VALUE or previous return value */
-               )
+uint16_t WICED_CRC_FUNCTION_NAME( crc16 )
+    (
+        uint8_t* pdata,       /* pointer to array of data to process */
+        unsigned int nbytes,  /* number of input data bytes to process */
+        uint16_t crc          /* either CRC16_INIT_VALUE or previous return value */
+    )
 {
     while (nbytes-- > 0)
     {
@@ -229,10 +233,12 @@ static const uint32_t crc32_table[256] = {
  * accumulating over multiple pieces.
  */
 
-uint32_t crc32 ( uint8_t* pdata,      /* pointer to array of data to process */
-                 unsigned int nbytes, /* number of input data bytes to process */
-                 uint32_t crc         /* either CRC32_INIT_VALUE or previous return value */
-               )
+uint32_t WICED_CRC_FUNCTION_NAME( crc32 )
+    (
+        uint8_t* pdata,      /* pointer to array of data to process */
+        unsigned int nbytes, /* number of input data bytes to process */
+        uint32_t crc         /* either CRC32_INIT_VALUE or previous return value */
+    )
 {
     uint8_t *pend;
 #ifdef __mips__

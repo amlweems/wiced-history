@@ -1,5 +1,5 @@
 @
-@ Copyright 2015, Broadcom Corporation
+@ Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 @ All Rights Reserved.
 @
 @ This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,7 +11,11 @@
 #define VENEER_NAME_THUMB2(name) veneer_thumb2_##name
 #define VENEER_NAME_ARM(name)    veneer_arm_##name
 
-#ifdef __thumb__
+#if defined(__thumb__) || defined(__NUTTX__)
+#define VECTOR_VENEER_NEEDED
+#endif
+
+#ifdef VECTOR_VENEER_NEEDED
 #define VECTOR_NAME(name)        VENEER_NAME_THUMB2(name)
 #else
 #define VECTOR_NAME(name)        name
@@ -61,7 +65,7 @@
 
     /* Vector veneers when need to change instruction set */
 
-#ifdef __thumb__
+#ifdef VECTOR_VENEER_NEEDED
     .text
     .section .text, "ax"
     .align 2
@@ -80,7 +84,7 @@ VECTOR_NAME(irq_vector_external_interrupt):
     LDR        pc, =irq_vector_external_interrupt
 VECTOR_NAME(irq_vector_fast_interrupt):
     LDR        pc, =irq_vector_fast_interrupt
-#endif /* __thumb__ */
+#endif /* VECTOR_VENEER_NEEDED */
 
 #ifdef RESET_ENTRY_POINT_THUMB2
     .thumb

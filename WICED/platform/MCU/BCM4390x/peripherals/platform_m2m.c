@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -115,11 +115,13 @@ typedef appscr4_regs_t wlancr4_regs_t;
  *             Variables
  ******************************************************/
 
+#ifndef WWD_BUS_TYPE_SDIO
 static m2m_hnddma_t*         dma_handle = NULL;
 static osl_t*                osh        = NULL;
-static volatile sbm2mregs_t* m2mreg     = (sbm2mregs_t *)M2M_REG_ADR;
 static int                   deiniting  = 0;
 static int                   initing    = 0;
+#endif /* !WWD_BUS_TYPE_SDIO */
+static volatile sbm2mregs_t* m2mreg     = (sbm2mregs_t *)M2M_REG_ADR;
 
 /******************************************************
  *             Function declarations
@@ -134,6 +136,7 @@ static void m2m_core_enable( void )
     osl_wrapper_enable( (void*)PLATFORM_M2M_MASTER_WRAPPER_REGBASE(0x0) );
 }
 
+#ifndef WWD_BUS_TYPE_SDIO
 static void m2m_dma_enable_interrupts( wiced_bool_t enable )
 {
     uint32_t rx_mask = enable ? I_DMA : 0x0;
@@ -447,20 +450,50 @@ void m2m_deinit_dma( void )
     dma_handle = NULL;
     deiniting = 0;
 }
+#endif /* !WWD_BUS_TYPE_SDIO */
 
 void m2m_switch_off_dma_post_completion( void )
 {
+    int      is_irq_enabled;
+    uint32_t flags;
+
+    WICED_SAVE_INTERRUPTS( flags );
+
+    is_irq_enabled = platform_irq_is_irq_enabled( M2M_ExtIRQn );
+
     /* Wait till DMA has finished */
-    while ( ( (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.status0 & D64_XS0_XS_MASK) == D64_XS0_XS_ACTIVE ) ||
-          ( (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.status0 & D64_XS0_XS_MASK) == D64_XS0_XS_ACTIVE ) )
+    while ( 1 )
     {
+         m2mreg->intregs[MEMCPY_M2M_DMA_CHANNEL].intmask = I_RI | I_ERRORS;
+         platform_irq_enable_irq( M2M_ExtIRQn );
+
+         cpu_wait_for_interrupt( );
+
+         m2mreg->intregs[MEMCPY_M2M_DMA_CHANNEL].intmask = 0x0;
+         (void)m2mreg->intregs[MEMCPY_M2M_DMA_CHANNEL].intmask; /* read back */
+         if ( !is_irq_enabled )
+         {
+             platform_irq_disable_irq( M2M_ExtIRQn );
+         }
+
+         WICED_RESTORE_INTERRUPTS( flags );
+
          wiced_assert( "TX failed", (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.status0 & D64_XS0_XS_MASK) != D64_XS0_XS_STOPPED/* error*/ );
          wiced_assert( "RX failed", (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.status0 & D64_XS0_XS_MASK) != D64_XS0_XS_STOPPED/* error*/ );
+
+         if ( ( (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.status0 & D64_XS0_XS_MASK) != D64_XS0_XS_ACTIVE ) &&
+              ( (m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.status0 & D64_XS0_XS_MASK) != D64_XS0_XS_ACTIVE ) )
+         {
+             break;
+         }
+
+         WICED_SAVE_INTERRUPTS( flags );
     }
 
     /* Switch off the DMA */
     m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.control &= (~D64_XC_XE);
     m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.control &= (~D64_XC_XE);
+    m2mreg->intregs[MEMCPY_M2M_DMA_CHANNEL].intstatus = ~0x0;
 }
 
 void m2m_post_dma_completion_operations( void* destination, uint32_t byte_count )
@@ -529,9 +562,12 @@ int m2m_unprotected_dma_memcpy( void* destination, const void* source, uint32_t 
     /* Prepare M2M engine */
     m2m_core_enable( );
 
+    /* Enable interrupts generation after each frame */
+    m2mreg->intrxlazy[MEMCPY_M2M_DMA_CHANNEL] = DEF_IRL;
+
     /* Setup descriptors */
     m2m_descriptors[0].ctrl1 = D64_CTRL1_EOF | D64_CTRL1_SOF;
-    m2m_descriptors[1].ctrl1 = D64_CTRL1_EOF | D64_CTRL1_SOF;
+    m2m_descriptors[1].ctrl1 = D64_CTRL1_EOF | D64_CTRL1_SOF | D64_CTRL1_IOC;
 
     /* Setup DMA channel transmitter */
     m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.addrhigh = 0;
@@ -578,8 +614,8 @@ int m2m_unprotected_dma_memcpy( void* destination, const void* source, uint32_t 
         M2M_MEMCPY_DCACHE_CLEAN( (void*)&m2m_descriptors[0], sizeof(m2m_descriptors) );
 
         /* Fire off the DMA */
-        m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.control |= D64_XC_XE;
         m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].rx.control |= D64_XC_XE;
+        m2mreg->dmaregs[MEMCPY_M2M_DMA_CHANNEL].tx.control |= D64_XC_XE;
 
         /* Update variables */
         byte_count      -= write_size;
@@ -600,6 +636,7 @@ int m2m_unprotected_dma_memcpy( void* destination, const void* source, uint32_t 
     return 0;
 }
 
+#ifndef WWD_BUS_TYPE_SDIO
 void m2m_wlan_dma_deinit( void )
 {
     /* Stop WLAN side M2M dma */
@@ -634,3 +671,4 @@ WWD_RTOS_MAP_ISR( platform_m2mdma_isr, M2M_ISR)
 WWD_RTOS_MAP_ISR( platform_m2mdma_isr, Sw0_ISR)
 
 #endif /* !M2M_RX_POLL_MODE */
+#endif /* !WWD_BUS_TYPE_SDIO */

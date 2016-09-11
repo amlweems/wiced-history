@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,7 +18,7 @@
 #include "wiced_resource.h"
 #include "platform_config.h"
 #include "platform_resource.h"
-
+#include "platform_toolchain.h"
 
 /******************************************************
  *                      Macros
@@ -27,8 +27,6 @@
 /******************************************************
  *                    Constants
  ******************************************************/
-
-#define RESOURCE_MAX_PAGE_SIZE (512)
 
 /******************************************************
  *                   Enumerations
@@ -63,10 +61,16 @@ resource_result_t resource_read ( const resource_hnd_t* resource, uint32_t offse
 
     *size = MIN( maxsize, resource->size - offset );
 
-    if ( resource->location == RESOURCE_IN_MEMORY )
+    if (resource->location == RESOURCE_IN_MEMORY)
     {
-        memcpy( buffer, &resource->val.mem.data[offset], *size );
+        memcpy(buffer, &resource->val.mem.data[offset], *size);
     }
+#ifdef USES_RESOURCES_IN_EXTERNAL_STORAGE
+    else if ( resource->location == RESOURCE_IN_EXTERNAL_STORAGE )
+    {
+        return platform_read_external_resource( resource, offset, maxsize, size, buffer );
+    }
+#endif
 #ifdef USES_RESOURCE_FILESYSTEM
     else
     {
@@ -115,7 +119,7 @@ resource_result_t resource_get_readonly_buffer ( const resource_hnd_t* resource,
     {
         resource_result_t result;
         uint32_t size_returned = 0;
-        *size_out = MIN( RESOURCE_MAX_PAGE_SIZE, maxsize );
+        *size_out = MIN( resource->size, maxsize );
         *buffer = malloc( *size_out );
         result = resource_read( resource, offset, *size_out, &size_returned, (void*) *buffer );
         *size_out = MIN( *size_out, size_returned );

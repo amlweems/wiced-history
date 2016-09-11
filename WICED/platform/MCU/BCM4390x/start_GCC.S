@@ -1,5 +1,5 @@
 @
-@ Copyright 2015, Broadcom Corporation
+@ Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 @ All Rights Reserved.
 @
 @ This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,7 +67,7 @@ _low_start:
     // Make sure above changes applied at this point
     ISB                                /* Barrier */
 
-#if !PLATFORM_NO_VECTORS
+#ifndef WICED_NO_VECTORS
     /* Copy vectors to flops */
     BOOT_CHECKPOINT(1)
     LDR        r8, =link_interrupt_vectors_copyfrom /* Source address */
@@ -141,7 +141,7 @@ _low_start:
 
     BOOT_CHECKPOINT(4)
 
-#if !PLATFORM_NO_VECTORS
+#ifndef WICED_NO_VECTORS
     // Prepare isr stack aligned on 8 byte
     LDR        r0, =link_stack_isr_end
     LSR        r0, r0, #3
@@ -161,7 +161,7 @@ _low_start:
     LSR        r0, r0, #3
     LSL        r0, r0, #3
 
-#if !PLATFORM_NO_VECTORS
+#ifndef WICED_NO_VECTORS
     // Setup UNDEF mode stack
     MSR        cpsr, #CPSR_UNDEF_INIT_VAL
     MOV        sp, r0
@@ -179,7 +179,7 @@ _low_start:
 
     BOOT_CHECKPOINT(5)
 
-#if !PLATFORM_NO_VECTORS
+#ifndef WICED_NO_VECTORS
     // Enable imprecise aborts
     CPSIE      A
 #endif
@@ -289,7 +289,7 @@ _mpudcfg:
     //
     // Vectors for execution only. Let's catch NULL pointers.
     //
-#if !PLATFORM_NO_VECTORS
+#ifndef WICED_NO_VECTORS
     MPU_REGION(0x0, MPU_R_SIZE_32, MPU_R_ACCESS_EXEC_ONLY_MEM)
 #endif
     //

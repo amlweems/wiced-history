@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -93,6 +93,8 @@ platform_result_t platform_ethernet_send_data             ( wiced_buffer_t buffe
 platform_result_t platform_ethernet_get_config            ( platform_ethernet_config_t** config );
 wiced_bool_t      platform_ethernet_is_ready_to_transceive( void );
 platform_result_t platform_ethernet_set_loopback_mode     ( platform_ethernet_loopback_mode_t loopback_mode );
+platform_result_t platform_ethernet_add_multicast_address   ( wiced_mac_t* mac );
+platform_result_t platform_ethernet_remove_multicast_address( wiced_mac_t* mac );
 
 #ifdef __cplusplus
 } /*extern "C" */

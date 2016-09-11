@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -112,7 +112,8 @@ TEST(unit_test_dhcp_server_start, normal )
 
     wiced_init( );
 
-    wiced_network_up( WICED_STA_INTERFACE, WICED_USE_STATIC_IP, &ip_settings );
+    result = wiced_network_up( WICED_STA_INTERFACE, WICED_USE_STATIC_IP, &ip_settings );
+    EXPECT_EQ( WICED_SUCCESS, result );
 
     result = wiced_start_dhcp_server( &server, WICED_STA_INTERFACE );
     EXPECT_EQ( WICED_SUCCESS, result );
@@ -120,7 +121,8 @@ TEST(unit_test_dhcp_server_start, normal )
     result = wiced_stop_dhcp_server( &server);
     EXPECT_EQ( WICED_SUCCESS, result );
 
-    wiced_network_down( WICED_STA_INTERFACE );
+    result = wiced_network_down( WICED_STA_INTERFACE );
+    EXPECT_EQ( WICED_SUCCESS, result );
 
 #if 0  // Simulator not working with AP yet
 

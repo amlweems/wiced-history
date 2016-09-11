@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,13 +27,13 @@ GLOBAL_DEFINES += TX_INCLUDE_USER_DEFINE_FILE
 
 ifneq ($(filter $(HOST_ARCH), ARM_CM3 ARM_CM4),)
 THREADX_ARCH:=Cortex_M3_M4
-GLOBAL_INCLUDES += ver$(THREADX_VERSION)/Cortex_M3_M4/GCC \
+GLOBAL_INCLUDES += ver$(THREADX_VERSION)/Cortex_M3_M4/$(TOOLCHAIN_NAME) \
                    WWD/CM3_CM4
 else
 ifneq ($(filter $(HOST_ARCH), ARM_CR4),)
 THREADX_ARCH:=Cortex_R4
 GLOBAL_DEFINES += __TARGET_ARCH_ARM=7 __THUMB_INTERWORK
-GLOBAL_INCLUDES += ver$(THREADX_VERSION)/Cortex_R4/GCC \
+GLOBAL_INCLUDES += ver$(THREADX_VERSION)/Cortex_R4/$(TOOLCHAIN_NAME) \
                    WWD/CR4
 else
 $(error No ThreadX port for architecture)

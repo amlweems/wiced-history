@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -53,7 +53,9 @@ $(NAME)_DEFINES += OPENSSL_SMALL_FOOTPRINT
 
 #$(NAME)_CFLAGS  = $(COMPILER_SPECIFIC_PEDANTIC_CFLAGS)
 
+ifneq ($(HOST_MCU_FAMILY),ix86)
 $(NAME)_ALWAYS_OPTIMISE := 1
+endif
 
 $(NAME)_UNIT_TEST_SOURCES := unit/crypto_unit.cpp \
                              unit/chacha_test_vectors.c \

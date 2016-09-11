@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -46,6 +46,11 @@ extern "C"
 typedef volatile unsigned char   host_semaphore_type_t;  /** NoOS definition of a semaphore */
 typedef volatile unsigned char   host_thread_type_t;     /** NoOS definition of a thread handle - Would be declared void but that is not allowed. */
 typedef volatile unsigned char   host_queue_type_t;      /** NoOS definition of a message queue */
+
+typedef struct
+{
+    uint8_t info;    /* not supported yet */
+} host_rtos_thread_config_type_t;
 
 /*@external@*/ void NoOS_setup_timing( void );
 /*@external@*/ void NoOS_stop_timing( void );

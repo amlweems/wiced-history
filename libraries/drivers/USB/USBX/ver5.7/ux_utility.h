@@ -137,10 +137,9 @@ VOID    _ux_utility_unicode_to_string(UCHAR *source, UCHAR *destination);
 VOID    _ux_utility_string_to_unicode(UCHAR *source, UCHAR *destination);
 VOID    _ux_system_error_handler(UINT error_code);
 
-/* +++ #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
+/* #BRCM#: Add WICED use. */
 UINT	_ux_utility_device_dump(UX_DEVICE *device);
-/* --- #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
-
+UINT    _ux_utility_platform_data_cache_handle(UX_TRANSFER *transfer_request);
 
 /* Define the system API mappings.
    Note: this section is only applicable to 
@@ -191,9 +190,9 @@ UINT	_ux_utility_device_dump(UX_DEVICE *device);
 #define ux_utility_unicode_to_string                   _ux_utility_unicode_to_string
 #define ux_utility_string_to_unicode                   _ux_utility_string_to_unicode
 #define ux_system_error_handler                        _ux_system_error_handler
-/* +++ #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
+/* #BRCM#: Add WICED use. */
 #define ux_utility_device_dump                         _ux_utility_device_dump
-/* --- #BRCM#WICED#: WICED use, added by JustinLi, 07/14/2015. */
+#define ux_utility_platform_data_cache_handle          _ux_utility_platform_data_cache_handle
 #endif
 
 #endif

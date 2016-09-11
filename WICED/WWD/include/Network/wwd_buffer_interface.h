@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -79,6 +79,17 @@ typedef struct
  */
 
 extern wwd_result_t wwd_buffer_init( /*@null@*/ void* native_arg );
+
+/**
+ * Deinitialize the packet buffer interface
+ *
+ * Implemented in the WICED buffer interface which is specific to the
+ * buffering scheme in use.
+ *
+ * @return WWD_SUCCESS = Success, Error code = Failure
+ */
+
+extern wwd_result_t wwd_buffer_deinit( void );
 
 /**
  * @brief Allocates a packet buffer
@@ -242,6 +253,13 @@ extern wwd_result_t host_buffer_add_remove_at_front( wiced_buffer_t* buffer, int
  * @return WWD_SUCCESS = Success, Error code = Failure
  */
 extern wwd_result_t host_buffer_check_leaked( void );
+
+/**
+ * Init fifo
+ *
+ * @param fifo : pointer to fifo structure
+ */
+extern void host_buffer_init_fifo( wiced_buffer_fifo_t* fifo );
 
 /**
  * Push buffer to tail of fifo

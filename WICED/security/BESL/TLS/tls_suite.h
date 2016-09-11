@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -64,6 +64,8 @@ typedef void (*tls_set_encrypt_key_func_t)( tls_cipher_context *ctx, const uint8
 typedef void (*tls_set_decrypt_key_func_t)( tls_cipher_context *ctx, const uint8_t* key, uint32_t key_length_bits  );
 typedef void (*tls_encrypt_func_t)(         tls_cipher_context *ctx, uint8_t* initial_value, const uint8_t *input, uint32_t length, uint8_t *output );
 typedef void (*tls_decrypt_func_t)(         tls_cipher_context *ctx, uint8_t* initial_value, const uint8_t *input, uint32_t length, uint8_t *output );
+typedef void (*tls_auth_encrypt_func_t)   ( tls_cipher_context *ctx, uint8_t* initial_value, const uint8_t *additional_data, uint32_t additional_length, const uint8_t *input, uint32_t length, uint8_t *output, uint8_t* tag, uint32_t tag_length );
+typedef void (*tls_auth_decrypt_func_t)   ( tls_cipher_context *ctx, uint8_t* initial_value, const uint8_t *additional_data, uint32_t additional_length, const uint8_t *input, uint32_t length, uint8_t *output, uint8_t* tag, uint32_t tag_length );
 
 /* MAC driver API function types */
 typedef void (*ssl3_mac_func_t)( const unsigned char* secret,
@@ -100,6 +102,8 @@ struct cipher_api_t
     tls_set_decrypt_key_func_t set_decrypt_key;
     tls_encrypt_func_t         encrypt;
     tls_decrypt_func_t         decrypt;
+    tls_auth_encrypt_func_t    auth_encrypt;
+    tls_auth_decrypt_func_t    auth_decrypt;
     cipher_t                   type;
     uint16_t                   minimum_tls_version;
 };
@@ -121,7 +125,7 @@ struct ssl3_driver
 {
     void     (*devive_master_key) ( ssl_context* ssl );
     void     (*devive_keyblock)   ( ssl_context* ssl, unsigned char keyblk[256] );
-    void     (*calc_verify_hash)  ( ssl_context *ssl, unsigned char hash[36], md5_context md5_ctx, sha1_context sha1_ctx );
+    void     (*calc_verify_hash)  ( ssl_context *ssl, unsigned char hash[36], md5_context *md5_ctx, sha1_context *sha1_ctx );
     int32_t  (*calc_hash)         ( ssl_context *ssl, unsigned char *buf, int32_t from, md5_context *md5_ctx, sha1_context *sha1_ctx );
 };
 

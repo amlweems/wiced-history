@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -92,9 +92,9 @@ typedef struct
 
 typedef struct
 {
-    linked_list_node_t           node;
-    wiced_http_response_stream_t stream;
-} http_response_stream_node_t;
+    linked_list_node_t  node;
+    wiced_http_stream_t stream;
+} http_stream_node_t;
 
 typedef struct
 {
@@ -114,13 +114,14 @@ static wiced_result_t           http_server_connect_callback         ( wiced_tcp
 static wiced_result_t           http_server_disconnect_callback      ( wiced_tcp_socket_t* socket, void* arg );
 static wiced_result_t           http_server_receive_callback         ( wiced_tcp_socket_t* socket, void* arg );
 static void                     http_server_event_thread_main        ( uint32_t arg );
-static wiced_result_t           http_server_parse_receive_packet     ( wiced_http_server_t* server, wiced_http_response_stream_t* stream, wiced_packet_t* packet );
-static wiced_result_t           http_server_process_url_request      ( wiced_http_response_stream_t* stream, const wiced_http_page_t* page_database, char* url, uint32_t url_length, wiced_http_message_body_t* http_message_body );
+static wiced_result_t           http_server_parse_receive_packet     ( wiced_http_server_t* server, wiced_http_stream_t* stream, wiced_packet_t* packet );
+static wiced_result_t           http_server_process_url_request      ( wiced_http_stream_t* stream, const wiced_http_page_t* page_database, char* url, uint32_t url_length, wiced_http_message_body_t* http_message_body );
 static uint16_t                 http_server_remove_escaped_characters( char* output, uint16_t output_length, const char* input, uint16_t input_length );
 static wiced_packet_mime_type_t http_server_get_mime_type            ( const char* request_data );
 static wiced_result_t           http_server_get_request_type_and_url ( char* request, uint16_t request_length, wiced_http_request_type_t* type, char** url_start, uint16_t* url_length );
 static wiced_result_t           http_server_find_url_in_page_database( char* url, uint32_t length, wiced_http_message_body_t* http_request, const wiced_http_page_t* page_database, wiced_http_page_t** page_found, wiced_packet_mime_type_t* mime_type );
 static wiced_bool_t             http_server_compare_stream_socket    ( linked_list_node_t* node_to_compare, void* user_data );
+static wiced_result_t           http_internal_server_start           (wiced_http_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_interface_t interface, uint32_t http_thread_stack_size, uint32_t server_connect_thread_stack_size );
 
 /******************************************************
  *                 Static Variables
@@ -157,20 +158,16 @@ static const char* const http_status_codes[ ] =
 
 wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_interface_t interface, uint32_t http_thread_stack_size )
 {
-    http_response_stream_node_t* stream_node;
-    uint32_t a;
-    uint32_t server_connect_thread_stack_size;
+    wiced_assert( "bad arg", ( server != NULL ) && ( page_database != NULL ) );
 
-    /* If this will be an HTTPS server then it requires a larger stack */
-    if ( server->tcp_server.tls_identity == NULL )
-    {
-        memset( server, 0, sizeof( *server ) );
-        server_connect_thread_stack_size = HTTP_SERVER_CONNECT_THREAD_STACK_SIZE;
-    }
-    else
-    {
-        server_connect_thread_stack_size = HTTPS_SERVER_CONNECT_THREAD_STACK_SIZE;
-    }
+    memset( server, 0, sizeof( *server ) );
+    return http_internal_server_start (server,port,max_sockets,page_database,interface, http_thread_stack_size, HTTP_SERVER_CONNECT_THREAD_STACK_SIZE);
+}
+
+static wiced_result_t http_internal_server_start(wiced_http_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_interface_t interface, uint32_t http_thread_stack_size, uint32_t server_connect_thread_stack_size )
+{
+    http_stream_node_t* stream_node;
+    uint32_t a;
 
     /* Store the inputs database */
     server->page_database = page_database;
@@ -179,13 +176,13 @@ wiced_result_t wiced_http_server_start( wiced_http_server_t* server, uint16_t po
 
     /* Allocate space for response streams and insert them into the inactive stream list */
     linked_list_init( &server->inactive_stream_list );
-    server->streams = malloc_named( "HTTP streams", sizeof(http_response_stream_node_t) * max_sockets );
+    server->streams = malloc_named( "HTTP streams", sizeof(http_stream_node_t) * max_sockets );
     if ( server->streams == NULL )
     {
         return WICED_OUT_OF_HEAP_SPACE;
     }
-    memset( server->streams, 0, sizeof(http_response_stream_node_t) * max_sockets );
-    stream_node = (http_response_stream_node_t*)server->streams;
+    memset( server->streams, 0, sizeof(http_stream_node_t) * max_sockets );
+    stream_node = (http_stream_node_t*)server->streams;
     for ( a = 0; a < max_sockets; a++ )
     {
         linked_list_set_node_data( &stream_node[a].node, (void*)&stream_node[a] );
@@ -212,6 +209,8 @@ wiced_result_t wiced_http_server_stop( wiced_http_server_t* server )
 {
     server_event_message_t current_event;
 
+    wiced_assert( "bad arg", ( server != NULL ) );
+
     current_event.event_type = SERVER_STOP_EVENT;
     current_event.socket     = 0;
 
@@ -219,11 +218,16 @@ wiced_result_t wiced_http_server_stop( wiced_http_server_t* server )
 
     if ( wiced_rtos_is_current_thread( &server->event_thread ) != WICED_SUCCESS )
     {
+        /* Wakeup HTTP event thread */
         wiced_rtos_thread_force_awake( &server->event_thread );
-        wiced_rtos_thread_join( &server->event_thread );
-        wiced_rtos_delete_thread( &server->event_thread );
-        wiced_rtos_delete_worker_thread( &server->connect_thread );
     }
+
+    /* Wait for the event to completely get processed for closing the server smoothly */
+    wiced_rtos_thread_join( &server->event_thread );
+
+    /* Delete the threads */
+    wiced_rtos_delete_thread( &server->event_thread );
+    wiced_rtos_delete_worker_thread( &server->connect_thread );
 
     linked_list_deinit( &server->inactive_stream_list );
     linked_list_deinit( &server->active_stream_list );
@@ -235,12 +239,14 @@ wiced_result_t wiced_http_server_stop( wiced_http_server_t* server )
 
 wiced_result_t wiced_https_server_start( wiced_https_server_t* server, uint16_t port, uint16_t max_sockets, const wiced_http_page_t* page_database, wiced_tls_identity_t* identity, wiced_interface_t interface, uint32_t url_processor_stack_size )
 {
+    wiced_assert( "bad arg", ( server != NULL ) && ( page_database != NULL ) );
+
     memset( server, 0, sizeof( *server ) );
 
     wiced_tcp_server_enable_tls( &server->tcp_server, identity );
 
     /* Start HTTP server */
-    WICED_VERIFY( wiced_http_server_start( server, port, max_sockets, page_database, interface, url_processor_stack_size) );
+    WICED_VERIFY( http_internal_server_start( server, port, max_sockets, page_database, interface, url_processor_stack_size, HTTPS_SERVER_CONNECT_THREAD_STACK_SIZE) );
 
     /* Enable TLS */
     return WICED_SUCCESS;
@@ -271,12 +277,16 @@ wiced_result_t wiced_http_server_deregister_callbacks( wiced_http_server_t* serv
 
 wiced_result_t wiced_http_response_stream_enable_chunked_transfer( wiced_http_response_stream_t* stream )
 {
+    wiced_assert( "bad arg", ( stream !=  NULL ) );
+
     stream->chunked_transfer_enabled = WICED_TRUE;
     return WICED_SUCCESS;
 }
 
 wiced_result_t wiced_http_response_stream_disable_chunked_transfer( wiced_http_response_stream_t* stream )
 {
+    wiced_assert( "bad arg", ( stream !=  NULL ) );
+
     if ( stream->chunked_transfer_enabled == WICED_TRUE )
     {
         /* Send final chunked frame */
@@ -328,13 +338,17 @@ wiced_result_t wiced_http_response_stream_write_header( wiced_http_response_stre
         WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, HTTP_HEADER_CHUNKED, strlen( HTTP_HEADER_CHUNKED ) ) );
         WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, CRLF, strlen( CRLF ) ) );
     }
-    else if ( content_length != 0 )
+    else
     {
-        /* Content-Length: xx\r\n */
-        sprintf( data_length_string, "%lu", (long) content_length );
-        WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, HTTP_HEADER_CONTENT_LENGTH, strlen( HTTP_HEADER_CONTENT_LENGTH ) ) );
-        WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, data_length_string, strlen( data_length_string ) ) );
-        WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, CRLF, strlen( CRLF ) ) );
+        /* for EVENT Stream content length is  Zero*/
+        if ( mime_type != MIME_TYPE_TEXT_EVENT_STREAM )
+        {
+            /* Content-Length: xx\r\n */
+            sprintf( data_length_string, "%lu", (long) content_length );
+            WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, HTTP_HEADER_CONTENT_LENGTH, strlen( HTTP_HEADER_CONTENT_LENGTH ) ) );
+            WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, data_length_string, strlen( data_length_string ) ) );
+            WICED_VERIFY( wiced_tcp_stream_write( &stream->tcp_stream, CRLF, strlen( CRLF ) ) );
+        }
     }
 
     /* Closing sequence */
@@ -345,6 +359,8 @@ wiced_result_t wiced_http_response_stream_write_header( wiced_http_response_stre
 
 wiced_result_t wiced_http_response_stream_write( wiced_http_response_stream_t* stream, const void* data, uint32_t length )
 {
+    wiced_assert( "bad arg", ( stream !=  NULL ) );
+
     if ( length == 0 )
     {
         return WICED_BADARG;
@@ -419,6 +435,8 @@ wiced_result_t wiced_http_response_stream_disconnect( wiced_http_response_stream
 
 wiced_result_t wiced_http_response_stream_init( wiced_http_response_stream_t* stream, wiced_tcp_socket_t* socket )
 {
+    wiced_assert( "bad arg", ( stream != NULL ) );
+
     memset( stream, 0, sizeof( wiced_http_response_stream_t ) );
 
     stream->chunked_transfer_enabled = WICED_FALSE;
@@ -428,6 +446,8 @@ wiced_result_t wiced_http_response_stream_init( wiced_http_response_stream_t* st
 
 wiced_result_t wiced_http_response_stream_deinit( wiced_http_response_stream_t* stream )
 {
+    wiced_assert( "bad arg", ( stream != NULL ) );
+
     return wiced_tcp_stream_deinit( &stream->tcp_stream );
 }
 
@@ -546,13 +566,13 @@ static wiced_result_t http_server_receive_callback( wiced_tcp_socket_t* socket, 
     return wiced_rtos_push_to_queue( &((wiced_http_server_t*)arg)->event_queue, &current_event, WICED_NO_WAIT );
 }
 
-static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* server, wiced_http_response_stream_t* stream, wiced_packet_t* packet )
+static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* server, wiced_http_stream_t* stream, wiced_packet_t* packet )
 {
     wiced_result_t result                        = WICED_SUCCESS;
     wiced_bool_t   disconnect_current_connection = WICED_FALSE;
     char*          start_of_url                  = NULL; /* Suppress compiler warning */
     uint16_t       url_length                    = 0;    /* Suppress compiler warning */
-    char*          request_string;
+    char*          request_string = NULL;
     uint16_t       request_length;
     uint16_t       new_url_length;
     uint16_t       available_data_length;
@@ -586,7 +606,7 @@ static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* ser
     /* If application registers a receive callback, call the callback before further processing */
     if ( server->receive_callback != NULL )
     {
-        result = server->receive_callback( stream, (uint8_t**)&request_string, &request_length );
+        result = server->receive_callback( &stream->response, (uint8_t**)&request_string, &request_length );
         if ( result != WICED_SUCCESS )
         {
             if ( result != WICED_PARTIAL_RESULTS )
@@ -597,17 +617,50 @@ static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* ser
         }
     }
 
+    /* Check if this is a close request */
+    if ( strnstr( request_string, request_length, HTTP_HEADER_CLOSE, sizeof( HTTP_HEADER_CLOSE ) - 1 ) != NULL )
+    {
+        disconnect_current_connection = WICED_TRUE;
+    }
+
+    /* Code allows to support if content length > MTU then send data to callback registered for particular page_found. */
+    if(stream->request.page_found != NULL)
+    {
+        /* currently we only handle content length > MTU for RAW_DYNAMIC_URL_CONTENT and WICED_DYNAMIC_CONTENT */
+        if(stream->request.page_found->url_content_type == WICED_RAW_DYNAMIC_URL_CONTENT || stream->request.page_found->url_content_type == WICED_DYNAMIC_URL_CONTENT)
+        {
+            if(stream->request.total_data_remaning > 0)
+            {
+                stream->request.total_data_remaning = (uint16_t)(stream->request.total_data_remaning -  request_length);
+
+                http_message_body.data = (uint8_t*)request_string;
+                http_message_body.message_data_length = request_length;
+                http_message_body.total_message_data_remaining = stream->request.total_data_remaning;
+
+                stream->request.page_found->url_content.dynamic_data.generator(stream->request.page_found->url, NULL, &stream->response, stream->request.page_found->url_content.dynamic_data.arg, &http_message_body);
+
+                /* We got all fragmented packets of http request [as total_data_remaining is 0 ] now send the response */
+                if(stream->request.total_data_remaning == 0)
+                {
+                   /* Disable chunked transfer as it was enabled previously in library itself and then flush the data */
+                   if( stream->request.page_found->url_content_type == WICED_DYNAMIC_URL_CONTENT )
+                   {
+                       wiced_http_response_stream_disable_chunked_transfer( &stream->response );
+                   }
+
+                   WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
+                }
+
+                return WICED_SUCCESS;
+            }
+        }
+    }
+
     /* Verify we have enough data to start processing */
     if ( request_length < MINIMUM_REQUEST_LINE_LENGTH )
     {
         result = WICED_ERROR;
         goto exit;
-    }
-
-    /* Check if this is a close request */
-    if ( strnstr( request_string, request_length, HTTP_HEADER_CLOSE, sizeof( HTTP_HEADER_CLOSE ) - 1 ) != NULL )
-    {
-        disconnect_current_connection = WICED_TRUE;
     }
 
     /* First extract the URL from the packet */
@@ -664,10 +717,13 @@ static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* ser
             message_data_length_string += ( sizeof( HTTP_HEADER_CONTENT_LENGTH ) - 1 );
 
             http_message_body.total_message_data_remaining = (uint16_t) ( strtol( message_data_length_string, NULL, 10 ) - http_message_body.message_data_length );
+
+            stream->request.total_data_remaning = http_message_body.total_message_data_remaining;
         }
         else
         {
             http_message_body.message_data_length = 0;
+            stream->request.total_data_remaning = 0;
         }
     }
 
@@ -676,13 +732,13 @@ static wiced_result_t http_server_parse_receive_packet( wiced_http_server_t* ser
     exit:
     if ( disconnect_current_connection == WICED_TRUE )
     {
-        wiced_http_response_stream_disconnect( stream );
+        wiced_http_response_stream_disconnect( &stream->response );
     }
 
     return result;
 }
 
-static wiced_result_t http_server_process_url_request( wiced_http_response_stream_t* stream, const wiced_http_page_t* page_database, char* url, uint32_t url_length, wiced_http_message_body_t* http_message_body )
+static wiced_result_t http_server_process_url_request( wiced_http_stream_t* stream, const wiced_http_page_t* page_database, char* url, uint32_t url_length, wiced_http_message_body_t* http_message_body )
 {
     char*                    url_query_parameters = url;
     uint32_t                 query_length         = url_length;
@@ -714,6 +770,7 @@ static wiced_result_t http_server_process_url_request( wiced_http_response_strea
     /* Find URL in server page database */
     if ( http_server_find_url_in_page_database( url, url_length, http_message_body, page_database, &page_found, &mime_type ) == WICED_SUCCESS )
     {
+        stream->request.page_found = page_found;
         status_code = HTTP_200_TYPE; /* OK */
     }
     else
@@ -727,39 +784,52 @@ static wiced_result_t http_server_process_url_request( wiced_http_response_strea
         switch ( page_found->url_content_type )
         {
             case WICED_DYNAMIC_URL_CONTENT:
-                wiced_http_response_stream_enable_chunked_transfer( stream );
-                wiced_http_response_stream_write_header( stream, status_code, CHUNKED_CONTENT_LENGTH, HTTP_CACHE_DISABLED, mime_type );
-                page_found->url_content.dynamic_data.generator( url, url_query_parameters, stream, page_found->url_content.dynamic_data.arg, http_message_body );
-                wiced_http_response_stream_disable_chunked_transfer( stream );
+                wiced_http_response_stream_enable_chunked_transfer( &stream->response );
+                wiced_http_response_stream_write_header( &stream->response, status_code, CHUNKED_CONTENT_LENGTH, HTTP_CACHE_DISABLED, mime_type );
+                page_found->url_content.dynamic_data.generator( url, url_query_parameters, &stream->response, page_found->url_content.dynamic_data.arg, http_message_body );
+                /* if content length is < MTU then just disable chunked transfer and flush the data */
+                if(stream->request.total_data_remaning == 0)
+                {
+                    wiced_http_response_stream_disable_chunked_transfer( &stream->response );
+                    WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
+                }
                 break;
 
             case WICED_RAW_DYNAMIC_URL_CONTENT:
-                page_found->url_content.dynamic_data.generator( url, url_query_parameters, stream, page_found->url_content.dynamic_data.arg, http_message_body );
+                page_found->url_content.dynamic_data.generator( url, url_query_parameters, &stream->response, page_found->url_content.dynamic_data.arg, http_message_body );
+                /* if content length is < MTU then just flush the response */
+                if(stream->request.total_data_remaning == 0)
+                {
+                    WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
+                }
                 break;
 
             case WICED_STATIC_URL_CONTENT:
-                wiced_http_response_stream_write_header( stream, status_code, page_found->url_content.static_data.length, HTTP_CACHE_ENABLED, mime_type );
-                wiced_http_response_stream_write( stream, page_found->url_content.static_data.ptr, page_found->url_content.static_data.length );
+                wiced_http_response_stream_write_header( &stream->response, status_code, page_found->url_content.static_data.length, HTTP_CACHE_ENABLED, mime_type );
+                wiced_http_response_stream_write( &stream->response, page_found->url_content.static_data.ptr, page_found->url_content.static_data.length );
+                WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
                 break;
 
             case WICED_RAW_STATIC_URL_CONTENT: /* This is just a Location header */
-                wiced_http_response_stream_write( stream, HTTP_HEADER_301, strlen( HTTP_HEADER_301 ) );
-                wiced_http_response_stream_write( stream, CRLF, strlen( CRLF ) );
-                wiced_http_response_stream_write( stream, HTTP_HEADER_LOCATION, strlen( HTTP_HEADER_LOCATION ) );
-                wiced_http_response_stream_write( stream, page_found->url_content.static_data.ptr, page_found->url_content.static_data.length );
-                wiced_http_response_stream_write( stream, CRLF, strlen( CRLF ) );
-                wiced_http_response_stream_write( stream, HTTP_HEADER_CONTENT_LENGTH, strlen( HTTP_HEADER_CONTENT_LENGTH ) );
-                wiced_http_response_stream_write( stream, "0", 1 );
-                wiced_http_response_stream_write( stream, CRLF_CRLF, strlen( CRLF_CRLF ) );
+                wiced_http_response_stream_write( &stream->response, HTTP_HEADER_301, strlen( HTTP_HEADER_301 ) );
+                wiced_http_response_stream_write( &stream->response, CRLF, strlen( CRLF ) );
+                wiced_http_response_stream_write( &stream->response, HTTP_HEADER_LOCATION, strlen( HTTP_HEADER_LOCATION ) );
+                wiced_http_response_stream_write( &stream->response, page_found->url_content.static_data.ptr, page_found->url_content.static_data.length );
+                wiced_http_response_stream_write( &stream->response, CRLF, strlen( CRLF ) );
+                wiced_http_response_stream_write( &stream->response, HTTP_HEADER_CONTENT_LENGTH, strlen( HTTP_HEADER_CONTENT_LENGTH ) );
+                wiced_http_response_stream_write( &stream->response, "0", 1 );
+                wiced_http_response_stream_write( &stream->response, CRLF_CRLF, strlen( CRLF_CRLF ) );
+                WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
                 break;
 
             case WICED_RESOURCE_URL_CONTENT:
                 /* Fall through */
             case WICED_RAW_RESOURCE_URL_CONTENT:
-                wiced_http_response_stream_enable_chunked_transfer( stream );
-                wiced_http_response_stream_write_header( stream, status_code, CHUNKED_CONTENT_LENGTH, HTTP_CACHE_DISABLED, mime_type );
-                wiced_http_response_stream_write_resource( stream, page_found->url_content.resource_data );
-                wiced_http_response_stream_disable_chunked_transfer( stream );
+                wiced_http_response_stream_enable_chunked_transfer( &stream->response );
+                wiced_http_response_stream_write_header( &stream->response, status_code, CHUNKED_CONTENT_LENGTH, HTTP_CACHE_DISABLED, mime_type );
+                wiced_http_response_stream_write_resource( &stream->response, page_found->url_content.resource_data );
+                wiced_http_response_stream_disable_chunked_transfer( &stream->response );
+                WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
                 break;
 
             default:
@@ -769,12 +839,11 @@ static wiced_result_t http_server_process_url_request( wiced_http_response_strea
     }
     else if ( status_code >= HTTP_400_TYPE )
     {
-        wiced_http_response_stream_write_header( stream, status_code, NO_CONTENT_LENGTH, HTTP_CACHE_DISABLED, MIME_TYPE_TEXT_HTML );
+        wiced_http_response_stream_write_header( &stream->response, status_code, NO_CONTENT_LENGTH, HTTP_CACHE_DISABLED, MIME_TYPE_TEXT_HTML );
+        WICED_VERIFY( wiced_http_response_stream_flush( &stream->response ) );
     }
 
-    WICED_VERIFY( wiced_http_response_stream_flush( stream ) );
-
-    wiced_assert( "Page Serve finished with data still in stream", stream->tcp_stream.tx_packet == NULL );
+    wiced_assert( "Page Serve finished with data still in stream", stream->response.tcp_stream.tx_packet == NULL );
     return WICED_SUCCESS;
 }
 
@@ -931,14 +1000,14 @@ static void http_server_event_thread_main( uint32_t arg )
         {
             case SOCKET_DISCONNECT_EVENT:
             {
-                http_response_stream_node_t* stream;
+                http_stream_node_t* stream;
 
                 /* Search in active stream whether stream for this socket is available. If available, removed it */
                 if ( linked_list_find_node( &server->active_stream_list, http_server_compare_stream_socket, (void*)current_event.socket, (linked_list_node_t**)&stream ) == WICED_SUCCESS )
                 {
                     linked_list_remove_node( &server->active_stream_list, &stream->node );
                     linked_list_insert_node_at_rear( &server->inactive_stream_list, &stream->node );
-                    wiced_http_response_stream_deinit( &stream->stream );
+                    wiced_http_response_stream_deinit( &stream->stream.response );
                 }
 
                 wiced_tcp_server_disconnect_socket( &server->tcp_server, current_event.socket );
@@ -951,14 +1020,14 @@ static void http_server_event_thread_main( uint32_t arg )
             }
             case SERVER_STOP_EVENT:
             {
-                http_response_stream_node_t* stream;
+                http_stream_node_t* stream;
 
                 /* Deinit all response stream */
                 linked_list_get_front_node( &server->active_stream_list, (linked_list_node_t**)&stream );
                 while ( stream != NULL )
                 {
                     linked_list_remove_node( &server->active_stream_list, &stream->node );
-                    wiced_http_response_stream_deinit( &stream->stream );
+                    wiced_http_response_stream_deinit( &stream->stream.response );
                     linked_list_get_front_node( &server->active_stream_list, (linked_list_node_t**)&stream );
                 }
                 server->quit = WICED_TRUE;
@@ -969,7 +1038,7 @@ static void http_server_event_thread_main( uint32_t arg )
             {
                 wiced_tcp_socket_t*          socket = (wiced_tcp_socket_t*)current_event.socket;
                 wiced_packet_t*              packet = NULL;
-                http_response_stream_node_t* stream = NULL;
+                http_stream_node_t* stream = NULL;
 
                 wiced_tcp_receive( socket, &packet, HTTP_SERVER_RECEIVE_TIMEOUT );
                 if ( packet != NULL )
@@ -979,7 +1048,7 @@ static void http_server_event_thread_main( uint32_t arg )
                     {
                         linked_list_remove_node_from_front( &server->inactive_stream_list, (linked_list_node_t**)&stream );
                         linked_list_insert_node_at_rear( &server->active_stream_list, &stream->node );
-                        wiced_http_response_stream_init( &stream->stream, current_event.socket );
+                        wiced_http_response_stream_init( &stream->stream.response, current_event.socket );
                     }
 
                     /* Process packet */
@@ -1005,9 +1074,9 @@ static void http_server_event_thread_main( uint32_t arg )
 static wiced_bool_t http_server_compare_stream_socket( linked_list_node_t* node_to_compare, void* user_data )
 {
     wiced_tcp_socket_t*          socket = (wiced_tcp_socket_t*)user_data;
-    http_response_stream_node_t* stream = (http_response_stream_node_t*)node_to_compare;
+    http_stream_node_t* stream = (http_stream_node_t*)node_to_compare;
 
-    if ( stream->stream.tcp_stream.socket == socket )
+    if ( stream->stream.response.tcp_stream.socket == socket )
     {
         return WICED_TRUE;
     }

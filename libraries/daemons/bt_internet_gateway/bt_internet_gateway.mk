@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,14 +10,16 @@
 
 NAME := Lib_Bluetooth_Internet_Gateway
 
-GLOBAL_DEFINES     += BT_TRACE_PROTOCOL=FALSE \
-                      BT_USE_TRACES=FALSE
+GLOBAL_DEFINES     += BUILDCFG
+# enable bluetooth traces/logging - you can define this flag either from the application or from this daemon
+# but not from both. This daemon is used by multiple apps in apps/demo/bt_internet_gateway
+#GLOBAL_DEFINES     += ENABLE_BT_PROTOCOL_TRACES
 
 GLOBAL_INCLUDES    += . \
                       internal
 
 $(NAME)_COMPONENTS += utilities/linked_list \
-                      drivers/bluetooth_le \
+                      drivers/bluetooth/low_energy \
                       daemons/HTTP_server
 
 $(NAME)_SOURCES    := internal/bt_internet_gateway.c\

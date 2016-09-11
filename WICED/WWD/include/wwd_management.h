@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -44,6 +44,16 @@ extern "C"
  * @return WWD_SUCCESS if initialization is successful, Error code otherwise
  */
 wwd_result_t wwd_management_wifi_platform_init( wiced_country_code_t country, wiced_bool_t resume_after_deep_sleep );
+
+/*
+ * WARNING: After setting to WICED_TRUE,
+ * Call wwd_management_wifi_platform_init_halt( WICED_FALSE )
+ * prior to next wwd_management_wifi_platform_init.
+ * Halt Wi-Fi platform init by causing abort of firmware download loop.
+ *
+ * @return WWD_SUCCESS if successfully set the flag to abort
+ */
+wwd_result_t wwd_management_wifi_platform_init_halt( wiced_bool_t halt );
 
 /**
  * Turn on the Wi-Fi device

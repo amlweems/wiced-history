@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,7 +11,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -31,6 +30,13 @@ extern "C"
 #define N_COL                   4
 #define N_BLOCK   (N_ROW * N_COL)
 #define N_MAX_ROUNDS           14
+
+/*
+ * maxium ECC key size in byte
+ *
+ * 144 bytes for sect571k1, sect571r1 (570 bit)
+ */
+#define ECC_KEY_MAX           144
 
 /******************************************************
  *                   Enumerations
@@ -68,6 +74,7 @@ typedef enum
 {
     TLS_RSA_KEY,
     TLS_ECC_KEY,
+    TLS_PSK_KEY,
 } wiced_tls_key_type_t;
 
 typedef enum
@@ -179,26 +186,16 @@ typedef struct
 } wiced_tls_rsa_key_t;
 
 /*
- * We support up to 512-bit ECC keys
+ * We support up to 570-bit ECC keys
  */
 typedef struct
 {
     wiced_tls_key_type_t type;
     uint32_t             version;
     uint32_t             length;
-    uint8_t              key[64];
+    uint8_t              key[ECC_KEY_MAX];
 } wiced_tls_ecc_key_t;
 
-/* Below structures are only specific to DTLS */
-typedef struct
-{
-    wiced_dtls_key_type_t type;
-    uint32_t              version;
-    uint32_t              length;
-    uint8_t               data[1];
-} wiced_dtls_key_t;
-
-/* this PSK structure is specific to DTLS */
 typedef struct
 {
     wiced_tls_key_type_t type;
@@ -206,10 +203,9 @@ typedef struct
     uint32_t             length;
     uint8_t              psk_identity[256];
     uint8_t              psk_key[256];
-} wiced_dtls_psk_key_t;
+} wiced_tls_psk_key_t;
 
-/* End of DTLS structures */
-
+typedef wiced_tls_psk_key_t wiced_dtls_psk_key_t;
 typedef wiced_tls_rsa_key_t rsa_context;
 
 /*
@@ -406,6 +402,9 @@ typedef unsigned char ed25519_signature[64];
 typedef unsigned char ed25519_public_key[32];
 typedef unsigned char ed25519_secret_key[32];
 #endif
+
+typedef wiced_tls_key_t     wiced_dtls_key_t;
+typedef wiced_tls_ecc_key_t wiced_dtls_ecc_key_t;
 
 /******************************************************
  *                 Global Variables

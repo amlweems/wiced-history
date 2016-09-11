@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,6 +31,8 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
+#define APOLLO_STREAMER_BURST_AUTO_SLC      (0xF0F0F0F0)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -43,20 +45,41 @@ typedef enum
 
 typedef enum
 {
-    APOLLO_STREAMER_EVENT_BT_ENABLED,
     APOLLO_STREAMER_EVENT_BT_CONNECTED,
     APOLLO_STREAMER_EVENT_BT_DISCONNECTED,
     APOLLO_STREAMER_EVENT_BT_PLAYBACK_STARTED,
-    APOLLO_STREAMER_EVENT_BT_PLAYBACK_STOPPED
+    APOLLO_STREAMER_EVENT_BT_PLAYBACK_STOPPED,
+    APOLLO_STREAMER_EVENT_BT_VOLUME_CHANGED,
+    APOLLO_STREAMER_EVENT_BT_PLAYBACK_STATUS,
+    APOLLO_STREAMER_EVENT_BT_TRACK_METADATA
 } apollo_streamer_event_t;
 
 /******************************************************
  *                 Type Definitions
  ******************************************************/
 
+typedef struct
+{
+    uint32_t position_msecs;                               /*!< Playback position in milliseconds (relative to track duration below)    */
+    uint32_t duration_msecs;                               /*!< Track duration in milliseconds                                          */
+} apollo_streamer_track_playback_status_t;
+
+typedef struct
+{
+    int8_t* artist_utf8_str;                               /*!< NULL-terminated, UTF-8 encoded, track artist string                       */
+    int8_t* title_utf8_str;                                /*!< NULL-terminated, UTF-8 encoded, track title string                        */
+} apollo_streamer_track_metadata_t;
+
+typedef union
+{
+    uint8_t                                 volume;        /*!< Audio volume (0 - 100)                                                    */
+    apollo_streamer_track_playback_status_t playback;
+    apollo_streamer_track_metadata_t        metadata;
+} apollo_streamer_event_data_t;
+
 typedef struct apollo_streamer_s* apollo_streamer_ref;
 
-typedef int (*apollo_streamer_event_callback)(apollo_streamer_ref handle, void* user_context, apollo_streamer_event_t event, void* arg);
+typedef int (*apollo_streamer_event_callback)(apollo_streamer_ref handle, void* user_context, apollo_streamer_event_t event, apollo_streamer_event_data_t* event_data);
 
 /******************************************************
  *                    Structures
@@ -65,19 +88,18 @@ typedef int (*apollo_streamer_event_callback)(apollo_streamer_ref handle, void* 
 typedef struct apollo_streamer_params_s
 {
     apollo_streamer_event_callback event_cb;               /*!< Application event callback                                                */
-    void                          *user_context;           /*!< User context for event callback                                           */
+    void*                          user_context;           /*!< User context for event callback                                           */
     apollo_audio_source_type_t     source_type;            /*!< Audio source type @ref apollo_audio_source_type_t                         */
     wiced_interface_t              iface;                  /*!< network interface @ref wiced_interface_t                                  */
     wiced_ip_address_t             clientaddr;             /*!< IPv4 destination address (can be multicast) @ref wiced_ip_address_t       */
     uint16_t                       port;                   /*!< RTP/UDP port number, enter 0 to use default                               */
     int                            num_pool_packets;       /*!< Total number of packets to be allocated for streamer buffering            */
     int                            num_packets;            /*!< Number of packets streamer may use for audio buffering                    */
-    int                            payload_size;           /*!< RTP payload size (audio data size)                                        */
-    int                            fec_length;             /*!< Length of FEC pattern; number of protected audio packets is fec_length*2  */
-    uint32_t                       fec_order;              /*!< RTP_AUDIO_FEC_PRIOR or RTP_AUDIO_FEC_PRIOR defined in apollo_rtp_params.h */
+    int                            max_payload_size;       /*!< RTP maximum payload size (audio data size)                                */
+    int                            burst_length;           /*!< Burst length of protected audio packets                                   */
+    int                            shuffle_length;         /*!< SLC shuffle length                                                        */
     platform_audio_device_id_t     audio_device_rx;        /*!< Input  / capture  device ID @ref platform_audio_device_id_t               */
     platform_audio_device_id_t     audio_device_tx;        /*!< Output / playback device ID @ref platform_audio_device_id_t               */
-    uint32_t                       app_dct_offset_for_bt;  /*!< Offset at which BT stack will write non-volatile data to flash            */
 
     /* Audio render playback parameters */
 
@@ -111,7 +133,7 @@ typedef struct apollo_streamer_params_s
  *
  * @return @ref wiced_result_t
  */
-wiced_result_t apollo_streamer_init  ( apollo_streamer_params_t *params, apollo_streamer_ref *streamer_ptr );
+wiced_result_t apollo_streamer_init  ( apollo_streamer_params_t* params, apollo_streamer_ref* streamer_ptr );
 
 
 /**

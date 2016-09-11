@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -97,7 +97,7 @@ besl_result_t besl_host_get_mac_address(besl_mac_t* address, uint32_t interface 
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
     CHECK_IOCTL_BUFFER( data );
-    *data = wwd_get_bss_index( interface );
+    *data = wwd_get_bss_index( ( wwd_interface_t )interface );
 
     result = wwd_sdpcm_send_iovar( SDPCM_GET, buffer, &response, WWD_STA_INTERFACE );
     if ( result != WWD_SUCCESS )
@@ -118,7 +118,7 @@ besl_result_t besl_host_set_mac_address(besl_mac_t* address, uint32_t interface 
 
     data = wwd_sdpcm_get_iovar_buffer( &buffer, sizeof(wiced_mac_t) + sizeof(uint32_t), "bsscfg:" IOVAR_STR_CUR_ETHERADDR );
     CHECK_IOCTL_BUFFER( data );
-    data[0] = wwd_get_bss_index( interface );
+    data[0] = wwd_get_bss_index( ( wwd_interface_t )interface );
     memcpy(&data[1], address, sizeof(wiced_mac_t));
 
     return (besl_result_t) wwd_sdpcm_send_iovar( SDPCM_SET, buffer, NULL, WWD_STA_INTERFACE );

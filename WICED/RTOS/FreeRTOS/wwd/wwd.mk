@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,6 +26,9 @@ $(NAME)_ARM_CM3_INCLUDES := ./ARM_CM3
 
 $(NAME)_ARM_CM4_SOURCES  := $($(NAME)_ARM_CM3_SOURCES)
 $(NAME)_ARM_CM4_INCLUDES := $($(NAME)_ARM_CM3_INCLUDES)
+
+$(NAME)_Win32_x86_SOURCES    :=
+$(NAME)_Win32_x86_INCLUDES   := ./Win32_x86
 
 $(NAME)_SOURCES += $($(NAME)_$(HOST_ARCH)_SOURCES)
 GLOBAL_INCLUDES += $($(NAME)_$(HOST_ARCH)_INCLUDES)

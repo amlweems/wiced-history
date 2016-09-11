@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -210,6 +210,15 @@ void WEAK NEVER_INLINE wiced_deep_sleep_application_init_on_networking_ready_han
 }
 
 #endif /* WICED_DEEP_SLEEP_IS_ENABLED() */
+
+void platform_deep_sleep_init( void )
+{
+#if WICED_DEEP_SLEEP_IS_ENABLED()
+#if WICED_DEEP_SLEEP_SAVE_PACKETS_NUM
+    host_buffer_init_fifo( &deep_sleep_saved_packets );
+#endif
+#endif
+}
 
 uint32_t wiced_deep_sleep_ticks_since_enter( void )
 {

@@ -327,7 +327,7 @@ unsigned int                                    _tx_thread_interrupt_control(uns
 const CHAR                      _tx_version_id[] =
                                     "Copyright (c) 1996-2013 Express Logic Inc. * ThreadX Cortex-M3/IAR Version G5.6.5.3 SN: 23451-108-0901 *";
 #else
-extern cont CHAR                _tx_version_id[];
+extern const CHAR                _tx_version_id[];
 #endif
 
 

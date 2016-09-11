@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -10,8 +10,7 @@
 
 NAME := Lib_Bluetooth_SmartBridge
 
-GLOBAL_DEFINES  += BT_TRACE_PROTOCOL=FALSE \
-                   BT_USE_TRACES=FALSE
+GLOBAL_DEFINES  += BUILDCFG
 GLOBAL_INCLUDES := .
 
 GLOBAL_INCLUDES += ./include \

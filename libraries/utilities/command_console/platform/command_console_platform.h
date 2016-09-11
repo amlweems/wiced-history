@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -31,7 +31,7 @@ extern "C" {
     { "mcu_powersave_sleep", mcu_powersave_sleep_console_command, 2, NULL, NULL, "<0|1> <sleep_ms>", "0 - RTOS sleeping with CPU can wake-up earlier if requested by other threads though current one remain in sleep state, 1 - forced sleeping where platform forced to ignore all interrupts except timer and sleep specified amount of time"}, \
     { "mcu_powersave_info",  mcu_powersave_info_console_command,  0, NULL, NULL, NULL, "Print powersave information"}, \
     { "mcu_wlan_powersave_stats",          mcu_wlan_powersave_stats_console_command,  0, NULL, NULL, NULL, "Print WLAN powersave statistics"}, \
-    { "mcu_powersave_gpio_wakeup_enable",  mcu_powersave_gpio_wakeup_enable_console_command,  1, NULL, NULL, "<input_pin_pull_mode>", "Enable wakening up from deep-sleep via GPIO"}, \
+    { "mcu_powersave_gpio_wakeup_enable",  mcu_powersave_gpio_wakeup_enable_console_command,  2, NULL, NULL, "<input_pin_pull_mode> <trigger>", "Enable wakening up from deep-sleep via GPIO"}, \
     { "mcu_powersave_gpio_wakeup_disable", mcu_powersave_gpio_wakeup_disable_console_command, 0, NULL, NULL, NULL, "Disable wakening up from deep-sleep via GPIO"}, \
     { "mcu_powersave_gpio_wakeup_ack",     mcu_powersave_gpio_wakeup_ack_console_command,     0, NULL, NULL, NULL, "If GPIO generated wake up event it remain triggered till acked"}, \
     { "mcu_powersave_gci_gpio_wakeup_enable",  mcu_powersave_gci_gpio_wakeup_enable_console_command,  3, NULL, NULL, "<pin> <input_pin_pull_mode> <trigger>", "Enable wakening up from deep-sleep via GPIO"}, \

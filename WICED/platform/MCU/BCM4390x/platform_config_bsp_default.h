@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,11 +17,6 @@
 extern "C" {
 #endif
 
-#ifndef __ASSEMBLER__
-#include "platform_isr.h"
-#include "platform_map.h"
-#endif
-
 /* Constant to be used to define others */
 #ifdef WICED_NO_WIFI
 #define PLATFORM_WLAN_PRESENT             0
@@ -31,7 +26,11 @@ extern "C" {
 
 /* Define which frequency CPU run */
 #ifndef PLATFORM_CPU_CLOCK_FREQUENCY
+#if defined(PLATFORM_4390X_OVERCLOCK)
+#define PLATFORM_CPU_CLOCK_FREQUENCY      PLATFORM_CPU_CLOCK_FREQUENCY_480_MHZ
+#else
 #define PLATFORM_CPU_CLOCK_FREQUENCY      PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ
+#endif /* PLATFORM_4390X_OVERCLOCK */
 #endif
 
 /* Common switch to be used to enable/disable various modules powersaving. */
@@ -151,6 +150,34 @@ extern "C" {
 #endif /* PLATFORM_HIB_ENABLE */
 
 /* Define DDR default configuration */
+#ifndef PLATFORM_DDR_HEAP_SIZE_CONFIG
+#define PLATFORM_DDR_HEAP_SIZE_CONFIG     0 /* can be defined per-application */
+#endif
+//
+#ifndef PLATFORM_DDR_CODE_AND_DATA_ENABLE
+#define PLATFORM_DDR_CODE_AND_DATA_ENABLE 0 /* can be defined per-platform as it require to specifically build application and bootloader same time */
+#endif
+//
+#if PLATFORM_DDR_CODE_AND_DATA_ENABLE
+#ifdef PLATFORM_NO_DDR
+#if PLATFORM_NO_DDR != 0
+#error "Misconfiguration"
+#endif /* PLATFORM_NO_DDR */
+#else
+#define PLATFORM_NO_DDR                   0
+#endif /* PLATFORM_NO_DDR */
+#endif /* PLATFORM_DDR_CODE_AND_DATA_ENABLE */
+//
+#if PLATFORM_DDR_CODE_AND_DATA_ENABLE
+#ifdef BOOTLOADER
+#define PLATFORM_DDR_SKIP_INIT            0
+#else
+#define PLATFORM_DDR_SKIP_INIT            1
+#endif /* BOOTLOADER */
+#else
+#define PLATFORM_DDR_SKIP_INIT            0
+#endif /* PLATFORM_DDR_CODE_AND_DATA_ENABLE */
+//
 #ifndef PLATFORM_NO_DDR
 #if defined(BOOTLOADER) || defined(TINY_BOOTLOADER)
 #define PLATFORM_NO_DDR                   1
@@ -159,19 +186,10 @@ extern "C" {
 #endif /* BOOTLODER || TINY_BOOTLOADER */
 #endif /* PLATFORM_NO_DDR */
 
-/* Define vectors default configuration */
-#ifndef PLATFORM_NO_VECTORS
-#if defined(TINY_BOOTLOADER)
-#define PLATFORM_NO_VECTORS               1
-#else
-#define PLATFORM_NO_VECTORS               0
-#endif /* TINY_BOOTLOADER */
-#endif /* PLATFORM_NO_VECTORS */
-
 /* Define SPI flash default configuration */
 #ifndef PLATFORM_NO_SFLASH_WRITE
 #if defined(BOOTLOADER) || defined(TINY_BOOTLOADER)
-#if defined(OTA2_SUPPORT)
+#if defined(PLATFORM_HAS_OTA) || defined(OTA2_SUPPORT)
 #define PLATFORM_NO_SFLASH_WRITE          0
 #else
 #define PLATFORM_NO_SFLASH_WRITE          1
@@ -206,9 +224,19 @@ extern "C" {
 #define PLATFORM_ALP_CLOCK_RES_FIXUP      PLATFORM_WLAN_PRESENT
 #endif
 
+/* Define platform USB require some fixup to use ALP clock. Necessary for A0/B0/B1 chips. */
+#ifndef PLATFORM_USB_ALP_CLOCK_RES_FIXUP
+#define PLATFORM_USB_ALP_CLOCK_RES_FIXUP  PLATFORM_WLAN_PRESENT
+#endif
+
 /* Define that platform need WLAN assistance to wake-up */
 #ifndef PLATFORM_WLAN_ASSISTED_WAKEUP
 #define PLATFORM_WLAN_ASSISTED_WAKEUP     PLATFORM_WLAN_PRESENT
+#endif
+
+/* Define that by default platform no need extra hook */
+#ifndef PLATFORM_IRQ_DEMUXER_HOOK
+#define PLATFORM_IRQ_DEMUXER_HOOK         0
 #endif
 
 #ifndef PLATFORM_LPLDO_VOLTAGE
@@ -253,6 +281,23 @@ extern "C" {
 
 #ifndef PLATFORM_NO_JTAG
 #define PLATFORM_NO_JTAG                  0
+#endif
+
+#ifndef PLATFORM_NO_PWM
+#define PLATFORM_NO_PWM                   0
+#endif
+
+#ifndef PLATFORM_NO_SOCSRAM_POWERDOWN
+#define PLATFORM_NO_SOCSRAM_POWERDOWN     0
+#endif
+
+#ifndef PLATFORM_HIB_WAKE_CTRL_REG_RCCODE
+#define PLATFORM_HIB_WAKE_CTRL_REG_RCCODE -1
+#endif
+
+#ifndef __ASSEMBLER__
+#include "platform_isr.h"
+#include "platform_map.h"
 #endif
 
 #ifdef __cplusplus

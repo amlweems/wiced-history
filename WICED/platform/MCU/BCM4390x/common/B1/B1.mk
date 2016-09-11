@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,8 @@ GLOBAL_DEFINES += OTP_WORD_NUM_AES_KEY=282
 GLOBAL_DEFINES += OTP_WORD_NUM_AES_KEY_R=274
 GLOBAL_DEFINES += SECUREBOOT_SHA_KEY_SIZE=32
 GLOBAL_DEFINES += GSIO_I2C_REPEATED_START_NEEDS_GPIO=1
+GLOBAL_DEFINES += PLATFORM_HIB_WAKE_CTRL_FREQ_BITS_FLIPPED
 
 ifeq ($(LINK_BOOTLOADER_WITH_ROM_SYMBOLS),TRUE)
-$(NAME)_SOURCES += $(SOURCE_ROOT)/common/B1/rom_offload/bootloader_rom_symbols.c
+$(NAME)_SOURCES += $(SOURCE_ROOT)common/B1/rom_offload/bootloader_rom_symbols.c
 endif

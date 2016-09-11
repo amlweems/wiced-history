@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -68,7 +68,7 @@ extern void* link_stack_end;
 uint32_t  crp_bank = 0xFFFFFFFF;
 
 
-uint32_t interrupt_vector_table[] =
+PLATFORM_DEFINE_INTERRUPT_VECTOR_TABLE_ARRAY( interrupt_vector_table, PLATFORM_INTERRUPT_VECTOR_TABLE_HAS_VARIABLE_SIZE ) =
 {
         (uint32_t)&link_stack_end       , // 0  Initial stack location
         (uint32_t)reset_handler         , // 1  Reset vector

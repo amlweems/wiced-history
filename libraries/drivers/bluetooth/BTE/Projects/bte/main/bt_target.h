@@ -1,12 +1,20 @@
-/*
- * Copyright 2015, Broadcom Corporation
- * All Rights Reserved.
- *
- * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
- * the contents of this file may not be disclosed to third parties, copied
- * or duplicated in any form, in whole or in part, without the prior
- * written permission of Broadcom Corporation.
- */
+/****************************************************************************
+**
+**  Name:       bt_target.h
+**
+**  Function    this file contains definitions that will probably
+**              change for each Bluetooth target system. This includes
+**              such things as buffer pool sizes, number of tasks,
+**              little endian/big endian conversions, etc...
+**
+**  NOTE        This file should always be included first.
+**
+**
+**  Copyright (c) 1999-2015, Broadcom Corp., All Rights Reserved.
+**  Broadcom Bluetooth Core. Proprietary and confidential.
+**
+*****************************************************************************/
+
 #ifndef BT_TARGET_H
 #define BT_TARGET_H
 
@@ -173,6 +181,10 @@
 /* Sends L2CAP packets to the peer and HCI messages to the controller. */
 #ifndef L2CAP_CMD_POOL_ID
 #define L2CAP_CMD_POOL_ID           GKI_POOL_ID_2
+#endif
+
+#ifndef L2CAP_FCR_INCLUDED
+#define L2CAP_FCR_INCLUDED    FALSE
 #endif
 
 /* Sends L2CAP segmented packets in ERTM mode */
@@ -569,11 +581,9 @@ and USER_HW_DISABLE_API macros */
 #define BTM_INTERNAL_LINKKEY_STORAGE_INCLUDED FALSE
 #endif
 
-/* TRUE to use controller-based private address resolution for 4.2 compliant controller, otherwise use host-based resolution */
-#ifndef BTM_USE_CONTROLLER_PRIVATE_ADDRESS
-#define BTM_USE_CONTROLLER_PRIVATE_ADDRESS  FALSE
+#ifndef BTM_COEX_INCLUDED
+#define BTM_COEX_INCLUDED FALSE
 #endif
-
 
 /**************************
 ** Initial SCO TX credit
@@ -713,11 +723,9 @@ and USER_HW_DISABLE_API macros */
 #define BTM_SEC_MAX_DEVICE_RECORDS  8
 #endif
 
-#if !defined(BTM_USE_CONTROLLER_PRIVATE_ADDRESS) || (BTM_USE_CONTROLLER_PRIVATE_ADDRESS == FALSE)
 /* Size of host-based private address resolution table */
 #ifndef BTM_SEC_HOST_PRIVACY_ADDR_RESOLUTION_TABLE_SIZE
 #define BTM_SEC_HOST_PRIVACY_ADDR_RESOLUTION_TABLE_SIZE   50
-#endif
 #endif
 
 /* The number of security records for services. */
@@ -932,6 +940,12 @@ and USER_HW_DISABLE_API macros */
 #ifndef BLE_BRCM_MULTI_ADV_INCLUDED
 #define BLE_BRCM_MULTI_ADV_INCLUDED     FALSE
 #endif
+
+
+#ifndef BTM_BLE_MAX_BG_CONN_DEV_NUM
+#define BTM_BLE_MAX_BG_CONN_DEV_NUM    10
+#endif
+
 
 
 /******************************************************************************
@@ -1161,6 +1175,10 @@ and USER_HW_DISABLE_API macros */
 #define BTM_BLE_PRIVACY_SPT         FALSE
 #endif
 
+#ifndef BTM_BLE_HOST_ADDR_RESOLUTION
+#define BTM_BLE_HOST_ADDR_RESOLUTION FALSE
+#endif
+
 #ifndef HID_LE_INCLUDED
 #define HID_LE_INCLUDED         FALSE
 #endif
@@ -1183,6 +1201,15 @@ and USER_HW_DISABLE_API macros */
 #define GATT_MAX_SR_PROFILES        32 /* max is 32 */
 #endif
 
+#ifndef GATT_FIXED_DB
+#define GATT_FIXED_DB                   TRUE
+#endif
+
+#ifndef GATTS_APPU_USE_GATT_TRACE
+#define GATTS_APPU_USE_GATT_TRACE       ATT_DEBUG
+#endif
+
+
 #ifndef GATT_MAX_APPS
 #define GATT_MAX_APPS            10 /* note: 2 apps used internally GATT and GAP */
 #endif
@@ -1200,6 +1227,10 @@ and USER_HW_DISABLE_API macros */
 */
 #ifndef GATT_MAX_BG_CONN_DEV
 #define GATT_MAX_BG_CONN_DEV        32
+#endif
+
+#ifndef GATT_OVER_BREDR_INCLUDED
+#define GATT_OVER_BREDR_INCLUDED TRUE
 #endif
 
 /******************************************************************************
@@ -1697,7 +1728,7 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 
 /* Number of simultaneous stream endpoints. */
 #ifndef AVDT_NUM_SEPS
-#define AVDT_NUM_SEPS               3
+#define AVDT_NUM_SEPS               4
 #endif
 
 /* Number of transport channels setup per media stream(audio or video) */
@@ -1735,6 +1766,10 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
  * Must be less than the number of buffers in the buffer pool of size AVDT_DATA_POOL_SIZE */
 #ifndef AVDT_MAX_FRAG_COUNT
 #define AVDT_MAX_FRAG_COUNT         15
+#endif
+
+#ifndef AVDT_CONFORMANCE_TESTING_INCLUDED
+#define AVDT_CONFORMANCE_TESTING_INCLUDED FALSE
 #endif
 
 /******************************************************************************
@@ -2271,6 +2306,10 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 #define BRR_HID_INCLUDED    FALSE
 #endif
 
+#ifndef HID_DEV_SET_CONN_MODE
+#define HID_DEV_SET_CONN_MODE    FALSE
+#endif
+
 /*************************************************************************
 ** Definitions for Both HID-Host & Device
 */
@@ -2289,12 +2328,8 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 /*************************************************************************
 ** Definitions for HID-Host
 */
-#ifndef HID_HOST_INCLUDED
+#ifndef  HID_HOST_INCLUDED
 #define HID_HOST_INCLUDED           FALSE
-#endif
-
-#ifndef HIDH_HOGP_BATTERY_SUPPORTED
-#define HIDH_HOGP_BATTERY_SUPPORTED     TRUE
 #endif
 
 #ifndef HID_HOST_MAX_DEVICES
@@ -2317,17 +2352,6 @@ Range: Minimum 12000 (12 secs) on BR/EDR when supporting PBF.
 #define HID_HOST_REPAGE_WIN          (2)
 #endif
 
-#ifndef BR_HIDH_INCLUDED
-#define BR_HIDH_INCLUDED                    TRUE
-#endif
-
-#ifndef BLE_HIDH_INCLUDED
-#define BLE_HIDH_INCLUDED                   TRUE
-#endif
-
-#ifndef HIDH_LE_CONFORMANCE_TEST
-#define HIDH_LE_CONFORMANCE_TEST            FALSE
-#endif
 
 /******************************************************************************
 **

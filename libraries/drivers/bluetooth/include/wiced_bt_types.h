@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,7 +14,7 @@
  *
  */
 #pragma once
-#include "wiced.h"
+#include <stdint.h>
 #include "data_types.h"
 
 
@@ -49,12 +49,6 @@ typedef struct
     } uu;
 
 } wiced_bt_uuid_t;
-
-#define BT_OCTET16_LEN    16                /**<  length: 16 */
-typedef uint8_t BT_OCTET16[BT_OCTET16_LEN]; /**< octet array: size 16 */
-
-#define BT_OCTET32_LEN    32
-typedef uint8_t BT_OCTET32[BT_OCTET32_LEN];   /* octet array: size 32 */
 
 /** Bluetooth QoS defintions */
 typedef struct {

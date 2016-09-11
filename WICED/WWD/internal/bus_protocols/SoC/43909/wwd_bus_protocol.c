@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -65,6 +65,8 @@
 #define PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS    10
 #endif
 
+#define PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_INVALID_MS  ((uint32_t)-1)
+
 /******************************************************
  *             Structures
  ******************************************************/
@@ -76,11 +78,15 @@
 /* Variables represent state and has to be reset in wwd_bus_deinit() */
 static wiced_bool_t bus_is_up = WICED_FALSE;
 static wiced_bool_t WICED_DEEP_SLEEP_SAVED_VAR(wwd_bus_flow_controlled) = WICED_FALSE;
-static uint32_t fake_backplane_window_addr = 0;
-static volatile wiced_bool_t refill_underflow = WICED_FALSE;
+static uint32_t fake_backplane_window_addr                              = 0;
+static volatile wiced_bool_t refill_underflow                           = WICED_FALSE;
+static volatile wiced_bool_t resource_download_aborted                  = WICED_FALSE;
+
 #if PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
-static wwd_time_t delayed_bus_release_deadline = 0;
-static wiced_bool_t delayed_bus_release_scheduled = WICED_FALSE;
+static wwd_time_t delayed_bus_release_deadline                          = 0;
+static wiced_bool_t delayed_bus_release_scheduled                       = WICED_FALSE;
+static uint32_t delayed_bus_release_timeout_ms                          = PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS;
+static volatile uint32_t delayed_bus_release_timeout_ms_request         = PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_INVALID_MS;
 #define DELAYED_BUS_RELEASE_SCHEDULE(schedule) do { delayed_bus_release_scheduled = schedule; delayed_bus_release_deadline = 0; } while(0)
 #else
 #define DELAYED_BUS_RELEASE_SCHEDULE(schedule) do {} while(0)
@@ -107,15 +113,20 @@ wwd_result_t wwd_bus_send_buffer( wiced_buffer_t buffer )
 
 wwd_result_t wwd_bus_init( void )
 {
+    wwd_result_t result = WWD_SUCCESS;
+
     PLATFORM_WLAN_POWERSAVE_RES_UP();
-    boot_wlan();
+    result = boot_wlan();
     PLATFORM_WLAN_POWERSAVE_RES_DOWN( NULL, WICED_FALSE );
 
     platform_watchdog_kick();
 
-    M2M_INIT_DMA_SYNC();
+    if ( result == WWD_SUCCESS )
+    {
+        M2M_INIT_DMA_SYNC();
+    }
 
-    return WWD_SUCCESS;
+    return result;
 }
 
 wwd_result_t wwd_bus_resume_after_deep_sleep( void )
@@ -151,6 +162,7 @@ wwd_result_t wwd_bus_deinit( void )
     wwd_bus_flow_controlled = WICED_FALSE;
     fake_backplane_window_addr = 0;
     refill_underflow = WICED_FALSE;
+    resource_download_aborted = WICED_FALSE;
     DELAYED_BUS_RELEASE_SCHEDULE( WICED_FALSE );
 
     return WWD_SUCCESS;
@@ -286,44 +298,78 @@ wiced_bool_t wwd_bus_is_flow_controlled( void )
     return wwd_bus_flow_controlled;
 }
 
+void platform_wlan_powersave_set_delayed_release_milliseconds( uint32_t time_ms )
+{
+#if PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
+
+    delayed_bus_release_timeout_ms_request = time_ms;
+    wwd_thread_notify( );
+
+#else
+
+    UNUSED_PARAMETER( time_ms );
+
+#endif /* PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS */
+}
+
 static uint32_t wwd_handle_delayed_bus_release( void )
 {
-    uint32_t result = 0;
+    uint32_t time_until_release = 0;
 
 #if PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS
+
+    if ( delayed_bus_release_timeout_ms_request != PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_INVALID_MS )
+    {
+        wiced_bool_t schedule = ( ( delayed_bus_release_scheduled != 0 ) || ( delayed_bus_release_deadline != 0 ) ) ? WICED_TRUE : WICED_FALSE;
+        uint32_t     flags;
+
+        WICED_SAVE_INTERRUPTS( flags );
+        delayed_bus_release_timeout_ms         = delayed_bus_release_timeout_ms_request;
+        delayed_bus_release_timeout_ms_request = PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_INVALID_MS;
+        WICED_RESTORE_INTERRUPTS( flags );
+
+        DELAYED_BUS_RELEASE_SCHEDULE( schedule );
+    }
+
     if ( delayed_bus_release_scheduled )
     {
         delayed_bus_release_scheduled = WICED_FALSE;
-        delayed_bus_release_deadline = host_rtos_get_time() + PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS;
 
-        result = PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS;
+        if ( delayed_bus_release_timeout_ms != 0 )
+        {
+            delayed_bus_release_deadline = host_rtos_get_time() + delayed_bus_release_timeout_ms;
+            time_until_release = delayed_bus_release_timeout_ms;
+        }
     }
     else if ( delayed_bus_release_deadline )
     {
         wwd_time_t now = host_rtos_get_time( );
 
-        if ( delayed_bus_release_deadline - now <= PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS )
+        if ( delayed_bus_release_deadline - now <= delayed_bus_release_timeout_ms )
         {
-            result = delayed_bus_release_deadline - now;
+            time_until_release = delayed_bus_release_deadline - now;
         }
 
-        if ( result == 0 )
+        if ( time_until_release == 0 )
         {
             delayed_bus_release_deadline = 0;
         }
     }
 
-    if ( !bus_is_up )
+    if ( time_until_release != 0 )
     {
-        result = 0;
-    }
-    else if ( platform_mcu_powersave_is_permitted( ) && (platform_mcu_powersave_get_mode( ) == PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP ) )
-    {
-        result = 0;
+        if ( !bus_is_up )
+        {
+            time_until_release = 0;
+        }
+        else if ( platform_mcu_powersave_is_permitted( ) && (platform_mcu_powersave_get_mode( ) == PLATFORM_MCU_POWERSAVE_MODE_DEEP_SLEEP ) )
+        {
+            time_until_release = 0;
+        }
     }
 #endif /* PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS */
 
-    return result;
+    return time_until_release;
 }
 
 void wwd_wait_for_wlan_event( host_semaphore_type_t* transceive_semaphore )
@@ -401,6 +447,11 @@ static void write_reset_instruction( uint32_t reset_instruction )
     FF_ROM_SHADOW_DATA_REGISTER  = reset_instruction;
 }
 
+void wwd_bus_set_resource_download_halt( wiced_bool_t halt )
+{
+    resource_download_aborted = halt;
+}
+
 wwd_result_t wwd_bus_write_wifi_firmware_image( void )
 {
 #ifndef NO_WIFI_FIRMWARE
@@ -419,6 +470,11 @@ wwd_result_t wwd_bus_write_wifi_firmware_image( void )
 
     while ( total_size > offset )
     {
+        if ( resource_download_aborted == WICED_TRUE )
+        {
+            return WWD_UNFINISHED;
+        }
+
         resource_read ( &wifi_firmware_image, 0, PLATFORM_WLAN_RAM_SIZE, &size_read, (uint8_t *)(WLAN_RAM_STARTING_ADDRESS+offset) );
         offset += size_read;
     }
@@ -477,12 +533,31 @@ wwd_result_t wwd_bus_get_wifi_nvram_image( char** nvram, uint32_t* size)
 
 static wwd_result_t boot_wlan(void)
 {
+    wwd_result_t result = WICED_SUCCESS;
+
     /* Load WLAN firmware & NVRAM */
 #ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD
+
+    UNUSED_PARAMETER(result);
     VERIFY_RESULT( external_write_wifi_firmware_and_nvram_image( ) );
+
 #else
-    VERIFY_RESULT( wwd_bus_write_wifi_firmware_image( ) );
+
+    /* Load wlan firmware from sflash */
+    result = wwd_bus_write_wifi_firmware_image();
+    if ( result == WWD_UNFINISHED )
+    {
+        /* for user abort, then put wifi module into known good state */
+        host_platform_reset_wifi( WICED_TRUE );
+        /* power wifi is a no-op, so don't need to do anything there */
+    }
+    if ( result != WWD_SUCCESS )
+    {
+        /* stop here and return control to the user */
+        return result;
+    }
     VERIFY_RESULT( wwd_bus_write_wifi_nvram_image( ) );
+
 #endif /* ifdef MFG_TEST_ALTERNATE_WLAN_DOWNLOAD */
 
     /* Release ARM core */

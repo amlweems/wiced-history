@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,6 +26,7 @@ extern "C" {
 #ifdef PKTQ_LOG
 #include <wlioctl.h>
 #endif
+#include <bcmdefs.h>
 
 /* ctype replacement */
 #define _BCM_U	0x01	/* upper */

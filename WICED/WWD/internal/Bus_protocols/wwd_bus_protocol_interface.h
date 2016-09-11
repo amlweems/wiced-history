@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -67,6 +67,7 @@ extern wwd_result_t wwd_bus_read_register_value        ( wwd_bus_function_t func
 /* Device data transfer functions */
 extern wwd_result_t wwd_bus_send_buffer                ( wiced_buffer_t buffer );
 extern wwd_result_t wwd_bus_transfer_bytes             ( wwd_bus_transfer_direction_t direction, wwd_bus_function_t function, uint32_t address, uint16_t size, /*@in@*/ /*@out@*/ wwd_transfer_bytes_packet_t* data );
+extern wwd_result_t wwd_bus_transfer_backplane_bytes   ( wwd_bus_transfer_direction_t direction, uint32_t address, uint32_t size, /*@in@*/ /*@out@*/ uint8_t* data );
 
 /* Frame transfer function */
 extern wwd_result_t wwd_bus_read_frame( /*@out@*/  wiced_buffer_t* buffer );
@@ -78,6 +79,7 @@ extern uint32_t     wwd_bus_packet_available_to_read   ( void );
 extern wwd_result_t wwd_bus_ack_interrupt              ( uint32_t intstatus );
 extern wwd_result_t wwd_bus_write_wifi_firmware_image  ( void );
 extern wwd_result_t wwd_bus_write_wifi_nvram_image     ( void );
+extern void         wwd_bus_set_resource_download_halt ( wiced_bool_t halt );
 extern void         wwd_bus_init_backplane_window      ( void );
 extern wwd_result_t wwd_bus_set_backplane_window       ( uint32_t addr );
 

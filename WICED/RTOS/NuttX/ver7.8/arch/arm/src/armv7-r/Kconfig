@@ -1,0 +1,11 @@
+#
+# For a description of the syntax of this configuration file,
+# see misc/tools/kconfig-language.txt.
+#
+
+comment "ARMv7-R Configuration Options"
+
+config ARMV7R_TOOLCHAIN_WICED
+	bool "WICED toolchain"
+	default y
+	depends on ARCH_CHIP_BCM4390X

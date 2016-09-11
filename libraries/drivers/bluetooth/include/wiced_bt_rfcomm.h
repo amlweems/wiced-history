@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,7 +15,6 @@
  */
 #pragma once
 
-#include "wiced.h"
 #include "wiced_bt_dev.h"
 
 /******************************************************
@@ -65,7 +64,7 @@ enum wiced_bt_rfcomm_result_e
     WICED_BT_RFCOMM_NO_MEM,                                         /**< No Memory */
     WICED_BT_RFCOMM_NO_RESOURCES,                                   /**< No Resources */
     WICED_BT_RFCOMM_BAD_BD_ADDR,                                    /**< Bad BD Address */
-    WICED_BT_RFCOMM_RESULT_RESERVED0,
+    WICED_BT_RFCOMM_INVALID_MTU,                                    /**< Invalid MTU */
     WICED_BT_RFCOMM_BAD_HANDLE,                                     /**< Bad Handle */
     WICED_BT_RFCOMM_NOT_OPENED,                                     /**< Not Opened */
     WICED_BT_RFCOMM_LINE_ERR,                                       /**< Line Error */
@@ -141,6 +140,23 @@ typedef void (wiced_bt_port_event_cback_t) (wiced_bt_rfcomm_port_event_t event, 
 extern "C"
 {
 #endif
+
+/**
+ * Function         wiced_bt_rfcomm_set_buffer_pool
+ *
+ *                  If buffer_size > 0 and wiced_bt_rfcomm does not have a private pool yet,
+ *                  this function allocates a private buffer pool.
+ *                  If buffer_size = 0 and wiced_bt_rfcomm has a private buffer pool,
+ *                  this function deallocates the private buffer pool.
+ *
+ *  @param[in]  buffer_size         : data size for the private pool. The actual buffer size includes additional overhead.
+ *  @param[in]  buffer_count        : number of buffers in this new pool.
+ *
+ *  @return     WICED_BT_SUCCESS           if the action was carried out successfully as desired
+ *              WICED_BT_NO_RESOURCES      no resources.
+ */
+wiced_bt_dev_status_t wiced_bt_rfcomm_set_buffer_pool(uint16_t buffer_size,
+                            uint16_t buffer_count);
 
 /**
  *  Establish serial port connection to the peer device, or allow
@@ -269,8 +285,9 @@ wiced_bt_rfcomm_result_t wiced_bt_rfcomm_control (uint16_t handle, uint8_t signa
 wiced_bt_rfcomm_result_t wiced_bt_rfcomm_flow_control (uint16_t handle, wiced_bool_t enable);
 
 /**
- *  This function directs a specified connection to pass flow control message to the peer device.
- *  Enable flag passed shows if port can accept more data.
+ *  This function sends the given application data to the peer device.
+ *  If wiced_bt_rfcomm_set_buffer_pool() was called to create a private buffer pool, the buffer from the private buffer pool is used to
+ *  hold the data in the RFCOMM TX queue. Otherwise, RFCOMM uses the RFCOMM_DATA_POOL_ID pool to hold the data.
  *
  *  @param[in]  handle              : The connection handle returned by
  *                                    @link wiced_bt_rfcomm_create_connection wiced_bt_rfcomm_create_connection @endlink
@@ -296,29 +313,6 @@ wiced_bt_rfcomm_result_t wiced_bt_rfcomm_write_data (uint16_t handle, char *p_da
  *              <b> WICED_BT_RFCOMM_LINE_ERR </b>       : If connection is not up and running
  */
 wiced_bt_rfcomm_result_t wiced_bt_rfcomm_check_connection (UINT16 handle, BD_ADDR bd_addr, UINT16 *p_lcid);
-
-#ifdef MPAF_CUSTOM_STACK
-/**
- *  This function allocates private pool to be used by RFCOMM.
- *
- *  @param[in]  buffer_size              : size of buffer
- *  @param[out]  buffer_cnt              : buffers
- *
- *  @return     <b> WICED_BT_RFCOMM_SUCCESS </b>        : If successful
- *              <b> WICED_BT_RFCOMM_ERROR </b>          : If pool allocation fails
- */
-wiced_bt_rfcomm_result_t wiced_bt_rfcomm_init(uint32_t buffer_size, uint32_t buffer_cnt);
-
-/**
- *  This function enables flow control based on ACL buffer availability
- *
- *  @param[in]  peer_addr              : Peer BD Address
- *
- *  @return     <b> WICED_TRUE </b>    : If successful
- *              <b> WICED_FALSE </b>   : If fails
- */
-wiced_bool_t wiced_bt_rfcomm_control_data_flow(BD_ADDR peer_bda);
-#endif
 
 #ifdef __cplusplus
 }

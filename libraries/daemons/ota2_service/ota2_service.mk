@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -12,8 +12,10 @@ NAME := Lib_OTA2_Service
 
 GLOBAL_DEFINES     += WPRINT_ENABLE_LIB_DEBUG
 
-$(NAME)_SOURCES := wiced_ota2_service.c
+$(NAME)_SOURCES := wiced_ota2_service.c wiced_ota2_network.c
 
 GLOBAL_INCLUDES := .
 
-$(NAME)_COMPONENTS := filesystems/ota2
+$(NAME)_COMPONENTS := filesystems/ota2		\
+					  protocols/DNS 		\
+					  protocols/HTTP

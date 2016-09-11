@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,6 +11,7 @@
 #define INCLUDED_WWD_TOOLCHAIN_H
 
 #include <stddef.h>
+#include "intrinsics.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -25,6 +26,10 @@ extern "C"
 
 #ifndef ALWAYS_INLINE
 #define ALWAYS_INLINE
+#endif
+
+#ifndef MAY_BE_UNUSED
+#define MAY_BE_UNUSED
 #endif
 
 #ifndef NORETURN
@@ -54,9 +59,9 @@ extern "C"
 /******************************************************
  *               Function Declarations
  ******************************************************/
-void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen );
+void *memmem( const void *haystack, size_t haystacklen, const void *needle, size_t needlelen );
 void *memrchr( const void *s, int c, size_t n );
-void iar_set_msp(void*);
+size_t strlcpy( char *dest, const char *src, size_t size );
 
 #ifdef __cplusplus
 } /* extern "C" */

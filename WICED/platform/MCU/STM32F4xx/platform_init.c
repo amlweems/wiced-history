@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -18,6 +18,7 @@
 #include "platform_config.h"
 #include "platform_toolchain.h"
 #include "platform/wwd_platform_interface.h"
+
 
 /******************************************************
  *                      Macros
@@ -86,9 +87,15 @@ WEAK void platform_init_system_clocks( void )
     FLASH_PrefetchBufferCmd( ENABLE );
 
     /* Use the clock configuration utility from ST to calculate these values
-     * http://www.st.com/st-web-ui/static/active/en/st_prod_software_internet/resource/technical/software/utility/stsw-stm32090.zip
+     * http://www.st.com/web/catalog/tools/FM147/CL1794/SC961/SS1743/LN1897
      */
-    RCC_PLLConfig( PLL_SOURCE, PLL_M_CONSTANT, PLL_N_CONSTANT, PLL_P_CONSTANT, PLL_Q_CONSTANT ); /* NOTE: The CPU Clock Frequency is independently defined in <WICED-SDK>/WICED/platform/<platform>/<platform>.mk */
+    /* NOTE: The CPU Clock Frequency is independently defined in <WICED-SDK>/WICED/platform/<platform>/<platform>.mk */
+#if defined(STM32F410xx) || defined(STM32F412xG) || defined(STM32F446xx) || defined(STM32F469_479xx)
+    RCC_PLLConfig( PLL_SOURCE, PLL_M_CONSTANT, PLL_N_CONSTANT, PLL_P_CONSTANT, PLL_Q_CONSTANT, PLL_R_CONSTANT);
+#else
+    RCC_PLLConfig( PLL_SOURCE, PLL_M_CONSTANT, PLL_N_CONSTANT, PLL_P_CONSTANT, PLL_Q_CONSTANT );
+#endif
+
     RCC_PLLCmd( ENABLE );
 
     while ( RCC_GetFlagStatus( RCC_FLAG_PLLRDY ) == RESET )

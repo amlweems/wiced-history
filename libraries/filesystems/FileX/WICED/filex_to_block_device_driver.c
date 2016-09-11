@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -108,8 +108,8 @@ VOID  wiced_filex_driver( FX_MEDIA* media_ptr )
         {
             /* FileX is requesting to read from the underlying block device */
             wiced_result_t result;
-            uint64_t requested_address = (media_ptr -> fx_media_driver_logical_sector + media_ptr -> fx_media_hidden_sectors) * media_ptr -> fx_media_bytes_per_sector;
-            uint64_t requested_size    = media_ptr -> fx_media_driver_sectors * media_ptr -> fx_media_bytes_per_sector;
+            uint64_t requested_address = (uint64_t)(media_ptr -> fx_media_driver_logical_sector + media_ptr -> fx_media_hidden_sectors) * media_ptr -> fx_media_bytes_per_sector;
+            uint64_t requested_size    = (uint64_t)(media_ptr -> fx_media_driver_sectors) * media_ptr -> fx_media_bytes_per_sector;
 
             result = device->driver->read( device, requested_address, media_ptr -> fx_media_driver_buffer, requested_size );
 
@@ -125,8 +125,8 @@ VOID  wiced_filex_driver( FX_MEDIA* media_ptr )
         {
             /* FileX is requesting to write to the underlying block device */
             wiced_result_t result;
-            uint64_t requested_address = (media_ptr -> fx_media_driver_logical_sector + media_ptr -> fx_media_hidden_sectors) * media_ptr -> fx_media_bytes_per_sector;
-            uint64_t requested_size    = media_ptr -> fx_media_driver_sectors * media_ptr -> fx_media_bytes_per_sector;
+            uint64_t requested_address = (uint64_t)(media_ptr -> fx_media_driver_logical_sector + media_ptr -> fx_media_hidden_sectors) * media_ptr -> fx_media_bytes_per_sector;
+            uint64_t requested_size    = (uint64_t)(media_ptr -> fx_media_driver_sectors) * media_ptr -> fx_media_bytes_per_sector;
 
             result = device->driver->write( device, requested_address, media_ptr -> fx_media_driver_buffer, requested_size );
 

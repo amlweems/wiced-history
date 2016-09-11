@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -62,6 +62,7 @@ extern "C" int32_t arc4_self_test( int32_t verbose );
 extern "C" int32_t aes_self_test( int32_t verbose );
 extern "C" int32_t mpi_self_test( int32_t verbose );
 extern "C" int32_t des_self_test( int32_t verbose );
+extern "C" int32_t md4_self_test( int32_t verbose );
 extern "C" int32_t md5_self_test( int32_t verbose );
 extern "C" int32_t rsa_self_test( int32_t verbose );
 extern "C" int32_t sha1_self_test( int32_t verbose );
@@ -134,6 +135,12 @@ TEST_F(unit_test_crypto, bignum)
 TEST_F(unit_test_crypto, des)
 {
     int result = des_self_test( 0 );
+    EXPECT_EQ( 0, result );
+}
+
+TEST_F(unit_test_crypto, md4)
+{
+    int result = md4_self_test( 0 );
     EXPECT_EQ( 0, result );
 }
 
@@ -226,12 +233,12 @@ TEST_F(unit_test_crypto, poly1305)
 TEST_F(unit_test_crypto, x509_valid_cert)
 {
     int result;
-    struct tm datetime1 = { .tm_sec  = 0,  /* 9th April 2014 */
+    struct tm datetime1 = { .tm_sec  = 0,  /* 1st Jan 2008 */
                             .tm_min  = 0,
                             .tm_hour = 0,
-                            .tm_mday = 9,
-                            .tm_mon  = 3,
-                            .tm_year = 114,
+                            .tm_mday = 1,
+                            .tm_mon  = 1,
+                            .tm_year = 104,
     };
     wiced_utc_time_ms_t datetime1_ms = (wiced_utc_time_ms_t) mktime ( &datetime1 ) * 1000;
 

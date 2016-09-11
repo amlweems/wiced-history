@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -43,16 +43,18 @@ extern "C"
 #define SIZE_OF_ARP_ENTRY           sizeof(NX_ARP)
 
 #ifdef DEBUG
-#define IP_STACK_SIZE               (3*1024)
+#define IP_STACK_SIZE                          (3*1024)
 #else
-#define IP_STACK_SIZE               (2*1024)
+#define IP_STACK_SIZE                          (2*1024)
 #endif
-#define ARP_CACHE_SIZE              (6 * SIZE_OF_ARP_ENTRY)
-#define DHCP_STACK_SIZE             (1280)
+#define ARP_CACHE_SIZE                         (6 * SIZE_OF_ARP_ENTRY)
+#define DHCP_STACK_SIZE                        (1280)
 
-#define WICED_ANY_PORT              (0)
-#define WICED_NETWORK_MTU_SIZE      (WICED_LINK_MTU)
-#define WICED_SOCKET_MAGIC_NUMBER   (0xfeedbead)
+#define WICED_ANY_PORT                         (0)
+#define WICED_NETWORK_MTU_SIZE                 (WICED_LINK_MTU)
+#define WICED_SOCKET_MAGIC_NUMBER              (0xfeedbead)
+#define WICED_MAXIMUM_SEGMENT_SIZE( socket )   MIN(socket->socket.nx_tcp_socket_mss, socket->socket.nx_tcp_socket_connect_mss)
+
 
 /******************************************************
  *                   Enumerations
@@ -117,6 +119,7 @@ struct wiced_udp_socket_struct
     NX_UDP_SOCKET               socket;
     uint32_t                    socket_magic_number;
     wiced_dtls_context_t*       dtls_context;
+    wiced_bool_t                context_malloced;
     wiced_udp_socket_callback_t receive_callback;
     void*                       callback_arg;
 };

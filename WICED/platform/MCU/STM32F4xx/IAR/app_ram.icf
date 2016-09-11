@@ -1,0 +1,60 @@
+/*
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+include "memory_ram.icf";
+
+/* Define memory regions */
+define memory mem with size = 4G;
+define region RAM_region   = mem:[from __SRAM_start   to __SRAM_end];
+
+
+/* create a stack block */
+define block CSTACK    with alignment = 8, size = __STACKSIZE__   { };
+/* create a heap block */
+define block HEAP      with alignment = 8, size = 0x10000     { };
+
+keep {section data_config_section};
+keep {section data_transfer_section};
+keep {section bootloader_app_header_section};
+keep {section wifi_firmware_image_section};
+
+
+
+/* place application header */
+place at address mem:__OTA_App_header_start   { section bootloader_app_header_section };
+/* place jtag to serial flash interface structure to the beginning of the SRAM */
+place at address mem:__SRAM_start { section data_config_section,
+                                    section data_transfer_section };
+
+initialize by copy { readwrite };
+
+
+place at address mem: __OTA_App_start  {
+                                          section .intvec,
+                                          readwrite,
+                                          readonly,
+                                          zeroinit,
+                                          section wifi_firmware_image_section,
+                                          block CSTACK,
+                                          block HEAP,
+                                        };
+
+/* export symbols */
+
+
+define symbol bootloader_api_addr_loc = __Bootloader_apis_start;
+export symbol bootloader_api_addr_loc;
+
+/* vectors offset */
+define symbol vectors_offset = __OTA_App_start -  __OTA_App_header_start;
+export symbol vectors_offset;
+
+define symbol app_hdr_start_addr_loc = __OTA_App_header_start;
+export symbol app_hdr_start_addr_loc;

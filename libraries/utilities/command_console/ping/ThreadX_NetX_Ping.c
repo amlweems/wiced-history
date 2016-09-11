@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -76,7 +76,7 @@ int ping( int argc, char *argv[] )
     NX_PACKET*         response_ptr;
     char*              data_ptr    = NULL;
     uint32_t           data_length = 0;
-    wiced_interface_t  interface   = WICED_STA_INTERFACE; /* Default interface for this ping function */
+    wwd_interface_t    interface   = WWD_STA_INTERFACE; /* Default interface for this ping function */
     NX_IP*             ip_handle;
     NX_INTERFACE*      nx_interface;
 
@@ -114,7 +114,7 @@ int ping( int argc, char *argv[] )
                 /* Match the network portion of the target address */
                 if ( ( ping_target.ip.v4 & (uint32_t)nx_interface->nx_interface_ip_network_mask ) == (uint32_t)nx_interface->nx_interface_ip_network )
                 {
-                    interface = i;
+                    interface = (wwd_interface_t)i;
                     break;
                 }
             }
@@ -160,7 +160,7 @@ int ping( int argc, char *argv[] )
 
             case 't':
                 continuous = WICED_TRUE;
-                WPRINT_APP_INFO(("continuous...\n\r"));
+                WPRINT_APP_INFO(("continuous... (board reset required to stop)\n\r"));
                 break;
 
             default:
@@ -176,6 +176,8 @@ int ping( int argc, char *argv[] )
     wiced_time_t reply_time;
     UINT status;
 
+    /* Intentionally loops forever when continuous == WICED_TRUE */
+    /* coverity[loop_top] */
     while (( num > 0 ) || ( continuous == WICED_TRUE ) )
     {
         status = WICED_ERROR;

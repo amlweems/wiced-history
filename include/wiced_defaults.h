@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -34,10 +34,13 @@ extern "C"
 #define WPRINT_ENABLE_WEBSERVER_INFO     /* Webserver prints */
 //#define WPRINT_ENABLE_WEBSERVER_DEBUG
 //#define WPRINT_ENABLE_WEBSERVER_ERROR
+
+#ifndef DISABLE_LOGGING
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_NETWORK_INFO       /* Network stack prints */
 //#define WPRINT_ENABLE_NETWORK_DEBUG
 //#define WPRINT_ENABLE_NETWORK_ERROR
+#endif
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_RTOS_INFO          /* RTOS prints */
 //#define WPRINT_ENABLE_RTOS_DEBUG
@@ -54,10 +57,13 @@ extern "C"
 #define WPRINT_ENABLE_SUPPLICANT_INFO    /* Supplicant stack prints */
 #define WPRINT_ENABLE_SUPPLICANT_DEBUG
 #define WPRINT_ENABLE_SUPPLICANT_ERROR
+
+#ifndef DISABLE_LOGGING
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #define WPRINT_ENABLE_WICED_INFO         /* Wiced internal prints */
 //#define WPRINT_ENABLE_WICED_DEBUG
 //#define WPRINT_ENABLE_WICED_ERROR
+#endif
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 //#define WPRINT_ENABLE_WWD_INFO         /* Wiced Wi-Fi Driver prints */
 //#define WPRINT_ENABLE_WWD_DEBUG
@@ -110,7 +116,6 @@ extern "C"
 #define WICED_DEFAULT_LIBRARY_PRIORITY     (5)
 #define WICED_APPLICATION_PRIORITY         (7)
 
-
 /************************************************************************
  * WICED TCP Options */
 #define WICED_TCP_WINDOW_SIZE                 (7 * 1024)
@@ -135,6 +140,10 @@ extern "C"
 /************************************************************************
  * Country code */
 #define WICED_DEFAULT_COUNTRY_CODE            ( WICED_COUNTRY_UNITED_STATES )
+
+/************************************************************************
+ * Uncomment to enable Auto country support */
+//#define WICED_ENABLE_AUTO_COUNTRY
 
 /************************************************************************
  * Application thread stack size */

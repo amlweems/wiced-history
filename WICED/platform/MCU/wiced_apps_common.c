@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -81,10 +81,15 @@
 #include "wiced_dct_common.h"
 #include "wiced_utilities.h"
 
+#if (DCT_BOOTLOADER_SDK_VERSION >= DCT_BOOTLOADER_SDK_3_1_1)
+
 /******************************************************
  *                      Macros
  ******************************************************/
+#ifndef PLATFORM_SFLASH_PERIPHERAL_ID
 #define PLATFORM_SFLASH_PERIPHERAL_ID  ( 0 )
+#endif
+
 #define SFLASH_SECTOR_SIZE             ( 4096UL )
 #define FIRST_APP_HEADER_ADDRESS       ( 0x20000UL )
 #define LAST_APP_HEADER_ADDRESS        ( FIRST_APP_HEADER_ADDRESS + SFLASH_SECTOR_SIZE - sizeof(app_header_t) )
@@ -103,9 +108,10 @@
  * code generated for this function dependent on build time options.
  * The check for PLATFORM_SECURESFLASH_ENABLED is done in function that is not ROMmed
  */
+#ifndef BOOTLOADER_APP_LUT_NO_SECURE_FLAG
 #define SFLASH_SECURE_ACCESS_FUNC( is_secure, secure_function_pointer, nonsecure_function_pointer ) \
     ( ( is_secure ) ?  ( secure_function_pointer ) : ( nonsecure_function_pointer ) )
-
+#endif
 /******************************************************
  *                    Constants
  ******************************************************/
@@ -308,21 +314,25 @@ static wiced_result_t wiced_apps_get_physical_address( app_header_t *app_header,
     {
         uint32_t current_size = app_header->sectors[ index ].count * SFLASH_SECTOR_SIZE;
 
+#ifndef BOOTLOADER_APP_LUT_NO_SECURE_FLAG
         if ( app_header->secure )
         {
             /* If secure sector, reduce the metadata_size from total size */
             current_size -= SECURE_SFLASH_METADATA_SIZE( current_size );
         }
+#endif
         if ( ( offset >= current_offset ) && ( offset < ( current_offset + current_size ) ) )
         {
             uint32_t diff = offset - current_offset;
 
+#ifndef BOOTLOADER_APP_LUT_NO_SECURE_FLAG
             if ( app_header->secure )
             {
                 /* Get the Secure address */
                 *address = ( app_header->sectors[ index ].start * SFLASH_SECTOR_SIZE ) + SECURE_SECTOR_ADDRESS( diff ) + OFFSET_WITHIN_SECURE_SECTOR( diff );
             }
             else
+#endif
             {
                 *address = app_header->sectors[ index ].start * SFLASH_SECTOR_SIZE + diff;
             }
@@ -371,9 +381,12 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
     deinit_sflash( &sflash_handle );
 
+#ifndef BOOTLOADER_APP_LUT_NO_SECURE_FLAG
     sflash_write_func = SFLASH_SECURE_ACCESS_FUNC( ( app_header.secure && ( sflash_handle.securesflash_handle != NULL ) ),
                 sflash_handle.securesflash_handle->sflash_secure_write_function, &sflash_write );
-
+#else
+    sflash_write_func = sflash_write;
+#endif
     while ( size )
     {
         if ( wiced_apps_get_physical_address( &app_header, offset, &address, &available_size ) != WICED_SUCCESS )
@@ -402,7 +415,7 @@ wiced_result_t wiced_apps_write( const image_location_t* app_header_location, co
                 if ( last_erased_sector )
                 {
                     /* User requests erase before write */
-                    *last_erased_sector = wiced_apps_erase_sections( address, size, *last_erased_sector );
+                    *last_erased_sector = wiced_apps_erase_sections( address, available_size, *last_erased_sector );
                 };
                 init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_ALLOWED );
                 sflash_write_func( &sflash_handle, address, data, available_size );
@@ -428,8 +441,12 @@ wiced_result_t wiced_apps_read( const image_location_t* app_header_location, uin
     init_sflash( &sflash_handle, PLATFORM_SFLASH_PERIPHERAL_ID, SFLASH_WRITE_NOT_ALLOWED );
     sflash_read( &sflash_handle, app_header_location->detail.external_fixed.location, &app_header, sizeof(app_header_t) );
 
+#ifndef BOOTLOADER_APP_LUT_NO_SECURE_FLAG
     sflash_read_func = SFLASH_SECURE_ACCESS_FUNC( ( app_header.secure && ( sflash_handle.securesflash_handle != NULL ) ),
             sflash_handle.securesflash_handle->sflash_secure_read_function, &sflash_read );
+#else
+    sflash_read_func = sflash_read;
+#endif
 
     while ( ( size ) && ( result ==  WICED_SUCCESS ) )
     {
@@ -445,12 +462,12 @@ wiced_result_t wiced_apps_read( const image_location_t* app_header_location, uin
             if ( size <= available_size )
             {
                 /* it all fit in to this sector */
-                result = sflash_read_func( &sflash_handle, address, data, size );
+                result = ( wiced_result_t ) sflash_read_func( &sflash_handle, address, data, size );
                 size = 0;
             }
             else
             {
-                result = sflash_read_func( &sflash_handle, address, data, available_size );
+                result = ( wiced_result_t ) sflash_read_func( &sflash_handle, address, data, available_size );
                 size   -= available_size;
                 offset += available_size;
                 data   += available_size;
@@ -462,3 +479,4 @@ done:
     /* We need to add a new app header at the end of the log section */
     return result;
 }
+#endif  /* (DCT_BOOTLOADER_SDK_VERSION >= DCT_BOOTLOADER_SDK_3_1_1) */

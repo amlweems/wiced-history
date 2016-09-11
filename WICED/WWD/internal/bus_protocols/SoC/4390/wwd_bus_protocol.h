@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -38,9 +38,12 @@ typedef struct
 
 #define WWD_BUS_HAS_HEADER
 
-#define WWD_BUS_HEADER_SIZE               ( sizeof(wwd_bus_header_t) )
+#define WWD_BUS_HEADER_SIZE                     ( sizeof(wwd_bus_header_t) )
 
-#define WWD_BUS_USE_STATUS_REPORT_SCHEME  ( 1 == 1 ) /* read the section "Interrupt and Status logic" in TWIKI */
+#define WWD_BUS_USE_STATUS_REPORT_SCHEME        ( 1 == 1 ) /* read the section "Interrupt and Status logic" in TWIKI */
+
+#define WWD_BUS_MAX_BACKPLANE_TRANSFER_SIZE     ( WICED_PAYLOAD_MTU )
+#define WWD_BUS_BACKPLANE_READ_PADD_SIZE        ( 0 )
 
 /******************************************************
  *             Function declarations

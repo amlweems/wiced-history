@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,5 +17,5 @@ MEMORY
     DCT2_FLASH       (rx)  : ORIGIN = 0x08008000, LENGTH = 16K
     APP_CODE         (rx)  : ORIGIN = 0x0800C000, LENGTH = 0x74000  /* 464K */
     SRAM             (rwx) : ORIGIN = 0x20000000, LENGTH = 96K
-    BTLDR_SRAM       (rwx) : ORIGIN = 0x20016000, LENGTH = 8k       /* Boot loader stack at the end. */
+    BTLDR_SRAM       (rwx) : ORIGIN = 0x20013C00, LENGTH = 17k       /* Boot loader stack at the end. */
 }

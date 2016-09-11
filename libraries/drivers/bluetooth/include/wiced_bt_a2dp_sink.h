@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -15,7 +15,6 @@ extern "C"
 {
 #endif
 
-#include "wiced.h"
 #include "wiced_bt_types.h"
 #include "wiced_result.h"
 #include "bt_target.h"
@@ -28,7 +27,16 @@ extern "C"
  *  This file Contains A2DP Sink APIs and definitions.
  */
 
-/** @defgroup a2dp_sink WICED BT A2DP SINK
+/**
+ * @defgroup    wicedbt_av_profiles Profiles
+ * @ingroup     wicedbt_av
+ *
+ * @addtogroup  wicedbt_a2dp        Advanced Audio Profile (A2DP) Sink
+ * @ingroup     wicedbt_av_profiles
+ * @ingroup     wicedbt_av
+ *
+ * Hands Free Profile.
+ *
  * @{
  */
 
@@ -272,7 +280,7 @@ wiced_result_t wiced_bt_a2dp_sink_suspend( wiced_bt_device_address_t bd_address 
 wiced_result_t wiced_bt_a2dp_sink_send_delay_report( wiced_bt_device_address_t bd_address,
     uint16_t delay );
 
-/** @} */ // end of a2dp_sink
+/** @} */ // end of wicedbt_a2dp
 
 #ifdef __cplusplus
 } /*extern "C" */

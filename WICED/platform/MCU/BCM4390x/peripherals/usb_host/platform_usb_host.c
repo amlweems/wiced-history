@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -89,6 +89,22 @@
 #define CC_CHIP_STATUS_HOST_IFACE_STRAP_2           (1 << 22)   /* 0: HSIC-PHY; 1: USB-PHY */
 #define CC_CHIP_STATUS_USB_PHY_SELECTION            CC_CHIP_STATUS_HOST_IFACE_STRAP_2
 
+/* OHCI Registers */
+/* HcRhDescriptorA */
+#define OHCI_RH_POWER_SWITCH_MODE_PER_PORT          (1 << 8)
+#define OHCI_RH_OVER_CURRENT_PROTECT_PER_PORT       (1 << 11)
+/* HcRhDescriptorB */
+#define OHCI_RH_PORT_POWER_CONTROL_MASK_SHIFT       16
+#define OHCI_RH_PORT_POWER_CONTROL_MASK_DEFAULT     (0x6 << OHCI_RH_PORT_POWER_CONTROL_MASK_SHIFT)
+
+/* HcRhPortStatus */
+#define OHCI_RH_PORT_SET_PORT_POWER                 (1 << 8)
+#define OHCI_RH_PORT_CLEAR_PORT_POWER               (1 << 9)
+
+/* EHCI Registers */
+/* PORTSC register */
+#define EHCI_RH_PORT_POWER_ON                       (1 << 12)
+
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -103,21 +119,35 @@
 /* BCM4390x USB20 Host register */
 typedef struct
 {
-    uint32_t reserved0[0x1e0/sizeof(uint32_t)];
+    uint32_t hc_cap_version;                            /* 0x000 */
+    uint32_t hcsparams;                                 /* 0x004 */
+    uint32_t hccparams;                                 /* 0x008 */
+    uint32_t hcsp_portroute;                            /* 0x00c */
+    uint32_t usbcmd;                                    /* 0x010 */
+    uint32_t usbsts;                                    /* 0x014 */
+    uint32_t usbintr;                                   /* 0x018 */
+    uint32_t frindex;                                   /* 0x01c */
+    uint32_t ctrldsssegment;                            /* 0x020 */
+    uint32_t periodclistbase;                           /* 0x024 */
+    uint32_t asynclistaddr;                             /* 0x028 */
+    uint32_t reserved0[9];                              /* 0x02c */
+    uint32_t configflag;                                /* 0x050 */
+    uint32_t portsc[2];                                 /* 0x054 */
+    uint32_t reserved1[0x184/sizeof(uint32_t)];         /* 0x05c */
     uint32_t clk_ctl_st;                                /* 0x1e0 */
-    uint32_t resetved1[0x1c/sizeof(uint32_t)];
+    uint32_t resetved2[0x1c/sizeof(uint32_t)];
     uint32_t hostcontrol;                               /* 0x200 */
-    uint32_t reserved2[0xfc/sizeof(uint32_t)];
+    uint32_t reserved3[0xfc/sizeof(uint32_t)];
     uint32_t framlengthadjust;                          /* 0x300 */
     uint32_t shimcontrol;                               /* 0x304 */
     uint32_t shimslavestatus;                           /* 0x308 */
     uint32_t shimmasterstatus;                          /* 0x30c */
-    uint32_t reserved3;                                 /* 0x310 */
+    uint32_t reserved4;                                 /* 0x310 */
     uint32_t ehcistatus;                                /* 0x314 */
-    uint32_t reserved4;                                 /* 0x318 */
-    uint32_t reserved5;                                 /* 0x31c */
+    uint32_t reserved5;                                 /* 0x318 */
+    uint32_t reserved6;                                 /* 0x31c */
     uint32_t sb_addr_hi;                                /* 0x320 */
-    uint32_t reserved6[0x1dc/sizeof(uint32_t)];
+    uint32_t reserved7[0x1dc/sizeof(uint32_t)];
     uint32_t bert_control1;                             /* 0x500 */
     uint32_t bert_control2;                             /* 0x504 */
     uint32_t bert_status1;                              /* 0x508 */
@@ -136,6 +166,35 @@ STRUCTURE_CHECK(100, platform_4390x_usb_host_registers_t, clk_ctl_st, 0x1e0);
 STRUCTURE_CHECK(101, platform_4390x_usb_host_registers_t, hostcontrol, 0x200);
 STRUCTURE_CHECK(102, platform_4390x_usb_host_registers_t, framlengthadjust, 0x300);
 STRUCTURE_CHECK(104, platform_4390x_usb_host_registers_t, bert_control1, 0x500);
+
+typedef struct {
+    uint32_t hc_revision;                               /* 0x00 */
+    uint32_t hc_control;                                /* 0x04 */
+    uint32_t hc_command_status;                         /* 0x08 */
+    uint32_t hc_interrupt_status;                       /* 0x0C */
+    uint32_t hc_interrupt_enable;                       /* 0x10 */
+    uint32_t hc_interrupt_disable;                      /* 0x14 */
+    uint32_t hc_hccca;                                  /* 0x18 */
+    uint32_t hc_period_current_ed;                      /* 0x1C */
+    uint32_t hc_control_head_ed;                        /* 0x20 */
+    uint32_t hc_control_current_ed;                     /* 0x24 */
+    uint32_t hc_bulk_head_ed;                           /* 0x28 */
+    uint32_t hc_bulk_current_ed;                        /* 0x2C */
+    uint32_t hc_done_head;                              /* 0x30 */
+    uint32_t hc_fm_interval;                            /* 0x34 */
+    uint32_t hc_fm_remaining;                           /* 0x38 */
+    uint32_t hc_fm_number;                              /* 0x3C */
+    uint32_t hc_periodic_start;                         /* 0x40 */
+    uint32_t hc_ls_threashold;                          /* 0x44 */
+    uint32_t hc_rh_descriptor_a;                        /* 0x48 */
+    uint32_t hc_rh_descriptor_b;                        /* 0x4C */
+    uint32_t hc_rh_status;                              /* 0x50 */
+    uint32_t hc_rh_port_status[15];                     /* 0x54 */
+} platform_usb_ohci_register_t;
+
+STRUCTURE_CHECK(105, platform_usb_ohci_register_t, hc_hccca, 0x18);
+STRUCTURE_CHECK(106, platform_usb_ohci_register_t, hc_rh_descriptor_a, 0x48);
+STRUCTURE_CHECK(107, platform_usb_ohci_register_t, hc_rh_port_status, 0x54);
 
 /* BCM4390x USB20 Host config */
 typedef struct
@@ -209,12 +268,16 @@ static wiced_bool_t bcm4390x_is_board_in_usb_host_mode( void );
 static void bcm4390x_usb_host_enable( void )
 {
     volatile platform_4390x_usb_host_registers_t *usb_host_registers = NULL;
+    volatile platform_usb_ohci_register_t *ohci_controller = (volatile platform_usb_ohci_register_t *) PLATFORM_OHCI_REGBASE(0);
 
     if (!bcm4390x_usb_host_driver)
     {
         WPRINT_PLATFORM_ERROR( ("Null usb host drv!\n") );
         return;
     }
+
+    /* Add platform USB using ALP clock fixup */
+    PLATFORM_USB_ALP_CLOCK_RES_UP();
 
     /* Obtain usb20h register base  */
     usb_host_registers = (volatile platform_4390x_usb_host_registers_t *)(bcm4390x_usb_host_driver->core_registers);
@@ -268,6 +331,10 @@ static void bcm4390x_usb_host_enable( void )
     usb_host_registers->hostcontrol = USB20H_HOSTCTL_VAL_OOR_SEQ1; //1'b10
     usb_host_registers->hostcontrol = USB20H_HOSTCTL_VAL_OOR_SEQ2; //1'b9 b10
     usb_host_registers->hostcontrol = USB20H_HOSTCTL_VAL_OOR_SEQ3; //1'b8 b9 b10
+
+    /* Set OHCI controller power switching mode and over current mode*/
+    ohci_controller->hc_rh_descriptor_a |= OHCI_RH_POWER_SWITCH_MODE_PER_PORT | OHCI_RH_OVER_CURRENT_PROTECT_PER_PORT;
+    ohci_controller->hc_rh_descriptor_b |= OHCI_RH_PORT_POWER_CONTROL_MASK_DEFAULT;
 }
 
 static void bcm4390x_usb_host_map_irq( uint8_t target_irq )
@@ -291,6 +358,9 @@ static int bcm4390x_usb_host_power_enable( int port )
 
 static void bcm4390x_usb_host_disable( void )
 {
+    /* Add platform USB using ALP clock fixup */
+    PLATFORM_USB_ALP_CLOCK_RES_DOWN( NULL, WICED_FALSE );
+
     return;
 }
 
@@ -356,6 +426,25 @@ platform_result_t platform_usb_host_init( void )
 
     bcm4390x_usb_host_enable();
     bcm4390x_usb_host_power_enable(0);
+    return PLATFORM_SUCCESS;
+}
+
+/*
+ * plaftorm_usb_host_post_init:
+ *      Put things that must be done after EHCI/OHCI driver initialized in this function.
+ */
+platform_result_t platform_usb_host_post_init( void )
+{
+    volatile platform_4390x_usb_host_registers_t *ehci_controller = (volatile platform_4390x_usb_host_registers_t *) PLATFORM_EHCI_REGBASE(0);
+    volatile platform_usb_ohci_register_t *ohci_controller = (volatile platform_usb_ohci_register_t *) PLATFORM_OHCI_REGBASE(0);
+
+    /*
+     *  Clear EHCI/OHCI port1 port power.
+     *  4390x EHCI/OHCI root hub supports 2 port but only port0 is physically connected to external pins. Turn off un-used port1 power.
+     *  This operation MUST BE done after the EHCI/OHCI driver initialization because the port power is set during the driver initialization.
+     */
+    ohci_controller->hc_rh_port_status[1] = OHCI_RH_PORT_CLEAR_PORT_POWER;
+    ehci_controller->portsc[1] &= ~ EHCI_RH_PORT_POWER_ON;
     return PLATFORM_SUCCESS;
 }
 
@@ -428,8 +517,7 @@ platform_result_t platform_usb_host_get_hci_resource( platform_usb_host_hci_reso
     /* Get HCI resource list and total resource number */
     memcpy((void *)resource_list_buf, (void *)bcm4390x_usb_host_hci_resource_list, resource_list_size);
     *resource_total_num = resource_num;
-    WPRINT_PLATFORM_INFO( ("USB Host support %lu HCI resource\n", resource_num) );
+    WPRINT_PLATFORM_INFO( ("USB Host support %u HCI resource\n", (unsigned)resource_num) );
 
     return PLATFORM_SUCCESS;
 }
-

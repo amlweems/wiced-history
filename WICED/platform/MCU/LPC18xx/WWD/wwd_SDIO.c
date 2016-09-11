@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -241,7 +241,7 @@ void host_platform_enable_high_speed_sdio( void )
 #ifndef SDIO_1_BIT
     Chip_SDIF_SetCardType( LPC_SDMMC, MCI_CTYPE_4BIT );
 #else
-    Chip_SDIF_SetCardType( LPC_SDMMC, 0 );
+    Chip_SDIF_SetCardType( LPC_SDMMC, MCI_CTYPE_1BIT );
 #endif
 }
 

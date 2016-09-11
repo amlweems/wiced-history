@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -537,6 +537,10 @@ etc_ioctl(etc_info_t *etc, int cmd, void *arg)
 		break;
 
 	case ETCDUMP:
+	    if (arg == NULL)
+	    {
+	        goto err;
+	    }
 		if (et_msg_level & 0x10000)
 			bcmdumplog((char *)arg, IOCBUFSZ);
 #ifdef BCMDBG
@@ -878,14 +882,16 @@ etc_qos(etc_info_t *etc, uint on)
 void
 etc_quota(etc_info_t *etc)
 {
-	int quota = ETCQUOTA_MAX;
 
 #ifdef PKTC
-	quota = (etc->pktc) ? etc->pktcbnd : RXBND;
-#endif
+   int quota = (etc->pktc) ? etc->pktcbnd : RXBND;
 
-	/* Cap to ETCQUOTA_MAX */
-	etc->quota = (quota > ETCQUOTA_MAX) ? ETCQUOTA_MAX : quota;
+   /* Cap to ETCQUOTA_MAX */
+   etc->quota = (quota > ETCQUOTA_MAX) ? ETCQUOTA_MAX : quota;
+#else
+   /* Cap to ETCQUOTA_MAX */
+    etc->quota = ETCQUOTA_MAX;
+#endif
 }
 
 void

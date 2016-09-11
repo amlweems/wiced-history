@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -70,6 +70,9 @@ wicedfs_filesystem_t  resource_fs_handle;
 static  wiced_app_t   fs_app;
 static  uint8_t       fs_init_done = 0;
 
+#if (DCT_BOOTLOADER_SDK_VERSION >= DCT_BOOTLOADER_SDK_3_1_2)
+static  wiced_app_t   fs_app;
+#endif
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -97,10 +100,14 @@ platform_result_t platform_filesystem_init( void )
             return PLATFORM_ERROR;
         }
 
+#if (DCT_BOOTLOADER_SDK_VERSION < DCT_BOOTLOADER_SDK_3_1_2)
+        /* this SDK does not have apps_locations in bootloader_dct_header_t (platform_dct_header_t for the SDK) */
+#else
         if ( wiced_framework_app_open( DCT_FILESYSTEM_IMAGE_INDEX, &fs_app ) != WICED_SUCCESS )
         {
             return PLATFORM_ERROR;
         }
+#endif /* (DCT_BOOTLOADER_SDK_VERSION < DCT_BOOTLOADER_SDK_3_1_2) */
 
         result = wicedfs_init( 0, read_callback, &resource_fs_handle, &wicedfs_sflash_handle );
         wiced_assert( "wicedfs init fail", result == 0 );
@@ -112,10 +119,19 @@ platform_result_t platform_filesystem_init( void )
 
 static wicedfs_usize_t read_callback( void* user_param, void* buf, wicedfs_usize_t size, wicedfs_usize_t pos )
 {
+#if (DCT_BOOTLOADER_SDK_VERSION < DCT_BOOTLOADER_SDK_3_1_2)
+    UNUSED_PARAMETER(user_param);
+    UNUSED_PARAMETER(buf);
+    UNUSED_PARAMETER(size);
+    UNUSED_PARAMETER(pos);
+            /* this SDK does not have apps_locations in bootloader_dct_header_t (platform_dct_header_t for the SDK) */
+    return 0;
+#else
     wiced_result_t retval;
     (void) user_param;
     retval = wiced_framework_app_read_chunk( &fs_app, pos, (uint8_t*) buf, size );
     return ( ( WICED_SUCCESS == retval ) ? size : 0 );
+#endif /* (DCT_BOOTLOADER_SDK_VERSION < DCT_BOOTLOADER_SDK_3_1_2) */
 }
 
 platform_result_t platform_get_sflash_dct_loc( sflash_handle_t* sflash_handle, uint32_t* loc )
@@ -137,16 +153,26 @@ static wiced_result_t ddr_block_device_init( wiced_block_device_t* device, wiced
         return WICED_ERROR;
     }
 
-    device->device_id        = 0;
-    if ( device->init_data->maximum_size == 0 )
+    if ( device->init_data->base_address_offset == (uint64_t)-1 )
     {
-        device->device_size = platform_ddr_size - device->init_data->base_address_offset;
+        ddr_specific_data->offset = PLATFORM_DDR_FREE_OFFSET;
     }
     else
     {
-        device->device_size = MIN( platform_ddr_size - device->init_data->base_address_offset, device->init_data->maximum_size );
+        ddr_specific_data->offset = (uint32_t)device->init_data->base_address_offset;
+    }
+    ddr_specific_data->offset = MIN( ddr_specific_data->offset, platform_ddr_get_size( ) );
+
+    if ( device->init_data->maximum_size == 0 )
+    {
+        device->device_size = platform_ddr_get_size( ) - ddr_specific_data->offset;
+    }
+    else
+    {
+        device->device_size = MIN( platform_ddr_get_size( ) - ddr_specific_data->offset, device->init_data->maximum_size );
     }
 
+    device->device_id        = 0;
     device->erase_block_size = 0;
     device->read_block_size  = 1;
     device->write_block_size = 1;
@@ -167,11 +193,12 @@ static wiced_result_t ddr_block_device_deinit( wiced_block_device_t* device )
 
 static wiced_result_t ddr_block_write( wiced_block_device_t* device, uint64_t start_address, const uint8_t* data, uint64_t size )
 {
+    ddr_block_device_specific_data_t* ddr_specific_data = (ddr_block_device_specific_data_t*) device->device_specific_data;
     if ( start_address + size > device->device_size )
     {
         return WICED_BADARG;
     }
-    memcpy( (void*)(ptrdiff_t)(DDR_BASE + start_address), data, (size_t) size );
+    memcpy( (void*)(ptrdiff_t)( DDR_BASE + start_address + ddr_specific_data->offset ), data, (size_t) size );
     return WICED_SUCCESS;
 }
 
@@ -183,11 +210,12 @@ static wiced_result_t ddr_block_flush( wiced_block_device_t* device )
 
 static wiced_result_t ddr_block_read( wiced_block_device_t* device, uint64_t start_address, uint8_t* data, uint64_t size )
 {
+    ddr_block_device_specific_data_t* ddr_specific_data = (ddr_block_device_specific_data_t*) device->device_specific_data;
     if ( start_address + size > device->device_size )
     {
         return WICED_BADARG;
     }
-    memcpy( data, (void*)(ptrdiff_t)(DDR_BASE + start_address + device->init_data->base_address_offset ), (size_t) size );
+    memcpy( data, (void*)(ptrdiff_t)( DDR_BASE + start_address + ddr_specific_data->offset ), (size_t) size );
     return WICED_SUCCESS;
 }
 

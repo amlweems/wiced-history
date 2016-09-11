@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,8 +39,11 @@ extern "C" {
 typedef struct
 {
         const char         *ca_cert;        /* CA certificate, common between client and server */
+        uint32_t           ca_cert_len;     /* CA certificate length */
         const char         *cert;           /* Client certificate in pem formate                */
+        uint32_t           cert_len;        /* Client certificate length */
         const char         *key;            /* Client private key                               */
+        uint32_t           key_len;         /* Client private key length */
 }wiced_amqp_socket_security_t;
 
 typedef struct

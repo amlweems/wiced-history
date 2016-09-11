@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -68,6 +68,12 @@ wwd_result_t host_rtos_create_thread_with_arg( /*@out@*/ host_thread_type_t* thr
     taskYIELD();
 
     return ( result == (signed portBASE_TYPE) pdPASS ) ? WWD_SUCCESS : WWD_THREAD_CREATE_FAILED;
+}
+
+wwd_result_t host_rtos_create_configed_thread(  /*@out@*/ host_thread_type_t* thread, void(*entry_function)( uint32_t ), const char* name, /*@null@*/ void* stack, uint32_t stack_size, uint32_t priority, host_rtos_thread_config_type_t *config )
+{
+    UNUSED_PARAMETER( config );
+    return host_rtos_create_thread( thread, entry_function, name, stack, stack_size, priority );
 }
 
 /**

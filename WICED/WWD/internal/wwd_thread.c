@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -200,14 +200,15 @@ int8_t wwd_thread_receive_one_packet( void )
 
 /** Sends and Receives all waiting packets
  *
- * Repeatedly calls wwd_thread_send_one_packet and wwd_thread_receive_one_packet
- * to send and receive packets, until there are no more packets waiting to
+ * Calls wwd_thread_send_one_packet and wwd_thread_receive_one_packet
+ * once to send and receive packets, until there are no more packets waiting to
  * be transferred.
  *
  * This function is normally used by the WWD Thread, but can be
  * called periodically by systems which have no RTOS to ensure
  * packets get send and received properly.
  *
+ * Note: do not loop in here, to avoid overwriting previously rx-ed packets
  */
 int8_t wwd_thread_poll_all( void ) /*@modifies internalState@*/
 {

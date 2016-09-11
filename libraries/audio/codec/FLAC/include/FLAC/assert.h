@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -53,6 +53,7 @@ extern "C" {
     #define FLAC__ASSERT( x ) assert( x )
     #define FLAC__ASSERT_DECLARATION( x ) x
 #else
+    #define assert( x )
     #define FLAC__ASSERT( x )
     #define FLAC__ASSERT_DECLARATION( x )
 #endif

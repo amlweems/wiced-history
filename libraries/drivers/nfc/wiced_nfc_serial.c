@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -143,6 +143,8 @@ typedef struct
  *               Function Declarations
  ******************************************************/
 
+void nfc_rx_irq_handler( void* arg );
+
 /******************************************************
  *               Variables Definitions
  ******************************************************/
@@ -186,11 +188,16 @@ void USERIAL_Open( tUSERIAL_PORT port, tUSERIAL_OPEN_CFG *p_cfg, tUSERIAL_CBACK 
 {
     wiced_result_t result;
 
-    result = nfc_bus_init( );
+    result = nfc_bus_init( nfc_rx_irq_handler );
     if ( result != WICED_SUCCESS )
     {
         return;
     }
+}
+
+void nfc_rx_irq_handler( void* arg )
+{
+    nfc_signal_rx_irq( );
 }
 
 wiced_result_t nfc_hci_transport_driver_bus_read_handler( BT_HDR* packet )

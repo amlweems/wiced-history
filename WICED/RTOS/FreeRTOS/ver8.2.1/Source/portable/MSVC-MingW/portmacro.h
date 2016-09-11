@@ -113,6 +113,7 @@ typedef unsigned long UBaseType_t;
 	#define portBYTE_ALIGNMENT		4
 #endif
 
+#define portEND_SWITCHING_ISR( xSwitchRequired )  if( xSwitchRequired ) portYIELD()
 #define portYIELD()					vPortGenerateSimulatedInterrupt( portINTERRUPT_YIELD )
 
 /* Simulated interrupts return pdFALSE if no context switch should be performed,

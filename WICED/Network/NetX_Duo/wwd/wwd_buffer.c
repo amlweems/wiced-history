@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -57,11 +57,11 @@ wiced_bool_t host_buffer_pool_is_full( wwd_buffer_dir_t direction )
 
     if( direction == WWD_NETWORK_TX )
     {
-        result = IS_POOL_FULL( tx_pool) && IS_POOL_FULL( application_defined_tx_pool );
+        result = ( IS_POOL_FULL( tx_pool) && IS_POOL_FULL( application_defined_tx_pool ) ) ? WICED_TRUE : WICED_FALSE;
     }
     else
     {
-        result = IS_POOL_FULL( rx_pool) && IS_POOL_FULL( application_defined_rx_pool );
+        result = ( IS_POOL_FULL( rx_pool) && IS_POOL_FULL( application_defined_rx_pool ) ) ? WICED_TRUE : WICED_FALSE;
     }
 
     return result;
@@ -269,6 +269,12 @@ wwd_result_t host_buffer_set_size( wiced_buffer_t buffer, unsigned short size )
     return WWD_SUCCESS;
 }
 
+void host_buffer_init_fifo( wiced_buffer_fifo_t* fifo )
+{
+    fifo->first = NULL;
+    fifo->last  = NULL;
+}
+
 void host_buffer_push_to_fifo( wiced_buffer_fifo_t* fifo, wiced_buffer_t buffer, wwd_interface_t interface )
 {
     buffer->nx_packet_ip_interface = (struct NX_INTERFACE_STRUCT*)interface;
@@ -292,9 +298,12 @@ wiced_buffer_t host_buffer_pop_from_fifo( wiced_buffer_fifo_t* fifo, wwd_interfa
 
     if ( fifo->first != NULL )
     {
-        buffer      = fifo->first;
-        *interface  = (wwd_interface_t)buffer->nx_packet_ip_interface;
-        fifo->first = buffer->nx_packet_queue_next;
+        buffer         = fifo->first;
+        if ( interface != NULL )
+        {
+            *interface = (wwd_interface_t)buffer->nx_packet_ip_interface;
+        }
+        fifo->first    = buffer->nx_packet_queue_next;
     }
 
     return buffer;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -80,7 +80,7 @@ typedef unsigned char hash_512bits[64];
 */
 static int
 ed25519_verify(const unsigned char *x, const unsigned char *y, size_t len) {
-    size_t differentbits = 0;
+    int differentbits = 0;
     while (len--)
         differentbits |= (*x++ ^ *y++);
     return (int) (1 & ((differentbits - 1) >> 8));

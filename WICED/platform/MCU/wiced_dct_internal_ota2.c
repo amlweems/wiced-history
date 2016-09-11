@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -23,6 +23,8 @@
 #include "platform_mcu_peripheral.h"
 #include "elf.h"
 #include "../../../libraries/utilities/crc/crc.h"
+
+#if !defined(BOOTLOADER)
 
 /******************************************************
  *                      Macros
@@ -93,7 +95,7 @@ wiced_result_t wiced_dct_ota2_save_copy( uint8_t type )
     platform_dct_ota2_config_t  ota2_dct_header;
 
     /* App */
-    if (wiced_dct_read_lock( (void**)&ota2_dct_header, WICED_TRUE, DCT_OTA2_CONFIG_SECTION, 0, sizeof(platform_dct_ota2_config_t) ) != WICED_SUCCESS )
+    if (wiced_dct_read_with_copy( (void**)&ota2_dct_header, DCT_OTA2_CONFIG_SECTION, 0, sizeof(platform_dct_ota2_config_t) ) != WICED_SUCCESS )
     {
         return WICED_ERROR;
     }
@@ -112,12 +114,6 @@ wiced_result_t wiced_dct_ota2_save_copy( uint8_t type )
     {
         return WICED_ERROR;
     }
-
-#if 0   // debugging
-    wiced_dct_read_lock( (void**)&ota2_dct_header, WICED_TRUE, DCT_OTA2_CONFIG_SECTION, 0, sizeof(platform_dct_ota2_config_t) );
-    mini_printf("Saved DCT to backup 0x%x\r\n", OTA2_IMAGE_APP_DCT_SAVE_AREA_BASE);
-    mini_printf("    ota2_dct_header.boot_type %d\r\n", ota2_dct_header.boot_type);
-#endif
 
     return WICED_SUCCESS;
 
@@ -145,3 +141,4 @@ wiced_result_t wiced_dct_ota2_read_saved_copy( void* info_ptr, dct_section_t sec
 
     return WICED_ERROR;
 }
+#endif /* !defined(BOOTLOADER) */

@@ -1,0 +1,67 @@
+/*
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+/* Define memory symbols */
+include "memory_with_bootloader.icf";
+
+/* Define memory regions */
+define memory mem with size = 4G;
+define region ROM_region   = mem:[from __Bootloader_vector_start   to __Bootloader_code_end];
+define region RAM_region   = mem:[from __SRAM_start   to __SRAM_end];
+
+/* Create a stack */
+define block CSTACK    with alignment = 8, size = __STACKSIZE__   { };
+/* provide heap */
+define block HEAP      with alignment = 8, size = 0x2000     { };
+
+
+place at address mem:__Bootloader_vector_start { readonly section .intvec };
+
+initialize by copy { readwrite };
+do not initialize  { section .noinit };
+
+place in ROM_region   { readonly };
+place in RAM_region   { readwrite,
+                        block CSTACK,
+                        block HEAP,
+                        last block LAST_BLOCK
+                        { section FREE_MEM, },
+                      };
+
+
+/* export symbols for application use */
+define symbol dct1_start_addr_loc     = __DCT1_start;
+export symbol dct1_start_addr_loc;
+
+define symbol dct1_size_loc = __DCT1_length;
+export symbol dct1_size_loc;
+
+define symbol dct2_start_addr_loc = __DCT2_start;
+export symbol dct2_start_addr_loc;
+
+define symbol dct2_size_loc = __DCT2_length;
+export symbol dct2_size_loc;
+
+define symbol app_hdr_start_addr_loc = __App_header_start;
+export symbol app_hdr_start_addr_loc;
+
+define symbol sram_start_addr_loc = __SRAM_start;
+export symbol sram_start_addr_loc;
+
+define symbol sram_size_loc = __SRAM_length;
+export symbol sram_size_loc;
+
+define symbol app_code_start_addr_loc = __App_start;
+export symbol app_code_start_addr_loc;
+
+
+/* export symbols required by threadx!!!!! */
+define symbol __tx_vectors = __Bootloader_vector_start;
+export symbol __tx_vectors;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -35,7 +35,11 @@
 #define SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS    (100000)
 #define SDIO_DMA_TIMEOUT_LOOPS               (1000000)
 #define MAX_TIMEOUTS                         (30)
+#if defined(STM32F412xG)
+#define SDIO_ERROR_MASK                      ( SDIO_STA_DCRCFAIL | SDIO_STA_CTIMEOUT | SDIO_STA_DTIMEOUT | SDIO_STA_TXUNDERR | SDIO_STA_RXOVERR | SDIO_STA_STBITERR )
+#else
 #define SDIO_ERROR_MASK                      ( SDIO_STA_CCRCFAIL | SDIO_STA_DCRCFAIL | SDIO_STA_CTIMEOUT | SDIO_STA_DTIMEOUT | SDIO_STA_TXUNDERR | SDIO_STA_RXOVERR | SDIO_STA_STBITERR )
+#endif
 #define SDIO_IRQ_CHANNEL                     ((u8)0x31)
 #define DMA2_3_IRQ_CHANNEL                   ((u8)DMA2_Stream3_IRQn)
 #define BUS_LEVEL_MAX_RETRIES                (5)
@@ -94,7 +98,11 @@ static void sdio_oob_irq_handler( void* arg )
 
 static void sdio_enable_bus_irq( void )
 {
+#if defined(STM32F412xG)
+    SDIO->MASK = SDIO_MASK_CMDRENDIE | SDIO_MASK_CMDSENTIE;
+#else
     SDIO->MASK = SDIO_MASK_SDIOITIE | SDIO_MASK_CMDRENDIE | SDIO_MASK_CMDSENTIE;
+#endif
 }
 
 static void sdio_disable_bus_irq( void )
@@ -138,8 +146,8 @@ wwd_result_t host_platform_bus_init( void )
     /* otherwise FreeRTOS will not be able to mask the interrupt */
     /* keep in mind that ARMCM3 interrupt priority logic is inverted, the highest value */
     /* is the lowest priority */
-    NVIC_EnableIRQ( SDIO_IRQ_CHANNEL );
-    NVIC_EnableIRQ( DMA2_3_IRQ_CHANNEL );
+    NVIC_EnableIRQ( ( IRQn_Type ) SDIO_IRQ_CHANNEL );
+    NVIC_EnableIRQ( ( IRQn_Type ) DMA2_3_IRQ_CHANNEL );
 
 #ifdef WICED_WIFI_USE_GPIO_FOR_BOOTSTRAP_0
     /* Set GPIO_B[1:0] to 00 to put WLAN module into SDIO mode */
@@ -239,8 +247,8 @@ wwd_result_t host_platform_bus_deinit( void )
 #endif
 
     /* Turn off SDIO IRQ */
-    NVIC_DisableIRQ( SDIO_IRQ_CHANNEL );
-    NVIC_DisableIRQ( DMA2_3_IRQ_CHANNEL );
+    NVIC_DisableIRQ( ( IRQn_Type ) SDIO_IRQ_CHANNEL );
+    NVIC_DisableIRQ( ( IRQn_Type ) DMA2_3_IRQ_CHANNEL );
 
     platform_mcu_powersave_enable();
 
@@ -362,6 +370,11 @@ restart:
                 goto restart;
             }
         } while ( ( temp_sta & SDIO_FLAG_CMDACT ) != 0 );
+#if defined(STM32F412xG)
+        /* Errata */
+        if (command == SDIO_CMD_5)
+            SDIO->ICR = SDIO_ICR_CCRCFAILC;
+#endif
     }
 
     if ( response != NULL )
@@ -372,7 +385,9 @@ restart:
 
 exit:
     platform_mcu_powersave_enable();
+#if !defined(STM32F412xG)
     SDIO->MASK = SDIO_MASK_SDIOITIE;
+#endif
     return result;
 }
 
@@ -409,7 +424,11 @@ void host_platform_enable_high_speed_sdio( void )
 {
     SDIO_InitTypeDef sdio_init_structure;
 
+#ifdef SLOW_SDIO_CLOCK
+    sdio_init_structure.SDIO_ClockDiv       = (uint8_t) 1; /* 1 = 16MHz if SDIO clock = 48MHz */
+#else
     sdio_init_structure.SDIO_ClockDiv       = (uint8_t) 0; /* 0 = 24MHz if SDIO clock = 48MHz */
+#endif
     sdio_init_structure.SDIO_ClockEdge      = SDIO_ClockEdge_Rising;
     sdio_init_structure.SDIO_ClockBypass    = SDIO_ClockBypass_Disable;
     sdio_init_structure.SDIO_ClockPowerSave = SDIO_ClockPowerSave_Disable;
@@ -492,6 +511,10 @@ WWD_RTOS_DEFINE_ISR( sdio_irq )
 {
     uint32_t intstatus = SDIO->STA;
 
+#if defined(STM32F412xG)
+    if (current_command == SDIO_CMD_5)
+        SDIO->ICR = SDIO_ICR_CCRCFAILC;
+#endif
     if ( ( intstatus & ( SDIO_STA_CCRCFAIL | SDIO_STA_DCRCFAIL | SDIO_STA_TXUNDERR | SDIO_STA_RXOVERR  | SDIO_STA_STBITERR )) != 0 )
     {
         //wiced_assert("sdio error flagged",0);

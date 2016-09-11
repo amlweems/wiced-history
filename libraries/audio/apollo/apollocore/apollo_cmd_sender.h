@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include "apollocore.h"
+#include "apollo_cmd_common.h"
 
 /******************************************************
  *                      Macros
@@ -49,7 +50,7 @@ typedef enum
     APOLLO_CMD_SENDER_COMMAND_NONE              = 0,
     APOLLO_CMD_SENDER_COMMAND_DISCOVER_PEERS,       /* arg is ignored                            */
     APOLLO_CMD_SENDER_COMMAND_SPEAKER_CONFIG,       /* arg is pointer to apollo_speaker_config_t */
-    APOLLO_CMD_SENDER_COMMAND_VOLUME,               /* arg is volume                             */
+    APOLLO_CMD_SENDER_COMMAND_VOLUME,               /* arg is pointer to apollo_volume_t         */
     APOLLO_CMD_SENDER_COMMAND_REBOOT                /* arg is ignored                            */
 } APOLLO_CMD_SENDER_COMMAND_T;
 
@@ -78,7 +79,7 @@ typedef struct apollo_speaker_s
 } apollo_speaker_t;
 
 /**
- * Apollo peers stucture passed to application with
+ * Apollo peers structure passed to application with
  * APOLLO_CMD_SENDER_EVENT_DISCOVER_RESULTS event.
  * Contains the speaker information for each speaker discovered on the network.
  */

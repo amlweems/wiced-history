@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -39,38 +39,151 @@ wiced_result_t wiced_tcp_send_buffer( wiced_tcp_socket_t* socket, const void* bu
     uint8_t* data_ptr = (uint8_t*)buffer;
     uint8_t* packet_data_ptr;
     uint16_t available_space;
+    uint16_t data_length;
+    uint16_t fragmented_data_length = 0;
+    uint16_t  enc_output_buf_len;
+    tls_record_t* record = NULL;
+    uint8_t* data_buffer;
+    uint8_t* enc_output_buf = NULL;
+    uint16_t data_to_write;
+    wiced_result_t result;
+    wiced_bool_t enc_buf_allocated = WICED_FALSE;
+    uint16_t maximum_segment_size;
 
     wiced_assert("Bad args", socket != NULL);
 
+    UNUSED_PARAMETER(record);
+    UNUSED_PARAMETER(enc_output_buf_len);
+    UNUSED_PARAMETER(maximum_segment_size);
+
     WICED_LINK_CHECK_TCP_SOCKET( socket );
 
-    /* Create a packet, copy the data and send it off */
+    data_length = buffer_length;
+    maximum_segment_size = (uint16_t)WICED_MAXIMUM_SEGMENT_SIZE(socket);
+
     while ( buffer_length != 0 )
     {
-        uint16_t data_to_write;
-        wiced_result_t result = wiced_packet_create_tcp( socket, buffer_length, &packet, &packet_data_ptr, &available_space );
-        if ( result != WICED_TCPIP_SUCCESS )
+        data_buffer = data_ptr;
+        fragmented_data_length = data_length;
+
+#ifndef WICED_DISABLE_TLS
+        if ( socket->tls_context != NULL )
         {
-            return result;
+            data_length = MIN(buffer_length, socket->tls_context->context.ext_max_fragment_length);
+            fragmented_data_length = data_length;
+
+            if(data_length > maximum_segment_size)
+            {
+                /* calculate the exact buffer required to accomodate encrypted data for the given payload size */
+                if( ( result = wiced_tls_calculate_encrypt_buffer_length(&socket->tls_context->context,data_length,&enc_output_buf_len ) ) != WICED_SUCCESS )
+                {
+                    WPRINT_LIB_ERROR( ( "Error in getting encrypt buffer length \n" ) );
+                    return result;
+                }
+
+                /* add record header in the buffer */
+                enc_output_buf_len = (uint16_t)( enc_output_buf_len + sizeof(tls_record_header_t));
+
+                enc_output_buf = (uint8_t*) malloc( enc_output_buf_len );
+
+                if( enc_output_buf == NULL)
+                {
+                    return WICED_ERROR;
+                }
+
+                data_buffer = enc_output_buf;
+                enc_buf_allocated = WICED_TRUE;
+
+                /* copy actual application data */
+                memcpy(data_buffer + sizeof(tls_record_header_t),data_ptr, data_length);
+
+                record                = (tls_record_t*) data_buffer;
+                record->type          =  TLS_MSG_APPLICATION_DATA;
+                record->major_version = (uint8_t)socket->tls_context->context.major_ver;
+                record->minor_version = (uint8_t)socket->tls_context->context.minor_ver;
+                record->length        =  htobe16(data_length);
+
+                /* Encrypt the record */
+                result = (wiced_result_t) tls_encrypt_record( &socket->tls_context->context, record, data_length );
+                if ( result != WICED_SUCCESS )
+                {
+                    free( enc_output_buf );
+                    return result;
+                }
+
+                data_length = enc_output_buf_len;
+            }
+        }
+#endif /* ifndef WICED_DISABLE_TLS */
+
+
+        /* send TCP data in multiple packets. It will be used when length is more than MTU size */
+        while(data_length != 0)
+        {
+            result = wiced_packet_create_tcp( socket, data_length, &packet, &packet_data_ptr, &available_space );
+            if ( result != WICED_TCPIP_SUCCESS )
+            {
+                if ( socket->tls_context != NULL && enc_buf_allocated == WICED_TRUE)
+                {
+                    free ( enc_output_buf );
+                }
+                return result;
+            }
+
+#ifndef WICED_DISABLE_TLS
+            if(socket->tls_context != NULL)
+            {
+                if ( socket->tls_context->context.state == SSL_HANDSHAKE_OVER && enc_buf_allocated == WICED_TRUE)
+                {
+                    /* this doesn't need the extra space for the encryption header that a normal TLS socket would use - remove it */
+                    packet_data_ptr -= sizeof(tls_record_header_t);
+                    wiced_packet_set_data_start((wiced_packet_t*) packet, packet_data_ptr);
+                }
+            }
+#endif /* ifndef WICED_DISABLE_TLS */
+
+            data_to_write   = MIN(data_length, available_space);
+            packet_data_ptr = MEMCAT(packet_data_ptr, (uint8_t*)data_buffer, data_to_write);
+
+            /* Write data */
+            wiced_packet_set_data_end( packet, packet_data_ptr );
+
+            /* Update variables */
+            data_buffer    += data_to_write;
+            data_length  = (uint16_t) ( data_length - data_to_write );
+            available_space = (uint16_t) ( available_space - data_to_write );
+
+            /* if TLS is enabled then Don't encrypt the data if its already encrypted in case of fragment is more than MSS */
+#ifndef WICED_DISABLE_TLS
+            if ( socket->tls_context != NULL && enc_buf_allocated == WICED_FALSE)
+            {
+                wiced_tls_encrypt_packet( &socket->tls_context->context, packet );
+            }
+#endif /* ifndef WICED_DISABLE_TLS */
+
+            result = network_tcp_send_packet( socket, packet );
+            if ( result != WICED_TCPIP_SUCCESS )
+            {
+                if ( socket->tls_context != NULL && enc_buf_allocated == WICED_TRUE)
+                {
+                    free ( enc_output_buf );
+                }
+                wiced_packet_delete( packet );
+                return result;
+            }
         }
 
-        /* Write data */
-        data_to_write   = MIN(buffer_length, available_space);
-        packet_data_ptr = MEMCAT(packet_data_ptr, data_ptr, data_to_write);
-
-        wiced_packet_set_data_end( packet, packet_data_ptr );
-
-        /* Update variables */
-        data_ptr       += data_to_write;
-        buffer_length   = (uint16_t) ( buffer_length - data_to_write );
-        available_space = (uint16_t) ( available_space - data_to_write );
-
-        result = wiced_tcp_send_packet( socket, packet );
-        if ( result != WICED_TCPIP_SUCCESS )
+        if (enc_buf_allocated == WICED_TRUE)
         {
-            wiced_packet_delete( packet );
-            return result;
+            free(enc_output_buf);
+            enc_output_buf = NULL;
         }
+
+        data_ptr += fragmented_data_length;
+        enc_buf_allocated = WICED_FALSE;
+
+        buffer_length   = (uint16_t) ( buffer_length - fragmented_data_length );
+
     }
 
     return WICED_TCPIP_SUCCESS;
@@ -98,6 +211,7 @@ wiced_result_t wiced_tcp_stream_init( wiced_tcp_stream_t* tcp_stream, wiced_tcp_
 {
     tcp_stream->tx_packet                 = NULL;
     tcp_stream->rx_packet                 = NULL;
+    tcp_stream->tx_packet_data_length     = 0;
     tcp_stream->socket                    = socket;
     return WICED_TCPIP_SUCCESS;
 }
@@ -122,13 +236,22 @@ wiced_result_t wiced_tcp_stream_deinit( wiced_tcp_stream_t* tcp_stream )
 
 wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const void* data, uint32_t data_length )
 {
+    int           max_fragment_length = 0;
+    wiced_bool_t  send_packet = WICED_FALSE;
+
     wiced_assert("Bad args", tcp_stream != NULL);
 
     WICED_LINK_CHECK_TCP_SOCKET( tcp_stream->socket );
 
+    if (tcp_stream->socket->tls_context != NULL )
+    {
+        max_fragment_length = tcp_stream->socket->tls_context->context.ext_max_fragment_length;
+    }
+
     while ( data_length != 0 )
     {
         uint16_t amount_to_write;
+        uint16_t actual_amount_to_write;
 
         /* Check if we don't have a packet */
         if ( tcp_stream->tx_packet == NULL )
@@ -142,16 +265,47 @@ wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const voi
         }
 
         /* Write data */
+
         amount_to_write = (uint16_t) MIN( data_length, tcp_stream->tx_packet_space_available );
-        tcp_stream->tx_packet_data     = MEMCAT( tcp_stream->tx_packet_data, data, amount_to_write );
+
+        if ( tcp_stream->socket->tls_context != NULL )
+        {
+            actual_amount_to_write = (uint16_t) MIN( amount_to_write, (max_fragment_length - tcp_stream->tx_packet_data_length));
+        }
+        else
+        {
+            actual_amount_to_write = amount_to_write;
+        }
+
+        tcp_stream->tx_packet_data     = MEMCAT( tcp_stream->tx_packet_data, data, actual_amount_to_write );
 
         /* Update variables */
-        data_length                           = (uint16_t)(data_length - amount_to_write);
-        tcp_stream->tx_packet_space_available = (uint16_t) ( tcp_stream->tx_packet_space_available - amount_to_write );
-        data                                  = (void*)((uint32_t)data + amount_to_write);
+        data_length                           = (uint16_t)(data_length - actual_amount_to_write);
+        tcp_stream->tx_packet_space_available = (uint16_t) ( tcp_stream->tx_packet_space_available - actual_amount_to_write );
+        data                                  = ((char*)data + actual_amount_to_write);
+
+        tcp_stream->tx_packet_data_length = (uint16_t)(actual_amount_to_write + tcp_stream->tx_packet_data_length);
+
+        if ( tcp_stream->socket->tls_context != NULL )
+        {
+            /* check added for TLS max fragment length extension if packet space available length is 0 or packet data length is matching to fragment length
+             * negotiated then we should send packet.
+             */
+            if ( tcp_stream->tx_packet_space_available == 0 || ( tcp_stream->tx_packet_data_length == max_fragment_length ))
+            {
+                send_packet = WICED_TRUE;
+            }
+        }
+        else
+        {
+            if ( tcp_stream->tx_packet_space_available == 0 )
+            {
+                send_packet = WICED_TRUE;
+            }
+        }
 
         /* Check if the packet is full */
-        if ( tcp_stream->tx_packet_space_available == 0 )
+        if ( send_packet == WICED_TRUE)
         {
             wiced_result_t result;
 
@@ -169,7 +323,9 @@ wiced_result_t wiced_tcp_stream_write( wiced_tcp_stream_t* tcp_stream, const voi
                 return result;
             }
 
+            tcp_stream->tx_packet_data_length = 0;
             tcp_stream->tx_packet = NULL;
+            send_packet = WICED_FALSE;
         }
     }
 
@@ -188,7 +344,7 @@ wiced_result_t wiced_tcp_stream_write_resource( wiced_tcp_stream_t* tcp_stream, 
         resource_result_t resource_result = resource_get_readonly_buffer ( res_id, pos, 0x7fffffff, &res_size, &data );
         if ( resource_result != RESOURCE_SUCCESS )
         {
-            return resource_result;
+            return ( wiced_result_t ) resource_result;
         }
 
         result = wiced_tcp_stream_write( tcp_stream, data, (uint16_t) res_size );
@@ -280,10 +436,12 @@ wiced_result_t wiced_tcp_stream_flush( wiced_tcp_stream_t* tcp_stream )
     if ( tcp_stream->tx_packet != NULL )
     {
         wiced_packet_set_data_end(tcp_stream->tx_packet, tcp_stream->tx_packet_data);
+
         result = wiced_tcp_send_packet( tcp_stream->socket, tcp_stream->tx_packet );
 
         tcp_stream->tx_packet_data            = NULL;
         tcp_stream->tx_packet_space_available = 0;
+        tcp_stream->tx_packet_data_length     = 0;
         if ( result != WICED_TCPIP_SUCCESS )
         {
             wiced_packet_delete( tcp_stream->tx_packet );

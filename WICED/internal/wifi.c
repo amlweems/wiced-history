@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -42,11 +42,13 @@
  *                    Constants
  ******************************************************/
 
-#define WLC_EVENT_MSG_LINK      (0x0001)  /** link is up */
+#define WLC_EVENT_MSG_LINK      ( 0x0001 )  /** link is up */
 
-#define SCAN_BSSID_LIST_LENGTH   (100)
-#define SCAN_LONGEST_WAIT_TIME  (5000)    /* Dual band devices take over 4000 milliseconds to complete a scan */
-#define HANDSHAKE_TIMEOUT_MS    (3000)
+#define SCAN_BSSID_LIST_LENGTH  ( 100 )
+#define SCAN_LONGEST_WAIT_TIME  ( 10000 )   /* Dual band devices take over 4000 milliseconds to complete a scan. In the associated case, this time could be doubled */
+#define HANDSHAKE_TIMEOUT_MS    ( 3000 )
+
+#define RRM_TIMEOUT             (4000)
 
 /******************************************************
  *                   Enumerations
@@ -64,6 +66,7 @@ typedef struct
 {
     wiced_scan_result_handler_t results_handler;
     void*                       user_data;
+    wiced_bool_t                is_pno_scan;
 } internal_scan_handler_t;
 
 /******************************************************
@@ -79,14 +82,16 @@ static void           link_up                   ( void );
 static void           link_down                 ( void );
 static void*          softap_event_handler      ( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/void* handler_user_data );
 static wiced_result_t wiced_wifi_init           ( void );
-
+static wiced_result_t wiced_wifi_scan_networks_ex( wiced_scan_result_handler_t results_handler, void* user_data, wiced_scan_type_t scan_type, wiced_ssid_t *ssid );
+static void           wiced_wifi_scan_cleanup( void );
 /******************************************************
  *               Variable Definitions
  ******************************************************/
 
 /* Link management variables */
 static const wwd_event_num_t        link_events[]           = { WLC_E_LINK, WLC_E_DEAUTH_IND, WLC_E_DISASSOC_IND, WLC_E_PSK_SUP, WLC_E_NONE };
-static const wwd_event_num_t        ap_client_events[]      = { WLC_E_DEAUTH_IND, WLC_E_DISASSOC_IND, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_NONE };
+static const wwd_event_num_t        ap_client_events[]      = { WLC_E_DEAUTH, WLC_E_DEAUTH_IND, WLC_E_DISASSOC, WLC_E_DISASSOC_IND, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND, WLC_E_NONE };
+static const wwd_event_num_t        rrm_events[]            =  { WLC_E_RRM, WLC_E_NONE };
 static wiced_bool_t                 WICED_DEEP_SLEEP_SAVED_VAR( wiced_wlan_initialised )  = WICED_FALSE;
 static wiced_bool_t                 WICED_DEEP_SLEEP_SAVED_VAR( wiced_sta_link_up )       = WICED_FALSE;
 static wiced_security_t             WICED_DEEP_SLEEP_SAVED_VAR( wiced_sta_security_type ) = WICED_SECURITY_UNKNOWN;
@@ -104,19 +109,29 @@ static wiced_wifi_softap_event_handler_t ap_event_handler;
 
 static wiced_country_code_t         WICED_DEEP_SLEEP_SAVED_VAR( country_code ) = WICED_DEFAULT_COUNTRY_CODE;
 
+static wiced_wifi_rrm_event_handler_t rrm_event_handler;
+
+static wiced_ssid_t*                wiced_wifi_pno_ssid     = NULL;
+static wiced_security_t             wiced_wifi_pno_security = WICED_SECURITY_UNKNOWN;
 /******************************************************
  *               Function Definitions
  ******************************************************/
 
 wiced_result_t wiced_init( void )
 {
+    wiced_result_t status = WICED_SUCCESS;
+
     WPRINT_WICED_INFO( ("\nStarting WICED v" WICED_VERSION "\n") );
 
     CHECK_RETURN( wiced_core_init( ) );
 
-    CHECK_RETURN( wiced_wlan_connectivity_init( ) );
+    status = wiced_wlan_connectivity_init( );
+    if ( status != WICED_SUCCESS )
+    {
+        wiced_core_deinit( );
+    }
 
-    return WICED_SUCCESS;
+    return status;
 }
 
 wiced_result_t wiced_resume_after_deep_sleep( void )
@@ -168,15 +183,19 @@ wiced_result_t wiced_wlan_connectivity_init( void )
 
     wiced_dct_read_unlock( wifi_config, WICED_FALSE );
 
-    result = (wiced_result_t) wwd_management_wifi_on( country_code );
+    result = ( wiced_result_t )wwd_management_wifi_on( country_code );
+
+    /* e.g. user requested an abort or other error */
     if ( result != WICED_SUCCESS )
     {
+        wiced_network_deinit( );
+
         WPRINT_NETWORK_ERROR( ("Error %d while starting WICED!\n", result) );
         return result;
     }
 
     /* Get wlan random to seed PRNG. Not all wlan firmware supports this feature. */
-    result = (wiced_result_t) wwd_wifi_get_iovar_value( IOVAR_STR_RAND, &wlan_rand, WWD_STA_INTERFACE );
+    result = ( wiced_result_t )wwd_wifi_get_iovar_value( IOVAR_STR_RAND, &wlan_rand, WWD_STA_INTERFACE );
     if ( result == WICED_SUCCESS )
     {
         wiced_crypto_add_entropy( &wlan_rand, sizeof( wlan_rand ) );
@@ -210,6 +229,8 @@ wiced_result_t wiced_wlan_connectivity_init( void )
     wiced_wlan_initialised = WICED_TRUE;
 
     ap_event_handler = NULL;
+
+    rrm_event_handler = NULL;
 
     return WICED_SUCCESS;
 }
@@ -320,6 +341,19 @@ wiced_result_t wiced_wifi_unregister_softap_event_handler( void )
     return (wiced_result_t) wwd_management_set_event_handler( ap_client_events, NULL, NULL, WWD_AP_INTERFACE );
 }
 
+
+wiced_result_t wiced_wifi_register_rrm_event_handler( wiced_wifi_rrm_event_handler_t event_handler )
+{
+    rrm_event_handler = event_handler;
+    return WICED_SUCCESS;
+}
+
+wiced_result_t wiced_wifi_unregister_rrm_event_handler( void  )
+{
+    rrm_event_handler = NULL;
+    return WICED_SUCCESS;
+}
+
 wiced_result_t wiced_enable_powersave( void )
 {
     wiced_result_t result;
@@ -414,7 +448,10 @@ wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t securit
     wiced_result_t      join_result = WICED_STA_JOIN_FAILED;
     wiced_scan_result_t temp_scan_result;
 
-    WPRINT_WICED_INFO(("Joining : %s\n", (char*)details->SSID.value));
+    char                ssid_name[SSID_NAME_SIZE + 1];
+    memset(ssid_name, 0, sizeof(ssid_name));
+    memcpy(ssid_name, details->SSID.value, details->SSID.length);
+    WPRINT_WICED_INFO(("Joining : %s\n", ssid_name));
 
     memcpy( &temp_scan_result, details, sizeof( *details ) );
 
@@ -431,6 +468,7 @@ wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t securit
         security = details->security;
         if (details->bss_type == WICED_BSS_TYPE_ADHOC)
         {
+            WPRINT_WICED_INFO(("%s: Network is ADHOC\n", __FUNCTION__));
             security |= IBSS_ENABLED;
         }
 
@@ -440,7 +478,7 @@ wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t securit
 
     if ( join_result == WICED_SUCCESS )
     {
-        WPRINT_WICED_INFO( ( "Successfully joined : %s\n", (char*)details->SSID.value ) );
+        WPRINT_WICED_INFO( ( "Successfully joined : %s\n", ssid_name) );
 
         wiced_sta_link_up       = WICED_TRUE;
         wiced_sta_security_type = details->security;
@@ -450,7 +488,7 @@ wiced_result_t wiced_join_ap_specific( wiced_ap_info_t* details, uint8_t securit
     }
     else
     {
-        WPRINT_WICED_INFO(("Failed to join: %s\n", (char*)details->SSID.value));
+        WPRINT_WICED_INFO(("Failed to join : %s\n", ssid_name));
     }
     return join_result;
 }
@@ -470,15 +508,18 @@ wiced_result_t wiced_leave_ap( wiced_interface_t interface )
 
 wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_handler, void* user_data )
 {
+    return wiced_wifi_scan_networks_ex( results_handler, user_data, WICED_SCAN_TYPE_ACTIVE, NULL );
+}
+
+static wiced_result_t wiced_wifi_scan_networks_ex( wiced_scan_result_handler_t results_handler, void* user_data, wiced_scan_type_t scan_type, wiced_ssid_t *ssid )
+{
     static internal_scan_handler_t scan_handler;
     wiced_result_t result;
-    const uint16_t chlist[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,0 };
-    const wiced_scan_extended_params_t extparam = { 5, 110, 110, 50 };
 
     wiced_assert("Bad args", results_handler != NULL);
 
     /* Initialise the semaphore that will prevent simultaneous access - cannot be a mutex, since
-     * we don't want to allow the same thread to start a new scan */
+       * we don't want to allow the same thread to start a new scan */
     result = wiced_rtos_get_semaphore( &scan_semaphore, SCAN_LONGEST_WAIT_TIME );
     if ( result != WICED_SUCCESS )
     {
@@ -505,6 +546,7 @@ wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_han
     /* Convert function pointer to object so it can be passed around */
     scan_handler.results_handler  = results_handler;
     scan_handler.user_data        = user_data;
+    scan_handler.is_pno_scan      = ( scan_type == WICED_SCAN_TYPE_PNO ) ? WICED_TRUE : WICED_FALSE;
 
     /* Initiate scan */
     scan_result_ptr = MALLOC_OBJECT("scan result", wiced_scan_handler_result_t);
@@ -516,12 +558,34 @@ wiced_result_t wiced_wifi_scan_networks( wiced_scan_result_handler_t results_han
     scan_result_ptr->status    = WICED_SCAN_INCOMPLETE;
     scan_result_ptr->user_data = user_data;
 
-    if ( wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_ANY, NULL, NULL, chlist, &extparam, wiced_scan_result_handler, (wiced_scan_result_t**) &scan_result_ptr, &scan_handler, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    if ( scan_type == WICED_SCAN_TYPE_PNO )
     {
-        goto error_with_result_ptr;
+        wiced_wifi_pno_ssid = malloc( sizeof( *wiced_wifi_pno_ssid ) );
+
+        if ( wiced_wifi_pno_ssid == NULL )
+        {
+            goto error_with_result_ptr;
+
+        }
+        wiced_wifi_pno_ssid->length = ssid->length;
+        memset( wiced_wifi_pno_ssid->value, 0, sizeof( wiced_wifi_pno_ssid->value ) );
+        memcpy( wiced_wifi_pno_ssid->value, ssid->value, ssid->length );
+    }
+
+    if ( wwd_wifi_scan( scan_type, WICED_BSS_TYPE_ANY, NULL, NULL, NULL, NULL, wiced_scan_result_handler, (wiced_scan_result_t**) &scan_result_ptr, &scan_handler, WWD_STA_INTERFACE ) != WWD_SUCCESS )
+    {
+        goto error_with_pno_ssid;
     }
 
     return WICED_SUCCESS;
+
+error_with_pno_ssid:
+    /* may be NULL if not pno scan */
+    if ( wiced_wifi_pno_ssid != NULL )
+    {
+        free( wiced_wifi_pno_ssid );
+        wiced_wifi_pno_ssid = NULL;
+    }
 
 error_with_result_ptr:
     free(scan_result_ptr);
@@ -926,13 +990,45 @@ static void* wiced_link_events_handler( const wwd_event_header_t* event_header, 
         case WLC_E_TX_STAT_ERROR:
         case WLC_E_BCMC_CREDIT_SUPPORT:
         case WLC_E_PSTA_PRIMARY_INTF_IND:
+        case WLC_E_RRM:
         case WLC_E_LAST:
         case WLC_E_FORCE_32_BIT:
+        case WLC_E_BT_WIFI_HANDOVER_REQ:
+        case WLC_E_PFN_BEST_BATCHING:
+        case WLC_E_SPW_TXINHIBIT:
+        case WLC_E_FBT_AUTH_REQ_IND:
+        case WLC_E_RSSI_LQM:
+        case WLC_E_PFN_GSCAN_FULL_RESULT:
+        case WLC_E_PFN_SWC:
+        case WLC_E_AUTHORIZED:
+        case WLC_E_PROBREQ_MSG_RX:
+        case WLC_E_RMC_EVENT:
+        case WLC_E_DPSTA_INTF_IND:
         default:
             wiced_assert( "Received event which was not registered\n", 0 != 0 );
             break;
     }
     return handler_user_data;
+}
+
+static void wiced_wifi_scan_cleanup( void )
+{
+    if ( scan_bssid_list != NULL )
+    {
+        malloc_transfer_to_curr_thread(scan_bssid_list);
+        free(scan_bssid_list);
+    }
+
+    if ( wiced_wifi_pno_ssid != NULL )
+    {
+        malloc_transfer_to_curr_thread( wiced_wifi_pno_ssid );
+        free( wiced_wifi_pno_ssid );
+    }
+
+    scan_bssid_list     = NULL;
+    off_channel_results = NULL;
+    wiced_wifi_pno_ssid = NULL;
+    wiced_rtos_set_semaphore(&scan_semaphore);
 }
 
 static void wiced_scan_result_handler( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status )
@@ -946,6 +1042,23 @@ static void wiced_scan_result_handler( wiced_scan_result_t** result_ptr, void* u
     if ( scan_result_ptr == NULL )
     {
         return;
+    }
+
+    current_result = (wiced_scan_handler_result_t*)(*result_ptr);
+
+    /* check and filter pno scan results, to ensure only desired ssids are passed back */
+    if ( scan_handler->is_pno_scan == WICED_TRUE )
+    {
+        /* if the result don't match our one and only ssid, then bail out and ignore */
+        if ( wiced_wifi_pno_ssid == NULL || wiced_wifi_pno_ssid->length != current_result->ap_details.SSID.length || memcmp(current_result->ap_details.SSID.value, wiced_wifi_pno_ssid->value, wiced_wifi_pno_ssid->length) != 0 )
+        {
+            return;
+        }
+        else
+        {
+            /* fill out the legit security, saved from ealier as FW doesn't supply currently */
+            current_result->ap_details.security = wiced_wifi_pno_security;
+        }
     }
 
     /* Check if scan is complete */
@@ -974,15 +1087,9 @@ static void wiced_scan_result_handler( wiced_scan_result_t** result_ptr, void* u
             free( scan_result_ptr );
             scan_result_ptr = NULL;
         }
-        malloc_transfer_to_curr_thread(scan_bssid_list);
-        free(scan_bssid_list);
-        scan_bssid_list     = NULL;
-        off_channel_results = NULL;
-        wiced_rtos_set_semaphore(&scan_semaphore);
+        wiced_wifi_scan_cleanup( );
         return;
     }
-
-    current_result = (wiced_scan_handler_result_t*)(*result_ptr);
 
     /* Check if the result is "on channel" */
     if ((*result_ptr)->on_channel == WICED_TRUE)
@@ -1038,6 +1145,7 @@ static void wiced_scan_result_handler( wiced_scan_result_t** result_ptr, void* u
     }
     else
     {
+
         /* Check if its already in the off-channel list */
         for ( result_iter = off_channel_results; result_iter != NULL ; result_iter = result_iter->next )
         {
@@ -1075,19 +1183,22 @@ static void* softap_event_handler( const wwd_event_header_t* event_header, const
 
     if ( ap_event_handler != NULL )
     {
-        if ( ( event_header->event_type == WLC_E_DEAUTH ) ||
-             ( event_header->event_type == WLC_E_DEAUTH_IND ) ||
-             ( event_header->event_type == WLC_E_DISASSOC ) ||
-             ( event_header->event_type == WLC_E_DISASSOC_IND ) )
+        if ( event_header->interface == WWD_AP_INTERFACE )
         {
-            event = WICED_AP_STA_LEAVE_EVENT;
-        }
-        else if ( event_header->event_type == WLC_E_ASSOC_IND || event_header->event_type == WLC_E_REASSOC_IND )
-        {
-            event = WICED_AP_STA_JOINED_EVENT;
-        }
+            if ( ( event_header->event_type == WLC_E_DEAUTH ) ||
+                 ( event_header->event_type == WLC_E_DEAUTH_IND ) ||
+                 ( event_header->event_type == WLC_E_DISASSOC ) ||
+                 ( event_header->event_type == WLC_E_DISASSOC_IND ) )
+            {
+                event = WICED_AP_STA_LEAVE_EVENT;
+            }
+            else if ( event_header->event_type == WLC_E_ASSOC_IND || event_header->event_type == WLC_E_REASSOC_IND )
+            {
+                event = WICED_AP_STA_JOINED_EVENT;
+            }
 
-        ap_event_handler( event, &event_header->addr );
+            ap_event_handler( event, &event_header->addr );
+        }
     }
 
     return NULL;
@@ -1095,7 +1206,6 @@ static void* softap_event_handler( const wwd_event_header_t* event_header, const
 
 wiced_result_t wiced_wifi_find_ap( const char* ssid, wiced_scan_result_t* ap_info, const uint16_t* optional_channel_list)
 {
-    const wiced_scan_extended_params_t extended_params = { 5, 110, 110, 50 };
     wiced_result_t  result;
     wiced_ssid_t    ssid_info;
     wiced_semaphore_t semaphore;
@@ -1113,17 +1223,17 @@ wiced_result_t wiced_wifi_find_ap( const char* ssid, wiced_scan_result_t* ap_inf
     memcpy( ssid_info.value, ssid, ssid_info.length );
 
     /* Initiate the scan */
-    result = wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_ANY, &ssid_info, NULL, optional_channel_list, &extended_params, find_ap_scan_handler, (wiced_scan_result_t**) &ap_info, &semaphore, WWD_STA_INTERFACE );
+    result = ( wiced_result_t ) wwd_wifi_scan( WICED_SCAN_TYPE_ACTIVE, WICED_BSS_TYPE_ANY, &ssid_info, NULL, optional_channel_list, NULL, find_ap_scan_handler, (wiced_scan_result_t**) &ap_info, &semaphore, WWD_STA_INTERFACE );
     if ( result != WICED_SUCCESS )
     {
         goto exit;
     }
 
-    result = wiced_rtos_get_semaphore( &semaphore, 4000 );
+    result = wiced_rtos_get_semaphore( &semaphore, SCAN_LONGEST_WAIT_TIME );
 
     if ( ap_info->channel == 0 )
     {
-        result = WWD_ACCESS_POINT_NOT_FOUND;
+        result = WICED_WWD_ACCESS_POINT_NOT_FOUND;
     }
 
 exit:
@@ -1131,6 +1241,29 @@ exit:
     memset(&semaphore, 0, sizeof(semaphore));
 
     return result;
+}
+
+wiced_result_t wiced_wifi_pno_start( wiced_ssid_t *ssid, wiced_security_t security, wiced_scan_result_handler_t handler, void *user_data )
+{
+    wiced_result_t  result;
+
+    /* add the network */
+    CHECK_RETURN( wwd_wifi_pno_add_network( ssid, security ) );
+    wiced_wifi_pno_security = security;
+    /* Initiate the scan */
+    result = wiced_wifi_scan_networks_ex( handler, user_data, WICED_SCAN_TYPE_PNO, ssid );
+    return result;
+}
+
+wiced_result_t wiced_wifi_pno_stop( void )
+{
+    /* bring pno down and clear out any networks */
+    CHECK_RETURN( wwd_wifi_pno_clear( ) );
+
+    /* clean up any memory which may outstanding */
+    wiced_wifi_scan_cleanup( );
+
+    return WICED_SUCCESS;
 }
 
 static void find_ap_scan_handler( wiced_scan_result_t** result_ptr, void* user_data, wiced_scan_status_t status )
@@ -1144,4 +1277,55 @@ static void find_ap_scan_handler( wiced_scan_result_t** result_ptr, void* user_d
         wiced_rtos_set_semaphore( semaphore );
         return;
     }
+}
+
+/* This is callback function to handle the events
+ * @param1: wwd_event_header_t
+ * @param2: event_data
+ * @param3: void* (user_data: semaphore)
+ */
+void* wiced_rrm_report_handler( const wwd_event_header_t* event_header, const uint8_t* event_data, /*@returned@*/ void* handler_user_data )
+{
+
+    wiced_semaphore_t* semaphore = (wiced_semaphore_t*)handler_user_data;
+
+   if (rrm_event_handler != NULL ) {
+         rrm_event_handler(event_header, event_data );
+    }
+
+    wiced_rtos_set_semaphore( semaphore );
+    return handler_user_data;
+}
+
+/* This function send Radio Resource Request by calling WWD API to send the request
+ * maintains the semaphore so that only one call is sent and response is received in the
+ * callback function
+ * @param1: wwd_rrm_report_type_t
+ * @param2: wwd_event_handler_t
+ * @param3: radio resource management request structure
+ * @param4: wwd_rrm_report_t**
+ * @param5: wwd_interface_t
+ * @return: wwd_result_t
+ */
+wwd_result_t wiced_wifi_rrm_request(  wwd_rrm_report_type_t                      report_type,
+                                      wwd_event_handler_t                        callback,
+                                      void*                                      rrm_req,
+                                      wwd_rrm_report_t**                         report_ptr,
+                                      wwd_interface_t                            interface
+                                     )
+{
+
+    wwd_result_t result = WWD_SUCCESS;
+    wiced_semaphore_t rrm_req_complete_semaphore;
+
+    wiced_rtos_init_semaphore( &rrm_req_complete_semaphore );
+
+    wwd_wifi_rrm_request( report_type, callback,  rrm_req, report_ptr, &rrm_req_complete_semaphore, interface);
+
+    wiced_rtos_get_semaphore(&rrm_req_complete_semaphore, RRM_TIMEOUT);
+
+    wiced_rtos_deinit_semaphore( &rrm_req_complete_semaphore );
+    memset(&rrm_req_complete_semaphore, 0, sizeof(rrm_req_complete_semaphore));
+
+    return result;
 }

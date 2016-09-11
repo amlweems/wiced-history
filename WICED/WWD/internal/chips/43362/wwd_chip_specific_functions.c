@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,6 +26,10 @@
 /******************************************************
  *                    Constants
  ******************************************************/
+#define PLATFORM_WLAN_RAM_BASE  (0x0)
+#define PLATFORM_WLAN_RAM_SIZE  (CHIP_RAM_SIZE)
+#define WLAN_SHARED_ADDR        (PLATFORM_WLAN_RAM_BASE + PLATFORM_WLAN_RAM_SIZE - 4)
+
 #define WLAN_BUS_UP_ATTEMPTS  (1000)
 
 /******************************************************
@@ -55,9 +59,11 @@ static wiced_bool_t bus_is_up               = WICED_FALSE;
 
 wwd_result_t wwd_wifi_read_wlan_log( char* buffer, uint32_t buffer_size )
 {
-    UNUSED_PARAMETER(buffer);
-    UNUSED_PARAMETER(buffer_size);
-    return WWD_UNSUPPORTED;
+    wwd_result_t result;
+
+    result = wwd_wifi_read_wlan_log_unsafe( WLAN_SHARED_ADDR, buffer, buffer_size );
+
+    return result;
 }
 
 wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t* country_code )
@@ -78,7 +84,7 @@ wwd_result_t wwd_chip_specific_init( void )
     return WWD_SUCCESS;
 }
 
-wwd_result_t wwd_disable_sram3_remap( void )
+wwd_result_t wwd_chip_specific_socsram_init( void )
 {
     return WWD_SUCCESS;
 }

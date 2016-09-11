@@ -1,5 +1,5 @@
 /**
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -66,8 +66,12 @@ extern const wiced_bt_cfg_buf_pool_t    wiced_bt_cfg_buf_pools[];
 static char                             bt_device_name[BT_DEVICE_NAME_MAX_LENGTH + 1] = { 0 };
 wiced_bool_t                            bt_initialised           = WICED_FALSE;
 static wiced_bt_device_address_t        bt_address               = { 0 };
+static wiced_bt_device_address_t        bt_override_address      = { 0 };
+static wiced_bt_device_address_t        bt_override_address_mask = { 0 };
+static wiced_bool_t                     bt_address_is_overriden  = WICED_FALSE;
 
 extern wiced_result_t wiced_bt_smartbridge_bond_info_update( wiced_bt_device_link_keys_t paired_device_keys );
+static wiced_result_t bt_management_override_device_address(void);
 
 /******************************************************
  *               Function Definitions
@@ -127,9 +131,11 @@ wiced_result_t wiced_bt_deinit( void )
 
 wiced_result_t wiced_bt_init_address( const wiced_bt_device_address_t* address, const wiced_bt_device_address_t* mask )
 {
-    UNUSED_PARAMETER(address);
-    UNUSED_PARAMETER(mask);
-    return WICED_BT_UNSUPPORTED;
+    memcpy(&bt_override_address, address, sizeof(wiced_bt_device_address_t));
+    memcpy(&bt_override_address_mask, mask, sizeof(wiced_bt_device_address_t));
+    bt_address_is_overriden     = WICED_TRUE;
+
+    return WICED_BT_SUCCESS;
 }
 
 wiced_result_t wiced_bt_start_mfgtest_mode( const wiced_uart_config_t* config )
@@ -188,7 +194,6 @@ wiced_bool_t wiced_bt_device_is_discoverable( void )
 static wiced_bt_dev_status_t smartbridge_bt_stack_management_callback( wiced_bt_management_evt_t event, wiced_bt_management_evt_data_t *p_event_data )
 {
     wiced_bt_dev_status_t status = WICED_BT_SUCCESS;
-    BD_ADDR address;
 
     switch(event)
     {
@@ -197,8 +202,8 @@ static wiced_bt_dev_status_t smartbridge_bt_stack_management_callback( wiced_bt_
             /* Initialize GATT REST API Server once Bluetooth controller and host stack is enabled */
             if ( ( status = p_event_data->enabled.status ) == WICED_BT_SUCCESS )
             {
-                wiced_bt_dev_read_local_addr(address);
-                WPRINT_LIB_INFO(( "[SmartBridge] Local Bluetooth Address: [%02X:%02X:%02X:%02X:%02X:%02X]\n", address[0], address[1], address[2], address[3], address[4], address[5]) );
+                bt_management_override_device_address();
+
                 /* Register for GATT event notifications */
                 wiced_bt_gatt_register( smartbridge_gatt_callback );
                 bt_initialised = WICED_TRUE;
@@ -305,4 +310,31 @@ static wiced_bt_dev_status_t smartbridge_bt_stack_management_callback( wiced_bt_
     }
 
     return status;
+}
+
+static wiced_result_t bt_management_override_device_address( void )
+{
+    wiced_bt_device_address_t   new_address;
+    /* If application decides to override the address, read the default address and override */
+    if ( bt_address_is_overriden == WICED_FALSE )
+    {
+        /* No override */
+        return WICED_BT_SUCCESS;
+    }
+    wiced_bt_dev_read_local_addr( bt_address );
+
+    WPRINT_LIB_INFO(( "[SmartBridge] Local Bluetooth Address: [%02X:%02X:%02X:%02X:%02X:%02X]\n", bt_address[0], bt_address[1], bt_address[2], bt_address[3], bt_address[4], bt_address[5]) );
+    /* Override address */
+    new_address[0] = ( bt_address[0] & ~( bt_override_address_mask[0] ) ) | ( bt_override_address[0] & bt_override_address_mask[0] );
+    new_address[1] = ( bt_address[1] & ~( bt_override_address_mask[1] ) ) | ( bt_override_address[1] & bt_override_address_mask[1] );
+    new_address[2] = ( bt_address[2] & ~( bt_override_address_mask[2] ) ) | ( bt_override_address[2] & bt_override_address_mask[2] );
+    new_address[3] = ( bt_address[3] & ~( bt_override_address_mask[3] ) ) | ( bt_override_address[3] & bt_override_address_mask[3] );
+    new_address[4] = ( bt_address[4] & ~( bt_override_address_mask[4] ) ) | ( bt_override_address[4] & bt_override_address_mask[4] );
+    new_address[5] = ( bt_address[5] & ~( bt_override_address_mask[5] ) ) | ( bt_override_address[5] & bt_override_address_mask[5] );
+
+    wiced_bt_set_local_bdaddr( new_address );
+    wiced_bt_dev_read_local_addr( new_address );
+    WPRINT_LIB_INFO(( "[SmartBridge] New Bluetooth Address: [%02X:%02X:%02X:%02X:%02X:%02X]\n", new_address[0], new_address[1], new_address[2], new_address[3], new_address[4], new_address[5]) );
+
+    return WICED_BT_SUCCESS;
 }

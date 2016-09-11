@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include "buildcfg.h"
 #include "wiced_bt_cfg.h"
 
 /******************************************************
@@ -61,7 +60,6 @@ extern "C" {
  * @return    WICED_BT_SUCCESS : on success;
  *            WICED_BT_ERROR   : if an error occurred
  */
-
 wiced_result_t wiced_bt_stack_init(wiced_bt_management_cback_t *p_bt_management_cback,
                                    const wiced_bt_cfg_settings_t     *p_bt_cfg_settings,
                                    const wiced_bt_cfg_buf_pool_t     wiced_bt_cfg_buf_pools[WICED_BT_CFG_NUM_BUF_POOLS]);
@@ -69,12 +67,13 @@ wiced_result_t wiced_bt_stack_init(wiced_bt_management_cback_t *p_bt_management_
 /**
  * Function         wiced_bt_stack_deinit
  *
- *                  De-initialize the Bluetooth controller and stack.
+ *                  This function blocks until all de-initialisation procedures are complete.
+ *                  It is recommended that the application disconnect any outstanding connections prior to invoking this function.
  *
  * @return    WICED_BT_SUCCESS : on success;
  *            WICED_BT_ERROR   : if an error occurred
  */
-wiced_result_t wiced_bt_stack_deinit(void);
+wiced_result_t wiced_bt_stack_deinit( void );
 
 /**@} wicedbt_Framework */
 

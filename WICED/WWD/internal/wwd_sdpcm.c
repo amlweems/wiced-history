@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -51,6 +51,7 @@
 #endif
 
 #define WWD_IOCTL_TIMEOUT_MS         (400)
+#define WWD_IOCTL_MAX_TX_PKT_LEN     ( 1500 )
 
 
 #define BDC_PROTO_VER                  (2)      /** Version number of BDC header */
@@ -358,8 +359,6 @@ static wwd_interface_t wwd_wifi_get_source_interface      ( uint8_t flags2 );
 
 wwd_result_t wwd_sdpcm_init( void )
 {
-    uint16_t i;
-
     /* Create the mutex protecting the packet send queue */
     if ( host_rtos_init_semaphore( &wwd_sdpcm_ioctl_mutex ) != WWD_SUCCESS )
     {
@@ -393,12 +392,7 @@ wwd_result_t wwd_sdpcm_init( void )
     wwd_sdpcm_send_queue_tail = NULL;
 
     /* Initialise the list of event handler functions */
-    for ( i = 0; i < (uint16_t) WWD_EVENT_HANDLER_LIST_SIZE; i++ )
-    {
-        wwd_sdpcm_event_list[i].events = NULL;
-        wwd_sdpcm_event_list[i].handler = NULL;
-        wwd_sdpcm_event_list[i].handler_user_data = NULL;
-    }
+    memset( wwd_sdpcm_event_list, 0, sizeof(wwd_sdpcm_event_list) );
 
     wwd_sdpcm_highest_rx_tos = 0;
     wwd_sdpcm_packet_transmit_sequence_number = 0;
@@ -515,7 +509,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
     packet->bdc_header.flags    = 0;
     packet->bdc_header.flags    = (uint8_t) ( BDC_PROTO_VER << BDC_FLAG_VER_SHIFT );
     /* If it's an IPv4 packet set the BDC header priority based on the DSCP field */
-    if (((ether_type == WICED_ETHERTYPE_IPv4) || (ether_type == WICED_ETHERTYPE_DOT1AS)) && (dscp != NULL))
+    if ( ((ether_type == WICED_ETHERTYPE_IPv4) || (ether_type == WICED_ETHERTYPE_DOT1AS)) && (dscp != NULL) )
     {
         if (*dscp != 0) /* If it's equal 0 then it's best effort traffic and nothing needs to be done */
         {
@@ -523,9 +517,7 @@ void wwd_network_send_ethernet_data( /*@only@*/ wiced_buffer_t buffer, wwd_inter
         }
     }
 
-    /* If it's for the STA interface then re-map priority to the priority allowed by the AP,
-     * regardless of whether it's an IPv4 packet
-     */
+    /* If STA interface, re-map prio to the prio allowed by the AP, regardless of whether it's an IPv4 packet */
     if ( interface == WWD_STA_INTERFACE )
     {
         packet->bdc_header.priority = wwd_tos_map[priority];
@@ -609,7 +601,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
     /* Check whether the packet is big enough to contain the SDPCM header (or) it's too big to handle */
     if ( ( size < (uint16_t) SDPCM_HEADER_LEN ) || ( size > (uint16_t) WICED_LINK_MTU ) )
     {
-        wiced_verify( "Packet size invalid", 0 == 1 );
+        wiced_minor_assert( "Packet size invalid", 0 == 1 );
         WPRINT_WWD_DEBUG(("Received a packet that is too small to contain anything useful (or) too big. Packet Size = [%d]\n", size));
         host_buffer_release( buffer, WWD_NETWORK_RX );
         return;
@@ -716,7 +708,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
 
                     /* Send packet to bottom of network stack */
                     host_network_process_ethernet_data( buffer, wwd_wifi_get_source_interface( bdc_header->flags2 ) );
-                    }
+                }
             }
             break;
 
@@ -791,6 +783,9 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
                     wwd_event->reason = (wwd_event_reason_t) ( (int)wwd_event->reason + WLC_E_DOT11_RC_REASON_OFFSET );
                 }
 
+                /* do any needed debug logging of event */
+                wwd_log_event( wwd_event, (uint8_t*) DATA_AFTER_HEADER( event ) );
+
                 for ( i = 0; i < (uint16_t) WWD_EVENT_HANDLER_LIST_SIZE; i++ )
                 {
                     if ( wwd_sdpcm_event_list[i].events != NULL )
@@ -817,7 +812,7 @@ void wwd_sdpcm_process_rx_packet( /*@only@*/ wiced_buffer_t buffer )
             break;
 
         default:
-            wiced_verify("SDPCM packet of unknown channel received - dropping packet", 0 != 0);
+            wiced_minor_assert("SDPCM packet of unknown channel received - dropping packet", 0 != 0);
             host_buffer_release( buffer, WWD_NETWORK_RX );
             break;
     }
@@ -892,13 +887,14 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
     send_packet->cdc_header.flags  = ( ( (uint32_t) ++wwd_sdpcm_requested_ioctl_id << CDCF_IOC_ID_SHIFT ) & CDCF_IOC_ID_MASK ) | type | bss_index << CDCF_IOC_IF_SHIFT;
     send_packet->cdc_header.status = 0;
 
-    /* Manufacturing test can receive big buffers, but sending big buffers causes a wlan firmware error */
-    if ( host_buffer_get_current_piece_size( send_buffer_hnd ) > 1500 )
-    {
-        host_buffer_set_size( send_buffer_hnd, 1500 );
-    }
-
     WWD_LOG( ( "Wcd:> IOCTL pkt 0x%08lX: cmd %d, len %d\n", (unsigned long)send_buffer_hnd, (int)command, (int)data_length ) );
+
+    /* Manufacturing test can receive big buffers, but sending big buffers causes a wlan firmware error */
+    /* Even though data portion needs to be truncated, cdc_header should have the actual length of the ioctl packet */
+    if ( host_buffer_get_current_piece_size( send_buffer_hnd ) > WWD_IOCTL_MAX_TX_PKT_LEN )
+    {
+        host_buffer_set_size( send_buffer_hnd, WWD_IOCTL_MAX_TX_PKT_LEN );
+    }
 
     /* Store the length of the data and the IO control header and pass "down" */
     wwd_sdpcm_send_common( send_buffer_hnd, CONTROL_HEADER );
@@ -945,7 +941,7 @@ wwd_result_t wwd_sdpcm_send_ioctl( sdpcm_command_type_t type, uint32_t command, 
             host_buffer_release( *response_buffer_hnd, WWD_NETWORK_RX );
             *response_buffer_hnd = NULL;
         }
-        wiced_verify("IOCTL failed\n", 0 != 0 );
+        wiced_minor_assert("IOCTL failed\n", 0 != 0 );
         return retval;
     }
 
@@ -1258,9 +1254,9 @@ static void wwd_sdpcm_send_common( /*@only@*/ wiced_buffer_t buffer, sdpcm_heade
 
 #ifdef SUPPORT_BUFFER_CHAINING
     wiced_buffer_t tmp_buff;
-    while ( NULL != (tmp_buff = host_buffer_get_next_piece( tmp_buff )
+    while ( NULL != ( tmp_buff = host_buffer_get_next_piece( tmp_buff ) ) )
     {
-        size += host_buffer_get_current_piece_size( tmp_buff )
+        size += host_buffer_get_current_piece_size( tmp_buff );
     }
 #endif /* ifdef SUPPORT_BUFFER_CHAINING */
 
@@ -1331,33 +1327,23 @@ static void wwd_sdpcm_set_next_buffer_in_queue( wiced_buffer_t buffer, wiced_buf
  * @return wmm_qos : WMM priority
  *
  */
+static const uint8_t dscp_to_wmm_qos[] =
+                                    { 0, 0, 0, 0, 0, 0, 0, 0,   /* 0  - 7 */
+                                      1, 1, 1, 1, 1, 1, 1,      /* 8  - 14 */
+                                      1, 1, 1, 1, 1, 1, 1,      /* 15 - 21 */
+                                      1, 1, 0, 0, 0, 0, 0,      /* 22 - 28 */
+                                      0, 0, 0, 5, 5, 5, 5,      /* 29 - 35 */
+                                      5, 5, 5, 5, 5, 5, 5,      /* 36 - 42 */
+                                      5, 5, 5, 5, 5, 7, 7,      /* 43 - 49 */
+                                      7, 7, 7, 7, 7, 7, 7,      /* 50 - 56 */
+                                      7, 7, 7, 7, 7, 7, 7,      /* 57 - 63 */
+                                    };
+
 static uint8_t wwd_map_dscp_to_priority( uint8_t val )
 {
-    uint8_t wmm_qos = 0;
-    uint8_t dscp_val = (uint8_t)(val >> 2); /* DSCP field is the first 6 bits of the second byte of an IPv4 header */
+    uint8_t dscp_val = (uint8_t)(val >> 2); /* DSCP field is the high 6 bits of the second byte of an IPv4 header */
 
-    if ( dscp_val < 8 )        /* Best Effort traffic */
-    {
-        wmm_qos = 0;
-    }
-    else if ( dscp_val < 24 ) /* Background traffic */
-    {
-        wmm_qos = 1;
-    }
-    else if ( dscp_val < 32 ) /* Best Effort traffic again */
-    {
-        wmm_qos = 0;
-    }
-    else if ( dscp_val < 48 ) /* Video traffic */
-    {
-        wmm_qos = 5;
-    }
-    else if ( dscp_val < 64 ) /* Voice traffic */
-    {
-        wmm_qos = 7;
-    }
-
-    return wmm_qos;
+    return dscp_to_wmm_qos[dscp_val];
 }
 
 static wwd_interface_t wwd_wifi_get_source_interface( uint8_t flags2 )

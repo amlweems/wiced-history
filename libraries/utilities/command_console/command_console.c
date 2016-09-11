@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -30,7 +30,7 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
-#define MAX_PARAMS             (16)
+#define MAX_PARAMS             (32)
 #define MAX_LOOP_CMDS          (16)
 #define MAX_LOOP_LINE_LENGTH   (128)
 #define MAX_NUM_COMMAND_TABLE  (8)
@@ -348,9 +348,11 @@ void console_thread_func( uint32_t arg )
     uint32_t       expected_transfer_size;
 
     /* turn off buffers, so IO occurs immediately */
+#ifdef _IONBF
     setvbuf( stdin, NULL, _IONBF, 0 );
     setvbuf( stdout, NULL, _IONBF, 0 );
     setvbuf( stderr, NULL, _IONBF, 0 );
+#endif
 
     while ( 1 )
     {
@@ -374,15 +376,18 @@ void console_thread_func( uint32_t arg )
 wiced_result_t command_console_init( wiced_uart_t uart, uint32_t line_len, char* buffer, uint32_t history_len, char* history_buffer_ptr, const char* delimiter_string )
 {
     wiced_result_t result;
-    UNUSED_PARAMETER(result);
+
+    if ( ( buffer != NULL ) && ( line_len != 0 ) )
+    {
+        buffer[0] = '\0';
+    }
 
     cons.uart = uart;
 
     cons.command_table_count = 0;
-    cons.console_line_len   = line_len;
+    cons.console_line_len = line_len;
     cons.console_buffer = buffer;
 
-    cons.console_buffer[0] = 0;
     cons.console_cursor_position = 0;
     cons.console_current_line = 0;
     cons.console_in_esc_seq = WICED_FALSE;
@@ -400,8 +405,12 @@ wiced_result_t command_console_init( wiced_uart_t uart, uint32_t line_len, char*
 
     console_add_cmd_table( commands );
 
+    if ( uart == WICED_UART_MAX )
+    {
+        return WICED_SUCCESS;
+    }
 
-    if( uart != STDIO_UART )
+    if ( uart != STDIO_UART )
     {
         /* Init uart the same as stdio uart configuration */
         ring_buffer_init( (wiced_ring_buffer_t*) &cons.console_rx_ring_buffer, (uint8_t*) console_rx_ring_data, sizeof(console_rx_ring_data) );
@@ -412,35 +421,43 @@ wiced_result_t command_console_init( wiced_uart_t uart, uint32_t line_len, char*
         }
     }
 
-    wiced_rtos_init_semaphore(&cons.console_quit_semaphore);
+    wiced_rtos_init_semaphore( &cons.console_quit_semaphore );
 
-    send_str(cons.console_prompt_string);
+    send_str( cons.console_prompt_string );
 
     /* create a console thread */
-    result = wiced_rtos_create_thread( &cons.console_thread, WICED_DEFAULT_LIBRARY_PRIORITY, "console", console_thread_func, CONSOLE_THREAD_STACK_SIZE, NULL);
+    result = wiced_rtos_create_thread( &cons.console_thread, WICED_DEFAULT_LIBRARY_PRIORITY, "console", console_thread_func, CONSOLE_THREAD_STACK_SIZE, NULL );
 
     return result;
-
 }
 
 wiced_result_t command_console_deinit(void)
 {
     wiced_result_t result;
+
     cons.quit = WICED_TRUE;
 
+    if ( cons.uart == WICED_UART_MAX )
+    {
+        return WICED_SUCCESS;
+    }
+
     /* Wait on a semaphore till the console thread is ready to quit */
-    result = wiced_rtos_get_semaphore(&cons.console_quit_semaphore, 1000);
-    if( result != WICED_SUCCESS )
+    result = wiced_rtos_get_semaphore( &cons.console_quit_semaphore, 1000 );
+    if ( result != WICED_SUCCESS )
     {
         return result;
     }
-    wiced_rtos_thread_join(&cons.console_thread);
+    wiced_rtos_thread_join( &cons.console_thread );
     result = wiced_rtos_delete_thread( &cons.console_thread);
-    wiced_rtos_deinit_semaphore(&cons.console_quit_semaphore);
+
+    wiced_rtos_deinit_semaphore( &cons.console_quit_semaphore );
+
     if( cons.uart != STDIO_UART )
     {
         wiced_uart_deinit(cons.uart);
     }
+
     return result;
 }
 
@@ -1094,7 +1111,7 @@ int loop_command( const char * line )
 
     while ( (token = strtok( NULL, ";" )) )
     {
-        strcpy( cmdline[numcmds], token );
+        strlcpy( cmdline[numcmds], token, MAX_LOOP_LINE_LENGTH );
         numcmds++;
     }
 

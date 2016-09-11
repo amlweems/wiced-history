@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -32,8 +32,8 @@ extern "C" {
  * set of default values appropriate for initialization of audio_pll_tuner_init_params_t
  */
 
-#define AUDIO_PLL_TUNER_DEFAULT_ADJ_PPM_MAX                    (+2500.0f)
-#define AUDIO_PLL_TUNER_DEFAULT_ADJ_PPM_MIN                    (-2500.0f)
+#define AUDIO_PLL_TUNER_DEFAULT_ADJ_PPM_MAX                    (+2000.0f)
+#define AUDIO_PLL_TUNER_DEFAULT_ADJ_PPM_MIN                    (-2000.0f)
 #define AUDIO_PLL_TUNER_DEFAULT_ADJ_RATE_PPM_PER_MSEC          (2.0f)
 #define AUDIO_PLL_TUNER_DEFAULT_ADJ_ATTACK_RATE                (0.020f)
 #define AUDIO_PLL_TUNER_DEFAULT_ADJ_DECAY_RATE                 (0.015f)
@@ -45,6 +45,13 @@ extern "C" {
  *                   Enumerations
  ******************************************************/
 
+typedef enum
+{
+    AUDIO_PLL_TUNER_TIME_UNIT_UNKNOWN          = -1,
+    AUDIO_PLL_TUNER_TIME_UNIT_NANOSECONDS      =  0,
+    AUDIO_PLL_TUNER_TIME_UNIT_PART_PER_BILLION =  1,
+} audio_pll_tuner_time_unit_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -53,8 +60,10 @@ typedef struct audio_pll_tuner_s *audio_pll_tuner_ref;
 
 typedef struct
 {
-    uint64_t ts_reference;
-    uint64_t ts_audio_timer;
+    uint64_t                    ts_reference;
+    uint64_t                    ts_audio_timer;
+    uint32_t                    payload_size;
+    audio_pll_tuner_time_unit_t ts_audio_timer_unit;
 } audio_pll_tuner_timestamp_t;
 
 typedef wiced_result_t (*audio_pll_tuner_start_timer_cb_t)       (uint32_t audio_sample_count,     void *user_context);

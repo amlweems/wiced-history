@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -63,6 +63,8 @@ Porting Notes
 #define SPI_NO_DMA             ( 0 << 2 )
 #define SPI_MSB_FIRST          ( 1 << 3 )
 #define SPI_LSB_FIRST          ( 0 << 3 )
+#define SPI_CS_ACTIVE_HIGH     ( 1 << 4 )
+#define SPI_CS_ACTIVE_LOW      ( 0 << 4 )
 
 /* I2C flags constants */
 #define I2C_DEVICE_DMA_MASK_POSN ( 0 )
@@ -78,9 +80,9 @@ Porting Notes
  */
 typedef enum
 {
+    INPUT_HIGH_IMPEDANCE,      /* Input - must always be driven, either actively or by an external pullup resistor */
     INPUT_PULL_UP,             /* Input with an internal pull-up resistor - use with devices that actively drive the signal low - e.g. button connected to ground */
     INPUT_PULL_DOWN,           /* Input with an internal pull-down resistor - use with devices that actively drive the signal high - e.g. button connected to a power rail */
-    INPUT_HIGH_IMPEDANCE,      /* Input - must always be driven, either actively or by an external pullup resistor */
     OUTPUT_PUSH_PULL,          /* Output actively driven high and actively driven low - must not be connected to other active outputs - e.g. LED output */
     OUTPUT_OPEN_DRAIN_NO_PULL, /* Output actively driven low but is high-impedance when set high - can be connected to other open-drain/open-collector outputs. Needs an external pull-up resistor */
     OUTPUT_OPEN_DRAIN_PULL_UP, /* Output actively driven low and is pulled high with an internal resistor when set high - can be connected to other open-drain/open-collector outputs. */
@@ -498,6 +500,21 @@ platform_result_t platform_spi_transmit( const platform_spi_t* spi, const platfo
  * @return @ref platform_result_t
  */
 platform_result_t platform_spi_transfer( const platform_spi_t* spi, const platform_spi_config_t* config, const platform_spi_message_segment_t* segments, uint16_t number_of_segments );
+
+/**
+ * Transfer raw data over the specified SPI interface.
+ * No prior setup (toggle chip-select, etc.) is done.
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_spi_transfer_nosetup( const platform_spi_t* spi, const platform_spi_config_t* config, const uint8_t* send_ptr, uint8_t* recv_ptr, uint32_t length );
+
+/**
+ * Toggle chip-select for the specified SPI interface.
+ *
+ * @return @ref platform_result_t
+ */
+platform_result_t platform_spi_chip_select_toggle( const platform_spi_t* spi, const platform_spi_config_t* config, wiced_bool_t activate );
 
 
 /** Initialises a SPI slave interface

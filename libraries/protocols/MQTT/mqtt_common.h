@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -124,13 +124,17 @@ typedef struct wiced_mqtt_pkt_connect_s
     uint8_t*    client_id;                                      /* Client ID */
     uint8_t*    username;                                       /* User name to connect to Broker */
     uint8_t*    password;                                       /* Password to connect to Broker */
+    uint8_t*    peer_cn;
 } wiced_mqtt_pkt_connect_t;
 
 typedef struct wiced_mqtt_security_s
 {
-    const char* ca_cert;                                        /* CA certificate, common between client and MQTT Broker */
-    const char* cert;                                           /* Client certificate in PEM format */
-    const char* key;                                            /* Client private key */
+     char*      ca_cert;                                        /* CA certificate, common between client and MQTT Broker */
+     uint32_t   ca_cert_len;                                    /* CA certificate length */
+     char*      cert;                                           /* Client certificate in PEM format */
+     uint32_t   cert_len;                                       /* Client certificate length */
+     char*      key;                                            /* Client private key */
+     uint32_t   key_len;                                        /* Client private key length */
 } wiced_mqtt_security_t;
 
 /** Call-back function for MQTT events

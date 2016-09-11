@@ -1,0 +1,92 @@
+#
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+# All Rights Reserved.
+#
+# This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+# the contents of this file may not be disclosed to third parties, copied
+# or duplicated in any form, in whole or in part, without the prior
+# written permission of Broadcom Corporation.
+#
+############################################################################
+# arch/arm/bcm4390x/Make.defs
+#
+#   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+#   Author: Gregory Nutt <gnutt@nuttx.org>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in
+#    the documentation and/or other materials provided with the
+#    distribution.
+# 3. Neither the name Gregory Nutt nor the names of its contributors may be
+#    used to endorse or promote products derived from this software
+#    without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+############################################################################
+
+BCM4390X_WWD_STUBS := 1
+
+CHIP_CSRCS += bcm4390x_bringup.c
+CHIP_CSRCS += bcm4390x_init.c
+CHIP_CSRCS += bcm4390x_platform.c
+CHIP_CSRCS += bcm4390x_irq.c
+CHIP_CSRCS += bcm4390x_watchdog.c
+ifeq ($(CONFIG_SERIAL),y)
+CHIP_CSRCS += bcm4390x_serial.c
+endif
+ifeq ($(CONFIG_PWM),y)
+CHIP_CSRCS += bcm4390x_pwm.c
+endif
+ifeq ($(CONFIG_NET),y)
+CHIP_CSRCS += bcm4390x_network.c
+ifeq ($(CONFIG_BCM4390X_WWD),y)
+CHIP_CSRCS += bcm4390x_wwd.c bcm4390x_wwd_wiced.c
+BCM4390X_WWD_STUBS := 0
+endif
+endif
+ifeq ($(BCM4390X_WWD_STUBS),1)
+CHIP_CSRCS += bcm4390x_wwd_stubs.c
+endif
+ifeq ($(CONFIG_SPI),y)
+CHIP_CSRCS += bcm4390x_spi.c
+endif
+ifeq ($(CONFIG_I2C),y)
+CHIP_CSRCS += bcm4390x_i2c.c
+endif
+ifeq ($(CONFIG_AUDIO),y)
+CHIP_CSRCS += bcm4390x_audio.c
+endif
+
+CHIP_CSRCS += arm_initialstate.c arm_unblocktask.c arm_blocktask.c
+CHIP_CSRCS += arm_releasepending.c arm_reprioritizertr.c arm_copyfullstate.c
+CHIP_CSRCS += arm_schedulesigaction.c arm_sigdeliver.c
+CHIP_ASRCS += arm_switchcontext.S arm_vectorirq.S arm_fullcontextrestore.S arm_vfork.S
+ifeq ($(CONFIG_ARCH_MEMCPY),y)
+CHIP_ASRCS += arm_memcpy.S
+endif
+ifeq ($(CONFIG_ARCH_MEMSET),y)
+CHIP_ASRCS += arm_memset.S
+endif
+
+CMN_CSRCS += up_interruptcontext.c up_createstack.c up_releasestack.c up_stackframe.c
+CMN_CSRCS += up_puts.c
+CMN_CSRCS += up_exit.c
+CMN_CSRCS += up_vfork.c

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -41,6 +41,8 @@
  ******************************************************/
 
 #define CONVERT_TO_LWIP_TIMEOUT(timeout)   do { if ( timeout == 0 ){ timeout = 1; }} while(0)
+
+#define WICED_LWIP_CONNECTION_TIMEOUT_MAX   0xFFFF
 
 /******************************************************
  *                    Constants
@@ -258,6 +260,8 @@ wiced_result_t wiced_tcp_create_socket( wiced_tcp_socket_t* socket, wiced_interf
     {
         return WICED_INVALID_INTERFACE;
     }
+
+    memset( socket, 0, sizeof(wiced_tcp_socket_t) );
 
     socket->conn_handler = netconn_new( NETCONN_TCP );
     if( !socket->conn_handler )
@@ -890,13 +894,6 @@ wiced_result_t wiced_udp_receive( wiced_udp_socket_t* socket, wiced_packet_t** p
 
     WICED_LINK_CHECK( socket->interface );
 
-#ifndef WICED_DISABLE_DTLS
-    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER )
-    {
-        return wiced_dtls_receive_packet( socket, packet, timeout );
-    }
-#endif
-
     netconn_set_recvtimeout( socket->conn_handler, (int)timeout );
 
     status = netconn_recv( socket->conn_handler, packet );
@@ -1020,6 +1017,14 @@ wiced_result_t wiced_tcp_connect( wiced_tcp_socket_t* socket, const wiced_ip_add
         }
         socket->is_bound = WICED_TRUE;
     }
+    /* To avoid silent truncation of 32-bit timeout variable to 16-bit value
+    saturating the timeout value to 65535(0xFFFF) */
+    if ( timeout > WICED_LWIP_CONNECTION_TIMEOUT_MAX )
+    {
+        timeout = WICED_LWIP_CONNECTION_TIMEOUT_MAX;
+        WPRINT_NETWORK_INFO(("Timeout 32-bit value has been truncated to a 16-bit value\n"));
+    }
+
     lwip_error = netconn_connect( socket->conn_handler, (ip_addr_t*) &temp, port, (uint16_t) timeout );
     if ( lwip_error != ERR_OK )
     {
@@ -1118,13 +1123,6 @@ wiced_result_t wiced_udp_send( wiced_udp_socket_t* socket, const wiced_ip_addres
 
     /* Total length and a length must be equal for a packet to be valid */
     packet->p->len = packet->p->tot_len;
-
-#ifndef WICED_DISABLE_DTLS
-    if ( socket->dtls_context != NULL && socket->dtls_context->context.state == DTLS_HANDSHAKE_OVER )
-    {
-        wiced_dtls_encrypt_packet( &socket->dtls_context->context, address, port, packet );
-    }
-#endif /* ifndef WICED_DISABLE_TLS */
 
     /* Send the packet via UDP socket */
     result = internal_udp_send( socket->conn_handler, packet, (wiced_interface_t)socket->interface );

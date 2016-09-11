@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -260,7 +260,7 @@ typedef mqtt_unsuback_arg_t mqtt_pubcomp_arg_t;
 
 wiced_result_t  mqtt_frame_create( uint16_t max_size, mqtt_frame_t *frame, mqtt_socket_t *socket );
 wiced_result_t  mqtt_frame_send  ( mqtt_frame_t *frame, mqtt_socket_t *socket );
-wiced_result_t  mqtt_frame_recv  ( wiced_mqtt_buffer_t *buffer, void *p_user, uint32_t *size );
+wiced_result_t  mqtt_frame_recv  ( wiced_mqtt_buffer_t *buffer, uint16_t buffer_data_len, void *p_user, uint32_t *size );
 wiced_result_t  mqtt_frame_delete( mqtt_frame_t *frame );
 
 wiced_result_t mqtt_frame_put_connect            ( mqtt_frame_t *frame, const mqtt_connect_arg_t     *args );

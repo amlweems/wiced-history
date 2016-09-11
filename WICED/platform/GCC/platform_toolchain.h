@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -77,13 +77,16 @@ extern "C"
  *               Function Declarations
  ******************************************************/
 
+#ifndef __linux__
 void *memrchr( const void *s, int c, size_t n );
-
+#endif
 
 /* Windows doesn't come with support for strlcpy */
-#ifdef WIN32
+#if defined( WIN32 ) || defined( __linux__ ) || defined( __NUTTX__ )
 size_t strlcpy (char *dest, const char *src, size_t size);
 #endif /* WIN32 */
+
+void platform_toolchain_sbrk_prepare(void* ptr, int incr);
 
 #ifdef __cplusplus
 } /* extern "C" */

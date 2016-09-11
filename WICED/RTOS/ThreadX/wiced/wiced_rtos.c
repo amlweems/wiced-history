@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -24,6 +24,7 @@
 #include "internal/wiced_internal_api.h"
 #include "RTOS/wiced_rtos_common.h"
 #include "tx_thread.h"
+#include "TraceX.h"
 
 #ifdef TX_ENABLE_EVENT_TRACE
 #include "platform_config.h"  /* pick up platform specific tracex buffer location */
@@ -88,20 +89,6 @@ static wiced_thread_t system_monitor_thread_handle;
 #endif /* WICED_DISABLE_WATCHDOG */
 static ULONG          WICED_DEEP_SLEEP_SAVED_VAR( before_deep_sleep_time );
 
-#ifdef TX_ENABLE_EVENT_TRACE
-#ifndef WICED_TRACEX_BUFFER_SIZE
-#define WICED_TRACEX_BUFFER_SIZE       (0x10000)
-#endif /* ifndef WICED_TRACEX_BUFFER_SIZE */
-#ifndef WICED_TRACEX_OBJECT_COUNT
-#define WICED_TRACEX_OBJECT_COUNT      (100)
-#endif /* ifndef WICED_TRACEX_OBJECT_COUNT */
-#ifndef WICED_TRACEX_BUFFER_ADDRESS
-static uint8_t tracex_buffer[WICED_TRACEX_BUFFER_SIZE];
-#define WICED_TRACEX_BUFFER_ADDRESS          (tracex_buffer)
-#endif /* ifndef WICED_TRACEX_BUFFER_ADDRESS */
-#endif /* ifdef TX_ENABLE_EVENT_TRACE */
-
-
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -119,11 +106,12 @@ int main( void )
  * variables have been initialised, so the following init still needs to be done
  * When using GCC, this is done in crt0_GCC.c
  */
-    extern void init_platform( void );
-    extern void init_architecture( void );
+    extern void platform_init_mcu_infrastructure( void );
+    extern void platform_init_external_devices( void );
 
-    init_architecture( );
-    init_platform( );
+    platform_init_mcu_infrastructure( );
+    platform_init_external_devices( );
+
 #endif /* #elif defined ( __IAR_SYSTEMS_ICC__ ) */    /* Enter the ThreadX kernel.  */
     tx_kernel_enter( );
     return 0;
@@ -141,19 +129,9 @@ void tx_application_define( void *first_unused_memory )
 {
     TX_THREAD* app_thread_handle;
     char*      app_thread_stack;
+    UINT       result;
 
     UNUSED_PARAMETER(first_unused_memory);
-
-#ifdef TX_ENABLE_EVENT_TRACE
-    {
-        UINT tx_result;
-        wiced_assert( "Bad TraceX Params", ( WICED_TRACEX_BUFFER_ADDRESS != NULL ) && ( WICED_TRACEX_BUFFER_SIZE != 0 ) );
-
-        tx_result = tx_trace_enable( WICED_TRACEX_BUFFER_ADDRESS, WICED_TRACEX_BUFFER_SIZE, WICED_TRACEX_OBJECT_COUNT );
-        wiced_assert( "TraceX enable failed", tx_result == TX_SUCCESS );
-        REFERENCE_DEBUG_ONLY_VARIABLE( tx_result );
-    }
-#endif /* TX_ENABLE_EVENT_TRACE */
 
     /* Restore system clock taking into account time spent in deep-sleep */
     if ( WICED_DEEP_SLEEP_IS_WARMBOOT_HANDLE( ) )
@@ -165,8 +143,19 @@ void tx_application_define( void *first_unused_memory )
     app_thread_handle = (TX_THREAD*)MALLOC_OBJECT("app thread", TX_THREAD);
     app_thread_stack  = (char*)malloc_named("app stack", APPLICATION_STACK_SIZE);
 
-    tx_thread_create( app_thread_handle, (char*)"app thread", application_thread_main, 0, app_thread_stack, APPLICATION_STACK_SIZE, WICED_APPLICATION_PRIORITY, WICED_APPLICATION_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START );
-    tx_thread_entry_exit_notify( app_thread_handle, application_thread_cleanup );
+    result = tx_thread_create( app_thread_handle, (char*)"app thread", application_thread_main, 0, app_thread_stack, APPLICATION_STACK_SIZE, WICED_APPLICATION_PRIORITY, WICED_APPLICATION_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START );
+
+    if ( TX_SUCCESS != result )
+    {
+        free ( app_thread_handle );
+        free ( app_thread_stack );
+        app_thread_handle = NULL;
+        app_thread_stack  = NULL;
+    }
+    else
+    {
+        ( void )tx_thread_entry_exit_notify( app_thread_handle, application_thread_cleanup );
+    }
 }
 
 void application_thread_cleanup( TX_THREAD *thread_ptr, UINT condition )
@@ -192,6 +181,29 @@ void application_thread_main( ULONG thread_input )
     /* Start the watchdog kicking thread */
     wiced_rtos_create_thread( &system_monitor_thread_handle, RTOS_HIGHEST_PRIORITY, "system monitor", (wiced_thread_function_t)system_monitor_thread_main, SYSTEM_MONITOR_THREAD_STACK_SIZE, NULL );
 #endif /* WICED_DISABLE_WATCHDOG */
+
+#ifdef TX_ENABLE_EVENT_TRACE
+    {
+        wiced_result_t        result;
+        wiced_tracex_config_t tracex_config;
+
+        tracex_config.loop_rec = WICED_FALSE;
+        tracex_config.filter = 0;
+        tracex_config.tcp_server.enable = WICED_FALSE;
+        tracex_config.tcp_server.port = WICED_TRACEX_TCP_SERVER_PORT;
+        tracex_config.tcp_server.max_data_len = WICED_TRACEX_TCP_MAX_PACKET_LENGTH;
+        tracex_config.tcp_server.timeout = WICED_TRACEX_TCP_CONNECT_TIMEOUT;
+        tracex_config.tcp_server.num_retries = WICED_TRACEX_TCP_CONNECTION_NUM_RETRIES;
+        SET_IPV4_ADDRESS(tracex_config.tcp_server.ip, WICED_TRACEX_TCP_SERVER_IP);
+        tracex_config.buf.addr = WICED_TRACEX_BUFFER_ADDRESS;
+        tracex_config.buf.size = WICED_TRACEX_BUFFER_SIZE;
+        tracex_config.buf.obj_cnt = WICED_TRACEX_OBJECT_COUNT;
+
+        result = wiced_tracex_enable(&tracex_config);
+        wiced_assert( "TraceX enable failed", result == WICED_SUCCESS );
+        REFERENCE_DEBUG_ONLY_VARIABLE( result );
+    }
+#endif /* TX_ENABLE_EVENT_TRACE */
 
     application_start( );
     malloc_leak_check(NULL, LEAK_CHECK_THREAD);
@@ -238,7 +250,10 @@ wiced_result_t wiced_rtos_delete_thread( wiced_thread_t* thread )
         return result;
     }
 
-    malloc_transfer_to_curr_thread( thread->stack );
+    if ( thread->stack != NULL )
+    {
+        malloc_transfer_to_curr_thread( thread->stack );
+    }
 
     malloc_leak_check( &thread->handle, LEAK_CHECK_THREAD );
 
@@ -246,8 +261,11 @@ wiced_result_t wiced_rtos_delete_thread( wiced_thread_t* thread )
 
     if ( result == WICED_WWD_SUCCESS )
     {
-        free( thread->stack );
-        thread->stack = NULL;
+        if ( thread->stack != NULL )
+        {
+            free( thread->stack );
+            thread->stack = NULL;
+        }
     }
 
     return result;

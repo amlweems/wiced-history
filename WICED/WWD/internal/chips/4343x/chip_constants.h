@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -22,7 +22,8 @@ extern "C" {
  ******************************************************/
 
 /* General chip stats */
-#define CHIP_RAM_SIZE      (512*1024)
+#define CHIP_RAM_SIZE                       ( 512 * 1024 )
+#define SOCSRAM_SRMEM_SIZE                  (  64 * 1024 )
 
 /* Backplane architecture */
 #define CHIPCOMMON_BASE_ADDRESS  0x18000000    /* Chipcommon core register region   */
@@ -424,7 +425,7 @@ typedef struct wl_extjoin_params {
 #define WL_EXTJOIN_PARAMS_FIXED_SIZE    (sizeof(wl_extjoin_params_t) - sizeof(chanspec_t))
 
 
-typedef wl_cnt_ver_six_t  wiced_counters_t;
+typedef wl_cnt_ver_ten_t  wiced_counters_t;
 
 #ifdef __cplusplus
 } /* extern "C" */

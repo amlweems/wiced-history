@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -271,18 +271,6 @@ typedef void (wiced_bt_l2cap_data_indication_cback_t) (void *context, uint16_t l
 typedef void (wiced_bt_l2cap_congestion_status_cback_t) (void *context, uint16_t local_cid, wiced_bool_t congested);
 
 /**
- *  Callback prototype for number of packets completed events.
- *  This callback notifies the application when Number of Completed Packets (nocp)
- *  event has been received.
- *  This callback is originally designed for 3DG devices.
- *
- *  @param bd_addr          : Peer BD Address
- *
- *  @return void
-*/
-typedef void (wiced_bt_l2cap_nocp_cback_t) (wiced_bt_device_address_t bd_addr);
-
-/**
  *  Transmit complete callback protype. This callback is optional. If
  *  set, L2CAP will call it when packets are sent or flushed. If the
  *  count is 0xFFFF, it means all packets are sent for that CID (eRTM
@@ -408,6 +396,21 @@ typedef void (wiced_bt_l2cap_le_connect_confirm_cback_t) (void *context, uint16_
     uint16_t result, uint16_t mtu_peer);
 
 
+/**
+ *  LE TX complete callback
+ *
+ *  (Optional) Notification after wiced_bt_l2cap_le_data_write has sent
+ *  buffer to transport layer
+ *
+ *  @param context          : Caller context provided with wiced_bt_l2cap_le_register()
+ *  @param local_cid        : Local CID
+ *  @param buf_count        : Number of buffers sent
+ *
+ *  @return void
+*/
+typedef void (wiced_bt_l2cap_le_tx_complete_cback_t)(void *context, uint16_t local_cid, uint16_t buf_count);
+
+
 #if (L2CAP_LE_COC_CONFORMANCE_TESTING == TRUE)
 /**
  *
@@ -433,7 +436,8 @@ typedef struct
     wiced_bt_l2cap_disconnect_indication_cback_t  *disconnect_indication_cback; /**< LE disconnect indication event */
     wiced_bt_l2cap_disconnect_confirm_cback_t     *disconnect_confirm_cback;    /**< LE disconnect confirm event */
     wiced_bt_l2cap_data_indication_cback_t        *data_indication_cback;       /**< LE data received indication */
-    wiced_bt_l2cap_congestion_status_cback_t      *congestion_status_cback;     /**< TODO */
+    wiced_bt_l2cap_congestion_status_cback_t      *congestion_status_cback;     /**< LE congestion status change*/
+    wiced_bt_l2cap_le_tx_complete_cback_t         *le_tx_complete_cback;        /**< LE tx complete (if using private tx pool) */
 #if (L2CAP_LE_COC_CONFORMANCE_TESTING == TRUE)
     wiced_bt_l2cap_le_conformance_test_cback_t    *conformance_test_cback;      /**< TODO */
 #endif
@@ -895,20 +899,6 @@ wiced_bool_t wiced_bt_l2cap_set_tx_priority (uint16_t cid, wiced_bt_l2cap_chnl_p
 
 /**
  *
- *  Function         wiced_bt_l2cap_register_for_nocp_evt
- *
- *                   Register callback for Number of Completed Packets (NOCP) event.
- *
- *  Input Param      p_cb - callback for Number of completed packets event
- *                   p_bda - BT address of remote device
- *
- *  @return         TRUE successful
- *
- */
-wiced_bool_t wiced_bt_l2cap_register_for_nocp_evt (wiced_bt_l2cap_nocp_cback_t *p_cb, wiced_bt_device_address_t p_bda);
-
-/**
- *
  *  Function         wiced_bt_l2cap_set_flush_timeout
  *
  *                  This function set the automatic flush time out in Baseband
@@ -1191,7 +1181,7 @@ wiced_bool_t wiced_bt_l2cap_le_disconnect_rsp (uint16_t lcid);
  *
  *  Function         wiced_bt_l2cap_le_data_write
  *
- *                  Higher layers call this function to write data.
+ *                  Send data over LE connection-oriented channel.
  *
  *  @param[in]      cid: Channel ID
  *  @param[in]      p_data: Input buffer

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -29,6 +29,9 @@
 #include "coap_server_internal.h"
 #include "parser/coap_parser.h"
 
+#include "wiced_dtls.h"
+#include "wiced_udpip_dtls_api.h"
+
 /******************************************************
  *                      Macros
  ******************************************************/
@@ -47,6 +50,8 @@
 #define MAX_DISCOVERY_SERVICES_BUF_SIZE      (500)
 #define COAP_RETRANSMISISON_TIMER            (1000)
 
+
+#define DTLS_SERVER_IP MAKE_IPV4_ADDRESS(192,168,0,2)
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -61,6 +66,9 @@ typedef struct
     coap_server_event_t event_type;
     void                *data;
 } server_event_message_t;
+
+
+uint16_t           udp_port;
 
 /******************************************************
  *                    Structures
@@ -101,6 +109,7 @@ static void coap_add_service( coap_service_t* service );
 static int coap_well_known_services( wiced_coap_server_service_t* known_services, char *buf );
 static void coap_get_service_name( const coap_request_info_t* pkt, uint8_t num, char *data );
 
+static int server_receive_callback( void *socket, void *args );
 /******************************************************
  *               Variables Declarations
  ******************************************************/
@@ -143,6 +152,7 @@ wiced_result_t wiced_coap_server_deinit( wiced_coap_server_t* server )
 wiced_result_t wiced_coap_server_start( wiced_coap_server_t* server, wiced_interface_t interface, uint16_t port, wiced_coap_security_t *security )
 {
     wiced_result_t result;
+    const wiced_ip_address_t INITIALISER_IPV4_ADDRESS( target_ip_addr, DTLS_SERVER_IP );
 
     if ( ( result = wiced_udp_create_socket( &server->socket, port, interface ) ) != WICED_SUCCESS )
     {
@@ -150,11 +160,47 @@ wiced_result_t wiced_coap_server_start( wiced_coap_server_t* server, wiced_inter
         return result;
     }
 
-    /* Register callback function for the UDP data. */
-    if ( ( result = wiced_udp_register_callbacks( &server->socket, coap_server_receive_callback, server ) ) != WICED_SUCCESS )
+    /* Load key and enbale DTLS */
+    if ( security != NULL )
     {
-        WPRINT_LIB_ERROR(("Error in registering udp callback\n"));
-        return result;
+        if ( ( security->cert != NULL ) && ( security->key != NULL ) )
+        {
+            wiced_udp_enable_dtls( &server->socket, &server->context );
+
+            result = wiced_dtls_init_identity( &server->identity, security->key ,strlen( (char*) security->key ), (uint8_t*) security->cert, strlen( (char*) security->cert ) );
+            if ( result != WICED_SUCCESS )
+            {
+                WPRINT_LIB_ERROR(( "Unable to initialize DTLS identity. Error = [%d]\n", result ));
+                return result;
+            }
+
+           result = wiced_dtls_init_context (server->socket.dtls_context, &server->identity, NULL);
+           if ( result != WICED_SUCCESS )
+           {
+               WPRINT_LIB_ERROR(( "Unable to initialize DTLS context. Error = [%d]\n", result ));
+               return result;
+           }
+
+            /* Register callback to get application data from client once handshake has been completed */
+            server->socket.dtls_context->receive_callback = (wiced_dtls_data_callback_t) server_receive_callback;
+            server->socket.dtls_context->callback_arg = server;
+
+            result = wiced_udp_start_dtls (&server->socket, target_ip_addr, WICED_DTLS_AS_SERVER, DTLS_NO_VERIFICATION);
+            if ( result != WICED_SUCCESS )
+            {
+                WPRINT_LIB_ERROR(( "Unable to start DTLS Server. Error = [%d]\n", result ));
+                return result;
+            }
+        }
+    }
+    else
+    {
+        /* Register callback function for the UDP data. */
+        if ( ( result = wiced_udp_register_callbacks( &server->socket, coap_server_receive_callback, server ) ) != WICED_SUCCESS )
+        {
+            WPRINT_LIB_ERROR(("Error in registering udp callback\n"));
+            return result;
+        }
     }
 
     /* Initialize linked list for service and transaction for server */
@@ -243,6 +289,7 @@ static void coap_server_thread_main( uint32_t arg )
             case COAP_SERVER_STOP:
                 /* Stop COAP server Event */
                 wiced_udp_unregister_callbacks( &server->socket );
+                wiced_dtls_deinit_identity(server->socket.dtls_context->identity);
                 wiced_udp_delete_socket( &server->socket );
                 list_deinit( server );
                 return;
@@ -403,12 +450,27 @@ static wiced_result_t coap_server_process_request( wiced_coap_server_t *server, 
 
     /* Save client IP and Port No which will be used to send response back */
     request_info.client_ip = udp_src_ip_addr;
-    request_info.port = udp_src_port;
+
+    if (server->socket.dtls_context != NULL)
+    {
+        request_info.port = udp_port;
+    }
+    else
+    {
+        request_info.port = udp_src_port;
+    }
+
+    WPRINT_LIB_DEBUG (("UDP Rx Application data from IP %u.%u.%u.%u:%d\n",
+               (unsigned char) ( ( GET_IPV4_ADDRESS(request_info.client_ip) >> 24 ) & 0xff ),
+               (unsigned char) ( ( GET_IPV4_ADDRESS(request_info.client_ip) >> 16 ) & 0xff ),
+               (unsigned char) ( ( GET_IPV4_ADDRESS(request_info.client_ip) >> 8 ) & 0xff ),
+               (unsigned char) ( ( GET_IPV4_ADDRESS(request_info.client_ip) >> 0 ) & 0xff ),
+               request_info.port ));
 
     /* Parse COAP Packet (Including Header, options and Payload) */
     if ( ( result = ( coap_server_parse_packet( &request_info.packet, udp_data, data_length, &response_code ) ) != WICED_SUCCESS ) )
     {
-        WPRINT_LIB_ERROR(("Error in parsing coap packet\n"));
+        WPRINT_LIB_ERROR (("Error in parsing coap packet\n"));
         coap_internal_send_response( server, service, (void*) &request_info, &response, response_code, WICED_COAP_MSGTYPE_CON, WICED_FALSE );
         return WICED_SUCCESS;
     }
@@ -821,6 +883,17 @@ static wiced_result_t coap_send_response( coap_send_response_t* client_response,
                     (unsigned char) ( ( GET_IPV4_ADDRESS(client_request->client_ip) >> 0 ) & 0xff ),
                     client_request->port ) );
 
+
+    if (server->socket.dtls_context != NULL)
+    {
+        if ( ( result = wiced_dtls_encrypt_packet( &server->socket.dtls_context->context, &client_request->client_ip, client_request->port, tx_packet ) ) != WICED_SUCCESS )
+        {
+            WPRINT_LIB_ERROR (( "DTLS encryption failed \n" ));
+            wiced_packet_delete( tx_packet );
+            return result;
+        }
+    }
+
     if ( ( result = wiced_udp_send( &server->socket, &client_request->client_ip, client_request->port, tx_packet ) ) != WICED_SUCCESS )
     {
         WPRINT_LIB_ERROR (( "udp packet send failed\n" ));
@@ -870,6 +943,16 @@ static wiced_result_t send_udp_response( wiced_udp_socket_t *udp_socket, uint8_t
                     (unsigned char) ( ( GET_IPV4_ADDRESS(ip) >> 8 ) & 0xff ),
                     (unsigned char) ( ( GET_IPV4_ADDRESS(ip) >> 0 ) & 0xff ),
                     port ) );
+
+    if (udp_socket->dtls_context != NULL)
+    {
+        if ( ( result = wiced_dtls_encrypt_packet( &udp_socket->dtls_context->context, &ip, port, tx_packet ) ) != WICED_SUCCESS )
+        {
+            WPRINT_LIB_ERROR (( "DTLS encryption failed \n" ));
+            wiced_packet_delete( tx_packet );
+            return result;
+        }
+    }
 
     if ( ( result = wiced_udp_send( udp_socket, &ip, port, tx_packet ) ) != WICED_SUCCESS )
     {
@@ -1278,4 +1361,38 @@ static wiced_bool_t compare_service( linked_list_node_t* node_to_compare, void* 
     }
 
     return result;
+}
+
+/* Data callback function register with DTLS to get application data once handshake has been finished */
+static int server_receive_callback( void *socket, void *args )
+{
+    wiced_result_t result;
+    wiced_packet_t* packet;
+    char* rx_data;
+    static uint16_t rx_data_length;
+    uint16_t available_data_length;
+    dtls_peer_data* peer;
+
+    peer   = (dtls_peer_data*) args;
+    packet = (wiced_packet_t*)peer->packet;
+    udp_port = peer->session.port;
+
+    result = wiced_packet_get_data( packet, 0, (uint8_t**) &rx_data, &rx_data_length, &available_data_length );
+    if ( result != WICED_SUCCESS )
+    {
+        WPRINT_LIB_ERROR(("Error in getting packet data \n"));
+        wiced_packet_delete( packet );
+        return result;
+    }
+
+    if ( coap_server_process_request( (wiced_coap_server_t*)peer->callback_args, packet ) != WICED_SUCCESS )
+    {
+        WPRINT_LIB_ERROR(("Error in processing client request\n"));
+        wiced_packet_delete( packet );
+        return WICED_ERROR;
+    }
+
+    wiced_packet_delete( packet );
+
+    return WICED_SUCCESS;
 }

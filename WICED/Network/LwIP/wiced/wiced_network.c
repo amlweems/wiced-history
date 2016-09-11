@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -374,7 +374,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
 
 wiced_result_t wiced_ip_down( wiced_interface_t interface )
 {
-    if ( IP_NETWORK_IS_INITED(interface) == WICED_TRUE )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         /* Cleanup DNS client and DHCP server/client depending on interface */
         if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE )

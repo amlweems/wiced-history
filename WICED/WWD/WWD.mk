@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -19,6 +19,7 @@ GLOBAL_INCLUDES := . \
 
 
 $(NAME)_SOURCES := internal/wwd_thread.c \
+                   internal/wwd_ap_common.c \
                    internal/wwd_thread_internal.c \
                    internal/wwd_sdpcm.c \
                    internal/wwd_internal.c \
@@ -27,12 +28,15 @@ $(NAME)_SOURCES := internal/wwd_thread.c \
                    internal/wwd_logging.c \
                    internal/wwd_eapol.c \
                    internal/bus_protocols/wwd_bus_common.c \
-                   internal/bus_protocols/$(subst .,/,$(BUS))/wwd_bus_protocol.c \
-                   ../internal/wiced_crypto.c # Pull in wiced_crypto_get_random() implementation from WICED/internal
+                   internal/bus_protocols/$(subst .,/,$(BUS))/wwd_bus_protocol.c
+ifdef NO_WICED_API
+$(NAME)_SOURCES += ../internal/wiced_crypto.c # Pull in wiced_crypto_get_random() implementation from WICED/internal
+endif
 
 
 $(NAME)_CHECK_HEADERS := \
                          internal/wwd_ap.h \
+                         internal/wwd_ap_common.h \
                          internal/wwd_bcmendian.h \
                          internal/wwd_internal.h \
                          internal/wwd_logging.h \

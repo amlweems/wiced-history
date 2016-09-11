@@ -2,6 +2,130 @@
 Broadcom WICED Software Development Kit - CHANGELOG
 =====================================================================
 
+Changes for WICED-SDK 3.7.0
+* Applications
+  * Add HTTP Streaming Audio playback application (snip.audio_player) for FLAC/WAV Audio playback - Support HDTracks.com FLAC files up to 192Khz (48Khz multiples), 24-bit WAV (MS RIFF)
+  * New Dynamic Channel Switching (DCS) app (snip.rfmon) using Radio Management (rm) and eCSA for Apollo Wireless audio spectrum management
+  * Major update to Apollo Wireless Audio Rebroadcast (snip.apollo) - DCS support and RTP format v3.0
+  * Major update to Apollo Wireless Audio Rebroadcast (snip.apollo) - Audio Sample Loss Concealment (SLC) supporting 5.1 (6-Channel) (44.1/48Khz)
+  * Major update to Apollo Wireless Audio Rebroadcast (snip.apollo) - Dolby Digital 5.1 Surround sound rebroadcast
+  * BCM943907WAE2_1 - Wireless Audio Edition Platform v2 - supporting SPDIF (Optical) compressed input - Dolby Digital 5.1 Decoding
+  * Added AVRCP Metadata support to snip.bluetooth_audio to show Audio track/title/duration for WAE_1 & WAE2_1 platforms with OLED display
+  * Added AVRCP support & Metadata to snip.apollo to show Audio track/title/duration for WAE_1 & WAE2_1 platforms with OLED display in BT A2DP Rebroadcast mode
+  * Added DACP & AVRCP support & Metadata for demo.airplay_audio to show Audio track/title/duration for WAE_1 & WAE2_1 platforms with OLED display
+  * Added Radio Resource Management app (snip.rrm)
+  * Added Preferred Network Offload app (snip.pno)
+  * Enhanced SIGMA DUT app (test.sigma_dut) for WiFi certificationt testing
+  * Support for Dual A2DP and Dual Handsfree profiles - WICED devices have the ability to connect simultaneously with 2 A2DP/HFP smartphones.
+  * Stability fixes to secure_mqtt application
+  * Added BLE Wi-Fi introducer iOS Application (along with WICED side app) that uses BLE proximity pairing to introduce Wi-Fi network to new device and assist in on-boarding connection to Wi-Fi network.
+* Libraries, Protocols, Drivers
+  * Added bit-banging SPI driver for BCM4390x
+  * Fixed the issue when configured in USB OHCI only mode for BCM4390x
+  * Enhanced WWD debug logging of events
+  * Added WWD support for Preferred Network Offload (PNO) in WLAN firmware
+  * New WLAN firmware (7.15.168.73) for BCM4390x with country codes XX/17 and XV/983
+  * Homekit enhancements
+   * Includes enhancements/modifications to pass iOS9 adjunct review
+   * HomeKit Tunnel Accessory support for Bluetooth LE accessories
+  * CoAP server supports secure DTLS connections - includes support for DTLS_PSK_WITH_AES_128_CCM_8 and DTLS_ECDHE_ECDSA_WITH_AES_128_CCM_8
+  * Enterprise security enhancements on BCM94343x/BCM943364
+   * Support for EAP-TLS Enterprise security protocol with SteelBelt, FreeRadius, IAS, ACS and Device
+   * Support for PEAPv0 Enterprise security protocol with SteelBelt, FreeRadius and Device
+  * Unified Bluetooth BTEWICED stack for Dual Mode and Low-Enery only modes - Applications may pick the desired Bluetooth stack binary at link time.
+  * Enabled IPv6 Multicast Listener Discovery for IPv6 (previously support was available only for IPv4)
+  * Coverity and robustness fixes to BESL, DTLS and HTTP libraries
+  * New WLAN firmware 7.45.45.17 added for BCM43364/BBCM43438/BCM4343W platforms which includes the following:
+   * Added provision to enable Autocountry (802.11d) support
+   * TCP Rx throughput enhanced by enabling Window Scaling
+   * TCP Tx tunables updated for throughput stability
+   * Fixed lockup issue with SDIO bus sleep during power save
+   * Improved WLAN scan and join performance in BT Coex mode
+   * Fixed WLAN Tx/Rx low throughput issues during BT A2DP streaming
+   * Added support for phy_rxiqest command in the mfg_test app for measuring Rx power at the antenna
+
+Changes for WICED-SDK 3.6.3
+* Applications
+  * Resolved stability issues associated with switching between Airplay and Bluetooth A2DP streaming
+  * Resolved error when sending Email with snip.email
+  * Fixed instability issues with demo.temp_control application
+  * Added support for notifications with Bluetooth Internet Gateway application
+* Libraries, Protocols, Drivers
+  * Added support for TLS extensions - Server Name Indication (SNI) and Maximum Frame Length negotiation
+  * Enhanced BESL library with support for the following cipher suites - CCM and GCM
+  * Resolved several robustness related JSON parsing issues (especially for invalid JSON strings)
+  * Fixed an issue where HTTP client library leaked out-of-order TCP/IP packets
+  * Coverity fixes to BESL, DTLS and HTTP libraries
+  * Added robustness error checks to SMTP, DNS and HTTP
+  * Updated BCM4390x WLAN FW to 7.15.168.67
+  * Updated STM4xx peripheral library to V1.7.0
+  * Fixed incorrect excess serial flash erase which leads to corruption
+  * Fixed more IAR compilation warnings and link errors
+  * Enhanced scan API to work properly for dual band capable chips
+  * Enhanced BCM4390x hardware crypto functionality
+  * New WLAN firmware (7.45.45.14) added for BCM43364/BBCM43438/BCM4343W which includes the following:
+    * TCP tunables updated for BCM4343W and BCM43438 for improved TCP throughput and stability
+    * Fix for WLAN Broadcast Rx failures in PS mode for BCM43364 and BCM4343W
+    * Fix for LE connection failure when WLAN DUT is associated with AP for BCM43364
+    * Workaround for SoftAP starting issue
+    * Support for Country Code Korea (KR/1)
+    * Fix for BT(Coex) performance issue in PM mode for BCm43364
+
+Changes for WICED-SDK 3.6.2
+* Applications
+  * Added support to HTTP client for handling packets whose content length exceeds MTU. Also added parsing of response payload using JSON parser.
+  * Resolved thread_monitor stability issues on BCM94343x platforms
+  * Resolved Eclipse installation issue due to incorrect JRE dependency (expects JRE 1.7.0)
+* Libraries, Protocols, Drivers
+  * Coverity fixes to Gedday/mDNS, BESL, DTLS and NetX/NetX-Duo
+  * Updated Bluetooth firmware for BCM943438 with OTP support for BD_ADDR
+  * Resolved stability issues relating to Bluetooth init/de-init on BCM94343x platforms.
+  * More fixes for compiler warnings when using IAR toolchain
+  * New WLAN firmware (7.15.168.64) for BCM4390x. Updated NVRAM for all BCM4390x based platforms to use temperature throttling feature
+  * New WLAN firmware (7.45.45.11) for BCM43364/BCM43438 with improved TCP and UDP stability and throughput.
+  * Fixed BCM43364 UDP throughput issues due to BT Coex Hybrid HW support
+  * Added suppport for BCM43364 CBUCK low power mode 
+  * Enabled HW OOB for all BCM4343x platforms
+  * Added support for STM32F412 MCU and updated STM peripheral library to 1.7.0RC1
+  * Added support for 3 new platforms
+    * BCM94343WWCD2
+    * BCM943907WCD1
+    * BCM943907WCD2
+
+
+Changes for WICED-SDK 3.6.1
+* Applications
+  * Homekit - Added Lock Management service and additional fixes for iOS9 adjunct review
+  * Support for AVRCP remote control commands with MacBook Air
+* Libraries, Protocols, Drivers
+  * Stability fixes to Gedday/mDNS
+  * Coverity fixes to BESL, DNS and utility libraries
+  * New WLAN firmware (7.15.168.59) for BCM4390x with support for temperature throttling
+  * New WLAN firmware (7.45.45.9) for BCM43364 with support for BT Coex Hybrid HW. Fixed all Coverity issues for the BCM43364 WLAN firmware code
+
+Changes for WICED-SDK 3.6.0
+* Applications
+ * Homekit - Stability fixes to Homekit and Gedday for iOS9 Adjunct review
+ * Apollo Wireless Rebroadcast application
+  * new RTP streaming protocol updated to version 2.0, please update all source/sink devices to this release.
+  * Stability improvements for BT rebroadcast, new BT API, GATT Enabled by default
+  * New WLAN firmware for improved range and diversity
+  * Initial iOS Speaker configuration application
+ * OTA2
+  * stability enhancements, factory reset additions, fixes for OSX/Linux image builder, Background service feature
+ * Bluetooth Audio
+  * Updated Bluetooth API documentation
+  * Configured max bitpool as 53 for better interoperability
+  * Improved switching stability between Airplay and Bluetooth streaming
+  * Auto reconnection when coming back into range
+* Libraries, Protocols, Drivers
+  * Updates to HTTP libraries for stability and customer reported fixes
+  * Updated wiced_bt API documentation
+  * USB-X/FILE-X fixes for building with Trace-X enabled
+  * AK4954 driver - muting fixes on power-up
+  * Stability fixes in BESL for handling certificates
+  * Added robustness error checks to MQTT, SNTP, Websockets, HTTP and DNS
+
 Changes for WICED-SDK 3.5.2
 * Applications
  * Added Bluetooth Handsfree profile support to Airplay-BT Combo application
@@ -16,7 +140,7 @@ Changes for WICED-SDK 3.5.2
    * Features outgoing and incoming call handling
  * Added wiced_bt_stack_deinit API to shutdown the Bluetooth stack
  * Low power mode support for BTEWICED_LE stack
- * General iperf throughput optimizations on WiFi interface 
+ * General iperf throughput optimizations on WiFi interface
  * Added I2C bit banging driver for 4390x
  * Added support for USB OHCI isochronous transfer
  * Added secondary OTA and Factory Reset Support (OTA2)
@@ -53,7 +177,7 @@ Changes for WICED-SDK 3.5.0
    * Secure boot support
    * USB-X and File-X libaries
    * USB host driver
-   * SDIO host driver   
+   * SDIO host driver
    * New WLAN firmware (7.15.168.50) with support for DFS in SoftAP mode, Antenna Diversity and Low Power Mode
 
 Changes for WICED-SDK 3.4.0
@@ -136,7 +260,7 @@ Changes for WICED-SDK 3.4.0
   * Moved wiced_tcp_stream_write_resource() into wiced_tcpip_common.c
   * Improved support for ARM Cortex R4
   * Improved support for STM32F4xx peripherals
-  * Added support for secure BCM43909 
+  * Added support for secure BCM43909
   * Updated FreeRTOS from version 7.5.2 to 8.2.1
   * Fixed clearing of interrupts for STM32F4xx UART
   * Fixed scanning of 5GHz channels for APs configured for wider than 20MHz operation

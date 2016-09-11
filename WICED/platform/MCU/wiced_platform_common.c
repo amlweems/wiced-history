@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -11,6 +11,9 @@
 /** @file
  * Defines common WICED Platform API
  */
+#if defined ( IAR_TOOLCHAIN )
+#include "platform_cmsis.h"
+#endif
 #include <stdint.h>
 #include <string.h>
 #include "wwd_assert.h"
@@ -235,7 +238,7 @@ wiced_result_t wiced_i2c_read( const wiced_i2c_device_t* device, uint16_t flags,
     config.flags         = device->flags;
     config.speed_mode    = device->speed_mode;
 
-    return platform_i2c_read( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
+    return ( wiced_result_t ) platform_i2c_read( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
 }
 
 wiced_result_t wiced_i2c_write( const wiced_i2c_device_t* device, uint16_t flags, const void* buffer, uint16_t buffer_length )
@@ -247,7 +250,7 @@ wiced_result_t wiced_i2c_write( const wiced_i2c_device_t* device, uint16_t flags
     config.flags         = device->flags;
     config.speed_mode    = device->speed_mode;
 
-    return platform_i2c_write( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
+    return ( wiced_result_t ) platform_i2c_write( &platform_i2c_peripherals[device->port], &config, flags, buffer, buffer_length );
 }
 
 void wiced_platform_mcu_enable_powersave( void )

@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Broadcom Corporation
+# Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
 # All Rights Reserved.
 #
 # This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -43,8 +43,13 @@ endif
 
 ifeq (,$(PLATFORM_NO_DDR))
 $(NAME)_SOURCES += platform_ddr.c
+$(NAME)_COMPONENTS += MCU/BCM4390x/peripherals/tlsf
 else
 GLOBAL_DEFINES  += PLATFORM_NO_DDR=1
+endif
+
+ifneq (,$(PLATFORM_NO_SOCSRAM_POWERDOWN))
+GLOBAL_DEFINES  += PLATFORM_NO_SOCSRAM_POWERDOWN=1
 endif
 
 $(NAME)_COMPONENTS += MCU/BCM4390x/peripherals/spi_flash

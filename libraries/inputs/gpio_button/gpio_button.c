@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -126,7 +126,7 @@ static void gpio_button_interrupt_handler( void* args )
 
     gpio_state = wiced_gpio_input_get( button->gpio );
 
-    is_pressed = ( button->polarity == WICED_ACTIVE_HIGH ) ? ( (gpio_state  == 0 ) ? 1 : 0 ) : ( (gpio_state == 0 ) ? 0 : 1 );
+    is_pressed = ( button->polarity == WICED_ACTIVE_HIGH ) ? ( (gpio_state  == WICED_FALSE ) ? WICED_TRUE : WICED_FALSE ) : ( (gpio_state == WICED_FALSE ) ? WICED_FALSE : WICED_TRUE );
 
     button_state_change_callback( (void*)button, is_pressed );
 }

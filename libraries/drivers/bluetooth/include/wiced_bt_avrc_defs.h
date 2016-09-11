@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Copyright 2014, Broadcom Corporation
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -824,8 +824,8 @@ typedef struct
 } wiced_bt_avrc_msg_pass_t;
 
 /* Command/Response indicator. */
-#define AVRC_CMD            0        /* Command message */
-#define AVRC_RSP            2        /* Response message */
+#define AVRC_CMD            0               /* Command message */
+#define AVRC_RSP            2               /* Response message */
 
 /** Browsing channel message */
 typedef struct

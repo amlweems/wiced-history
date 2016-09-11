@@ -1,0 +1,28 @@
+/*
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
+ * All Rights Reserved.
+ *
+ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
+ * the contents of this file may not be disclosed to third parties, copied
+ * or duplicated in any form, in whole or in part, without the prior
+ * written permission of Broadcom Corporation.
+ */
+
+
+/* Define memory symbols */
+include "memory_with_bootloader.icf";
+
+/* Define memory symbols */
+
+/* define memory regions */
+define memory mem with size = 4G;
+define region DCT_region   = mem:[from __DCT1_start   to __DCT1_end];
+
+keep{ section initial_dct_section };
+place in DCT_region{ readonly section initial_dct_section,
+                     readonly section wiced_apps_lut_section,
+                     readonly section .text}; /* !!!!! take into account */
+
+
+define symbol dct_full_size_loc = __DCT1_length;
+export symbol dct_full_size_loc;

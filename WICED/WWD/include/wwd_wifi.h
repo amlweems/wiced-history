@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -26,6 +26,7 @@
 #include "chip_constants.h"
 #include "RTOS/wwd_rtos_interface.h"        /* For semaphores */
 #include "network/wwd_network_interface.h"  /* For interface definitions */
+#include "wwd_structures.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -94,6 +95,20 @@ extern "C"
 #define WICED_WIFI_DEFAULT_ROAMING TRIGGER              ( 0 )
 #define WICED_WIFI_OPTIMIZE_BANDWIDTH_ROAMING_TRIGGER   ( 1 )
 #define WICED_WIFI_OPTIMIZE_DISTANCE_ROAMING_TRIGGER    ( 2 )
+
+/* Phyrate counts */
+#define WICED_WIFI_PHYRATE_COUNT       16
+#define WICED_WIFI_PHYRATE_LOG_SIZE    WL_PHYRATE_LOG_SIZE
+#define WICED_WIFI_PHYRATE_LOG_OFF     0
+#define WICED_WIFI_PHYRATE_LOG_TX      1
+#define WICED_WIFI_PHYRATE_LOG_RX      2
+
+/* Preferred Network Offload: time between scans
+  * Set based on desired reconnect responsiveness after the AP has been off
+  * for a long time.  (Reconnect will occur via roam if only off for 10s or less.)
+  * Also, larger numbers will generally consume less energy.
+  */
+#define WICED_WIFI_PNO_SCAN_PERIOD     20
 
 /******************************************************
  *                   Enumerations
@@ -171,11 +186,37 @@ extern wwd_result_t wwd_wifi_scan( wiced_scan_type_t                            
  */
 extern wwd_result_t wwd_wifi_abort_scan( void );
 
-/** Abort a previously issued scan
+/** Sets default scan parameters in FW
  *
- * @return    WICED_SUCCESS or WICED_ERROR
+ * @param[in]  assoc_time    : Specifies dwell time per channel in associated state
+ * @param[in]  unassoc_time  : Specifies dwell time per channel in unassociated state
+ * @param[in]  passive_time  : Specifies dwell time per channel for passive scanning
+ * @param[in]  home_time     : Specifies dwell time for the home channel between channel scans
+ * @param[in]  nprobes       : Specifies number of probes per channel
+ *
+ * @return    WWD_SUCCESS or Error code
  */
-extern wwd_result_t wwd_wifi_abort_scan( void );
+extern wwd_result_t wwd_wifi_set_scan_params( uint32_t assoc_time,
+                                              uint32_t unassoc_time,
+                                              uint32_t passive_time,
+                                              uint32_t home_time,
+                                              uint32_t nprobes );
+
+/** Sets default scan parameters in FW
+ *
+ * @param[out]  assoc_time    : Dwell time per channel in associated state
+ * @param[out]  unassoc_time  : Dwell time per channel in unassociated state
+ * @param[out]  passive_time  : Dwell time per channel for passive scanning
+ * @param[out]  home_time     : Dwell time for the home channel between channel scans
+ * @param[out]  nprobes       : Number of probes per channel
+ *
+ * @return    WWD_SUCCESS or Error code
+ */
+extern wwd_result_t wwd_wifi_get_scan_params( uint32_t* assoc_time,
+                                              uint32_t* unassoc_time,
+                                              uint32_t* passive_time,
+                                              uint32_t* home_time,
+                                              uint32_t* nprobes );
 
 /** Joins a Wi-Fi network
  *
@@ -453,6 +494,17 @@ extern wwd_result_t wwd_wifi_get_listen_interval( wiced_listen_interval_t* li );
  */
 extern wwd_result_t wwd_wifi_register_multicast_address( const wiced_mac_t* mac );
 
+/** Registers interest in a multicast address
+ * Similar to wwd_wifi_register_multicast_address but able to define interface
+ *
+ * @param mac      : Ethernet MAC address
+ * @param interface: Wireless interface
+ *
+ * @return  WWD_SUCCESS : if the address was registered successfully
+ *          Error code   : if the address was not registered
+ */
+extern wwd_result_t wwd_wifi_register_multicast_address_for_interface( const wiced_mac_t* mac, wwd_interface_t interface );
+
 /** Unregisters interest in a multicast address
  * Once a multicast address has been unregistered, all packets detected on the
  * medium destined for that address are ignored.
@@ -460,16 +512,27 @@ extern wwd_result_t wwd_wifi_register_multicast_address( const wiced_mac_t* mac 
  * @param mac: Ethernet MAC address
  *
  * @return  WWD_SUCCESS : if the address was unregistered successfully
- *          Error code   : if the address was not unregistered
+ *          Error code  : if the address was not unregistered
  */
 extern wwd_result_t wwd_wifi_unregister_multicast_address( const wiced_mac_t* mac );
+
+/** Unregisters interest in a multicast address
+ * Similar to wwd_wifi_unregister_multicast_address but able to define interface.
+ *
+ * @param mac      : Ethernet MAC address
+ * @param interface: Wireless interface
+ *
+ * @return  WWD_SUCCESS : if the address was unregistered successfully
+ *          Error code   : if the address was not unregistered
+ */
+extern wwd_result_t wwd_wifi_unregister_multicast_address_for_interface( const wiced_mac_t* mac, wwd_interface_t interface );
 
 /** Retrieve the latest RSSI value
  *
  * @param rssi: The location where the RSSI value will be stored
  *
  * @return  WWD_SUCCESS : if the RSSI was succesfully retrieved
- *          Error code   : if the RSSI was not retrieved
+ *          Error code  : if the RSSI was not retrieved
  */
 extern wwd_result_t wwd_wifi_get_rssi( int32_t* rssi );
 
@@ -898,6 +961,13 @@ extern wwd_result_t wwd_wifi_get_wifi_version( char* version, uint8_t length );
 
 extern wwd_result_t wwd_wifi_enable_minimum_power_consumption( void );
 
+/*
+ * APIs to write a bit/word to OTP at the specified bit/word offset. (An OTP word is 16 bits)
+ * These APIs work only with the MFG WLAN FW and are not supported on the Production WLAN FW.
+ */
+extern wwd_result_t wwd_wifi_otp_write_bit( uint16_t bit_offset, uint16_t write_bit );
+extern wwd_result_t wwd_wifi_otp_write_word( uint16_t word_offset, uint16_t write_word );
+
 extern wwd_result_t wwd_wifi_test_credentials( wiced_scan_result_t* ap, const uint8_t* security_key, uint8_t key_length );
 
 
@@ -914,6 +984,185 @@ extern wwd_result_t wwd_wifi_set_iovar_value( const char* iovar, uint32_t  value
 extern wwd_result_t wwd_wifi_get_iovar_value( const char* iovar, uint32_t* value, wwd_interface_t interface );
 extern wwd_result_t wwd_wifi_set_ioctl_value( uint32_t ioctl, uint32_t  value, wwd_interface_t interface );
 extern wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, wwd_interface_t interface );
+extern wwd_result_t wwd_wifi_get_revision_info( wwd_interface_t interface, wlc_rev_info_t *buf, uint16_t buflen );
+
+/* 802.11K (Radio Measurement) APIs */
+/*----------------------------------*/
+/*
+ *
+ *  This function gets Radio Resource Management Capabilities and parses them and
+ *  then passes them to user application to format the data.
+ *
+ * @param interface                                     : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_capability_ie_t     : The data structure get the different Radio Resource capabilities.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_get_radio_resource_management_capabilities( wwd_interface_t interface, radio_resource_management_capability_ie_t* rrm_cap );
+
+/*
+ *
+ *  This function sets Radio Resource Management Capabilities in the WLAN firmware.
+ *
+ * @param interface                                     : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_capability_ie_t     : The data structure to set the different Radio Resource capabilities.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_set_radio_resource_management_capabilities( wwd_interface_t interface, radio_resource_management_capability_ie_t* rrm_cap );
+
+
+/*
+ *
+ *  This function send 11k neighbor report measurement request for the particular SSID in the WLAN firmware.
+ *
+ * @param interface       : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param wiced_ssid_t    : The data structure of the SSID.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_neighbor_req( wwd_interface_t interface, wiced_ssid_t* ssid );
+
+/*
+ *
+ *  This function sets 11k link measurement request for the particular BSSID in the WLAN firmware.
+ *
+ * @param interface      : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param wiced_mac_t    : MAC Address of the destination
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_link_management_req( wwd_interface_t interface, wiced_mac_t* ea );
+
+/*
+ *
+ *  This function sets 11k beacon measurement request in the WLAN firmware.
+ *
+ * @param interface                                : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_beacon_req_t   : pointer to data structure of rrm_bcn_req_t
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_beacon_req( wwd_interface_t interface, radio_resource_management_beacon_req_t* rrm_bcn_req );
+
+/*
+ *
+ *  This function sets 11k channel load measurement request in the WLAN firmware.
+ *
+ * @param interface                       : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_req_t : pointer to data structure of rrm_chload_req
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_channel_load_req( wwd_interface_t interface, radio_resource_management_req_t* rrm_chload_req );
+
+/*
+ *
+ *  This function sets 11k noise measurement request in the WLAN firmware.
+ *
+ * @param interface                            : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_req_t      : pointer to data structure of rrm_noise_req
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_noise_req( wwd_interface_t interface, radio_resource_management_req_t* rrm_noise_req );
+
+/*
+ *
+ *  This function sets 11k frame measurement request in the WLAN firmware.
+ *
+ * @param interface                            : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_framereq_t : pointer to data structure of rrm_framereq
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_frame_req( wwd_interface_t interface, radio_resource_management_framereq_t* rrm_framereq );
+
+/*
+ *
+ *  This function sets 11k stat measurement request in the WLAN firmware.
+ *
+ * @param interface                            : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param radio_resource_management_statreq_t  : pointer to data structure of rrm_statreq
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_stat_req( wwd_interface_t interface, radio_resource_management_statreq_t* rrm_statreq );
+
+/*
+ *
+ *  This function gets 11k neighbor report list works from the WLAN firmware.
+ *
+ * @param interface      : WWD_AP_INTERFACE (works only in AP mode)
+ * @param uint8_t        : buffer pointer to data structure
+ * @param uint16_t       : buffer length
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_neighbor_list( wwd_interface_t interface, uint8_t* buffer, uint16_t buflen );
+
+/*
+ *
+ *  This function deletes node from 11k neighbor report list
+ *
+ * @param interface      : WWD_AP_INTERFACE (works only in AP mode)
+ * @param wiced_mac_t    : BSSID of the node to be deleted from neighbor report list
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_neighbor_del_neighbor( wwd_interface_t interface, wiced_mac_t* bssid);
+
+/*
+ *
+ *  This function adds a node to  Neighbor list
+ *
+ * @param interface           : WWD_AP_INTERFACE (works only in AP mode)
+ * @param rrm_nbr_element_t   : pointer to the neighbor element data structure.
+ * @param buflen              : buffer length of the neighbor element data.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_radio_resource_management_neighbor_add_neighbor( wwd_interface_t interface, radio_resource_management_nbr_element_t* nbr_elt, uint16_t buflen );
+
+
+/* 802.11R(Fast BSS Transition) APIs */
+/*--------------------------------------*/
+/*
+ *
+ *  This function sets/resets the value of FBT(Fast BSS Transition) Over-the-DS(Distribution System)
+ *
+ * @param interface       : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param set             : If the value 1 then FBT over the DS is allowed
+ *                        : if the value is 0 then FBT over the DS is not allowed (over the air is the only option)
+ * @param value           : value of the data.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_fast_bss_transition_over_distribution_system( wwd_interface_t interface, wiced_bool_t set, int* value);
+
+/*
+ *
+ *  This function  returns the value of WLFBT (1 if Driver 4-way handshake & reassoc (WLFBT)  is enabled 1 and 0 if disabled)
+ *
+ * @param interface           : WWD_STA_INTERFACE or WWD_AP_INTERFACE
+ * @param value               : gets value of the FBT capabilities.
+ *
+ *
+ * @returns : status WWD_SUCCESS or failure
+ */
+extern wwd_result_t wwd_wifi_fast_bss_transition_capabilities( wwd_interface_t interface, wiced_bool_t* enable );
 
 /** Set a custom WLAN country code
  *
@@ -921,6 +1170,21 @@ extern wwd_result_t wwd_wifi_get_ioctl_value( uint32_t ioctl, uint32_t* value, w
  * @return     @ref wwd_result_t
  */
 extern wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t* country_code );
+
+/*
+ * This function will send a channel switch announcement and switch to the specificed channel at the specified time.
+ * @param[in] wiced_chan_switch_t: pointer to channel switch information
+ * @param interface              : WWD_AP_INTERFACE (works only in AP mode)
+ * @return     @ref wwd_result_t
+ */
+extern wwd_result_t wwd_wifi_send_csa( const wiced_chan_switch_t* csa, wwd_interface_t interface );
+
+/** RRM report callback function pointer type
+ *
+ * @param result_ptr  : A pointer to the pointer that indicates where to put the next RRM report
+ *
+ */
+typedef void (*wiced_rrm_report_callback_t)( wwd_rrm_report_t** result_ptr );
 
 
 /*****************************************************************************/
@@ -932,6 +1196,13 @@ extern wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t
  */
 /*****************************************************************************/
 
+/** Map channel to its band, comparing channel to max 2g channel
+ *
+ * @param channel     : The channel to map to a band
+ *
+ * @return                  : WL_CHANSPEC_BAND_2G or WL_CHANSPEC_BAND_5G
+ */
+extern wl_chanspec_t wwd_channel_to_wl_band( uint32_t channel );
 
 /**
  ******************************************************************************
@@ -940,13 +1211,101 @@ extern wwd_result_t wwd_wifi_set_custom_country_code( const wiced_country_info_t
  * @param[in] record  A pointer to the wiced_scan_result_t record
  *
  */
-void print_scan_result( wiced_scan_result_t* record );
+extern void print_scan_result( wiced_scan_result_t* record );
 
 /** @} */
+
+/**
+ ******************************************************************************
+ * Resets WiFi driver statistic counters
+ */
+
+wwd_result_t wwd_reset_statistics_counters( void );
+
+/**
+ ******************************************************************************
+ * Starts or stops the WiFi driver Phyrate logging facility.
+ * @param[in] a mode selector where 0 = stop, 1 = start TX, 2= start RX
+ */
+
+wwd_result_t wwd_phyrate_log( unsigned int mode );
+
+/**
+ ******************************************************************************
+ * Returns the WiFi driver phyrate statistics sinc the last reset.
+ * @param[in] a pointer to the phyrate counts
+ * @param[in] size of the phyrate counts buffer
+ */
+
+wwd_result_t wwd_get_phyrate_statistics_counters( wiced_phyrate_counters_t *counts_buffer, unsigned int size);
+
+/**
+ ******************************************************************************
+ * Returns the WiFi driver phyrate log size since the last reset
+ * @param[out] size of the phyrate counts buffer
+ */
+
+wwd_result_t wwd_get_phyrate_log_size( unsigned int *size);
+
+/**
+ ******************************************************************************
+ * Returns the WiFi driver phyrate log since the last reset.
+ * @param[in] a pointer to the phyrate counts buffer to fill
+ */
+wwd_result_t wwd_get_phyrate_log( wiced_phyrate_log_t *data);
+
+/**
+ ******************************************************************************
+ * Returns the WiFi driver statistics counters since the last reset.
+ * @param[in] a pointer to the counter staticstics buffer to fill
+ */
+
+wwd_result_t wwd_get_counters( wiced_counters_t *data);
+
+/**
+ ******************************************************************************
+ * Preferred Network Offload functions (pno)
+ */
+
+/**
+ * Add another preferred network to be searched for in the background.
+ * Adds are cumulative and can be called one after another.
+ * @param[in] ssid of the network
+ * @param[in] security settings for the preferred network
+ */
+
+wwd_result_t wwd_wifi_pno_add_network( wiced_ssid_t *ssid, wiced_security_t security );
+
+/**
+ * clear added networks and disable pno scanning
+ */
+
+wwd_result_t wwd_wifi_pno_clear( void );
+
+/**
+ * enable pno scan process now; use previously added networks
+ */
+
+wwd_result_t wwd_wifi_pno_start( void );
+
+/**
+ * disable pno scan process now; do not clear previously added networks
+ */
+
+wwd_result_t wwd_wifi_pno_stop( void );
+
+/**
+* Print out an event's information for debugging help
+*/
+void wwd_log_event( const wwd_event_header_t* event_header, const uint8_t* event_data );
 
 /*@+exportlocal@*/
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+
 #endif /* ifndef INCLUDED_WWD_WIFI_H */
+
+

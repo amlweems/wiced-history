@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    stm32f4xx_cec.c
   * @author  MCD Application Team
-  * @version V1.5.1
-  * @date    22-May-2015
+  * @version V1.7.0
+  * @date    22-April-2016
   * @brief   This file provides firmware functions to manage the following 
   *          functionalities of the Consumer Electronics Control (CEC) peripheral
   *          applicable only on STM32F446xx devices:
@@ -72,7 +72,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT 2015 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT 2016 STMicroelectronics</center></h2>
   *
   * Licensed under MCD-ST Liberty SW License Agreement V2, (the "License");
   * You may not use this file except in compliance with the License.
@@ -101,7 +101,6 @@
   * @brief CEC driver modules
   * @{
   */
-
 #if defined(STM32F446xx)
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -596,8 +595,8 @@ void CEC_ClearITPendingBit(uint16_t CEC_IT)
 /**
   * @}
   */
-
 #endif /* STM32F446xx */
+
 /**
   * @}
   */

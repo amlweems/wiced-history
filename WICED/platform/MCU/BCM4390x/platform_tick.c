@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -45,6 +45,9 @@
 #define PLATFORM_CLOCK_HZ_120MHZ                PLATFORM_CLOCK_HZ_DEFINE( 120000000 )
 #define PLATFORM_CLOCK_HZ_160MHZ                PLATFORM_CLOCK_HZ_DEFINE( 160000000 )
 #define PLATFORM_CLOCK_HZ_320MHZ                PLATFORM_CLOCK_HZ_DEFINE( 320000000 )
+#if defined(PLATFORM_4390X_OVERCLOCK)
+#define PLATFORM_CLOCK_HZ_480MHZ                PLATFORM_CLOCK_HZ_DEFINE( 480000000 )
+#endif /* PLATFORM_4390X_OVERCLOCK */
 
 #define CPU_CLOCK_HZ_DEFAULT                    PLATFORM_CLOCK_HZ_160MHZ
 
@@ -81,13 +84,23 @@
 #define PLATFORM_TICK_PMU_DEEP_SLEEP_THRESH     100
 #endif
 
-#define PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( cpu_freq, backplane_freq, source, source_only ) \
+#define PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( cpu_freq, backplane_freq, source, source_only, pll_ch1, pll_ch2 ) \
     { \
-        config->apps_cpu_freq_reg_value = (cpu_freq);       \
-        config->apps_bp_freq_reg_value  = (backplane_freq); \
-        config->clock_source            = (source);         \
-        config->clock_source_only       = (source_only);    \
+        config->apps_cpu_freq_reg_value = (cpu_freq);         \
+        config->apps_bp_freq_reg_value  = (backplane_freq);   \
+        config->clock_source            = (source);           \
+        config->clock_source_only       = (source_only);      \
+        channels[0]                     = (uint8_t)(pll_ch1); \
+        channels[1]                     = (uint8_t)(pll_ch2); \
     }
+
+#if defined(PLATFORM_4390X_OVERCLOCK)
+#define PLATFORM_CPU_CLOCK_FREQ_PLL_CONFIG_DEFINE( channel, divider ) \
+    { \
+        config->pll_channel = (channel); \
+        config->pll_divider = (divider); \
+    }
+#endif /* PLATFORM_4390X_OVERCLOCK */
 
 /******************************************************
  *                    Constants
@@ -148,7 +161,7 @@ typedef struct platform_tick_timer
     uint32_t     deep_sleep_threshold;
     uint32_t     tickless_threshold;
     uint32_t     cycles_per_tick;
-    uint32_t     cycles_max;
+    uint32_t     ticks_max;
     uint32_t     freerunning_start_stamp;
     uint32_t     freerunning_stop_stamp;
     uint32_t     cycles_till_fire;
@@ -161,6 +174,10 @@ typedef struct platform_cpu_clock_freq_config
     uint32_t                    apps_bp_freq_reg_value;
     platform_cpu_clock_source_t clock_source;
     wiced_bool_t                clock_source_only;
+#if defined(PLATFORM_4390X_OVERCLOCK)
+    uint8_t                     pll_channel;
+    uint8_t                     pll_divider;
+#endif /* PLATFORM_4390X_OVERCLOCK */
 } platform_cpu_clock_freq_config_t;
 
 /******************************************************
@@ -187,6 +204,10 @@ static uint32_t               platform_pmu_last_deep_sleep_stamp;
 
 static wiced_bool_t           WICED_DEEP_SLEEP_SAVED_VAR( platform_lpo_clock_inited );
 
+#if PLATFORM_APPS_POWERSAVE
+static pmu_ext_wakeup_t       platform_pmu_stored_ext_wakeup;
+#endif
+
 /******************************************************
  *               Clock Function Definitions
  ******************************************************/
@@ -205,7 +226,7 @@ platform_cpu_wait_ht( void )
     wiced_assert( "timed out", timeout != 0 );
 }
 
-static void
+void
 platform_cpu_core_init( void )
 {
     appscr4_core_ctrl_reg_t core_ctrl;
@@ -300,6 +321,13 @@ platform_cpu_clock_drives_backplane_clock( void )
 static uint32_t
 platform_cpu_clock_get_freq_for_source( platform_cpu_clock_source_t source )
 {
+    /*
+     * TODO
+     * 1.Consider to read PLL dividers and calculate frequency using PLL base frequency.
+     * 2.Instead of GCI_CHIPCONTROL_APPS_CPU_FREQ_* constants use PLL clock output number constants.
+     *   And another software layer which maps output number to frequency by reading PLL configuration.
+     */
+
     uint32_t ret = PLATFORM_CLOCK_HZ_160MHZ;
 
     switch ( source )
@@ -307,10 +335,28 @@ platform_cpu_clock_get_freq_for_source( platform_cpu_clock_source_t source )
         case PLATFORM_CPU_CLOCK_SOURCE_ARM:
             switch( platform_gci_chipcontrol( GCI_CHIPCONTROL_APPS_CPU_FREQ_REG, 0x0, 0x0 ) & GCI_CHIPCONTROL_APPS_CPU_FREQ_MASK )
             {
+#if defined(PLATFORM_4390X_OVERCLOCK)
+                case GCI_CHIPCONTROL_APPS_CPU_FREQ_320_480:
+                    switch ( platform_pmu_pllcontrol_mdiv_get( PLL_FREQ_320_480_MHZ_CHANNEL ) )
+                    {
+                        case PLL_FREQ_480_MHZ_DIVIDER:
+                            ret = PLATFORM_CLOCK_HZ_480MHZ;
+                            break;
+
+                        case PLL_FREQ_320_MHZ_DIVIDER:
+                            ret = PLATFORM_CLOCK_HZ_320MHZ;
+                            break;
+
+                        default:
+                            wiced_assert( "unknown divider", 0 );
+                            break;
+                    }
+                    break;
+#else  /* PLATFORM_4390X_OVERCLOCK */
                 case GCI_CHIPCONTROL_APPS_CPU_FREQ_320:
                     ret = PLATFORM_CLOCK_HZ_320MHZ;
                     break;
-
+#endif /* PLATFORM_4390X_OVERCLOCK */
                 case GCI_CHIPCONTROL_APPS_CPU_FREQ_160:
                     ret = PLATFORM_CLOCK_HZ_160MHZ;
                     break;
@@ -430,52 +476,85 @@ platform_cpu_clock_get_freq( void )
 static platform_result_t
 platform_cpu_clock_freq_to_config( platform_cpu_clock_frequency_t freq, platform_cpu_clock_freq_config_t* config )
 {
-    platform_result_t result = PLATFORM_BADARG;
+    uint8_t  channels[2];
+    unsigned i;
+
+#if defined(PLATFORM_4390X_OVERCLOCK)
+    PLATFORM_CPU_CLOCK_FREQ_PLL_CONFIG_DEFINE( PLL_FREQ_320_480_MHZ_CHANNEL, PLL_FREQ_320_MHZ_DIVIDER );
+#endif /* PLATFORM_4390X_OVERCLOCK */
 
     switch ( freq )
     {
         case PLATFORM_CPU_CLOCK_FREQUENCY_24_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_24, GCI_CHIPCONTROL_APPS_BP_FREQ_24, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_24, GCI_CHIPCONTROL_APPS_BP_FREQ_24, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 5, -1 );
             break;
 
         case PLATFORM_CPU_CLOCK_FREQUENCY_48_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_48, GCI_CHIPCONTROL_APPS_BP_FREQ_48, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_48, GCI_CHIPCONTROL_APPS_BP_FREQ_48, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 5, -1 );
             break;
 
         case PLATFORM_CPU_CLOCK_FREQUENCY_60_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_60, GCI_CHIPCONTROL_APPS_BP_FREQ_60, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_60, GCI_CHIPCONTROL_APPS_BP_FREQ_60, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 2, -1 );
             break;
 
         case PLATFORM_CPU_CLOCK_FREQUENCY_80_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_80, GCI_CHIPCONTROL_APPS_BP_FREQ_80, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_80, GCI_CHIPCONTROL_APPS_BP_FREQ_80, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 3, -1 );
             break;
 
         case PLATFORM_CPU_CLOCK_FREQUENCY_120_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_120, GCI_CHIPCONTROL_APPS_BP_FREQ_120, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_120, GCI_CHIPCONTROL_APPS_BP_FREQ_120, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 2, -1 );
             break;
 
         case PLATFORM_CPU_CLOCK_FREQUENCY_160_MHZ:
             if ( platform_cpu_clock_get_freq() == PLATFORM_CLOCK_HZ_320MHZ )
             {
-                PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( 0, 0, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_TRUE );
+                PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( 0, 0, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_TRUE, -1, -1 );
             }
             else
             {
-                PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_160, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE );
+                PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_160, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_BACKPLANE, WICED_FALSE, 3, -1 );
             }
             break;
 
-        default:
-            wiced_assert( "unsupported frequency", 0 );
         case PLATFORM_CPU_CLOCK_FREQUENCY_320_MHZ:
-            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_320, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_ARM, WICED_FALSE );
+#if defined(PLATFORM_4390X_OVERCLOCK)
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_320_480, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_ARM, WICED_FALSE, 1, 3 );
+#else
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_320, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_ARM, WICED_FALSE, 1, 3 );
+#endif /* PLATFORM_4390X_OVERCLOCK */
             break;
+
+#if defined(PLATFORM_4390X_OVERCLOCK)
+        case PLATFORM_CPU_CLOCK_FREQUENCY_480_MHZ:
+            /* 480MHZ must run on ARM clock source and backplane use div by 2 ARM clock */
+            PLATFORM_CPU_CLOCK_FREQ_CONFIG_DEFINE( GCI_CHIPCONTROL_APPS_CPU_FREQ_320_480, GCI_CHIPCONTROL_APPS_BP_FREQ_160, PLATFORM_CPU_CLOCK_SOURCE_ARM, WICED_FALSE, 1, 3 );
+            PLATFORM_CPU_CLOCK_FREQ_PLL_CONFIG_DEFINE( PLL_FREQ_320_480_MHZ_CHANNEL, PLL_FREQ_480_MHZ_DIVIDER );
+            break;
+#endif /* PLATFORM_4390X_OVERCLOCK */
+
+        default:
+            wiced_assert( "Unsupported frequency", 0 );
+            return PLATFORM_BADARG;
     }
 
-    return result;
+    for ( i = 0; i < ARRAYSIZE(channels); i++)
+    {
+        if ( channels[i] != (uint8_t)-1 )
+        {
+            uint32_t field = ( ( platform_pmu_pllcontrol( PLL_CONTROL_ENABLE_CHANNEL_REG, 0, 0 ) & PLL_CONTROL_ENABLE_CHANNEL_MASK ) >> PLL_CONTROL_ENABLE_CHANNEL_SHIFT );
+
+            if ( ( ( 1U << ( channels[i] - 1 ) ) & field ) != 0 )
+            {
+                /* Channel disabled */
+                return PLATFORM_BADARG;
+            }
+        }
+    }
+
+    return PLATFORM_SUCCESS;
 }
 
-void
+wiced_bool_t
 platform_cpu_clock_init( platform_cpu_clock_frequency_t freq )
 {
     /*
@@ -491,16 +570,28 @@ platform_cpu_clock_init( platform_cpu_clock_frequency_t freq )
     platform_cpu_clock_freq_config_t config;
     uint32_t                         cpu_freq;
     uint32_t                         flags;
+    platform_result_t                result;
 
-    platform_cpu_clock_freq_to_config( freq, &config );
+    result = platform_cpu_clock_freq_to_config( freq, &config );
+    if ( result != PLATFORM_SUCCESS )
+    {
+        return WICED_FALSE;
+    }
 
     WICED_SAVE_INTERRUPTS( flags );
 
     platform_cpu_core_init();
 
+#if defined(PLATFORM_4390X_OVERCLOCK)
+    if ( platform_pmu_pllcontrol_mdiv_get( config.pll_channel ) != config.pll_divider )
+    {
+        platform_pmu_pllcontrol_mdiv_set( config.pll_channel, config.pll_divider );
+        platform_cpu_wait_ht();
+    }
+#endif /* PLATFORM_4390X_OVERCLOCK */
+
     if ( config.clock_source_only )
     {
-
         platform_cpu_clock_source( config.clock_source );
     }
     else if ( config.clock_source == PLATFORM_CPU_CLOCK_SOURCE_ARM )
@@ -561,6 +652,8 @@ platform_cpu_clock_init( platform_cpu_clock_frequency_t freq )
 #endif /* !PLATFORM_TICK_TINY */
 
     WICED_RESTORE_INTERRUPTS( flags );
+
+    return WICED_TRUE;
 }
 
 uint32_t
@@ -718,7 +811,7 @@ static void
 platform_tick_pmu_init( platform_tick_timer_t* timer )
 {
     timer->cycles_per_tick = CYCLES_PMU_PER_TICK;
-    timer->cycles_max      = TICKS_MAX( TICK_PMU_MAX_COUNTER, timer->cycles_per_tick );
+    timer->ticks_max       = TICKS_MAX( TICK_PMU_MAX_COUNTER, timer->cycles_per_tick );
 }
 
 static uint32_t
@@ -830,7 +923,7 @@ static platform_tick_timer_t platform_tick_pmu_timer =
     .deep_sleep_threshold     = PLATFORM_TICK_PMU_DEEP_SLEEP_THRESH,
     .tickless_threshold       = PLATFORM_TICK_PMU_TICKLESS_THRESH,
     .cycles_per_tick          = CYCLES_PMU_INIT_PER_TICK,
-    .cycles_max               = TICKS_MAX( TICK_PMU_MAX_COUNTER, CYCLES_PMU_INIT_PER_TICK ),
+    .ticks_max                = TICKS_MAX( TICK_PMU_MAX_COUNTER, CYCLES_PMU_INIT_PER_TICK ),
     .freerunning_start_stamp  = 0,
     .freerunning_stop_stamp   = 0,
     .cycles_till_fire         = 0,
@@ -896,7 +989,7 @@ static void
 platform_tick_cpu_init( platform_tick_timer_t* timer )
 {
     timer->cycles_per_tick = CYCLES_CPU_PER_TICK;
-    timer->cycles_max      = TICKS_MAX( TICK_CPU_MAX_COUNTER, timer->cycles_per_tick );
+    timer->ticks_max       = TICKS_MAX( TICK_CPU_MAX_COUNTER, timer->cycles_per_tick );
 }
 
 static uint32_t
@@ -970,7 +1063,7 @@ static platform_tick_timer_t platform_tick_cpu_timer =
     .deep_sleep_threshold     = PLATFORM_TICK_CPU_DEEP_SLEEP_THRESH,
     .tickless_threshold       = PLATFORM_TICK_CPU_TICKLESS_THRESH,
     .cycles_per_tick          = CYCLES_CPU_INIT_PER_TICK,
-    .cycles_max               = TICKS_MAX( TICK_CPU_MAX_COUNTER, CYCLES_CPU_INIT_PER_TICK ),
+    .ticks_max                = TICKS_MAX( TICK_CPU_MAX_COUNTER, CYCLES_CPU_INIT_PER_TICK ),
     .freerunning_start_stamp  = 0,
     .freerunning_stop_stamp   = 0,
     .cycles_till_fire         = 0,
@@ -1155,10 +1248,10 @@ platform_tick_stop( void )
 static void
 platform_tick_reset( platform_tick_timer_t* timer )
 {
-    const uint32_t         current          = timer->freerunning_current_func( timer );
-    const uint32_t         passed           = current - timer->freerunning_start_stamp;
-    const uint32_t         next_sched       = timer->cycles_till_fire + timer->cycles_per_tick;
-    const uint32_t         cycles_till_fire = ( passed < next_sched ) ? ( next_sched - passed ) : 1;
+    const uint32_t current          = timer->freerunning_current_func( timer );
+    const uint32_t passed           = current - timer->freerunning_start_stamp;
+    const uint32_t next_sched       = timer->cycles_till_fire + timer->cycles_per_tick;
+    const uint32_t cycles_till_fire = ( passed < next_sched ) ? ( next_sched - passed ) : 1;
 
     timer->freerunning_start_stamp = current;
     timer->cycles_till_fire        = cycles_till_fire;
@@ -1171,6 +1264,27 @@ platform_tick_irq_handler( void )
 {
     wiced_bool_t res = WICED_FALSE;
 
+#if PLATFORM_APPS_POWERSAVE
+    if ( PLATFORM_PMU->ext_wakeup_status.raw & PLATFORM_PMU->ext_wake_mask1.raw )
+    {
+        /*
+         * External wake-up event triggered.
+         * We don't want to have storm of interrupts, so ack it here.
+         * Wake-up event sets same bit in pmu intstatus register as timer.
+         * So clear here wake-up bit and if pmu intstatus bit not disappear -
+         * it means we also have timer interrupt, and as result ISR will be re-triggered.
+         *
+         * To wake-up event be able to triggered again, it need to be acked first.
+         * Please check platform_mcu_powersave_gpio_wakeup_ack() and similar.
+         */
+        platform_pmu_stored_ext_wakeup.raw  = PLATFORM_PMU->ext_wakeup_status.raw & PLATFORM_PMU->ext_wake_mask1.raw;
+        PLATFORM_PMU->ext_wakeup_status.raw = platform_pmu_stored_ext_wakeup.raw;
+        res = WICED_TRUE;
+    }
+#if PLATFORM_TICK_PMU
+    else
+#endif
+#endif /* PLATFORM_APPS_POWERSAVE */
 #if PLATFORM_TICK_PMU
     if ( PLATFORM_PMU->pmuintstatus.bits.rsrc_req_timer_int1 && PLATFORM_PMU->pmuintmask1.bits.rsrc_req_timer_int1 )
     {
@@ -1199,6 +1313,13 @@ platform_tick_irq_handler( void )
     return res;
 }
 
+void platform_tick_sleep_clear_ext_wake( void )
+{
+#if PLATFORM_APPS_POWERSAVE
+    platform_pmu_stored_ext_wakeup.raw = 0;
+#endif
+}
+
 static uint32_t
 platform_tick_sleep_common( platform_tick_sleep_idle_func idle_func, uint32_t ticks, wiced_bool_t opportunistic )
 {
@@ -1207,11 +1328,19 @@ platform_tick_sleep_common( platform_tick_sleep_idle_func idle_func, uint32_t ti
     const wiced_bool_t     tickless        = ( ticks != 0 ) ? WICED_TRUE : WICED_FALSE;
     uint32_t               ret             = 0;
 
+#if PLATFORM_APPS_POWERSAVE
+    /* Return immediately if external wake-up event detected. */
+    if ( platform_pmu_stored_ext_wakeup.raw != 0 )
+    {
+        return 0;
+    }
+#endif
+
     /* Reconfigure timer if tickless mode. */
     if ( tickless )
     {
         const uint32_t old_restart = timer->cycles_till_fire;
-        const uint32_t requested   = cycles_per_tick * MIN( ticks, timer->cycles_max );
+        const uint32_t requested   = cycles_per_tick * MIN( ticks, timer->ticks_max );
         const uint32_t passed      = timer->freerunning_current_func( timer ) - timer->freerunning_start_stamp;
         uint32_t       new_restart;
 
@@ -1331,41 +1460,82 @@ platform_tick_sleep_rtos( platform_tick_sleep_idle_func idle_func, uint32_t tick
 uint32_t
 platform_tick_sleep_force( platform_tick_sleep_idle_func idle_func, uint32_t ticks, platform_tick_sleep_force_interrupts_mode_t mode )
 {
-    /* Function expect to be called with interrupts disabled. */
+    /*
+     * Function expect to be called with interrupts disabled.
+     *
+     * Zero ticks parameter means sleep indefinitely.
+     *
+     * Wake-up is either via timer or GPIO which both trigger same PMU timer interrupt.
+     * So even if tick timer stopped and timer interrupts are masked, we need to unmask timer interrupt.
+     * In this case mask is restored before exit and so interrupt would be not triggered.
+     * We rely on tick driver not only mask interrupt when stopped but also acknowledge pending interrupt if any,
+     * otherwise sleep will be exited earlier.
+     */
 
-    wiced_bool_t    restore_masks = WICED_FALSE;
-    uint32_t        ret;
-    pmu_intstatus_t pmu_new_intmask;
+    const uint32_t  pmu_timer_intmask = platform_tick_pmu_intstatus_init().raw;
+    const uint32_t  irq_timer_mask    = IRQN2MASK(Timer_ExtIRQn);
     uint32_t        pmu_intmask;
     uint32_t        irq_mask;
+    uint32_t        pmu_new_intmask;
+    uint32_t        irq_new_mask;
+    uint32_t        ret;
 
+    /* Sleep for indefinite time, so let's stop ticking to not wake-up. */
+    if ( ticks == 0 )
+    {
+        platform_tick_stop( );
+    }
+
+    /* Read current interrupts masks */
+    pmu_intmask = PLATFORM_PMU->pmuintmask1.raw;
+    irq_mask    = PLATFORM_APPSCR4->irq_mask;
+
+    /* Update interrupt masks */
     if ( ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_OFF ) || ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_WLAN_ON ) )
     {
-        /* Save masks */
-        pmu_intmask   = PLATFORM_PMU->pmuintmask1.raw;
-        irq_mask      = PLATFORM_APPSCR4->irq_mask;
-        restore_masks = WICED_TRUE;
+        /* Enable PMU timer interrupt only */
+        pmu_new_intmask = pmu_timer_intmask;
 
-        /* Clear PMU interrupts mask except timer */
-        pmu_new_intmask.raw                      = 0x0;
-        pmu_new_intmask.bits.rsrc_req_timer_int1 = 1;
-        PLATFORM_PMU->pmuintmask1.raw            = pmu_intmask & pmu_new_intmask.raw;
-        /* Clear APPSCR4 interrupts except timer and conditionally WLAN */
-        PLATFORM_APPSCR4->irq_mask               = irq_mask & IRQN2MASK(Timer_ExtIRQn);
+        /* Enable APPSCR4 timer interrupt only and conditionally WLAN */
+        irq_new_mask = irq_timer_mask;
         if ( mode == PLATFORM_TICK_SLEEP_FORCE_INTERRUPTS_WLAN_ON )
         {
-            PLATFORM_APPSCR4->irq_mask           |= irq_mask & ( IRQN2MASK(M2M_ExtIRQn) | IRQN2MASK(SW0_ExtIRQn) );
+            irq_new_mask |= irq_mask & ( IRQN2MASK(M2M_ExtIRQn) | IRQN2MASK(SW0_ExtIRQn) );
         }
+    }
+    else
+    {
+        pmu_new_intmask = pmu_intmask | pmu_timer_intmask;
+        irq_new_mask    = irq_mask | irq_timer_mask;
+    }
+
+    /* Set masks */
+    if ( pmu_intmask != pmu_new_intmask )
+    {
+        PLATFORM_PMU->pmuintmask1.raw = pmu_new_intmask;
+    }
+    if ( irq_mask != irq_new_mask )
+    {
+        PLATFORM_APPSCR4->irq_mask = irq_new_mask;
     }
 
     /* Go to sleep */
     ret = platform_tick_sleep_common( idle_func, ticks, WICED_FALSE );
 
-    if ( restore_masks )
+    /* Restore masks */
+    if ( irq_mask != irq_new_mask )
     {
-        /* Restore masks */
-        PLATFORM_APPSCR4->irq_mask    = irq_mask;
+        PLATFORM_APPSCR4->irq_mask = irq_mask;
+    }
+    if ( pmu_intmask != pmu_new_intmask )
+    {
         PLATFORM_PMU->pmuintmask1.raw = pmu_intmask;
+    }
+
+    /* Start ticks back */
+    if ( ticks == 0 )
+    {
+        platform_tick_start( );
     }
 
     return ret;

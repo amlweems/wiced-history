@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -46,8 +46,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <platform_dct.h>
 /* Include platform-specific defines */
-#ifndef _WIN32
+#if !defined(OTA2_BUILDER_UTILITY) && ((DCT_BOOTLOADER_SDK_VERSION >= DCT_BOOTLOADER_SDK_3_5_2) && defined(UPDATE_FROM_SDK))
 #include "platform_ota2_image.h"
 #endif
 
@@ -137,6 +138,7 @@ typedef enum
     OTA2_BOOT_NORMAL,
     OTA2_BOOT_FACTORY_RESET,
     OTA2_BOOT_UPDATE,
+    OTA2_SOFTAP_UPDATE,
     OTA2_BOOT_LAST_KNOWN_GOOD,
 } ota2_boot_type_t;
 
@@ -177,9 +179,14 @@ typedef enum {
 
 typedef enum {
     WICED_OTA2_IMAGE_COMPONENT_LUT       = 0,
+    WICED_OTA2_IMAGE_COMPONENT_FR_APP,
     WICED_OTA2_IMAGE_COMPONENT_DCT,
+    WICED_OTA2_IMAGE_COMPONENT_OTA_APP,
     WICED_OTA2_IMAGE_COMPONENT_FILESYSTEM,
-    WICED_OTA2_IMAGE_COMPONENT_APPLICATION,
+    WICED_OTA2_IMAGE_COMPONENT_WIFI_FW,
+    WICED_OTA2_IMAGE_COMPONENT_APP0,
+    WICED_OTA2_IMAGE_COMPONENT_APP1,
+    WICED_OTA2_IMAGE_COMPONENT_APP2
 } wiced_ota2_image_component_type_t;
 
 typedef enum {
@@ -370,6 +377,17 @@ wiced_result_t wiced_ota2_image_update_staged_header(uint32_t delta_written);
  *          WICED_ERROR
  */
 wiced_result_t wiced_ota2_image_update_staged_status(wiced_ota2_image_status_t new_status);
+
+/** Call this to set the flag to force a facory reset on reboot
+ *  NOTE: This is equal to holding the "factory reset button" for 5 seconds.
+ *          Use this if there is no button on the system.
+ *
+ * @param   N/A
+ *
+ * @return  WICED_SUCCESS
+ *          WICED_ERROR
+ */
+wiced_result_t wiced_ota2_force_factory_reset_on_reboot( void );
 
 /** Get the last boot type - did we update or have a factory reset?
  *

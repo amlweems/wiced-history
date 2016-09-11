@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -32,6 +32,9 @@ extern "C" {
  *     // Do something here
  * }
  */
+
+#if defined( __GNUC__ )
+
 #define WWD_RTOS_DEFINE_ISR( function )     \
     void function( void ); \
     PLATFORM_DEFINE_NAKED_ISR( __tx_ ## function ) \
@@ -42,6 +45,30 @@ extern "C" {
         __asm__( "b  _tx_thread_context_restore" ); \
     } \
     PLATFORM_DEFINE_ISR( function)
+
+#elif defined ( __IAR_SYSTEMS_ICC__ )
+
+/* IAR will complain that the inline asm cannot see _tx_XXX symbols,
+ * so include prototypes.  If labels aren't local to the translation
+ * unit IAR will complain, so it's not enough to include prototypes
+ * for inline assembly to work.  Instead, call _tx_XXX functions
+ * directly.  _tx_thread_context_restore will return from exception,
+ * so BL is okay here.
+ */
+#define WWD_RTOS_DEFINE_ISR( function )     \
+    void function( void ); \
+    PLATFORM_DEFINE_NAKED_ISR( __tx_ ## function ) \
+    { \
+        extern void _tx_thread_context_save(void); \
+        extern void _tx_thread_context_restore(void); \
+        __asm volatile( "PUSH {lr}" ); \
+        _tx_thread_context_save(); \
+        function(); \
+        _tx_thread_context_restore(); \
+    } \
+    PLATFORM_DEFINE_ISR( function)
+
+#endif
 
 /* Macro for mapping a function defined using WWD_RTOS_DEFINE_ISR
  * to an interrupt handler declared in

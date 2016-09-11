@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -379,7 +379,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
     NXD_ADDRESS ipv6_address;
     uint8_t     ipv6_address_attempt = 0;
 
-    if ( IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         return WICED_SUCCESS;
     }
@@ -443,6 +443,12 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         WPRINT_NETWORK_ERROR( ( "Failed to enable IGMP\n" ) );
         goto leave_wifi_and_delete_ip;
 
+    }
+
+    if ( nxd_mld_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
+    {
+        WPRINT_NETWORK_ERROR( ( "Failed to enable IPV6 MLD\n" ) );
+        goto leave_wifi_and_delete_ip;
     }
 
     if ( nx_ip_fragment_enable( &IP_HANDLE(interface) ) != NX_SUCCESS )
@@ -611,6 +617,7 @@ wiced_result_t wiced_ip_up( wiced_interface_t interface, wiced_network_config_t 
         if ( IP_HANDLE(interface).nx_ipv6_address[ ipv6_address_index ].nxd_ipv6_address_state == NX_IPV6_ADDR_STATE_VALID )
         {
             uint16_t* ipv6 = (uint16_t*)ipv6_address.nxd_ip_address.v6;
+            UNUSED_PARAMETER(ipv6);
             nxd_ipv6_address_get( &IP_HANDLE(interface), ipv6_address_index, &ipv6_address, &ipv6_prefix, &ipv6_interface_index );
             WPRINT_NETWORK_INFO( ( "IPv6 network ready IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\n",
                                    (unsigned int) ( ( ipv6[ 1 ] ) ),
@@ -653,7 +660,7 @@ driver_not_notified_leave_wifi_and_delete_ip:
 
 wiced_result_t wiced_ip_down( wiced_interface_t interface )
 {
-    if ( IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_TRUE )
     {
         /* Cleanup DHCP & DNS */
         if ( ( interface == WICED_AP_INTERFACE ) || ( interface == WICED_CONFIG_INTERFACE )
@@ -1024,7 +1031,7 @@ wiced_bool_t wiced_ip_is_any_pending_packets( wiced_interface_t interface )
     NX_IP* ip_handle;
     ULONG  i;
 
-    if ( !IP_NETWORK_IS_INITED(interface) )
+    if ( IP_NETWORK_IS_INITED( interface ) == WICED_FALSE )
     {
         return WICED_FALSE;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -27,15 +27,21 @@ extern "C" {
  *                    Constants
  ******************************************************/
 
-#define SIZEOF_SESSION_ID        32
-#define SIZEOF_SESSION_MASTER    48
-#define SIZEOF_RANDOM            64
+#define SIZEOF_SESSION_ID                                   32
+#define SIZEOF_SESSION_MASTER                               48
+#define SIZEOF_RANDOM                                       64
 
-#define  TLS_WAIT_FOREVER                (0xFFFFFFFF)
-#define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS (20000)
+#define  TLS_WAIT_FOREVER                                  (0xFFFFFFFF)
+#define  TLS_HANDSHAKE_PACKET_TIMEOUT_MS                   (20000)
 
-#define WICED_TLS_CONTEXT_ID             (0xd309c08b)
+/* Max negotiated length is SSL_MAX_FRAGMENT_LEN_4096 [4K], But if not negotiated then TLS_DEFAULT_MAX_FRAGMENT_LENGTH [16K]
+ * will be used. Its not possible to negotiate above SSL_MAX_FRAGMENT_LEN_4096 [4K].
+ */
+#define  TLS_DEFAULT_MAX_FRAGMENT_LENGTH                   (16384)
+#define  TLS_EXT_MAX_FRAGMENT_LENGTH_FIELD_SIZE            (1)
+#define  TLS_MSG_APPLICATION_DATA                          (23)
 
+#define WICED_TLS_CONTEXT_ID                               (0xd309c08b)
 /******************************************************
  *                   Enumerations
  ******************************************************/
@@ -112,6 +118,22 @@ typedef enum
     TLS_DIGITALLY_SIGNED_SIGNATURE_ALGORITHM_ECDSA     = 3,
 } tls_digitally_signed_signature_algorithm_t;
 
+/* Reference: http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml */
+typedef enum
+{
+    TLS_EXTENSION_TYPE_SERVER_NAME                              =  0,
+    TLS_EXTENSION_TYPE_MAX_FRAGMENT_LENGTH                      =  1,
+    TLS_EXTENSION_TYPE_APPLICATION_LAYER_PROTOCOL_NEGOTIATION   = 16,
+} wiced_tls_extension_type_t;
+
+typedef enum
+{
+    TLS_FRAGMENT_LENGTH_512   =  1,
+    TLS_FRAGMENT_LENGTH_1024  =  2,
+    TLS_FRAGMENT_LENGTH_2048  =  3,
+    TLS_FRAGMENT_LENGTH_4096  =  4,
+} wiced_tls_max_fragment_length_t;
+
 /******************************************************
  *                 Type Definitions
  ******************************************************/
@@ -120,6 +142,7 @@ typedef struct _ssl_context  wiced_tls_workspace_t;
 typedef struct _ssl_session  wiced_tls_session_t;
 typedef uint32_t             tls_packet_t;
 
+typedef int (*wiced_tls_sign_certificate_verify)(  wiced_tls_rsa_key_t* rsa_key ,rsa_hash_id_t hash_id, int32_t hashlen, const unsigned char *hash, unsigned char *rsa_sign, uint32_t* key_length );
 
 typedef struct
 {
@@ -138,6 +161,8 @@ typedef struct
         wiced_tls_key_t     common;
         wiced_tls_rsa_key_t rsa;
         wiced_tls_ecc_key_t ecc;
+        wiced_tls_psk_key_t psk;
+        wiced_tls_sign_certificate_verify rsa_sign;
     } private_key;
     wiced_tls_certificate_t certificate;
 } wiced_tls_identity_t;
@@ -226,19 +251,17 @@ typedef union
         seed_context_t seed;
 } tls_cipher_context;
 
-
-
 /*
  * This structure is used for extensions
  */
-#define MAX_EXTENSIONS       8
-#define MAX_EXTENSION_DATA  32
+#define MAX_NUMBER_OF_EXTENSIONS_SUPPORTED       8
+#define MAX_EXT_DATA_LENGTH                      256
 struct _ssl_extension
 {
     uint16_t id;
     uint16_t used;
     uint16_t sz;
-    uint8_t data[MAX_EXTENSION_DATA+1];
+    uint8_t data[MAX_EXT_DATA_LENGTH+1];
 };
 
 typedef struct _ssl_extension ssl_extension;
@@ -338,6 +361,7 @@ struct _ssl_context
     int32_t keylen;                     /*!<  symmetric key length    */
     int32_t minlen;                     /*!<  min. ciphertext length  */
     int32_t ivlen;                      /*!<  IV length               */
+    int32_t iv_fixedlen;                /*!<  Lenght of fixed part of IV */
     int32_t maclen;                     /*!<  MAC length              */
     int verifylen;                      /*!<  verify data length      */
 
@@ -356,10 +380,10 @@ struct _ssl_context
     /*
      * TLS extensions
      */
+    uint16_t ext_max_fragment_length;
     int extension_count;
-    ssl_extension extensions[MAX_EXTENSIONS];
+    ssl_extension extensions[MAX_NUMBER_OF_EXTENSIONS_SUPPORTED];
 };
-
 
 typedef struct
 {
@@ -368,6 +392,17 @@ typedef struct
     wiced_tls_session_t      session;
     wiced_tls_identity_t*    identity;
 } wiced_tls_context_t;
+
+typedef struct
+{
+    wiced_tls_extension_type_t           type;
+    union
+    {
+        uint8_t*                         server_name;
+        wiced_tls_max_fragment_length_t  max_fragment_length;
+    } extension_data;
+} wiced_tls_extension_t;
+
 
 typedef enum
 {
@@ -402,6 +437,7 @@ tls_result_t tls_encrypt_record        ( ssl_context *ssl, tls_record_t* record,
 tls_result_t tls_decrypt_record        ( ssl_context *ssl, tls_record_t* record );
 void         microrng_init             ( microrng_state *state );
 int32_t      microrng_rand             ( void *p_state );
+int          ussl_set_extension        ( ssl_context *ssl, const ssl_extension *extension );
 
 
 #ifdef __cplusplus

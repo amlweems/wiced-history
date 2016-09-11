@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -81,11 +81,13 @@ extern "C" {
     RESULT_ENUM( prefix, OTHER_ENROLLEE,                          3042 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_RECEIVED_INVALID_CREDENTIALS,      3043 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_HMAC_CHECK_FAIL,                   3044 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_UNABLE_TO_SET_WLAN_SECURITY,       3045 ),   /**<   */
+    RESULT_ENUM( prefix, ERROR_UNABLE_TO_SET_WLAN_SECURITY,       3045 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_RUNT_WPS_PACKET,                   3046 ),   /**<   */
 
 #define TLS_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
     RESULT_ENUM( prefix, TIMEOUT,                                2 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR,                                  4 ),   /**<   */ \
     RESULT_ENUM( prefix, RECEIVE_FAILED,                      5001 ),   /**<   */ \
     RESULT_ENUM( prefix, ALERT_NO_CERTIFICATE,                5002 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_OUT_OF_MEMORY,                 5003 ),   /**<   */ \
@@ -129,11 +131,15 @@ extern "C" {
     RESULT_ENUM( prefix, CERTIFICATE_REVOKED,                 5041 ),   /**<   */ \
     RESULT_ENUM( prefix, NO_DATA,                             5042 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_UNSUPPORTED_EXTENSION,         5043 ),   /**<   */ \
-    RESULT_ENUM( prefix, ERROR_UNITIALIZED_CONTEXT,           5044 ),   /**<   */
+    RESULT_ENUM( prefix, ERROR_UNITIALIZED_CONTEXT,           5044 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_UNRECOGNIZED_SERVER_NAME,      5045 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_ILLEGAL_PARAMETER,             5046 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR_RECORD_OVERFLOW,               5047 ),   /**<   */
 
 #define DTLS_RESULT_LIST( prefix ) \
     RESULT_ENUM( prefix, SUCCESS,                                0 ),   /**<   */ \
     RESULT_ENUM( prefix, TIMEOUT,                                2 ),   /**<   */ \
+    RESULT_ENUM( prefix, ERROR,                                  4 ),   /**<   */ \
     RESULT_ENUM( prefix, RECEIVE_FAILED,                      5001 ),   /**<   */ \
     RESULT_ENUM( prefix, ALERT_NO_CERTIFICATE,                5002 ),   /**<   */ \
     RESULT_ENUM( prefix, ERROR_OUT_OF_MEMORY,                 5003 ),   /**<   */ \

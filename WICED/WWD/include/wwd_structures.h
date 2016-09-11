@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Broadcom Corporation
+ * Broadcom Proprietary and Confidential. Copyright 2016 Broadcom
  * All Rights Reserved.
  *
  * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Corporation;
@@ -17,6 +17,8 @@
 #define INCLUDED_WWD_STRUCTURES_H
 
 #include "wwd_constants.h"
+#include "wwd_wlioctl.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +55,7 @@ typedef struct wl_bss_info_struct     wiced_bss_info_t;
 typedef struct edcf_acparam    wiced_edcf_ac_param_t;
 typedef struct wl_action_frame wiced_action_frame_t;
 
+typedef struct wiced_event_header_struct wwd_event_header_t;
 /** @endcond */
 
 /******************************************************
@@ -252,6 +255,111 @@ typedef struct
     uint8_t       rx_supported_mcs_set[16];
 } ht_operation_ie_t;
 
+
+/* 11k Radio resource capabilities bit information */
+typedef struct radio_resource_management_capability_debug_msg
+{
+    uint32_t value;
+    const char* string;
+} radio_resource_management_capability_debug_msg_t;
+
+/* 11k Radio resource capabilities */
+typedef struct
+{
+    uint8_t radio_resource_management[RRM_CAPABILITIES_LEN];
+} radio_resource_management_capability_ie_t;
+
+/* 11k Radio resource beacon request */
+typedef struct radio_resource_management_beacon_req
+{
+    uint8_t       bcn_mode;
+    int           duration;
+    int           channel;
+    wiced_mac_t   da;
+    uint16_t      random_int;
+    wlc_ssid_t    ssid;
+    uint16_t      repetitions;
+} radio_resource_management_beacon_req_t;
+
+/* 11k Radio resource management request */
+typedef struct radio_resource_management_req
+{
+    wiced_mac_t   da;
+    uint8_t       regulatory;
+    uint8_t       channel;
+    uint16_t      random_int;
+    uint16_t      duration;
+    uint16_t      repetitions;
+} radio_resource_management_req_t;
+
+/* 11k Radio resource management frame request */
+typedef struct radio_resource_management_framereq
+{
+    wiced_mac_t   da;
+    uint8_t       regulatory;
+    uint8_t       channel;
+    uint16_t      random_int;
+    uint16_t      duration;
+    wiced_mac_t   ta;
+    uint16_t      repetitions;
+} radio_resource_management_framereq_t;
+
+/* 11k Radio resource management statistics request */
+typedef struct radio_resource_management_statreq
+{
+    wiced_mac_t   da;
+    wiced_mac_t   peer;
+    uint16_t      random_int;
+    uint16_t      duration;
+    uint8_t       group_id;
+    uint16_t      repetitions;
+} radio_resource_management_statreq_t;
+
+/* 11k Radio resource statistics report */
+typedef struct
+{
+    uint16_t      version;
+    wiced_mac_t   sta_address;
+    uint32_t      timestamp;
+    uint16_t      flag;
+    uint16_t      length_of_payload;
+    unsigned char data[WL_RRM_RPT_MAX_PAYLOAD];
+} radio_resource_management_statrpt_t;
+
+/* 11k Neighbor Report element */
+typedef struct rrm_nbr_element
+{
+    uint8_t       id;
+    uint8_t       length;
+    wiced_mac_t   bssid;
+    uint32_t      bssid_info;
+    uint8_t       regulatory;
+    uint8_t       channel;
+    uint8_t       phytype;
+    uint8_t       pad;
+} radio_resource_management_nbr_element_t;
+
+typedef struct
+{
+    uint8_t mode;       /* 1 == target must not tx between recieving CSA and actually switching */
+                        /* 0 == target may tx between recieving CSA and actually switching */
+    uint8_t count;      /* count number of beacons before switching */
+    uint16_t chspec;    /* target chanspec */
+} wiced_chan_switch_t;
+
+typedef struct radio_resource_management_neight_report
+{
+  struct radio_resource_management_neight_report *link;
+  radio_resource_management_nbr_element_t nbr_elm;
+} radio_resource_management_neighbor_report_t;
+
+
+typedef struct wwd_rrm_report
+{
+  wwd_rrm_report_type_t      type;
+  uint32_t                   report_len;
+  uint8_t                   *report;
+} wwd_rrm_report_t;
 
 /******************************************************
  *                 Global Variables
